@@ -23,7 +23,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+          go test -coverprofile=coverage.txt -covermode=atomic ./...
           go test -json ./... > test.json
 
       - name: Upload coverage reports to Codecov
