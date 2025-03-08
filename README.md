@@ -5,6 +5,8 @@ Package gocq offers a concurrent queue system using channels and goroutines, sup
 [![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
+[![CI](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 GoCQ is a high-performance concurrent queue for Go, optimized for efficient task processing. It supports both FIFO and priority queues, featuring non-blocking job submission, dedicated worker channels, and a pre-allocated worker pool to ensure smooth and controlled concurrency. With optimized memory management, GoCQ minimizes allocations and prevents goroutine leaks, making it a reliable choice for high-throughput applications.
