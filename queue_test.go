@@ -51,7 +51,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 		resultChan := q.AddAll([]PQItem[int]{
 			{Value: 1, Priority: 2},
 			{Value: 2, Priority: 1},
-			{Value: 3, Priority: 0},
+			{Value: 3},
 			{Value: 4, Priority: 2},
 			{Value: 5, Priority: 1},
 		})

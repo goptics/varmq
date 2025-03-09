@@ -23,17 +23,13 @@ type ConcurrentQueue[T, R any] struct {
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func NewQueue[T, R any](concurrency uint, worker Worker[T, R]) *ConcurrentQueue[T, R] {
-	channelsStack := make([]chan *queue.Job[T, R], concurrency)
-	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewQueue[*queue.Job[T, R]]()
-
 	queue := &ConcurrentQueue[T, R]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: channelsStack,
-		curProcessing: 0,
-		jobQueue:      jobQueue,
-		wg:            wg,
-		mx:            mx,
+		channelsStack: make([]chan *queue.Job[T, R], concurrency),
+		jobQueue:      queue.NewQueue[*queue.Job[T, R]](),
+		wg:            new(sync.WaitGroup),
+		mx:            new(sync.Mutex),
 		isPaused:      atomic.Bool{},
 	}
 

@@ -15,17 +15,13 @@ type ConcurrentVoidQueue[T any] struct {
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
 func NewVoidQueue[T any](concurrency uint, worker VoidWorker[T]) *ConcurrentVoidQueue[T] {
-	channelsStack := make([]chan *queue.Job[T, any], concurrency)
-	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewQueue[*queue.Job[T, any]]()
-
 	queue := &ConcurrentQueue[T, any]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: channelsStack,
-		curProcessing: 0,
-		jobQueue:      jobQueue,
-		wg:            wg,
-		mx:            mx,
+		channelsStack: make([]chan *queue.Job[T, any], concurrency),
+		jobQueue:      queue.NewPriorityQueue[*queue.Job[T, any]](),
+		wg:            new(sync.WaitGroup),
+		mx:            new(sync.Mutex),
 		isPaused:      atomic.Bool{},
 	}
 

@@ -18,17 +18,13 @@ type ConcurrentPriorityQueue[T, R any] struct {
 
 // NewPriorityQueue creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
 func NewPriorityQueue[T, R any](concurrency uint, worker Worker[T, R]) *ConcurrentPriorityQueue[T, R] {
-	channelsStack := make([]chan *queue.Job[T, R], concurrency)
-	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewPriorityQueue[*queue.Job[T, R]]()
-
 	queue := &ConcurrentQueue[T, R]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: channelsStack,
-		curProcessing: 0,
-		jobQueue:      jobQueue,
-		wg:            wg,
-		mx:            mx,
+		channelsStack: make([]chan *queue.Job[T, R], concurrency),
+		jobQueue:      queue.NewPriorityQueue[*queue.Job[T, R]](),
+		wg:            new(sync.WaitGroup),
+		mx:            new(sync.Mutex),
 		isPaused:      atomic.Bool{},
 	}
 

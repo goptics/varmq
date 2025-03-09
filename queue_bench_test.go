@@ -41,7 +41,6 @@ func BenchmarkQueue_Operations(b *testing.B) {
 			// drain the channel
 		}
 	})
-
 }
 
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
@@ -78,5 +77,4 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 			// drain the channel
 		}
 	})
-
 }
