@@ -99,7 +99,7 @@ func main() {
 }
 ```
 
-> Note: Void queue is almost ~26% faster than the standard queue (result returning) according to the benchmarks.
+> Note: Void queue is almost ~32% faster than the standard queue (result returning) according to the benchmarks. Also mem allocations are also reduced to 50%
 
 ## 📚 API Reference
 
@@ -350,26 +350,14 @@ goos: linux
 goarch: amd64
 pkg: github.com/fahimfaisaal/gocq
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkQueue_Operations
-BenchmarkQueue_Operations/Add
-BenchmarkQueue_Operations/Add-24                         1385332               972.6 ns/op             224 B/op          5 allocs/op
-BenchmarkQueue_Operations/AddAll
-BenchmarkQueue_Operations/AddAll-24                       896625                1272 ns/op             288 B/op          7 allocs/op
-BenchmarkPriorityQueue_Operations
-BenchmarkPriorityQueue_Operations/Add
-BenchmarkPriorityQueue_Operations/Add-24                 1000000                1245 ns/op             200 B/op          5 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll
-BenchmarkPriorityQueue_Operations/AddAll-24               950577                1906 ns/op             264 B/op          7 allocs/op
-BenchmarkVoidQueue_Operations
-BenchmarkVoidQueue_Operations/Add
-BenchmarkVoidQueue_Operations/Add-24                     1527048               851.7 ns/op             112 B/op          3 allocs/op
-BenchmarkVoidQueue_Operations/AddAll
-BenchmarkVoidQueue_Operations/AddAll-24                  1542825               680.1 ns/op             112 B/op          4 allocs/op
-BenchmarkVoidPriorityQueue_Operations
-BenchmarkVoidPriorityQueue_Operations/Add
-BenchmarkVoidPriorityQueue_Operations/Add-24              856620                1313 ns/op              88 B/op          3 allocs/op
-BenchmarkVoidPriorityQueue_Operations/AddAll
-BenchmarkVoidPriorityQueue_Operations/AddAll-24          1243413                1288 ns/op              88 B/op          3 allocs/op
+BenchmarkQueue_Operations/Add-24                         1000000              1101 ns/op             224 B/op          5 allocs/op
+BenchmarkQueue_Operations/AddAll-24                       929614              1779 ns/op             289 B/op          7 allocs/op
+BenchmarkPriorityQueue_Operations/Add-24                 1333922              1132 ns/op             200 B/op          5 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll-24               708817              2031 ns/op             264 B/op          7 allocs/op
+BenchmarkVoidQueue_Operations/Add-24                     1239252              1055 ns/op             112 B/op          3 allocs/op
+BenchmarkVoidQueue_Operations/AddAll-24                  1825214             748.2 ns/op             112 B/op          3 allocs/op
+BenchmarkVoidPriorityQueue_Operations/Add-24             1000000              1374 ns/op              90 B/op          3 allocs/op
+BenchmarkVoidPriorityQueue_Operations/AddAll-24           958118              1361 ns/op              89 B/op          3 allocs/op
 ```
 
 ### Run Benchmarks
