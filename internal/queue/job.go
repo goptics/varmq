@@ -1,4 +1,4 @@
-package types
+package queue
 
 type Job[T, R any] struct {
 	Data     T

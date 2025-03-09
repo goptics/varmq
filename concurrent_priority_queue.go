@@ -5,17 +5,21 @@ import (
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/internal/queue"
-	types "github.com/fahimfaisaal/gocq/internal/queue/types"
 )
+
+type PQItem[T any] struct {
+	Value    T
+	Priority int
+}
 
 type ConcurrentPriorityQueue[T, R any] struct {
 	*ConcurrentQueue[T, R]
 }
 
 // NewPriorityQueue creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
-func NewPriorityQueue[T, R any](concurrency uint, worker func(T) R) *ConcurrentPriorityQueue[T, R] {
-	channelsStack := make([]chan *types.Job[T, R], concurrency)
-	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewPriorityQueue[*types.Job[T, R]]()
+func NewPriorityQueue[T, R any](concurrency uint, worker Worker[T, R]) *ConcurrentPriorityQueue[T, R] {
+	channelsStack := make([]chan *queue.Job[T, R], concurrency)
+	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewPriorityQueue[*queue.Job[T, R]]()
 
 	queue := &ConcurrentQueue[T, R]{
 		concurrency:   concurrency,
@@ -33,7 +37,7 @@ func NewPriorityQueue[T, R any](concurrency uint, worker func(T) R) *ConcurrentP
 
 // Pause pauses the processing of jobs.
 func (q *ConcurrentPriorityQueue[T, R]) Pause() *ConcurrentPriorityQueue[T, R] {
-	q.isPaused.Store(true)
+	q.pause()
 	return q
 }
 
@@ -43,12 +47,12 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) <-chan R {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
-	job := &types.Job[T, R]{
+	job := &queue.Job[T, R]{
 		Data:     data,
 		Response: make(chan R, 1),
 	}
 
-	q.jobQueue.Enqueue(types.EnqItem[*types.Job[T, R]]{Value: job, Priority: priority})
+	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, R]]{Value: job, Priority: priority})
 	q.wg.Add(1)
 
 	// process next Job only when the current processing Job count is less than the concurrency

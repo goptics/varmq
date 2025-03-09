@@ -26,13 +26,12 @@ func main() {
 	// Make sure trace is stopped before your program ends
 	defer trace.Stop()
 
-	q := gocq.NewPriorityQueue(20, func(data int) int {
+	q := gocq.NewVoidPriorityQueue(20, func(data int) {
 		fmt.Printf("Started Worker %d\n", data)
 		for i := 0; i < 1e10; i++ {
 			// do nothing
 		}
 		fmt.Printf("Ended Worker %d\n", data)
-		return data
 	})
 	defer q.WaitAndClose()
 

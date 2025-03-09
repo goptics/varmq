@@ -1,4 +1,4 @@
-package types
+package queue
 
 type IQueue[T any] interface {
 	Dequeue() (T, bool)

@@ -8,8 +8,7 @@ import (
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
 		worker := func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		}
 
 		q := NewPriorityQueue(1, worker).Pause()
@@ -44,8 +43,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 
 	t.Run("AddAll with Priority", func(t *testing.T) {
 		worker := func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		}
 
 		q := NewPriorityQueue(2, worker)
@@ -83,8 +81,7 @@ func TestConcurrentQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
 		t.Parallel()
 		q := NewQueue(2, func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		})
 		defer q.Close()
 
@@ -98,13 +95,12 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("AddAll", func(t *testing.T) {
 		q := NewQueue(2, func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		})
 		defer q.Close()
 
 		data := []int{1, 2, 3, 4, 5}
-		resultChan := q.AddAll(data...)
+		resultChan := q.AddAll(data)
 
 		results := make([]int, 0)
 		for result := range resultChan {
@@ -128,8 +124,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("WaitUntilFinished", func(t *testing.T) {
 		q := NewQueue(2, func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		})
 		defer q.Close()
 
@@ -152,9 +147,8 @@ func TestConcurrentQueue(t *testing.T) {
 		concurrency := uint(2)
 		processed := 0
 		q := NewQueue(concurrency, func(data int) int {
-			time.Sleep(100 * time.Millisecond)
 			processed++
-			return data * 2
+			return TwoTimes(data)
 		})
 		defer q.Close()
 
@@ -174,8 +168,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("WaitAndClose", func(t *testing.T) {
 		q := NewQueue(2, func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		})
 
 		q.Add(1)
@@ -194,8 +187,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("PauseAndResume", func(t *testing.T) {
 		worker := func(data int) int {
-			time.Sleep(100 * time.Millisecond)
-			return data * 2
+			return TwoTimes(data)
 		}
 
 		q := NewQueue(2, worker)

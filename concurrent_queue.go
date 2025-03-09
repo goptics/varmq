@@ -5,20 +5,16 @@ import (
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/internal/queue"
-	types "github.com/fahimfaisaal/gocq/internal/queue/types"
 )
 
-type PQItem[T any] struct {
-	Value    T
-	Priority int
-}
+type Worker[T, R any] func(T) R
 
 type ConcurrentQueue[T, R any] struct {
 	concurrency   uint
-	worker        func(T) R
-	channelsStack []chan *types.Job[T, R]
+	worker        any
+	channelsStack []chan *queue.Job[T, R]
 	curProcessing uint
-	jobQueue      types.IQueue[*types.Job[T, R]]
+	jobQueue      queue.IQueue[*queue.Job[T, R]]
 	wg            *sync.WaitGroup
 	mx            *sync.Mutex
 	isPaused      atomic.Bool
@@ -26,9 +22,9 @@ type ConcurrentQueue[T, R any] struct {
 
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
-func NewQueue[T, R any](concurrency uint, worker func(T) R) *ConcurrentQueue[T, R] {
-	channelsStack := make([]chan *types.Job[T, R], concurrency)
-	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewQueue[*types.Job[T, R]]()
+func NewQueue[T, R any](concurrency uint, worker Worker[T, R]) *ConcurrentQueue[T, R] {
+	channelsStack := make([]chan *queue.Job[T, R], concurrency)
+	wg, mx, jobQueue := new(sync.WaitGroup), new(sync.Mutex), queue.NewQueue[*queue.Job[T, R]]()
 
 	queue := &ConcurrentQueue[T, R]{
 		concurrency:   concurrency,
@@ -54,36 +50,45 @@ func (q *ConcurrentQueue[T, R]) Init() *ConcurrentQueue[T, R] {
 			close(channel)
 		}
 
-		q.channelsStack[i] = make(chan *types.Job[T, R])
+		q.channelsStack[i] = make(chan *queue.Job[T, R])
 
-		go func(channel chan *types.Job[T, R]) {
-			for job := range channel {
-				output := q.worker(job.Data)
-
-				job.Response <- output // sends the output to the Job consumer
-				close(job.Response)
-				q.wg.Done()
-
-				q.mx.Lock()
-				// adding the free channel to stack
-				q.channelsStack = append(q.channelsStack, channel)
-				q.curProcessing--
-
-				// process only if the queue is not empty
-				if q.shouldProcessNextJob("worker") {
-					q.processNextJob()
-				}
-				q.mx.Unlock()
-			}
-		}(q.channelsStack[i])
+		go q.spawnWorker(q.channelsStack[i])
 	}
 
 	return q
 }
 
+func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
+	for job := range channel {
+		switch worker := q.worker.(type) {
+		case VoidWorker[T]:
+			worker(job.Data)
+		case Worker[T, R]:
+			output := worker(job.Data)
+			job.Response <- output // sends the output to the Job consumer
+			close(job.Response)
+		default:
+			// do nothing
+		}
+
+		q.wg.Done()
+
+		q.mx.Lock()
+		// adding the free channel to stack
+		q.channelsStack = append(q.channelsStack, channel)
+		q.curProcessing--
+
+		// process only if the queue is not empty
+		if q.shouldProcessNextJob("worker") {
+			q.processNextJob()
+		}
+		q.mx.Unlock()
+	}
+}
+
 // Picks the next available channel for processing a Job.
 // Time complexity: O(1)
-func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- *types.Job[T, R] {
+func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- *queue.Job[T, R] {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	l := len(q.channelsStack)
@@ -108,6 +113,10 @@ func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 	}
 }
 
+func (q *ConcurrentQueue[T, R]) pause() {
+	q.isPaused.Store(true)
+}
+
 // Processes the next Job in the queue.
 func (q *ConcurrentQueue[T, R]) processNextJob() {
 	value, has := q.jobQueue.Dequeue()
@@ -118,7 +127,7 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 
 	q.curProcessing++
 
-	go func(data *types.Job[T, R]) {
+	go func(data *queue.Job[T, R]) {
 		q.pickNextChannel() <- data
 	}(value)
 }
@@ -142,7 +151,7 @@ func (q *ConcurrentQueue[T, R]) CurrentProcessingCount() uint {
 
 // Pause pauses the processing of jobs.
 func (q *ConcurrentQueue[T, R]) Pause() *ConcurrentQueue[T, R] {
-	q.isPaused.Store(true)
+	q.pause()
 	return q
 }
 
@@ -166,12 +175,12 @@ func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
-	job := &types.Job[T, R]{
+	job := &queue.Job[T, R]{
 		Data:     data,
 		Response: make(chan R, 1),
 	}
 
-	q.jobQueue.Enqueue(types.EnqItem[*types.Job[T, R]]{Value: job})
+	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, R]]{Value: job})
 	q.wg.Add(1)
 
 	// process next Job only when the current processing Job count is less than the concurrency
@@ -184,7 +193,7 @@ func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
 
 // Adds multiple Jobs to the queue and returns a channel to receive all responses.
 // Time complexity: O(n) where n is the number of Jobs added
-func (q *ConcurrentQueue[T, R]) AddAll(data ...T) <-chan R {
+func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan R {
 	wg := new(sync.WaitGroup)
 	merged := make(chan R, len(data))
 
@@ -223,6 +232,10 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 
 	// close all pending channels to avoid routine leaks
 	for _, job := range prevValues {
+		if job.Response == nil {
+			continue
+		}
+
 		close(job.Response)
 	}
 }
@@ -243,7 +256,7 @@ func (q *ConcurrentQueue[T, R]) Close() {
 		close(channel)
 	}
 
-	q.channelsStack = make([]chan *types.Job[T, R], q.concurrency)
+	q.channelsStack = make([]chan *queue.Job[T, R], q.concurrency)
 }
 
 // Waits until all pending Jobs in the queue are processed and then closes the queue.

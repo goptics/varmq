@@ -2,8 +2,6 @@ package queue
 
 import (
 	"container/list"
-
-	types "github.com/fahimfaisaal/gocq/internal/queue/types"
 )
 
 // Queue holds a linked list-based queue of generic items.
@@ -39,7 +37,7 @@ func (q *Queue[T]) Len() int {
 
 // Enqueue adds an item at the back of the list.
 // Time complexity: O(1)
-func (q *Queue[T]) Enqueue(item types.EnqItem[T]) {
+func (q *Queue[T]) Enqueue(item EnqItem[T]) {
 	q.internal.PushBack(item.Value)
 }
 

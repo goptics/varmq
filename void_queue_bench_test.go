@@ -5,28 +5,24 @@ import (
 	"testing"
 )
 
-func TwoTimes(n int) int {
-	return n * 2
-}
-
-func BenchmarkQueue_Operations(b *testing.B) {
+func BenchmarkVoidQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewVoidQueue(cpus, func(data int) {
+			TwoTimes(data)
 		})
 		defer q.Close()
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			<-q.Add(j)
+			q.Add(j)
 		}
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewVoidQueue(cpus, func(data int) {
+
 		})
 		defer q.Close()
 
@@ -36,33 +32,28 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		out := q.AddAll(data)
-		for range out {
-			// drain the channel
-		}
+		q.AddAll(data)
 	})
-
 }
 
-func BenchmarkPriorityQueue_Operations(b *testing.B) {
+func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewVoidPriorityQueue(cpus, func(data int) {
+			TwoTimes(data)
 		})
 		defer q.Close()
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			out := q.Add(i, i%10)
-			<-out
+			q.Add(i, i%10)
 		}
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewVoidPriorityQueue(cpus, func(data int) {
+			TwoTimes(data)
 		})
 		defer q.Close()
 
@@ -72,11 +63,6 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		out := q.AddAll(data)
-
-		for range out {
-			// drain the channel
-		}
+		q.AddAll(data)
 	})
-
 }

@@ -1,10 +1,8 @@
 package queue
 
-import types "github.com/fahimfaisaal/gocq/internal/queue/types"
-
-// heapQueue implements heap.Interface for a slice of *types.EnqItem[T].
+// heapQueue implements heap.Interface for a slice of *EnqItem[T].
 type heapQueue[T any] struct {
-	items []*types.EnqItem[T]
+	items []*EnqItem[T]
 }
 
 // Len, Less, Swap are standard for heap.Interface.
@@ -29,7 +27,7 @@ func (pq *heapQueue[T]) Swap(i, j int) {
 // Push is called by heap.Push to add a new element to the end.
 // Time complexity: O(1)
 func (pq *heapQueue[T]) Push(x any) {
-	pq.items = append(pq.items, x.(*types.EnqItem[T]))
+	pq.items = append(pq.items, x.(*EnqItem[T]))
 }
 
 // Pop is called by heap.Pop to remove the last element from the slice.
