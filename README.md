@@ -372,6 +372,12 @@ BenchmarkVoidPriorityQueue_Operations/AddAll
 BenchmarkVoidPriorityQueue_Operations/AddAll-24          1243413                1288 ns/op              88 B/op          3 allocs/op
 ```
 
+### Run Benchmarks
+
+```bash
+go test -bench=. -benchmem
+```
+
 ## 👤 Author (Fahim Faisaal)
 
 - GitHub: [@fahimfaisaal](https://github.com/fahimfaisaal)
