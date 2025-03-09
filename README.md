@@ -1,6 +1,6 @@
 # GoCQ: High-Performance Concurrent Queue for Gophers
 
-Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations.
+Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations, with options for result-returning and void (non-returning) queues.
 
 [![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
@@ -14,6 +14,7 @@ GoCQ is a high-performance concurrent queue for Go, optimized for efficient task
 ## 🌟 Features
 
 - Generic type support for both data and results
+- Result-returning and void (non-returning) queue variants
 - Configurable concurrency limits
 - FIFO queue with O(1) operations
 - Priority queue support with O(log n) operations
@@ -28,7 +29,9 @@ GoCQ is a high-performance concurrent queue for Go, optimized for efficient task
 - [Quick Start](#-quick-start)
 - [API Reference](#-api-reference)
   - [Standard Queue](#standard-queue-fifo)
+  - [Void Queue](#void-queue)
   - [Priority Queue](#priority-queue)
+  - [Void Priority Queue](#void-priority-queue)
 - [Examples](#-examples)
 - [Performance](#-performance)
 
@@ -40,13 +43,14 @@ go get github.com/fahimfaisaal/gocq
 
 ## 🚀 Quick Start
 
+### Standard Queue (FIFO and Result-Returning)
+
 ```go
 package main
 
 import (
   "fmt"
   "time"
-
   "github.com/fahimfaisaal/gocq"
 )
 
@@ -69,6 +73,33 @@ func main() {
   }
 }
 ```
+
+### Void Queue (No Return Value)
+
+```go
+package main
+
+import (
+  "fmt"
+  "time"
+  "github.com/fahimfaisaal/gocq"
+)
+
+func main() {
+  // Create a void queue with 2 concurrent workers
+  queue := gocq.NewVoidQueue(2, func(data int) {
+    time.Sleep(500 * time.Millisecond)
+    fmt.Printf("Processed: %d\n", data)
+  })
+  defer queue.WaitAndClose()
+
+  // Add jobs
+  queue.Add(5)
+  queue.AddAll([]int{1, 2, 3})
+}
+```
+
+> Note: Void queue is almost ~26% faster than the standard queue (result returning) according to the benchmarks.
 
 ## 📚 API Reference
 
@@ -103,7 +134,7 @@ Adds a single job to the queue.
 - Time Complexity: O(1)
 - Returns: Channel to receive the result
 
-#### `AddAll(data ...T) <-chan R`
+#### `AddAll(data []T) <-chan R`
 
 Adds multiple jobs to the queue.
 
@@ -136,14 +167,14 @@ Removes all pending jobs from the queue.
 
 > Note: Closes response channels for all purged jobs
 
-#### `WaitUntilFinished()`
+#### `WaitUntilFinished() error`
 
 Blocks until all pending jobs complete.
 
 - Time Complexity: O(n) where n is number of currently processing and pending jobs
 - Effect: Blocks until all pending jobs are processed
 
-#### `Close()`
+#### `Close() error`
 
 Closes the queue and cleans up resources.
 
@@ -179,6 +210,26 @@ Checks if the queue is currently paused.
 - Time Complexity: O(1)
 - Returns: true if paused, false otherwise
 
+### Void Queue
+
+#### `NewVoidQueue[T any](concurrency uint, worker func(T)) *ConcurrentVoidQueue[T]`
+
+Creates a new concurrent FIFO queue for operations without return values.
+
+- Time Complexity: O(c) where c is concurrency
+- Parameters:
+  - `concurrency`: Maximum number of concurrent workers
+  - `worker`: Function to process each job (void return)
+- Returns: A new void queue instance
+
+#### Void Queue Operation Methods
+
+Similar to standard queue but without return channels:
+
+- `Add(data T)`: Adds a single job
+- `AddAll(data []T)`: Adds multiple jobs
+- `Pause()`, `Resume()`, `Close()`, etc. work the same as standard queue
+
 ### Priority Queue
 
 **The priority queue extends the standard queue with priority support.**
@@ -208,6 +259,26 @@ Adds multiple prioritized jobs.
 
 - Time Complexity: O(n log n) where n is number of items
 - Returns: Merged channel to receive all results in priority order
+
+### Void Priority Queue
+
+#### `NewVoidPriorityQueue[T any](concurrency uint, worker func(T)) *ConcurrentVoidPriorityQueue[T]`
+
+Creates a new concurrent priority queue for operations without return values.
+
+- Time Complexity: O(1)
+- Parameters:
+  - `concurrency`: Maximum number of concurrent workers
+  - `worker`: Function to process each job (void return)
+- Returns: A new void priority queue instance
+
+#### Void Priority Queue Operation Methods
+
+Similar to standard priority queue but without return channels:
+
+- `Add(data T, priority int)`: Adds a job with priority
+- `AddAll(items []PQItem[T])`: Adds multiple prioritized jobs
+- Other methods work the same as standard priority queue
 
 ## 💡 Examples
 
@@ -251,6 +322,20 @@ queue.Resume()
 fmt.Println(<-resp1, <-resp2) // Output: 2 4 (unordered due to concurrency)
 ```
 
+### Void Queue Example
+
+```go
+queue := gocq.NewVoidQueue(2, func(data int) {
+    fmt.Printf("Processing: %d\n", data)
+    time.Sleep(500 * time.Millisecond)
+})
+defer queue.WaitAndClose()
+
+// Add jobs
+queue.Add(1)
+queue.AddAll([]int{2, 3, 4})
+```
+
 ## 🚀 Performance
 
 The implementation uses efficient data structures:
@@ -265,10 +350,26 @@ goos: linux
 goarch: amd64
 pkg: github.com/fahimfaisaal/gocq
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkPriorityQueue_Operations/Add-24                 1378249              1278 ns/op
-BenchmarkPriorityQueue_Operations/AddAll-24               795332              1712 ns/op
-BenchmarkQueue_Operations/Add-24                         1000000              1300 ns/op
-BenchmarkQueue_Operations/AddAll-24                      1000000              1822 ns/op
+BenchmarkQueue_Operations
+BenchmarkQueue_Operations/Add
+BenchmarkQueue_Operations/Add-24                         1385332               972.6 ns/op             224 B/op          5 allocs/op
+BenchmarkQueue_Operations/AddAll
+BenchmarkQueue_Operations/AddAll-24                       896625                1272 ns/op             288 B/op          7 allocs/op
+BenchmarkPriorityQueue_Operations
+BenchmarkPriorityQueue_Operations/Add
+BenchmarkPriorityQueue_Operations/Add-24                 1000000                1245 ns/op             200 B/op          5 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll
+BenchmarkPriorityQueue_Operations/AddAll-24               950577                1906 ns/op             264 B/op          7 allocs/op
+BenchmarkVoidQueue_Operations
+BenchmarkVoidQueue_Operations/Add
+BenchmarkVoidQueue_Operations/Add-24                     1527048               851.7 ns/op             112 B/op          3 allocs/op
+BenchmarkVoidQueue_Operations/AddAll
+BenchmarkVoidQueue_Operations/AddAll-24                  1542825               680.1 ns/op             112 B/op          4 allocs/op
+BenchmarkVoidPriorityQueue_Operations
+BenchmarkVoidPriorityQueue_Operations/Add
+BenchmarkVoidPriorityQueue_Operations/Add-24              856620                1313 ns/op              88 B/op          3 allocs/op
+BenchmarkVoidPriorityQueue_Operations/AddAll
+BenchmarkVoidPriorityQueue_Operations/AddAll-24          1243413                1288 ns/op              88 B/op          3 allocs/op
 ```
 
 ## 👤 Author (Fahim Faisaal)
