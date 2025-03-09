@@ -67,7 +67,7 @@ func main() {
   fmt.Println(result) // Output: 10
 
   // Add multiple jobs
-  results := queue.AddAll(1, 2, 3, 4, 5)
+  results := queue.AddAll([]int{1, 2, 3, 4, 5})
   for result := range results {
     fmt.Println(result) // Output: 2, 4, 6, 8, 10 (unordered)
   }
