@@ -64,8 +64,7 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 		case VoidWorker[T]:
 			worker(job.Data)
 		case Worker[T, R]:
-			output := worker(job.Data)
-			job.Response <- output // sends the output to the Job consumer
+			job.Response <- worker(job.Data) // sends the output to the Job consumer
 			close(job.Response)
 		default:
 			// do nothing
@@ -242,7 +241,7 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 
 // Closes the queue and resets all internal states.
 // Time complexity: O(n) where n is the number of channels
-func (q *ConcurrentQueue[T, R]) Close() {
+func (q *ConcurrentQueue[T, R]) Close() error {
 	q.Purge()
 
 	// wait until all ongoing processes are done
@@ -257,11 +256,12 @@ func (q *ConcurrentQueue[T, R]) Close() {
 	}
 
 	q.channelsStack = make([]chan *queue.Job[T, R], q.concurrency)
+	return nil
 }
 
 // Waits until all pending Jobs in the queue are processed and then closes the queue.
 // Time complexity: O(n) where n is the number of pending Jobs
-func (q *ConcurrentQueue[T, R]) WaitAndClose() {
+func (q *ConcurrentQueue[T, R]) WaitAndClose() error {
 	q.wg.Wait()
-	q.Close()
+	return q.Close()
 }
