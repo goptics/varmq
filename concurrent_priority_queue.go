@@ -39,13 +39,14 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() *ConcurrentPriorityQueue[T, R] {
 
 // Add adds a new Job with the given priority to the queue and returns a channel to receive the response.
 // Time complexity: O(log n)
-func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) <-chan R {
+func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) (<-chan R, <-chan error) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	job := &queue.Job[T, R]{
 		Data:     data,
 		Response: make(chan R, 1),
+		Err:      make(chan error, 1),
 	}
 
 	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, R]]{Value: job, Priority: priority})
@@ -56,29 +57,44 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) <-chan R {
 		q.processNextJob()
 	}
 
-	return job.Response
+	return job.Response, job.Err
 }
 
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 // Time complexity: O(n log n) where n is the number of Jobs added
-func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan R {
+func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) (<-chan R, <-chan error) {
 	wg := new(sync.WaitGroup)
-	merged := make(chan R, len(items))
+	mergedOutput, mergedErr := make(chan R, 1), make(chan error, 1)
 
 	wg.Add(len(items))
 	for _, item := range items {
-		go func(c <-chan R) {
-			defer wg.Done()
-			for val := range c {
-				merged <- val
+		response, err := q.Add(item.Value, item.Priority)
+		go func(c <-chan R, err <-chan error) {
+			for c != nil || err != nil {
+				select {
+				case val, ok := <-c:
+					if !ok {
+						c = nil
+						continue
+					}
+					mergedOutput <- val
+				case err, ok := <-err:
+					if !ok {
+						err = nil
+						continue
+					}
+					mergedErr <- err
+				}
+				wg.Done()
 			}
-		}(q.Add(item.Value, item.Priority))
+		}(response, err)
 	}
 
 	go func() {
 		wg.Wait()
-		close(merged)
+		close(mergedOutput)
+		close(mergedErr)
 	}()
 
-	return merged
+	return mergedOutput, mergedErr
 }

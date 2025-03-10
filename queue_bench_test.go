@@ -1,12 +1,13 @@
 package gocq
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
 )
 
-// TwoTimes multiplies the input by 2.
-func TwoTimes(n int) int {
+// Double multiplies the input by 2.
+func Double(n int) int {
 	return n * 2
 }
 
@@ -15,20 +16,21 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			<-q.Add(j)
+			output, _ := q.Add(j)
+			<-output
 		}
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
@@ -36,12 +38,14 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		for i := range data {
 			data[i] = i
 		}
+		fmt.Println("Done data")
 
 		b.ResetTimer()
-		out := q.AddAll(data)
+		out, _ := q.AddAll(data)
 		for range out {
 			// drain the channel
 		}
+		fmt.Println("Done out")
 	})
 }
 
@@ -50,21 +54,20 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			out := q.Add(i, i%10)
-			<-out
+			q.Add(i, i%10)
 		}
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) int {
-			return TwoTimes(data)
+		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
@@ -72,12 +75,14 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
+		fmt.Println("Done data")
 
 		b.ResetTimer()
-		out := q.AddAll(data)
+		out, _ := q.AddAll(data)
 
 		for range out {
 			// drain the channel
 		}
+		fmt.Println("Done out")
 	})
 }

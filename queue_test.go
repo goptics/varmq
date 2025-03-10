@@ -8,15 +8,15 @@ import (
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
-		worker := func(data int) int {
-			return TwoTimes(data)
+		worker := func(data int) (int, error) {
+			return Double(data), nil
 		}
 
 		q := NewPriorityQueue(1, worker).Pause()
 
-		resp1 := q.Add(1, 2)
-		resp2 := q.Add(2, 1)
-		resp3 := q.Add(3, 0)
+		resp1, _ := q.Add(1, 2)
+		resp2, _ := q.Add(2, 1)
+		resp3, _ := q.Add(3, 0)
 
 		if count := q.PendingCount(); count != 3 {
 			t.Errorf("Expected pending count to be 3, got %d", count)
@@ -43,16 +43,16 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll with Priority", func(t *testing.T) {
-		worker := func(data int) int {
-			return TwoTimes(data)
+		worker := func(data int) (int, error) {
+			return Double(data), nil
 		}
 
 		q := NewPriorityQueue(2, worker)
 
-		resultChan := q.AddAll([]PQItem[int]{
+		resultChan, _ := q.AddAll([]PQItem[int]{
 			{Value: 1, Priority: 2},
 			{Value: 2, Priority: 1},
-			{Value: 3},
+			{Value: 3, Priority: 0},
 			{Value: 4, Priority: 2},
 			{Value: 5, Priority: 1},
 		})
@@ -82,12 +82,12 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 func TestConcurrentQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
 		t.Parallel()
-		q := NewQueue(2, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(2, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
-		resultChan := q.Add(5)
+		resultChan, _ := q.Add(5)
 		result := <-resultChan
 
 		if result != 10 {
@@ -96,13 +96,13 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll", func(t *testing.T) {
-		q := NewQueue(2, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(2, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
 		data := []int{1, 2, 3, 4, 5}
-		resultChan := q.AddAll(data)
+		resultChan, _ := q.AddAll(data)
 
 		results := make([]int, 0)
 		for result := range resultChan {
@@ -125,8 +125,8 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("WaitUntilFinished", func(t *testing.T) {
-		q := NewQueue(2, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(2, func(data int) (int, error) {
+			return Double(data), nil
 		})
 		defer q.Close()
 
@@ -148,9 +148,9 @@ func TestConcurrentQueue(t *testing.T) {
 		t.Parallel()
 		concurrency := uint(2)
 		processed := 0
-		q := NewQueue(concurrency, func(data int) int {
+		q := NewQueue(concurrency, func(data int) (int, error) {
 			processed++
-			return TwoTimes(data)
+			return Double(data), nil
 		})
 		defer q.Close()
 
@@ -169,8 +169,8 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("WaitAndClose", func(t *testing.T) {
-		q := NewQueue(2, func(data int) int {
-			return TwoTimes(data)
+		q := NewQueue(2, func(data int) (int, error) {
+			return Double(data), nil
 		})
 
 		q.Add(1)
@@ -188,14 +188,14 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("PauseAndResume", func(t *testing.T) {
-		worker := func(data int) int {
-			return TwoTimes(data)
+		worker := func(data int) (int, error) {
+			return Double(data), nil
 		}
 
 		q := NewQueue(2, worker)
 
-		resp1 := q.Add(1)
-		resp2 := q.Add(2)
+		resp1, _ := q.Add(1)
+		resp2, _ := q.Add(2)
 
 		if result := <-resp1; result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
@@ -205,7 +205,7 @@ func TestConcurrentQueue(t *testing.T) {
 		}
 
 		q.Pause()
-		resp3 := q.Add(3)
+		resp3, _ := q.Add(3)
 		time.Sleep(50 * time.Millisecond)
 		if count := q.PendingCount(); count != 1 {
 			t.Errorf("Expected pending count to be 1, got %d", count)

@@ -1,13 +1,14 @@
 package gocq
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
 
-type Worker[T, R any] func(T) R
+type Worker[T, R any] func(T) (R, error)
 
 type ConcurrentQueue[T, R any] struct {
 	concurrency   uint
@@ -59,10 +60,14 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 	for job := range channel {
 		switch worker := q.worker.(type) {
 		case VoidWorker[T]:
-			worker(job.Data)
+			err := worker(job.Data)
+			job.Err <- err
 		case Worker[T, R]:
-			job.Response <- worker(job.Data) // sends the output to the Job consumer
-			close(job.Response)
+			output, err := worker(job.Data)
+			job.Err <- err
+			fmt.Println("Send err")
+			job.Response <- output
+			fmt.Println("Send output")
 		default:
 			// do nothing
 		}
@@ -70,6 +75,8 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 		q.wg.Done()
 
 		q.mx.Lock()
+		q.closeJob(job)
+
 		// adding the free channel to stack
 		q.channelsStack = append(q.channelsStack, channel)
 		q.curProcessing--
@@ -80,6 +87,13 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 		}
 		q.mx.Unlock()
 	}
+}
+
+func (q *ConcurrentQueue[T, R]) closeJob(job *queue.Job[T, R]) {
+	if job.Response != nil {
+		close(job.Response)
+	}
+	close(job.Err)
 }
 
 // pickNextChannel picks the next available channel for processing a Job.
@@ -168,13 +182,14 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 
 // Add adds a new Job to the queue and returns a channel to receive the response.
 // Time complexity: O(1)
-func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
+func (q *ConcurrentQueue[T, R]) Add(data T) (<-chan R, <-chan error) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	job := &queue.Job[T, R]{
 		Data:     data,
 		Response: make(chan R, 1),
+		Err:      make(chan error, 1),
 	}
 
 	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, R]]{Value: job})
@@ -185,31 +200,46 @@ func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
 		q.processNextJob()
 	}
 
-	return job.Response
+	return job.Response, job.Err
 }
 
 // AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
 // Time complexity: O(n) where n is the number of Jobs added
-func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan R {
+func (q *ConcurrentQueue[T, R]) AddAll(data []T) (<-chan R, <-chan error) {
 	wg := new(sync.WaitGroup)
-	merged := make(chan R, len(data))
+	mergedOutput, mergedErr := make(chan R, 1), make(chan error, 1)
 
 	wg.Add(len(data))
 	for _, item := range data {
-		go func(c <-chan R) {
-			defer wg.Done()
-			for val := range c {
-				merged <- val
+		output, err := q.Add(item)
+		go func(c <-chan R, err <-chan error) {
+			for c != nil || err != nil {
+				select {
+				case val, ok := <-c:
+					if !ok {
+						c = nil
+						continue
+					}
+					mergedOutput <- val
+				case err, ok := <-err:
+					if !ok {
+						err = nil
+						continue
+					}
+					mergedErr <- err
+				}
+				wg.Done()
 			}
-		}(q.Add(item))
+		}(output, err)
 	}
 
 	go func() {
 		wg.Wait()
-		close(merged)
+		close(mergedOutput)
+		close(mergedErr)
 	}()
 
-	return merged
+	return mergedOutput, mergedErr
 }
 
 // WaitUntilFinished waits until all pending Jobs in the queue are processed.

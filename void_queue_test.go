@@ -8,8 +8,9 @@ import (
 func TestConcurrentVoidQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
 
-		q := NewVoidQueue(2, func(data int) {
-			TwoTimes(data)
+		q := NewVoidQueue(2, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.WaitAndClose()
 
@@ -17,8 +18,9 @@ func TestConcurrentVoidQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll", func(t *testing.T) {
-		q := NewVoidQueue(2, func(data int) {
-			TwoTimes(data)
+		q := NewVoidQueue(2, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.WaitAndClose()
 
@@ -27,9 +29,9 @@ func TestConcurrentVoidQueue(t *testing.T) {
 	})
 
 	t.Run("PauseAndResume", func(t *testing.T) {
-		q := NewVoidQueue(2, func(data int) {
-			TwoTimes(data)
-
+		q := NewVoidQueue(2, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 
@@ -57,8 +59,9 @@ func TestConcurrentVoidQueue(t *testing.T) {
 
 func TestConcurrentVoidPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
-		q := NewVoidPriorityQueue(1, func(data int) {
-			TwoTimes(data)
+		q := NewVoidPriorityQueue(1, func(data int) error {
+			Double(data)
+			return nil
 		}).Pause()
 		defer q.Close()
 
@@ -82,9 +85,9 @@ func TestConcurrentVoidPriorityQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll with Priority", func(t *testing.T) {
-		q := NewVoidPriorityQueue(2, func(data int) {
-			TwoTimes(data)
-
+		q := NewVoidPriorityQueue(2, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 

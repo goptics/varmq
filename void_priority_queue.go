@@ -31,12 +31,13 @@ func NewVoidPriorityQueue[T any](concurrency uint, worker VoidWorker[T]) *Concur
 }
 
 // Add adds a new Job with the given priority to the queue.
-func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) {
+func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) <-chan error {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	job := &queue.Job[T, any]{
 		Data: data,
+		Err:  make(chan error, 1),
 	}
 
 	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, any]]{Value: job, Priority: priority})
@@ -46,13 +47,31 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) {
 	if q.shouldProcessNextJob("add") {
 		q.processNextJob()
 	}
+
+	return job.Err
 }
 
 // AddAll adds multiple Jobs with the given priority to the queue.
-func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) {
+func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error {
+	wg := new(sync.WaitGroup)
+	mergedErr := make(chan error, 1)
+
+	wg.Add(len(items))
 	for _, item := range items {
-		q.Add(item.Value, item.Priority)
+		go func(err <-chan error) {
+			defer wg.Done()
+			for e := range err {
+				mergedErr <- e
+			}
+		}(q.Add(item.Value, item.Priority))
 	}
+
+	go func() {
+		wg.Wait()
+		close(mergedErr)
+	}()
+
+	return mergedErr
 }
 
 // Pause pauses the processing of jobs.

@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// BenchmarkVoidQueue_Operations benchmarks the operations of VoidQueue.
 func BenchmarkVoidQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidQueue(cpus, func(data int) {
-			TwoTimes(data)
+		q := NewVoidQueue(cpus, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 
@@ -22,8 +22,9 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewVoidQueue(cpus, func(data int) {
-
+		q := NewVoidQueue(cpus, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 
@@ -37,13 +38,13 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 	})
 }
 
-// BenchmarkVoidPriorityQueue_Operations benchmarks the operations of VoidPriorityQueue.
 func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidPriorityQueue(cpus, func(data int) {
-			TwoTimes(data)
+		q := NewVoidPriorityQueue(cpus, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 
@@ -54,8 +55,9 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewVoidPriorityQueue(cpus, func(data int) {
-			TwoTimes(data)
+		q := NewVoidPriorityQueue(cpus, func(data int) error {
+			Double(data)
+			return nil
 		})
 		defer q.Close()
 

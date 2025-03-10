@@ -7,7 +7,7 @@ import (
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
 
-type VoidWorker[T any] func(T)
+type VoidWorker[T any] func(T) error
 
 type ConcurrentVoidQueue[T any] struct {
 	*ConcurrentQueue[T, any]
@@ -31,12 +31,13 @@ func NewVoidQueue[T any](concurrency uint, worker VoidWorker[T]) *ConcurrentVoid
 }
 
 // Add adds a new Job to the queue.
-func (q *ConcurrentVoidQueue[T]) Add(data T) {
+func (q *ConcurrentVoidQueue[T]) Add(data T) <-chan error {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	job := &queue.Job[T, any]{
 		Data: data,
+		Err:  make(chan error, 1),
 	}
 
 	q.jobQueue.Enqueue(queue.EnqItem[*queue.Job[T, any]]{Value: job})
@@ -46,13 +47,31 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) {
 	if q.shouldProcessNextJob("add") {
 		q.processNextJob()
 	}
+
+	return job.Err
 }
 
 // AddAll adds multiple Jobs to the queue.
-func (q *ConcurrentVoidQueue[T]) AddAll(data []T) {
+func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
+	wg := new(sync.WaitGroup)
+	mergedErr := make(chan error, 1)
+
+	wg.Add(len(data))
 	for _, item := range data {
-		q.Add(item)
+		go func(err <-chan error) {
+			defer wg.Done()
+			for e := range err {
+				mergedErr <- e
+			}
+		}(q.Add(item))
 	}
+
+	go func() {
+		wg.Wait()
+		close(mergedErr)
+	}()
+
+	return mergedErr
 }
 
 // Pause pauses the processing of jobs.
