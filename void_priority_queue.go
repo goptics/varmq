@@ -30,6 +30,7 @@ func NewVoidPriorityQueue[T any](concurrency uint, worker VoidWorker[T]) *Concur
 	}
 }
 
+// Add adds a new Job with the given priority to the queue.
 func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -47,6 +48,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) {
 	}
 }
 
+// AddAll adds multiple Jobs with the given priority to the queue.
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) {
 	for _, item := range items {
 		q.Add(item.Value, item.Priority)

@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// BenchmarkVoidQueue_Operations benchmarks the operations of VoidQueue.
 func BenchmarkVoidQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
@@ -36,6 +37,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 	})
 }
 
+// BenchmarkVoidPriorityQueue_Operations benchmarks the operations of VoidPriorityQueue.
 func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 

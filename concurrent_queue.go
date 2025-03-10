@@ -54,6 +54,7 @@ func (q *ConcurrentQueue[T, R]) Init() *ConcurrentQueue[T, R] {
 	return q
 }
 
+// spawnWorker starts a worker goroutine to process jobs from the channel.
 func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 	for job := range channel {
 		switch worker := q.worker.(type) {
@@ -81,7 +82,7 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *queue.Job[T, R]) {
 	}
 }
 
-// Picks the next available channel for processing a Job.
+// pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- *queue.Job[T, R] {
 	q.mx.Lock()
@@ -94,7 +95,7 @@ func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- *queue.Job[T, R] {
 	return channel
 }
 
-// Determines if the next job should be processed based on the current state.
+// shouldProcessNextJob determines if the next job should be processed based on the current state.
 func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 	switch action {
 	case "add":
@@ -108,11 +109,12 @@ func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 	}
 }
 
+// pause pauses the processing of jobs.
 func (q *ConcurrentQueue[T, R]) pause() {
 	q.isPaused.Store(true)
 }
 
-// Processes the next Job in the queue.
+// processNextJob processes the next Job in the queue.
 func (q *ConcurrentQueue[T, R]) processNextJob() {
 	value, has := q.jobQueue.Dequeue()
 
@@ -127,7 +129,7 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 	}(value)
 }
 
-// Returns the number of Jobs pending in the queue.
+// PendingCount returns the number of Jobs pending in the queue.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) PendingCount() int {
 	return q.jobQueue.Len()
@@ -138,7 +140,7 @@ func (q *ConcurrentQueue[T, R]) IsPaused() bool {
 	return q.isPaused.Load()
 }
 
-// Returns the number of Jobs currently being processed.
+// CurrentProcessingCount returns the number of Jobs currently being processed.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) CurrentProcessingCount() uint {
 	return q.curProcessing
@@ -164,7 +166,7 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 	}
 }
 
-// Adds a new Job to the queue and returns a channel to receive the response and a cancel function.
+// Add adds a new Job to the queue and returns a channel to receive the response.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
 	q.mx.Lock()
@@ -186,7 +188,7 @@ func (q *ConcurrentQueue[T, R]) Add(data T) <-chan R {
 	return job.Response
 }
 
-// Adds multiple Jobs to the queue and returns a channel to receive all responses.
+// AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
 // Time complexity: O(n) where n is the number of Jobs added
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan R {
 	wg := new(sync.WaitGroup)
@@ -210,13 +212,13 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan R {
 	return merged
 }
 
-// Waits until all pending Jobs in the queue are processed.
+// WaitUntilFinished waits until all pending Jobs in the queue are processed.
 // Time complexity: O(n) where n is the number of pending Jobs
 func (q *ConcurrentQueue[T, R]) WaitUntilFinished() {
 	q.wg.Wait()
 }
 
-// Remove all pending Jobs from the queue.
+// Purge removes all pending Jobs from the queue.
 func (q *ConcurrentQueue[T, R]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -235,7 +237,7 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 	}
 }
 
-// Closes the queue and resets all internal states.
+// Close closes the queue and resets all internal states.
 // Time complexity: O(n) where n is the number of channels
 func (q *ConcurrentQueue[T, R]) Close() error {
 	q.Purge()
@@ -255,7 +257,7 @@ func (q *ConcurrentQueue[T, R]) Close() error {
 	return nil
 }
 
-// Waits until all pending Jobs in the queue are processed and then closes the queue.
+// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
 // Time complexity: O(n) where n is the number of pending Jobs
 func (q *ConcurrentQueue[T, R]) WaitAndClose() error {
 	q.wg.Wait()

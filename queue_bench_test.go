@@ -5,10 +5,12 @@ import (
 	"testing"
 )
 
+// TwoTimes multiplies the input by 2.
 func TwoTimes(n int) int {
 	return n * 2
 }
 
+// BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 
@@ -43,6 +45,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 }
 
+// BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	cpus := uint(runtime.NumCPU())
 

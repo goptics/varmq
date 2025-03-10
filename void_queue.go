@@ -30,6 +30,7 @@ func NewVoidQueue[T any](concurrency uint, worker VoidWorker[T]) *ConcurrentVoid
 	}
 }
 
+// Add adds a new Job to the queue.
 func (q *ConcurrentVoidQueue[T]) Add(data T) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -47,6 +48,7 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) {
 	}
 }
 
+// AddAll adds multiple Jobs to the queue.
 func (q *ConcurrentVoidQueue[T]) AddAll(data []T) {
 	for _, item := range data {
 		q.Add(item)
