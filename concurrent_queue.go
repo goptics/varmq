@@ -14,6 +14,9 @@ type Response[T any] struct {
 
 type Worker[T, R any] func(T) (R, error)
 
+type Awaitable[T any] interface {
+	Wait() (T, error)
+}
 type ConcurrentQueue[T, R any] struct {
 	concurrency   uint32
 	worker        any
@@ -179,7 +182,7 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 
 // Add adds a new Job to the queue and returns a channel to receive the response.
 // Time complexity: O(1)
-func (q *ConcurrentQueue[T, R]) Add(data T) (<-chan R, <-chan error) {
+func (q *ConcurrentQueue[T, R]) Add(data T) Awaitable[R] {
 	job := queue.Job[T, R]{
 		Data: data,
 		Channel: queue.Channel[R]{
@@ -189,7 +192,7 @@ func (q *ConcurrentQueue[T, R]) Add(data T) (<-chan R, <-chan error) {
 	}
 
 	q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job})
-	return job.Channel.Data, job.Channel.Err
+	return &job
 }
 
 // AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.

@@ -14,22 +14,22 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 
 		q := NewPriorityQueue(1, worker).Pause()
 
-		resp1, _ := q.Add(1, 2)
-		resp2, _ := q.Add(2, 1)
-		resp3, _ := q.Add(3, 0)
+		job1 := q.Add(1, 2)
+		job2 := q.Add(2, 1)
+		job3 := q.Add(3, 0)
 
 		if count := q.PendingCount(); count != 3 {
 			t.Errorf("Expected pending count to be 3, got %d", count)
 		}
 
 		q.Resume()
-		if result := <-resp3; result != 6 {
+		if result, _ := job3.Wait(); result != 6 {
 			t.Errorf("Expected result to be 6, got %d", result)
 		}
-		if result := <-resp2; result != 4 {
+		if result, _ := job2.Wait(); result != 4 {
 			t.Errorf("Expected result to be 4, got %d", result)
 		}
-		if result := <-resp1; result != 2 {
+		if result, _ := job1.Wait(); result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
 		}
 
@@ -52,8 +52,7 @@ func TestConcurrentQueue(t *testing.T) {
 		})
 		defer q.Close()
 
-		resultChan, _ := q.Add(5)
-		result := <-resultChan
+		result, _ := q.Add(5).Wait()
 
 		if result != 10 {
 			t.Errorf("Expected result to be 10, got %d", result)
@@ -130,25 +129,25 @@ func TestConcurrentQueue(t *testing.T) {
 
 		q := NewQueue(2, worker)
 
-		resp1, _ := q.Add(1)
-		resp2, _ := q.Add(2)
+		job1 := q.Add(1)
+		job2 := q.Add(2)
 
-		if result := <-resp1; result != 2 {
+		if result, _ := job1.Wait(); result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
 		}
-		if result := <-resp2; result != 4 {
+		if result, _ := job2.Wait(); result != 4 {
 			t.Errorf("Expected result to be 4, got %d", result)
 		}
 
 		q.Pause()
-		resp3, _ := q.Add(3)
+		job3 := q.Add(3)
 		time.Sleep(50 * time.Millisecond)
 		if count := q.PendingCount(); count != 1 {
 			t.Errorf("Expected pending count to be 1, got %d", count)
 		}
 
 		q.Resume()
-		if result := <-resp3; result != 6 {
+		if result, _ := job3.Wait(); result != 6 {
 			t.Errorf("Expected result to be 6, got %d", result)
 		}
 

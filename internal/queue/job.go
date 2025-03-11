@@ -1,6 +1,8 @@
 package queue
 
-import "errors"
+import (
+	"errors"
+)
 
 type Channel[R any] struct {
 	Data chan R
@@ -12,6 +14,15 @@ type Job[T, R any] struct {
 	Data T
 	Channel[R]
 	Lock bool
+}
+
+func (j *Job[T, R]) Wait() (R, error) {
+	select {
+	case data := <-j.Channel.Data:
+		return data, nil
+	case err := <-j.Channel.Err:
+		return *new(R), err
+	}
 }
 
 func (j *Job[T, R]) Close() error {

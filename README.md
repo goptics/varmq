@@ -56,20 +56,23 @@ import (
 
 func main() {
   // Create a queue with 2 concurrent workers
-  queue := gocq.NewQueue(2, func(data int) int {
+  queue := gocq.NewQueue(2, func(data int) (int, error) {
     time.Sleep(500 * time.Millisecond)
-    return data * 2
+    return data * 2, nil
   })
   defer queue.Close()
 
   // Add a single job
-  result := <-queue.Add(5)
-  fmt.Println(result) // Output: 10
+  result, err := queue.Add(5).Wait()
+  fmt.Println(result, err) // Output: 10 nil
 
   // Add multiple jobs
-  results := queue.AddAll([]int{1, 2, 3, 4, 5})
-  for result := range results {
-    fmt.Println(result) // Output: 2, 4, 6, 8, 10 (unordered)
+  for result := range queue.AddAll([]int{1, 2, 3, 4, 5}) {
+    if result.Err != nil {
+      fmt.Printf("Error: %v\n", result.Err)
+      continue
+    }
+    fmt.Println(result.Data) // Output: 2, 4, 6, 8, 10 (unordered)
   }
 }
 ```
@@ -87,32 +90,41 @@ import (
 
 func main() {
   // Create a void queue with 2 concurrent workers
-  queue := gocq.NewVoidQueue(2, func(data int) {
+  queue := gocq.NewVoidQueue(2, func(data int) error {
     time.Sleep(500 * time.Millisecond)
     fmt.Printf("Processed: %d\n", data)
+    return nil
   })
   defer queue.WaitAndClose()
 
   // Add jobs
-  queue.Add(5)
-  queue.AddAll([]int{1, 2, 3})
+  if err := <-queue.Add(5); err != nil {
+    fmt.Printf("Error: %v\n", err)
+  }
+
+  errs := queue.AddAll([]int{1, 2, 3})
+  for err := range errs {
+    if err != nil {
+      fmt.Printf("Error: %v\n", err)
+    }
+  }
 }
 ```
 
-> Note: Void queue is almost ~32% faster than the standard queue (result returning) according to the benchmarks. Also mem allocations are also reduced to 50%
+> Note: Void queue is almost ~28% faster than the standard queue (result returning) according to the benchmarks. Also mem allocations are also reduced to 50%
 
 ## 📚 API Reference
 
 ### Standard Queue (FIFO)
 
-#### `NewQueue[T, R any](concurrency uint32, worker func(T) R) *ConcurrentQueue[T, R]`
+#### `NewQueue[T, R any](concurrency uint32, worker func(T) (R, error)) *ConcurrentQueue[T, R]`
 
 Creates a new concurrent FIFO queue.
 
 - Time Complexity: O(c) where c is concurrency and spawns c goroutines
 - Parameters:
   - `concurrency`: Maximum number of concurrent workers
-  - `worker`: Function to process each job
+  - `worker`: Function to process each job, returns result and error
 - Returns: A new concurrent queue instance
 
 #### Queue Operation Methods
@@ -127,14 +139,14 @@ Initializes the queue and starts worker goroutines.
 
 > Note: Closes old channels to prevent routine leaks
 
-#### `Add(data T) <-chan R`
+#### `Add(data T) <-chan Result[R]`
 
 Adds a single job to the queue.
 
 - Time Complexity: O(1)
 - Returns: Channel to receive the result
 
-#### `AddAll(data []T) <-chan R`
+#### `AddAll(data []T) <-chan Result[R]`
 
 Adds multiple jobs to the queue.
 
@@ -234,7 +246,7 @@ Similar to standard queue but without return channels:
 
 **The priority queue extends the standard queue with priority support.**
 
-#### `NewPriorityQueue[T, R any](concurrency uint32, worker func(T) R) *ConcurrentPriorityQueue[T, R]`
+#### `NewPriorityQueue[T, R any](concurrency uint32, worker func(T) (R, error)) *ConcurrentPriorityQueue[T, R]`
 
 Creates a new concurrent priority queue.
 
@@ -244,7 +256,7 @@ Creates a new concurrent priority queue.
   - `worker`: Function to process each job
 - Returns: A new priority queue instance
 
-#### `Add(data T, priority int) <-chan R`
+#### `Add(data T, priority int) <-chan Result[R]`
 
 Adds a job with priority (lower number = higher priority).
 
@@ -253,7 +265,7 @@ Adds a job with priority (lower number = higher priority).
   - `priority`: Lower value means higher priority
 - Returns: Channel to receive the result
 
-#### `AddAll(items []PQItem[T]) <-chan R`
+#### `AddAll(items []PQItem[T]) <-chan Result[R]`
 
 Adds multiple prioritized jobs.
 
@@ -285,9 +297,9 @@ Similar to standard priority queue but without return channels:
 ### Priority Queue Example
 
 ```go
-queue := gocq.NewPriorityQueue(1, func(data int) int {
+queue := gocq.NewPriorityQueue(1, func(data int) (int, error) {
     time.Sleep(500 * time.Millisecond)
-    return data * 2
+    return data * 2, nil
 })
 defer queue.WaitAndClose()
 
@@ -300,7 +312,11 @@ items := []gocq.PQItem[int]{
 
 results := queue.AddAll(items)
 for result := range results {
-    fmt.Println(result) // Output: 6, 4, 2 (processed by priority)
+    if result.Err != nil {
+        fmt.Printf("Error: %v\n", result.Err)
+        continue
+    }
+    fmt.Println(result.Data) // Output: 6, 4, 2 (processed by priority)
 }
 ```
 
@@ -350,15 +366,26 @@ goos: linux
 goarch: amd64
 pkg: github.com/fahimfaisaal/gocq
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkQueue_Operations/Add-24                         1000000              1101 ns/op             224 B/op          5 allocs/op
-BenchmarkQueue_Operations/AddAll-24                       929614              1779 ns/op             289 B/op          7 allocs/op
-BenchmarkPriorityQueue_Operations/Add-24                 1333922              1132 ns/op             200 B/op          5 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll-24               708817              2031 ns/op             264 B/op          7 allocs/op
-BenchmarkVoidQueue_Operations/Add-24                     1239252              1055 ns/op             112 B/op          3 allocs/op
-BenchmarkVoidQueue_Operations/AddAll-24                  1825214             748.2 ns/op             112 B/op          3 allocs/op
-BenchmarkVoidPriorityQueue_Operations/Add-24             1000000              1374 ns/op              90 B/op          3 allocs/op
-BenchmarkVoidPriorityQueue_Operations/AddAll-24           958118              1361 ns/op              89 B/op          3 allocs/op
+BenchmarkQueue_Operations/Add-24                                 1661820              1290 ns/op             392 B/op          7 allocs/op
+BenchmarkQueue_Operations/AddAll-24                                11620            176242 ns/op           20546 B/op        508 allocs/op
+BenchmarkPriorityQueue_Operations/Add-24                         1575746              1623 ns/op             360 B/op          6 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll-24                         9286            111769 ns/op           17341 B/op        408 allocs/op
+BenchmarkVoidQueue_Operations/Add-24                             1436550               932.0 ns/op           248 B/op          5 allocs/op
+BenchmarkVoidQueue_Operations/AddAll-24                            10952            152168 ns/op           15754 B/op        407 allocs/op
+BenchmarkVoidPriorityQueue_Operations/Add-24                     1000000              1417 ns/op             248 B/op          5 allocs/op
+BenchmarkVoidPriorityQueue_Operations/AddAll-24                     8871            137396 ns/op           15754 B/op        407 allocs/op
 ```
+
+| Queue Type   | Operation | Variant    | ns/op   | B/op      | allocs/op |
+| ------------ | --------- | ---------- | ------- | --------- | --------- |
+| Non-Priority | Add       | Returnable | 1290    | 392       | 7         |
+| Non-Priority | Add       | Void       | **932** | **248**   | **5**     |
+| Non-Priority | AddAll    | Returnable | 176242  | 20546     | 508       |
+| Non-Priority | AddAll    | Void       | 152168  | 15754     | 407       |
+| Priority     | Add       | Returnable | 1623    | 360       | 6         |
+| Priority     | Add       | Void       | 1417    | **248**   | **5**     |
+| Priority     | AddAll    | Returnable | 111769  | 17341     | 408       |
+| Priority     | AddAll    | Void       | 137396  | **15754** | 407       |
 
 ### Run Benchmarks
 

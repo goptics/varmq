@@ -35,7 +35,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() *ConcurrentPriorityQueue[T, R] {
 
 // Add adds a new Job with the given priority to the queue and returns a channel to receive the response.
 // Time complexity: O(log n)
-func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) (<-chan R, <-chan error) {
+func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) Awaitable[R] {
 	job := queue.Job[T, R]{
 		Data: data,
 		Channel: queue.Channel[R]{
@@ -46,7 +46,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) (<-chan R, <-c
 
 	q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job, Priority: priority})
 
-	return job.Channel.Data, job.Channel.Err
+	return &job
 }
 
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.

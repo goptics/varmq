@@ -2,43 +2,26 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"runtime/trace"
 	"time"
 
 	"github.com/fahimfaisaal/gocq"
 )
 
 func main() {
-	start := time.Now()
-	defer func() {
-		fmt.Printf("Took %s\n", time.Since(start))
-	}()
-	f, err := os.Create("trace.out")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	if err := trace.Start(f); err != nil {
-		panic(err)
-	}
-
-	// Make sure trace is stopped before your program ends
-	defer trace.Stop()
-
-	worker := func(data int) (int, error) {
+	// Create a queue with 2 concurrent workers
+	queue := gocq.NewQueue(2, func(data int) (int, error) {
+		time.Sleep(100 * time.Millisecond)
+		if data == 10 {
+			return 0, fmt.Errorf("error")
+		}
 		return data * 2, nil
-	}
+	})
+	defer queue.Close()
 
-	q := gocq.NewPriorityQueue(1, worker).Pause()
+	// Add a single job
+	result, err := queue.Add(5).Wait()
 
-	resp1, _ := q.Add(1, 2)
-	resp2, _ := q.Add(2, 1)
-	resp3, _ := q.Add(3, 0)
+	fmt.Println(result)
 
-	q.Resume()
-
-	fmt.Println(<-resp1)
-	fmt.Println(<-resp2)
-	fmt.Println(<-resp3)
+	fmt.Println(result, err)
 }
