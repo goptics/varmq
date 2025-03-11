@@ -105,7 +105,7 @@ func main() {
 
 ### Standard Queue (FIFO)
 
-#### `NewQueue[T, R any](concurrency uint, worker func(T) R) *ConcurrentQueue[T, R]`
+#### `NewQueue[T, R any](concurrency uint32, worker func(T) R) *ConcurrentQueue[T, R]`
 
 Creates a new concurrent FIFO queue.
 
@@ -196,7 +196,7 @@ Returns the number of jobs waiting to be processed.
 - Time Complexity: O(1)
 - Returns: Number of pending jobs
 
-#### `CurrentProcessingCount() uint`
+#### `CurrentProcessingCount() uint32`
 
 Returns the number of jobs currently being processed.
 
@@ -212,7 +212,7 @@ Checks if the queue is currently paused.
 
 ### Void Queue
 
-#### `NewVoidQueue[T any](concurrency uint, worker func(T)) *ConcurrentVoidQueue[T]`
+#### `NewVoidQueue[T any](concurrency uint32, worker func(T)) *ConcurrentVoidQueue[T]`
 
 Creates a new concurrent FIFO queue for operations without return values.
 
@@ -234,7 +234,7 @@ Similar to standard queue but without return channels:
 
 **The priority queue extends the standard queue with priority support.**
 
-#### `NewPriorityQueue[T, R any](concurrency uint, worker func(T) R) *ConcurrentPriorityQueue[T, R]`
+#### `NewPriorityQueue[T, R any](concurrency uint32, worker func(T) R) *ConcurrentPriorityQueue[T, R]`
 
 Creates a new concurrent priority queue.
 
@@ -262,7 +262,7 @@ Adds multiple prioritized jobs.
 
 ### Void Priority Queue
 
-#### `NewVoidPriorityQueue[T any](concurrency uint, worker func(T)) *ConcurrentVoidPriorityQueue[T]`
+#### `NewVoidPriorityQueue[T any](concurrency uint32, worker func(T)) *ConcurrentVoidPriorityQueue[T]`
 
 Creates a new concurrent priority queue for operations without return values.
 

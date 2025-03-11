@@ -1,7 +1,6 @@
 package gocq
 
 import (
-	"fmt"
 	"runtime"
 	"testing"
 )
@@ -13,13 +12,13 @@ func Double(n int) int {
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
-	cpus := uint(runtime.NumCPU())
+	cpus := uint32(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
 		q := NewQueue(cpus, func(data int) (int, error) {
 			return Double(data), nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
@@ -32,26 +31,24 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		q := NewQueue(cpus, func(data int) (int, error) {
 			return Double(data), nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		data := make([]int, b.N)
 		for i := range data {
 			data[i] = i
 		}
-		fmt.Println("Done data")
 
 		b.ResetTimer()
-		out, _ := q.AddAll(data)
+		out := q.AddAll(data)
 		for range out {
 			// drain the channel
 		}
-		fmt.Println("Done out")
 	})
 }
 
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
-	cpus := uint(runtime.NumCPU())
+	cpus := uint32(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
 		q := NewPriorityQueue(cpus, func(data int) (int, error) {
@@ -61,7 +58,8 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			q.Add(i, i%10)
+			output, _ := q.Add(i, i%10)
+			<-output // Wait for each operation to complete
 		}
 	})
 
@@ -69,20 +67,17 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		q := NewPriorityQueue(cpus, func(data int) (int, error) {
 			return Double(data), nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		data := make([]PQItem[int], b.N)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
-		fmt.Println("Done data")
 
 		b.ResetTimer()
-		out, _ := q.AddAll(data)
-
+		out := q.AddAll(data)
 		for range out {
 			// drain the channel
 		}
-		fmt.Println("Done out")
 	})
 }

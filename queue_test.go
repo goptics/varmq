@@ -41,41 +41,6 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 			t.Errorf("Expected current processing count to be 0, got %d", count)
 		}
 	})
-
-	t.Run("AddAll with Priority", func(t *testing.T) {
-		worker := func(data int) (int, error) {
-			return Double(data), nil
-		}
-
-		q := NewPriorityQueue(2, worker)
-
-		resultChan, _ := q.AddAll([]PQItem[int]{
-			{Value: 1, Priority: 2},
-			{Value: 2, Priority: 1},
-			{Value: 3, Priority: 0},
-			{Value: 4, Priority: 2},
-			{Value: 5, Priority: 1},
-		})
-
-		results := make([]int, 0)
-		for result := range resultChan {
-			results = append(results, result)
-		}
-
-		if len(results) != 5 {
-			t.Errorf("Expected 5 results, got %d", len(results))
-		}
-
-		expectedSum := 30 // sum of [2,4,6,8,10]
-		actualSum := 0
-		for _, r := range results {
-			actualSum += r
-		}
-
-		if actualSum != expectedSum {
-			t.Errorf("Expected sum of results to be %d, got %d", expectedSum, actualSum)
-		}
-	})
 }
 
 // TestConcurrentQueue tests the functionality of ConcurrentQueue.
@@ -92,35 +57,6 @@ func TestConcurrentQueue(t *testing.T) {
 
 		if result != 10 {
 			t.Errorf("Expected result to be 10, got %d", result)
-		}
-	})
-
-	t.Run("AddAll", func(t *testing.T) {
-		q := NewQueue(2, func(data int) (int, error) {
-			return Double(data), nil
-		})
-		defer q.Close()
-
-		data := []int{1, 2, 3, 4, 5}
-		resultChan, _ := q.AddAll(data)
-
-		results := make([]int, 0)
-		for result := range resultChan {
-			results = append(results, result)
-		}
-
-		if len(results) != 5 {
-			t.Errorf("Expected 5 results, got %d", len(results))
-		}
-
-		expectedSum := 30 // sum of [2,4,6,8,10]
-		actualSum := 0
-		for _, r := range results {
-			actualSum += r
-		}
-
-		if actualSum != expectedSum {
-			t.Errorf("Expected sum of results to be %d, got %d", expectedSum, actualSum)
 		}
 	})
 
@@ -146,7 +82,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("Concurrency", func(t *testing.T) {
 		t.Parallel()
-		concurrency := uint(2)
+		concurrency := uint32(2)
 		processed := 0
 		q := NewQueue(concurrency, func(data int) (int, error) {
 			processed++

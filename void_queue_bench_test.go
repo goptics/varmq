@@ -6,14 +6,14 @@ import (
 )
 
 func BenchmarkVoidQueue_Operations(b *testing.B) {
-	cpus := uint(runtime.NumCPU())
+	cpus := uint32(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
 		q := NewVoidQueue(cpus, func(data int) error {
 			Double(data)
 			return nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
@@ -26,7 +26,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 			Double(data)
 			return nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		data := make([]int, b.N)
 		for i := range data {
@@ -39,14 +39,14 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 }
 
 func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
-	cpus := uint(runtime.NumCPU())
+	cpus := uint32(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
 		q := NewVoidPriorityQueue(cpus, func(data int) error {
 			Double(data)
 			return nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -59,7 +59,7 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 			Double(data)
 			return nil
 		})
-		defer q.Close()
+		defer q.WaitAndClose()
 
 		data := make([]PQItem[int], b.N)
 		for i := range data {
@@ -67,6 +67,10 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		q.AddAll(data)
+		out := q.AddAll(data)
+
+		for range out {
+			// drain the channel
+		}
 	})
 }
