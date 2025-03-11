@@ -5,19 +5,22 @@ import (
 	"testing"
 )
 
-const AddAll_SampleSize = 100
+const SampleSize = 100
 
 // Double multiplies the input by 2.
 func Double(n int) int {
 	return n * 2
 }
 
+func Cpus() uint32 {
+	return uint32(runtime.NumCPU())
+}
+
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
-	cpus := uint32(runtime.NumCPU())
 
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) (int, error) {
+		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -29,7 +32,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("Add-Parallel", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) (int, error) {
+		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -43,12 +46,12 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) (int, error) {
+		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, AddAll_SampleSize)
+		data := make([]int, SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -63,12 +66,12 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll-Parallel", func(b *testing.B) {
-		q := NewQueue(cpus, func(data int) (int, error) {
+		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, AddAll_SampleSize)
+		data := make([]int, SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -87,10 +90,8 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
-	cpus := uint32(runtime.NumCPU())
-
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -102,12 +103,12 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], AddAll_SampleSize)
+		data := make([]PQItem[int], SampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
@@ -122,12 +123,12 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll-Parallel", func(b *testing.B) {
-		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], AddAll_SampleSize)
+		data := make([]PQItem[int], SampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
