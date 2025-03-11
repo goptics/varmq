@@ -21,22 +21,6 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 		}
 	})
 
-	b.Run("Add-Parallel", func(b *testing.B) {
-		q := NewVoidQueue(Cpus(), func(data int) error {
-			Double(data)
-			return nil
-		})
-		defer q.WaitAndClose()
-
-		b.ResetTimer()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				err := q.Add(1)
-				<-err
-			}
-		})
-	})
-
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewVoidQueue(Cpus(), func(data int) error {
 			Double(data)
@@ -57,8 +41,26 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 			}
 		}
 	})
+}
 
-	b.Run("AddAll-Parallel", func(b *testing.B) {
+func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewVoidQueue(Cpus(), func(data int) error {
+			Double(data)
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				err := q.Add(1)
+				<-err
+			}
+		})
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
 		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
@@ -95,21 +97,6 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 		}
 	})
 
-	b.Run("Add-Parallel", func(b *testing.B) {
-		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
-			Double(data)
-			return nil
-		})
-		defer q.WaitAndClose()
-
-		b.ResetTimer()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				q.Add(1, 0)
-			}
-		})
-	})
-
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
 			Double(data)
@@ -130,8 +117,25 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 			}
 		}
 	})
+}
 
-	b.Run("AddAll-Parallel", func(b *testing.B) {
+func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
+			Double(data)
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1, 0)
+			}
+		})
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
 		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
 			Double(data)
 			return nil

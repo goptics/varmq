@@ -18,7 +18,6 @@ func Cpus() uint32 {
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
-
 	b.Run("Add", func(b *testing.B) {
 		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
@@ -29,20 +28,6 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		for j := 0; j < b.N; j++ {
 			q.Add(j)
 		}
-	})
-
-	b.Run("Add-Parallel", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
-		})
-		defer q.WaitAndClose()
-
-		b.ResetTimer()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				q.Add(1)
-			}
-		})
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
@@ -64,8 +49,25 @@ func BenchmarkQueue_Operations(b *testing.B) {
 			}
 		}
 	})
+}
 
-	b.Run("AddAll-Parallel", func(b *testing.B) {
+// BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
+func BenchmarkQueue_ParallelOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewQueue(Cpus(), func(data int) (int, error) {
+			return Double(data), nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1)
+			}
+		})
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
 		q := NewQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
@@ -121,8 +123,25 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 			}
 		}
 	})
+}
 
-	b.Run("AddAll-Parallel", func(b *testing.B) {
+// BenchmarkPriorityQueue_ParallelOperations benchmarks parallel operations of PriorityQueue.
+func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
+			return Double(data), nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1, 0)
+			}
+		})
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
 		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
 			return Double(data), nil
 		})
