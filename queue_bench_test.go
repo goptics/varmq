@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const AddAll_SampleSize = 100
+
 // Double multiplies the input by 2.
 func Double(n int) int {
 	return n * 2
@@ -22,9 +24,22 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			output, _ := q.Add(j)
-			<-output
+			q.Add(j)
 		}
+	})
+
+	b.Run("Add-Parallel", func(b *testing.B) {
+		q := NewQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1)
+			}
+		})
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
@@ -33,16 +48,40 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, b.N)
+		data := make([]int, AddAll_SampleSize)
 		for i := range data {
 			data[i] = i
 		}
 
 		b.ResetTimer()
-		out := q.AddAll(data)
-		for range out {
-			// drain the channel
+		for i := 0; i < b.N; i++ {
+			out := q.AddAll(data)
+			for range out {
+				// drain the channel
+			}
 		}
+	})
+
+	b.Run("AddAll-Parallel", func(b *testing.B) {
+		q := NewQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
+		})
+		defer q.WaitAndClose()
+
+		data := make([]int, AddAll_SampleSize)
+		for i := range data {
+			data[i] = i
+		}
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				out := q.AddAll(data)
+				for range out {
+					// drain the channel
+				}
+			}
+		})
 	})
 }
 
@@ -58,8 +97,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			output, _ := q.Add(i, i%10)
-			<-output // Wait for each operation to complete
+			q.Add(i, i%10)
 		}
 	})
 
@@ -69,15 +107,39 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], b.N)
+		data := make([]PQItem[int], AddAll_SampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
-		out := q.AddAll(data)
-		for range out {
-			// drain the channel
+		for i := 0; i < b.N; i++ {
+			out := q.AddAll(data)
+			for range out {
+				// drain the channel
+			}
 		}
+	})
+
+	b.Run("AddAll-Parallel", func(b *testing.B) {
+		q := NewPriorityQueue(cpus, func(data int) (int, error) {
+			return Double(data), nil
+		})
+		defer q.WaitAndClose()
+
+		data := make([]PQItem[int], AddAll_SampleSize)
+		for i := range data {
+			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+		}
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				out := q.AddAll(data)
+				for range out {
+					// drain the channel
+				}
+			}
+		})
 	})
 }
