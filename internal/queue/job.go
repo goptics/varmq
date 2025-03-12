@@ -29,12 +29,13 @@ type Job[T, R any] struct {
 }
 
 func (j *Job[T, R]) Wait() (R, error) {
-	select {
-	case data := <-j.Channel.Data:
+	data, ok := <-j.Channel.Data
+
+	if ok {
 		return data, nil
-	case err := <-j.Channel.Err:
-		return *new(R), err
 	}
+
+	return *new(R), <-j.Channel.Err
 }
 
 func (j *Job[T, R]) Close() error {
