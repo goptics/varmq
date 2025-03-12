@@ -9,6 +9,18 @@ type Channel[R any] struct {
 	Err  chan error
 }
 
+func (c *Channel[R]) Close() error {
+	if c.Data != nil {
+		close(c.Data)
+	}
+
+	if c.Err != nil {
+		close(c.Err)
+	}
+
+	return nil
+}
+
 // Job represents a task to be executed by a worker.
 type Job[T, R any] struct {
 	Data T
@@ -30,9 +42,6 @@ func (j *Job[T, R]) Close() error {
 		return errors.New("job channel is not closeable")
 	}
 
-	if j.Channel.Data != nil {
-		close(j.Channel.Data)
-	}
-	close(j.Channel.Err)
+	j.Channel.Close()
 	return nil
 }

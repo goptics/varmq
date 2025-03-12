@@ -201,16 +201,17 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Response[R] {
 	wg := new(sync.WaitGroup)
 	response := make(chan Response[R], len(data))
 	dataCh, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
+	channel := queue.Channel[R]{
+		Data: dataCh,
+		Err:  err,
+	}
 
 	wg.Add(len(data))
 	for _, item := range data {
 		job := queue.Job[T, R]{
-			Data: item,
-			Channel: queue.Channel[R]{
-				Data: dataCh,
-				Err:  err,
-			},
-			Lock: true,
+			Data:    item,
+			Channel: channel,
+			Lock:    true,
 		}
 
 		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job})
@@ -240,8 +241,7 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Response[R] {
 	go func() {
 		wg.Wait()
 
-		close(err)
-		close(dataCh)
+		channel.Close()
 		close(response)
 	}()
 
