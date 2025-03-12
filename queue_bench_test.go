@@ -43,8 +43,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			out := q.AddAll(data)
-			for range out {
+			for range q.AddAll(data) {
 				// drain the channel
 			}
 		}
@@ -155,8 +154,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				out := q.AddAll(data)
-				for range out {
+				for range q.AddAll(data) {
 					// drain the channel
 				}
 			}

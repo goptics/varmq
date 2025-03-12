@@ -82,9 +82,7 @@ func TestConcurrentQueue(t *testing.T) {
 	t.Run("Concurrency", func(t *testing.T) {
 		t.Parallel()
 		concurrency := uint32(2)
-		processed := 0
 		q := NewQueue(concurrency, func(data int) (int, error) {
-			processed++
 			return Double(data), nil
 		})
 		defer q.Close()
