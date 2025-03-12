@@ -55,21 +55,12 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 	wg := new(sync.WaitGroup)
 	response := make(chan Response[R], len(items))
 	data, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
-
-	wg.Add(len(items))
-	for _, item := range items {
-		job := queue.Job[T, R]{
-			Data: item.Value,
-			Channel: queue.Channel[R]{
-				Data: data,
-				Err:  err,
-			},
-			Lock: true,
-		}
-
-		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job, Priority: item.Priority})
+	channel := queue.Channel[R]{
+		Data: data,
+		Err:  err,
 	}
 
+	// consume data and err channels from the worker
 	go func() {
 		for {
 			select {
@@ -91,11 +82,21 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 		}
 	}()
 
+	wg.Add(len(items))
+	for _, item := range items {
+		job := queue.Job[T, R]{
+			Data:    item.Value,
+			Channel: channel,
+			Lock:    true,
+		}
+
+		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job, Priority: item.Priority})
+	}
+
 	go func() {
 		wg.Wait()
 
-		close(err)
-		close(data)
+		channel.Close()
 		close(response)
 	}()
 

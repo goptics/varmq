@@ -25,7 +25,7 @@ func (c *Channel[R]) Close() error {
 type Job[T, R any] struct {
 	Data T
 	Channel[R]
-	Lock bool
+	Lock bool // if true, channel will not be closed by this job
 }
 
 func (j *Job[T, R]) Wait() (R, error) {
@@ -40,7 +40,7 @@ func (j *Job[T, R]) Wait() (R, error) {
 
 func (j *Job[T, R]) Close() error {
 	if j.Lock {
-		return errors.New("job channel is not closeable")
+		return errors.New("job is not closeable")
 	}
 
 	j.Channel.Close()

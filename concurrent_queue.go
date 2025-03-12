@@ -206,17 +206,7 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Response[R] {
 		Err:  err,
 	}
 
-	wg.Add(len(data))
-	for _, item := range data {
-		job := queue.Job[T, R]{
-			Data:    item,
-			Channel: channel,
-			Lock:    true,
-		}
-
-		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job})
-	}
-
+	// consume data and err channels from the worker
 	go func() {
 		for {
 			select {
@@ -237,6 +227,17 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Response[R] {
 			}
 		}
 	}()
+
+	wg.Add(len(data))
+	for _, item := range data {
+		job := queue.Job[T, R]{
+			Data:    item,
+			Channel: channel,
+			Lock:    true,
+		}
+
+		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job})
+	}
 
 	go func() {
 		wg.Wait()

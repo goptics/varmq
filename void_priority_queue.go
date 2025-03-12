@@ -44,26 +44,27 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error 
 	wg := new(sync.WaitGroup)
 	response := make(chan error, len(items))
 	err := make(chan error, 1)
-
-	wg.Add(len(items))
-	for _, item := range items {
-		job := queue.Job[T, any]{
-			Data: item.Value,
-			Channel: queue.Channel[any]{
-				Err: err,
-			},
-			Lock: true,
-		}
-
-		q.addJob(job, queue.EnqItem[queue.Job[T, any]]{Value: job, Priority: item.Priority})
+	channel := queue.Channel[any]{
+		Err: err,
 	}
 
-	go func() {
+	go func(err <-chan error) {
 		for e := range err {
 			response <- e
 			wg.Done()
 		}
-	}()
+	}(err)
+
+	wg.Add(len(items))
+	for _, item := range items {
+		job := queue.Job[T, any]{
+			Data:    item.Value,
+			Channel: channel,
+			Lock:    true,
+		}
+
+		q.addJob(job, queue.EnqItem[queue.Job[T, any]]{Value: job, Priority: item.Priority})
+	}
 
 	go func() {
 		wg.Wait()
