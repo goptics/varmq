@@ -367,11 +367,11 @@ goarch: amd64
 pkg: github.com/fahimfaisaal/gocq
 cpu: AMD EPYC 7763 64-Core Processor
 
-BenchmarkQueue_Operations/Add-4                          1000000       1019 ns/op        408 B/op        8 allocs/op
-BenchmarkQueue_Operations/AddAll-4                         10000     105456 ns/op      20055 B/op      509 allocs/op
-BenchmarkPriorityQueue_Operations/Add-4                  1000000       1028 ns/op        384 B/op        8 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll-4                  9600     119258 ns/op      17653 B/op      509 allocs/op
-BenchmarkVoidQueue_Operations/Add-4                      1224120      952.3 ns/op        272 B/op        7 allocs/op
+BenchmarkQueue_Operations/Add-4                          1000000        1019 ns/op        408 B/op        8 allocs/op
+BenchmarkQueue_Operations/AddAll-4                         10000      105456 ns/op      20055 B/op      509 allocs/op
+BenchmarkPriorityQueue_Operations/Add-4                  1000000        1028 ns/op        384 B/op        8 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll-4                  9600      119258 ns/op      17653 B/op      509 allocs/op
+BenchmarkVoidQueue_Operations/Add-4                      1224120       952.3 ns/op        272 B/op        7 allocs/op
 BenchmarkVoidQueue_Operations/AddAll-4                     10000      114441 ns/op     16572 B/op      509 allocs/op
 BenchmarkVoidPriorityQueue_Operations/Add-4              1256269       953.9 ns/op       272 B/op        7 allocs/op
 BenchmarkVoidPriorityQueue_Operations/AddAll-4              9727      117869 ns/op     16573 B/op      509 allocs/op
