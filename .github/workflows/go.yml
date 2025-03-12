@@ -35,4 +35,4 @@ jobs:
           verbose: true
 
       - name: Run benchmarks
-        run: go test -bench=. ./...
+        run: go test -bench . -benchmem
