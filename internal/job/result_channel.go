@@ -5,6 +5,7 @@ type ResultChannel[R any] struct {
 	Err  chan error
 }
 
+// Close closes the data and error channels of a job.
 func (c *ResultChannel[R]) Close() error {
 	if c.Data != nil {
 		close(c.Data)

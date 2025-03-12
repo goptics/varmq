@@ -7,7 +7,6 @@ import (
 
 func TestConcurrentVoidQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
-
 		q := NewVoidQueue(2, func(data int) error {
 			Double(data)
 			return nil
@@ -24,8 +23,7 @@ func TestConcurrentVoidQueue(t *testing.T) {
 		})
 		defer q.WaitAndClose()
 
-		data := []int{1, 2, 3, 4, 5}
-		q.AddAll(data)
+		q.AddAll([]int{1, 2, 3, 4, 5})
 	})
 
 	t.Run("PauseAndResume", func(t *testing.T) {

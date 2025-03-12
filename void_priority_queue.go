@@ -41,6 +41,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) job.Awaitable
 	return j
 }
 
+// AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error {
 	wg := sync.WaitGroup{}
 	response := make(chan error, len(items))
@@ -70,7 +71,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error 
 	go func() {
 		wg.Wait()
 
-		close(err)
+		channel.Close()
 		close(response)
 	}()
 
