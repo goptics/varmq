@@ -14,7 +14,7 @@ GoCQ is a high-performance concurrent queue for Go, optimized for efficient task
 ## 🌟 Features
 
 - Generic type support for both data and results
-- Result-returning and void (non-returning) queue variants
+- ResultChannel-returning and void (non-returning) queue variants
 - Configurable concurrency limits
 - FIFO queue with O(1) operations
 - Priority queue support with O(log n) operations
@@ -43,7 +43,7 @@ go get github.com/fahimfaisaal/gocq
 
 ## 🚀 Quick Start
 
-### Standard Queue (FIFO and Result-Returning)
+### Standard Queue (FIFO and ResultChannel-Returning)
 
 ```go
 package main
@@ -139,14 +139,14 @@ Initializes the queue and starts worker goroutines.
 
 > Note: Closes old channels to prevent routine leaks
 
-#### `Add(data T) <-chan Result[R]`
+#### `Add(data T) <-chan ResultChannel[R]`
 
 Adds a single job to the queue.
 
 - Time Complexity: O(1)
-- Returns: Channel to receive the result
+- Returns: ResultChannel to receive the result
 
-#### `AddAll(data []T) <-chan Result[R]`
+#### `AddAll(data []T) <-chan ResultChannel[R]`
 
 Adds multiple jobs to the queue.
 
@@ -256,16 +256,16 @@ Creates a new concurrent priority queue.
   - `worker`: Function to process each job
 - Returns: A new priority queue instance
 
-#### `Add(data T, priority int) <-chan Result[R]`
+#### `Add(data T, priority int) <-chan ResultChannel[R]`
 
 Adds a job with priority (lower number = higher priority).
 
 - Time Complexity: O(log n) where n is queue size
 - Parameters:
   - `priority`: Lower value means higher priority
-- Returns: Channel to receive the result
+- Returns: ResultChannel to receive the result
 
-#### `AddAll(items []PQItem[T]) <-chan Result[R]`
+#### `AddAll(items []PQItem[T]) <-chan ResultChannel[R]`
 
 Adds multiple prioritized jobs.
 

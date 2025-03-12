@@ -17,8 +17,8 @@ func NewVoidQueue[T any](concurrency uint32, worker VoidWorker[T]) *ConcurrentVo
 	queue := &ConcurrentQueue[T, any]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: make([]chan queue.Job[T, any], concurrency),
-		jobQueue:      queue.NewPriorityQueue[queue.Job[T, any]](),
+		channelsStack: make([]chan *queue.Job[T, any], concurrency),
+		jobQueue:      queue.NewPriorityQueue[*queue.Job[T, any]](),
 	}
 
 	return &ConcurrentVoidQueue[T]{
@@ -34,23 +34,23 @@ func (q *ConcurrentVoidQueue[T]) Pause() *ConcurrentVoidQueue[T] {
 
 // Add adds a new Job to the queue.
 func (q *ConcurrentVoidQueue[T]) Add(data T) <-chan error {
-	job := queue.Job[T, any]{
+	job := &queue.Job[T, any]{
 		Data: data,
-		Channel: queue.Channel[any]{
+		ResultChannel: &queue.ResultChannel[any]{
 			Err: make(chan error, 1),
 		},
 	}
 
-	q.addJob(job, queue.EnqItem[queue.Job[T, any]]{Value: job})
+	q.addJob(job, queue.EnqItem[*queue.Job[T, any]]{Value: job})
 
-	return job.Channel.Err
+	return job.ResultChannel.Err
 }
 
 func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 	wg := new(sync.WaitGroup)
 	response := make(chan error, len(data))
 	err := make(chan error, 1)
-	channel := queue.Channel[any]{
+	channel := &queue.ResultChannel[any]{
 		Err: err,
 	}
 
@@ -63,13 +63,13 @@ func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 
 	wg.Add(len(data))
 	for _, item := range data {
-		job := queue.Job[T, any]{
-			Data:    item,
-			Channel: channel,
-			Lock:    true,
+		job := &queue.Job[T, any]{
+			Data:          item,
+			ResultChannel: channel,
+			Lock:          true,
 		}
 
-		q.addJob(job, queue.EnqItem[queue.Job[T, any]]{Value: job})
+		q.addJob(job, queue.EnqItem[*queue.Job[T, any]]{Value: job})
 	}
 
 	go func() {

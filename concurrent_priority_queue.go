@@ -20,8 +20,8 @@ func NewPriorityQueue[T, R any](concurrency uint32, worker Worker[T, R]) *Concur
 	queue := &ConcurrentQueue[T, R]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: make([]chan queue.Job[T, R], concurrency),
-		jobQueue:      queue.NewPriorityQueue[queue.Job[T, R]](),
+		channelsStack: make([]chan *queue.Job[T, R], concurrency),
+		jobQueue:      queue.NewPriorityQueue[*queue.Job[T, R]](),
 	}
 
 	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: queue.Init()}
@@ -35,18 +35,18 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() *ConcurrentPriorityQueue[T, R] {
 
 // Add adds a new Job with the given priority to the queue and returns a channel to receive the response.
 // Time complexity: O(log n)
-func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) Awaitable[R] {
-	job := queue.Job[T, R]{
+func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) Job[R] {
+	job := &queue.Job[T, R]{
 		Data: data,
-		Channel: queue.Channel[R]{
+		ResultChannel: &queue.ResultChannel[R]{
 			Data: make(chan R, 1),
 			Err:  make(chan error, 1),
 		},
 	}
 
-	q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job, Priority: priority})
+	q.addJob(job, queue.EnqItem[*queue.Job[T, R]]{Value: job, Priority: priority})
 
-	return &job
+	return job
 }
 
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
@@ -55,7 +55,7 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 	wg := new(sync.WaitGroup)
 	response := make(chan Response[R], len(items))
 	data, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
-	channel := queue.Channel[R]{
+	channel := &queue.ResultChannel[R]{
 		Data: data,
 		Err:  err,
 	}
@@ -84,13 +84,13 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 
 	wg.Add(len(items))
 	for _, item := range items {
-		job := queue.Job[T, R]{
-			Data:    item.Value,
-			Channel: channel,
-			Lock:    true,
+		job := &queue.Job[T, R]{
+			Data:          item.Value,
+			ResultChannel: channel,
+			Lock:          true,
 		}
 
-		q.addJob(job, queue.EnqItem[queue.Job[T, R]]{Value: job, Priority: item.Priority})
+		q.addJob(job, queue.EnqItem[*queue.Job[T, R]]{Value: job, Priority: item.Priority})
 	}
 
 	go func() {

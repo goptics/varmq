@@ -4,12 +4,12 @@ import (
 	"errors"
 )
 
-type Channel[R any] struct {
+type ResultChannel[R any] struct {
 	Data chan R
 	Err  chan error
 }
 
-func (c *Channel[R]) Close() error {
+func (c *ResultChannel[R]) Close() error {
 	if c.Data != nil {
 		close(c.Data)
 	}
@@ -24,18 +24,18 @@ func (c *Channel[R]) Close() error {
 // Job represents a task to be executed by a worker.
 type Job[T, R any] struct {
 	Data T
-	Channel[R]
+	*ResultChannel[R]
 	Lock bool // if true, channel will not be closed by this job
 }
 
 func (j *Job[T, R]) Wait() (R, error) {
-	data, ok := <-j.Channel.Data
+	data, ok := <-j.ResultChannel.Data
 
 	if ok {
 		return data, nil
 	}
 
-	return *new(R), <-j.Channel.Err
+	return *new(R), <-j.ResultChannel.Err
 }
 
 func (j *Job[T, R]) Close() error {
@@ -43,6 +43,6 @@ func (j *Job[T, R]) Close() error {
 		return errors.New("job is not closeable")
 	}
 
-	j.Channel.Close()
+	j.ResultChannel.Close()
 	return nil
 }
