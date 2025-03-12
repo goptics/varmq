@@ -111,7 +111,7 @@ func main() {
 }
 ```
 
-> Note: Void queue is almost ~28% faster than the standard queue (result returning) according to the benchmarks. Also mem allocations are also reduced to 50%
+> Note: Void queue is almost ~25% faster than the standard queue (result returning) according to the benchmarks. Also mem allocations are less in void queue.
 
 ## 📚 API Reference
 
@@ -365,27 +365,28 @@ The implementation uses efficient data structures:
 goos: linux
 goarch: amd64
 pkg: github.com/fahimfaisaal/gocq
-cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkQueue_Operations/Add-24                                 1661820              1290 ns/op             392 B/op          7 allocs/op
-BenchmarkQueue_Operations/AddAll-24                                11620            176242 ns/op           20546 B/op        508 allocs/op
-BenchmarkPriorityQueue_Operations/Add-24                         1575746              1623 ns/op             360 B/op          6 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll-24                         9286            111769 ns/op           17341 B/op        408 allocs/op
-BenchmarkVoidQueue_Operations/Add-24                             1436550               932.0 ns/op           248 B/op          5 allocs/op
-BenchmarkVoidQueue_Operations/AddAll-24                            10952            152168 ns/op           15754 B/op        407 allocs/op
-BenchmarkVoidPriorityQueue_Operations/Add-24                     1000000              1417 ns/op             248 B/op          5 allocs/op
-BenchmarkVoidPriorityQueue_Operations/AddAll-24                     8871            137396 ns/op           15754 B/op        407 allocs/op
+cpu: AMD EPYC 7763 64-Core Processor
+
+BenchmarkQueue_Operations/Add-4                          1000000       1019 ns/op        408 B/op        8 allocs/op
+BenchmarkQueue_Operations/AddAll-4                         10000     105456 ns/op      20055 B/op      509 allocs/op
+BenchmarkPriorityQueue_Operations/Add-4                  1000000       1028 ns/op        384 B/op        8 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll-4                  9600     119258 ns/op      17653 B/op      509 allocs/op
+BenchmarkVoidQueue_Operations/Add-4                      1224120      952.3 ns/op        272 B/op        7 allocs/op
+BenchmarkVoidQueue_Operations/AddAll-4                     10000      114441 ns/op     16572 B/op      509 allocs/op
+BenchmarkVoidPriorityQueue_Operations/Add-4              1256269       953.9 ns/op       272 B/op        7 allocs/op
+BenchmarkVoidPriorityQueue_Operations/AddAll-4              9727      117869 ns/op     16573 B/op      509 allocs/op
 ```
 
-| Queue Type   | Operation | Variant    | ns/op   | B/op      | allocs/op |
-| ------------ | --------- | ---------- | ------- | --------- | --------- |
-| Non-Priority | Add       | Returnable | 1290    | 392       | 7         |
-| Non-Priority | Add       | Void       | **932** | **248**   | **5**     |
-| Non-Priority | AddAll    | Returnable | 176242  | 20546     | 508       |
-| Non-Priority | AddAll    | Void       | 152168  | 15754     | 407       |
-| Priority     | Add       | Returnable | 1623    | 360       | 6         |
-| Priority     | Add       | Void       | 1417    | **248**   | **5**     |
-| Priority     | AddAll    | Returnable | 111769  | 17341     | 408       |
-| Priority     | AddAll    | Void       | 137396  | **15754** | 407       |
+| Queue Type         | Operation | Variant | ns/op  | B/op  | allocs/op |
+| ------------------ | --------- | ------- | ------ | ----- | --------- |
+| Non-Priority Queue | Add       | Normal  | 1019   | 408   | 8         |
+| Non-Priority Queue | AddAll    | Normal  | 105456 | 20055 | 509       |
+| Priority Queue     | Add       | Normal  | 1028   | 384   | 8         |
+| Priority Queue     | AddAll    | Normal  | 119258 | 17653 | 509       |
+| Non-Priority Queue | Add       | Void    | 952.3  | 272   | 7         |
+| Non-Priority Queue | AddAll    | Void    | 114441 | 16572 | 509       |
+| Priority Queue     | Add       | Void    | 953.9  | 272   | 7         |
+| Priority Queue     | AddAll    | Void    | 117869 | 16573 | 509       |
 
 ### Run Benchmarks
 
