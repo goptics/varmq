@@ -24,28 +24,32 @@ func main() {
 	job3 := queue.Add(15, 0)
 	job4 := queue.Add(20, -1)
 
+	fmt.Println("Pending count:", queue.PendingCount())
+	fmt.Println(job1.State())
 	queue.Resume()
-	if result, err := job4.Wait(); err != nil {
+	if result, err := job4.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
 	} else {
-		fmt.Println("ResultChannel:", result)
+		fmt.Println("Result:", result)
 	}
 
-	if result, err := job3.Wait(); err != nil {
+	if result, err := job3.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
 	} else {
-		fmt.Println("ResultChannel:", result)
+		fmt.Println("Result:", result)
 	}
 
-	if result, err := job2.Wait(); err != nil {
+	if result, err := job2.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
 	} else {
-		fmt.Println("ResultChannel:", result)
+		fmt.Println("Result:", result)
 	}
 
-	if result, err := job1.Wait(); err != nil {
+	fmt.Println(job1.State())
+	if result, err := job1.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
 	} else {
-		fmt.Println("ResultChannel:", result)
+		fmt.Println("Result:", result)
 	}
+	fmt.Println(job1.State())
 }

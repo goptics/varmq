@@ -23,13 +23,13 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 		}
 
 		q.Resume()
-		if result, _ := job3.Wait(); result != 6 {
+		if result, _ := job3.WaitForResult(); result != 6 {
 			t.Errorf("Expected result to be 6, got %d", result)
 		}
-		if result, _ := job2.Wait(); result != 4 {
+		if result, _ := job2.WaitForResult(); result != 4 {
 			t.Errorf("Expected result to be 4, got %d", result)
 		}
-		if result, _ := job1.Wait(); result != 2 {
+		if result, _ := job1.WaitForResult(); result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
 		}
 
@@ -52,7 +52,7 @@ func TestConcurrentQueue(t *testing.T) {
 		})
 		defer q.Close()
 
-		result, _ := q.Add(5).Wait()
+		result, _ := q.Add(5).WaitForResult()
 
 		if result != 10 {
 			t.Errorf("Expected result to be 10, got %d", result)
@@ -94,7 +94,7 @@ func TestConcurrentQueue(t *testing.T) {
 			q.Add(i)
 		}
 
-		// Wait a bit to let some processing happen
+		// WaitForResult a bit to let some processing happen
 		time.Sleep(150 * time.Millisecond)
 
 		// Check if only concurrency number of Jobs are being processed
@@ -132,10 +132,10 @@ func TestConcurrentQueue(t *testing.T) {
 		job1 := q.Add(1)
 		job2 := q.Add(2)
 
-		if result, _ := job1.Wait(); result != 2 {
+		if result, _ := job1.WaitForResult(); result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
 		}
-		if result, _ := job2.Wait(); result != 4 {
+		if result, _ := job2.WaitForResult(); result != 4 {
 			t.Errorf("Expected result to be 4, got %d", result)
 		}
 
@@ -147,7 +147,7 @@ func TestConcurrentQueue(t *testing.T) {
 		}
 
 		q.Resume()
-		if result, _ := job3.Wait(); result != 6 {
+		if result, _ := job3.WaitForResult(); result != 6 {
 			t.Errorf("Expected result to be 6, got %d", result)
 		}
 

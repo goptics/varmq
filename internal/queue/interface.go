@@ -7,7 +7,3 @@ type IQueue[T any] interface {
 	Len() int
 	Values() []T
 }
-
-type IJob[T any] interface {
-	Wait() (T, error)
-}

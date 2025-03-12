@@ -3,6 +3,7 @@ package gocq
 import (
 	"sync"
 
+	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
 
@@ -15,8 +16,8 @@ func NewVoidPriorityQueue[T any](concurrency uint32, worker VoidWorker[T]) *Conc
 	queue := &ConcurrentQueue[T, any]{
 		concurrency:   concurrency,
 		worker:        worker,
-		channelsStack: make([]chan *queue.Job[T, any], concurrency),
-		jobQueue:      queue.NewPriorityQueue[*queue.Job[T, any]](),
+		channelsStack: make([]chan *job.Job[T, any], concurrency),
+		jobQueue:      queue.NewPriorityQueue[*job.Job[T, any]](),
 	}
 
 	return &ConcurrentVoidPriorityQueue[T]{
@@ -27,24 +28,24 @@ func NewVoidPriorityQueue[T any](concurrency uint32, worker VoidWorker[T]) *Conc
 }
 
 // Add adds a new Job with the given priority to the queue.
-func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) <-chan error {
-	job := &queue.Job[T, any]{
+func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) job.AwaitableVoidJob[T] {
+	j := &job.Job[T, any]{
 		Data: data,
-		ResultChannel: &queue.ResultChannel[any]{
+		ResultChannel: &job.ResultChannel[any]{
 			Err: make(chan error, 1),
 		},
 	}
 
-	q.addJob(job, queue.EnqItem[*queue.Job[T, any]]{Value: job, Priority: priority})
+	q.addJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: priority})
 
-	return job.ResultChannel.Err
+	return j
 }
 
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error {
 	wg := new(sync.WaitGroup)
 	response := make(chan error, len(items))
 	err := make(chan error, 1)
-	channel := &queue.ResultChannel[any]{
+	channel := &job.ResultChannel[any]{
 		Err: err,
 	}
 
@@ -57,13 +58,13 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error 
 
 	wg.Add(len(items))
 	for _, item := range items {
-		job := &queue.Job[T, any]{
+		j := &job.Job[T, any]{
 			Data:          item.Value,
 			ResultChannel: channel,
 			Lock:          true,
 		}
 
-		q.addJob(job, queue.EnqItem[*queue.Job[T, any]]{Value: job, Priority: item.Priority})
+		q.addJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: item.Priority})
 	}
 
 	go func() {
