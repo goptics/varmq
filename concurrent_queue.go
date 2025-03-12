@@ -203,7 +203,7 @@ func (q *ConcurrentQueue[T, R]) Add(data T) job.AwaitableJob[R] {
 // AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
 // Time complexity: O(n) where n is the number of Jobs added
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Response[R] {
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	response := make(chan Response[R], len(data))
 	dataCh, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
 	channel := &job.ResultChannel[R]{

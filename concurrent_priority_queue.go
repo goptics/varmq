@@ -53,7 +53,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) job.AwaitableJ
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 // Time complexity: O(n log n) where n is the number of Jobs added
 func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Response[R] {
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	response := make(chan Response[R], len(items))
 	data, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
 	channel := &job.ResultChannel[R]{

@@ -48,7 +48,7 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) job.AwaitableVoidJob[T] {
 }
 
 func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	response := make(chan error, len(data))
 	err := make(chan error, 1)
 	channel := &job.ResultChannel[any]{

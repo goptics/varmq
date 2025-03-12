@@ -42,7 +42,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) job.Awaitable
 }
 
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []PQItem[T]) <-chan error {
-	wg := new(sync.WaitGroup)
+	wg := sync.WaitGroup{}
 	response := make(chan error, len(items))
 	err := make(chan error, 1)
 	channel := &job.ResultChannel[any]{
