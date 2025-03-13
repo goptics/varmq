@@ -194,7 +194,7 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 	}
 }
 
-// Add adds a new Job to the queue and returns a channel to receive the response.
+// Add adds a new Job to the queue and returns a channel to receive the result.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 	j := &job.Job[T, R]{
@@ -213,7 +213,7 @@ func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 // Time complexity: O(n) where n is the number of Jobs added
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 	wg := sync.WaitGroup{}
-	response := make(chan Result[R], len(data))
+	result := make(chan Result[R], len(data))
 	dataCh, err := make(chan R, q.Concurrency), make(chan error, q.Concurrency)
 	channel := &job.ResultChannel[R]{
 		Data: dataCh,
@@ -226,14 +226,14 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 			select {
 			case val, ok := <-dataCh:
 				if ok {
-					response <- Result[R]{Data: val}
+					result <- Result[R]{Data: val}
 					wg.Done()
 				} else {
 					return
 				}
 			case err, ok := <-err:
 				if ok {
-					response <- Result[R]{Err: err}
+					result <- Result[R]{Err: err}
 					wg.Done()
 				} else {
 					return
@@ -257,10 +257,10 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 		wg.Wait()
 
 		channel.Close()
-		close(response)
+		close(result)
 	}()
 
-	return response
+	return result
 }
 
 // WaitUntilFinished waits until all pending Jobs in the queue are processed.

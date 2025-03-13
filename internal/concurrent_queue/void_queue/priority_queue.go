@@ -53,7 +53,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 // AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan error {
 	wg := sync.WaitGroup{}
-	response := make(chan error, len(items))
+	result := make(chan error, len(items))
 	err := make(chan error, 1)
 	channel := &job.ResultChannel[any]{
 		Err: err,
@@ -61,7 +61,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan err
 
 	go func(err <-chan error) {
 		for e := range err {
-			response <- e
+			result <- e
 			wg.Done()
 		}
 	}(err)
@@ -81,10 +81,10 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan err
 		wg.Wait()
 
 		channel.Close()
-		close(response)
+		close(result)
 	}()
 
-	return response
+	return result
 }
 
 // Pause pauses the processing of jobs.

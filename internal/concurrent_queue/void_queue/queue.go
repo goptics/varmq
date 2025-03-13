@@ -56,7 +56,7 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 
 func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 	wg := sync.WaitGroup{}
-	response := make(chan error, len(data))
+	result := make(chan error, len(data))
 	err := make(chan error, 1)
 	channel := &job.ResultChannel[any]{
 		Err: err,
@@ -64,7 +64,7 @@ func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 
 	go func(err <-chan error) {
 		for e := range err {
-			response <- e
+			result <- e
 			wg.Done()
 		}
 	}(err)
@@ -84,8 +84,8 @@ func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 		wg.Wait()
 
 		channel.Close()
-		close(response)
+		close(result)
 	}()
 
-	return response
+	return result
 }

@@ -37,7 +37,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() IConcurrentPriorityQueue[T, R] {
 	return q
 }
 
-// Add adds a new Job with the given priority to the queue and returns a channel to receive the response.
+// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 // Time complexity: O(log n)
 func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R] {
 	j := &job.Job[T, R]{
@@ -57,7 +57,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R]
 // Time complexity: O(n log n) where n is the number of Jobs added
 func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[R] {
 	wg := sync.WaitGroup{}
-	response := make(chan Result[R], len(items))
+	result := make(chan Result[R], len(items))
 	data, err := make(chan R, q.Concurrency), make(chan error, q.Concurrency)
 	channel := &job.ResultChannel[R]{
 		Data: data,
@@ -70,14 +70,14 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[
 			select {
 			case val, ok := <-data:
 				if ok {
-					response <- Result[R]{Data: val}
+					result <- Result[R]{Data: val}
 					wg.Done()
 				} else {
 					return
 				}
 			case err, ok := <-err:
 				if ok {
-					response <- Result[R]{Err: err}
+					result <- Result[R]{Err: err}
 					wg.Done()
 				} else {
 					return
@@ -101,8 +101,8 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[
 		wg.Wait()
 
 		channel.Close()
-		close(response)
+		close(result)
 	}()
 
-	return response
+	return result
 }
