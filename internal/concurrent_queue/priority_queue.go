@@ -20,15 +20,15 @@ type IConcurrentPriorityQueue[T, R any] interface {
 
 // NewPriorityQueue creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
 func NewPriorityQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentPriorityQueue[T, R] {
-	queue := &ConcurrentQueue[T, R]{
+	concurrentQueue := &ConcurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
 		ChannelsStack: make([]chan *job.Job[T, R], concurrency),
 		JobQueue:      queue.NewPriorityQueue[*job.Job[T, R]](),
 	}
 
-	queue.Restart()
-	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: queue}
+	concurrentQueue.Restart()
+	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: concurrentQueue}
 }
 
 // Pause pauses the processing of jobs.

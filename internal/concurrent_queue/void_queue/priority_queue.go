@@ -15,29 +15,29 @@ type ConcurrentVoidPriorityQueue[T any] struct {
 type IConcurrentVoidPriorityQueue[T any] interface {
 	cq.IQueue[T, any]
 	Pause() IConcurrentVoidPriorityQueue[T]
-	Add(data T, priority int) cq.EnqueuedVoidJob[T]
+	Add(data T, priority int) cq.EnqueuedVoidJob
 	AddAll(items []cq.PQItem[T]) <-chan error
 }
 
 // Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and worker function.
 func NewPriorityQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *ConcurrentVoidPriorityQueue[T] {
-	queue := &cq.ConcurrentQueue[T, any]{
+	concurrentQueue := &cq.ConcurrentQueue[T, any]{
 		Concurrency:   concurrency,
 		Worker:        worker,
 		ChannelsStack: make([]chan *job.Job[T, any], concurrency),
 		JobQueue:      queue.NewPriorityQueue[*job.Job[T, any]](),
 	}
 
-	queue.Restart()
+	concurrentQueue.Restart()
 	return &ConcurrentVoidPriorityQueue[T]{
 		ConcurrentPriorityQueue: &cq.ConcurrentPriorityQueue[T, any]{
-			ConcurrentQueue: queue,
+			ConcurrentQueue: concurrentQueue,
 		},
 	}
 }
 
 // Add adds a new Job with the given priority to the queue.
-func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVoidJob[T] {
+func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
 		Data: data,
 		ResultChannel: &job.ResultChannel[any]{

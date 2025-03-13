@@ -30,15 +30,15 @@ type IConcurrentQueue[T, R any] interface {
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func NewQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentQueue[T, R] {
-	queue := &ConcurrentQueue[T, R]{
+	concurrentQueue := &ConcurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
 		ChannelsStack: make([]chan *job.Job[T, R], concurrency),
 		JobQueue:      queue.NewQueue[*job.Job[T, R]](),
 	}
 
-	queue.Restart()
-	return queue
+	concurrentQueue.Restart()
+	return concurrentQueue
 }
 
 // Restart restarts the queue and initializes the worker goroutines based on the concurrency.
@@ -74,7 +74,6 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 		default:
 			// Log or handle the invalid type to avoid silent failures
 			j.ResultChannel.Err <- errors.New("unsupported worker type passed to queue")
-
 		}
 
 		j.ChangeStatus(job.Finished)

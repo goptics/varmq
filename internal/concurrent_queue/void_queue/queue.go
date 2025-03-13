@@ -15,22 +15,22 @@ type ConcurrentVoidQueue[T any] struct {
 type IConcurrentVoidQueue[T any] interface {
 	cq.IQueue[T, any]
 	Pause() IConcurrentVoidQueue[T]
-	Add(data T) cq.EnqueuedVoidJob[T]
+	Add(data T) cq.EnqueuedVoidJob
 	AddAll(items []T) <-chan error
 }
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
 func NewQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *ConcurrentVoidQueue[T] {
-	queue := &cq.ConcurrentQueue[T, any]{
+	concurrentQueue := &cq.ConcurrentQueue[T, any]{
 		Concurrency:   concurrency,
 		Worker:        worker,
 		ChannelsStack: make([]chan *job.Job[T, any], concurrency),
 		JobQueue:      queue.NewPriorityQueue[*job.Job[T, any]](),
 	}
 
-	queue.Restart()
+	concurrentQueue.Restart()
 	return &ConcurrentVoidQueue[T]{
-		ConcurrentQueue: queue,
+		ConcurrentQueue: concurrentQueue,
 	}
 }
 
@@ -41,7 +41,7 @@ func (q *ConcurrentVoidQueue[T]) Pause() IConcurrentVoidQueue[T] {
 }
 
 // Add adds a new Job to the queue.
-func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob[T] {
+func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
 		Data: data,
 		ResultChannel: &job.ResultChannel[any]{
