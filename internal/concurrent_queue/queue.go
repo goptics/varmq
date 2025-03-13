@@ -40,10 +40,13 @@ func NewQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentQueu
 	return queue
 }
 
-// Initializes the ConcurrentQueue by starting the worker goroutines.
+// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
 // Time complexity: O(n) where n is the concurrency
 func (q *ConcurrentQueue[T, R]) Restart() {
+	q.isPaused.Store(false)
+
 	for i := range q.ChannelsStack {
+		// close old channels to avoid routine leaks
 		if q.ChannelsStack[i] != nil {
 			close(q.ChannelsStack[i])
 		}
@@ -135,7 +138,7 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 	j.ChangeStatus(job.Processing)
 
 	go func(job *job.Job[T, R]) {
-		q.pickNextChannel() <- j
+		q.pickNextChannel() <- job
 	}(j)
 }
 
@@ -287,7 +290,7 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 func (q *ConcurrentQueue[T, R]) Close() error {
 	q.Purge()
 
-	// wait until all ongoing processes are done
+	// wait until all ongoing processes are done to gracefully close the channels
 	q.wg.Wait()
 
 	for _, channel := range q.ChannelsStack {
