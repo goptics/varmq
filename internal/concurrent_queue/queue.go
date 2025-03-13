@@ -1,6 +1,7 @@
 package concurrent_queue
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -71,7 +72,9 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 				j.ResultChannel.Data <- result
 			}
 		default:
-			// do nothing
+			// Log or handle the invalid type to avoid silent failures
+			j.ResultChannel.Err <- errors.New("unsupported worker type passed to queue")
+
 		}
 
 		j.ChangeStatus(job.Finished)
@@ -131,6 +134,7 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 
 	if j.IsClosed() {
 		q.wg.Done()
+		q.processNextJob() // process next Job recursively if the current one is closed
 		return
 	}
 
