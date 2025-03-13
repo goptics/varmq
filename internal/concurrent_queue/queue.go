@@ -61,11 +61,11 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 			err := worker(j.Data)
 			j.ResultChannel.Err <- err
 		case Worker[T, R]:
-			output, err := worker(j.Data)
+			result, err := worker(j.Data)
 			if err != nil {
 				j.ResultChannel.Err <- err
 			} else {
-				j.ResultChannel.Data <- output
+				j.ResultChannel.Data <- result
 			}
 		default:
 			// do nothing

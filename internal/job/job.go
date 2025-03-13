@@ -66,6 +66,13 @@ func (j *Job[T, R]) WaitForError() error {
 	return <-j.ResultChannel.Err
 }
 
+func (j *Job[T, R]) Drain() {
+	go func() {
+		<-j.ResultChannel.Data
+		<-j.ResultChannel.Err
+	}()
+}
+
 func (j *Job[T, R]) Close() error {
 	defer j.mx.Unlock()
 	j.mx.Lock()
