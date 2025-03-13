@@ -1,4 +1,4 @@
-package gocq
+package concurrent_queue
 
 import (
 	"sync"
@@ -7,36 +7,39 @@ import (
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
 
-type PQItem[T any] struct {
-	Value    T
-	Priority int
-}
-
 type ConcurrentPriorityQueue[T, R any] struct {
 	*ConcurrentQueue[T, R]
+}
+
+type IConcurrentPriorityQueue[T, R any] interface {
+	IQueue[T, R]
+	Pause() IConcurrentPriorityQueue[T, R]
+	Add(data T, priority int) EnqueuedJob[R]
+	AddAll(items []PQItem[T]) <-chan Result[R]
 }
 
 // NewPriorityQueue creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
 func NewPriorityQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentPriorityQueue[T, R] {
 	queue := &ConcurrentQueue[T, R]{
-		concurrency:   concurrency,
-		worker:        worker,
-		channelsStack: make([]chan *job.Job[T, R], concurrency),
-		jobQueue:      queue.NewPriorityQueue[*job.Job[T, R]](),
+		Concurrency:   concurrency,
+		Worker:        worker,
+		ChannelsStack: make([]chan *job.Job[T, R], concurrency),
+		JobQueue:      queue.NewPriorityQueue[*job.Job[T, R]](),
 	}
 
-	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: queue.Init()}
+	queue.Restart()
+	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: queue}
 }
 
 // Pause pauses the processing of jobs.
-func (q *ConcurrentPriorityQueue[T, R]) Pause() *ConcurrentPriorityQueue[T, R] {
-	q.pause()
+func (q *ConcurrentPriorityQueue[T, R]) Pause() IConcurrentPriorityQueue[T, R] {
+	q.PauseQueue()
 	return q
 }
 
 // Add adds a new Job with the given priority to the queue and returns a channel to receive the response.
 // Time complexity: O(log n)
-func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) job.AwaitableJob[R] {
+func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R] {
 	j := &job.Job[T, R]{
 		Data: data,
 		ResultChannel: &job.ResultChannel[R]{
@@ -45,17 +48,17 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) job.AwaitableJ
 		},
 	}
 
-	q.addJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: priority})
+	q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: priority})
 
 	return j
 }
 
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 // Time complexity: O(n log n) where n is the number of Jobs added
-func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Response[R] {
+func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[R] {
 	wg := sync.WaitGroup{}
-	response := make(chan Response[R], len(items))
-	data, err := make(chan R, q.concurrency), make(chan error, q.concurrency)
+	response := make(chan Result[R], len(items))
+	data, err := make(chan R, q.Concurrency), make(chan error, q.Concurrency)
 	channel := &job.ResultChannel[R]{
 		Data: data,
 		Err:  err,
@@ -67,14 +70,14 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 			select {
 			case val, ok := <-data:
 				if ok {
-					response <- Response[R]{Data: val}
+					response <- Result[R]{Data: val}
 					wg.Done()
 				} else {
 					return
 				}
 			case err, ok := <-err:
 				if ok {
-					response <- Response[R]{Err: err}
+					response <- Result[R]{Err: err}
 					wg.Done()
 				} else {
 					return
@@ -91,7 +94,7 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Respons
 			Lock:          true,
 		}
 
-		q.addJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: item.Priority})
 	}
 
 	go func() {

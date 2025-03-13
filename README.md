@@ -360,22 +360,32 @@ The implementation uses efficient data structures:
 - Standard Queue: Based on `container/list` with O(1) operations
 - Priority Queue: Based on `container/heap` implementation with O(log n) operations
 
-### Benchmark Results
+## Benchmark Results
+
+### Void Queue Benchmarks
 
 ```bash
 goos: linux
 goarch: amd64
-pkg: github.com/fahimfaisaal/gocq
-cpu: AMD EPYC 7763 64-Core Processor
+pkg: github.com/fahimfaisaal/gocq/internal/concurrent_queue/void_queue
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
+BenchmarkVoidQueue_Operations/Add-24                     1454280              1231 ns/op             272 B/op          7 allocs/op
+BenchmarkVoidQueue_Operations/AddAll-24                    10000            160978 ns/op           16606 B/op        509 allocs/op
+BenchmarkVoidPriorityQueue_Operations/Add-24             1000000              1074 ns/op             272 B/op          7 allocs/op
+BenchmarkVoidPriorityQueue_Operations/AddAll-24            10000            174001 ns/op           16583 B/op        509 allocs/op
+```
 
-BenchmarkQueue_Operations/Add-4                          1000000        1019 ns/op        408 B/op        8 allocs/op
-BenchmarkQueue_Operations/AddAll-4                         10000      105456 ns/op      20055 B/op      509 allocs/op
-BenchmarkPriorityQueue_Operations/Add-4                  1000000        1028 ns/op        384 B/op        8 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll-4                  9600      119258 ns/op      17653 B/op      509 allocs/op
-BenchmarkVoidQueue_Operations/Add-4                      1224120       952.3 ns/op        272 B/op        7 allocs/op
-BenchmarkVoidQueue_Operations/AddAll-4                     10000      114441 ns/op      16572 B/op       509 allocs/op
-BenchmarkVoidPriorityQueue_Operations/Add-4              1256269       953.9 ns/op        272 B/op         7 allocs/op
-BenchmarkVoidPriorityQueue_Operations/AddAll-4              9727      117869 ns/op      16573 B/op       509 allocs/op
+### Standard Queue Benchmarks
+
+```bash
+goos: linux
+goarch: amd64
+pkg: github.com/fahimfaisaal/gocq/internal/concurrent_queue
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
+BenchmarkQueue_Operations/Add-24                         1275486              1529 ns/op             408 B/op          8 allocs/op
+BenchmarkQueue_Operations/AddAll-24                         7089            155369 ns/op           20561 B/op        509 allocs/op
+BenchmarkPriorityQueue_Operations/Add-24                  907742              1999 ns/op             384 B/op          8 allocs/op
+BenchmarkPriorityQueue_Operations/AddAll-24                11808            169821 ns/op           18159 B/op        509 allocs/op
 ```
 
 | Queue Type         | Operation | Variant | ns/op  | B/op  | allocs/op |
@@ -392,7 +402,8 @@ BenchmarkVoidPriorityQueue_Operations/AddAll-4              9727      1
 ### Run Benchmarks
 
 ```bash
-go test -bench=. -benchmem
+go test -bench=. -benchmem ./internal/concurrent_queue/  # run standard queue benchmarks
+go test -bench=. -benchmem ./internal/concurrent_queue/void_queue/  # run void queue benchmarks
 ```
 
 ## 👤 Author (Fahim Faisaal)

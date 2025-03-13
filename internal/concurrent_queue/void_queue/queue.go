@@ -1,40 +1,47 @@
-package gocq
+package void_queue
 
 import (
 	"sync"
 
+	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
 
-type VoidWorker[T any] func(T) error
-
 type ConcurrentVoidQueue[T any] struct {
-	*ConcurrentQueue[T, any]
+	*cq.ConcurrentQueue[T, any]
+}
+
+type IConcurrentVoidQueue[T any] interface {
+	cq.IQueue[T, any]
+	Pause() IConcurrentVoidQueue[T]
+	Add(data T) cq.EnqueuedVoidJob[T]
+	AddAll(items []T) <-chan error
 }
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
-func NewVoidQueue[T any](concurrency uint32, worker VoidWorker[T]) *ConcurrentVoidQueue[T] {
-	queue := &ConcurrentQueue[T, any]{
-		concurrency:   concurrency,
-		worker:        worker,
-		channelsStack: make([]chan *job.Job[T, any], concurrency),
-		jobQueue:      queue.NewPriorityQueue[*job.Job[T, any]](),
+func NewQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *ConcurrentVoidQueue[T] {
+	queue := &cq.ConcurrentQueue[T, any]{
+		Concurrency:   concurrency,
+		Worker:        worker,
+		ChannelsStack: make([]chan *job.Job[T, any], concurrency),
+		JobQueue:      queue.NewPriorityQueue[*job.Job[T, any]](),
 	}
 
+	queue.Restart()
 	return &ConcurrentVoidQueue[T]{
-		ConcurrentQueue: queue.Init(),
+		ConcurrentQueue: queue,
 	}
 }
 
 // Pause pauses the processing of jobs.
-func (q *ConcurrentVoidQueue[T]) Pause() *ConcurrentVoidQueue[T] {
-	q.pause()
+func (q *ConcurrentVoidQueue[T]) Pause() IConcurrentVoidQueue[T] {
+	q.PauseQueue()
 	return q
 }
 
 // Add adds a new Job to the queue.
-func (q *ConcurrentVoidQueue[T]) Add(data T) job.AwaitableVoidJob[T] {
+func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob[T] {
 	j := &job.Job[T, any]{
 		Data: data,
 		ResultChannel: &job.ResultChannel[any]{
@@ -42,7 +49,7 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) job.AwaitableVoidJob[T] {
 		},
 	}
 
-	q.addJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
+	q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
 
 	return j
 }
@@ -70,7 +77,7 @@ func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 			Lock:          true,
 		}
 
-		q.addJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
+		q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
 	}
 
 	go func() {

@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// Create a queue with 2 concurrent workers
-	queue := gocq.NewPriorityQueue(1, func(data int) (int, error) {
+	queue := gocq.NewQueue(1, func(data int) (int, error) {
 		time.Sleep(100 * time.Millisecond)
 		if data == 10 {
 			return 0, fmt.Errorf("error")
@@ -19,10 +19,10 @@ func main() {
 	defer queue.Close()
 
 	// Add a single job
-	job1 := queue.Add(5, 2)
-	job2 := queue.Add(10, 1)
-	job3 := queue.Add(15, 0)
-	job4 := queue.Add(20, -1)
+	job1 := queue.Add(5)
+	job2 := queue.Add(10)
+	job3 := queue.Add(15)
+	job4 := queue.Add(20)
 
 	fmt.Println("Pending count:", queue.PendingCount())
 	fmt.Println(job1.State())

@@ -1,13 +1,16 @@
-package gocq
+package void_queue
 
 import (
 	"testing"
+
+	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
+	"github.com/fahimfaisaal/gocq/internal/shared"
 )
 
 func BenchmarkVoidQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -19,13 +22,13 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewVoidQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, SampleSize)
+		data := make([]int, shared.SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -41,8 +44,8 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 
 func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -56,12 +59,13 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
+			return nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, SampleSize)
+		data := make([]int, shared.SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -79,8 +83,8 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 
 func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -92,15 +96,15 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], SampleSize)
+		data := make([]cq.PQItem[int], shared.SampleSize)
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = cq.PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -114,8 +118,8 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 
 func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -129,15 +133,15 @@ func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewVoidPriorityQueue(Cpus(), func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(shared.Cpus(), func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], SampleSize)
+		data := make([]cq.PQItem[int], shared.SampleSize)
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = cq.PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()

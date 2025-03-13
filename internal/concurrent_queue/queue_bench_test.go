@@ -1,26 +1,16 @@
-package gocq
+package concurrent_queue
 
 import (
-	"runtime"
 	"testing"
+
+	"github.com/fahimfaisaal/gocq/internal/shared"
 )
-
-const SampleSize = 100
-
-// Double multiplies the input by 2.
-func Double(n int) int {
-	return n * 2
-}
-
-func Cpus() uint32 {
-	return uint32(runtime.NumCPU())
-}
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -31,12 +21,12 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, SampleSize)
+		data := make([]int, shared.SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -53,8 +43,8 @@ func BenchmarkQueue_Operations(b *testing.B) {
 // BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -67,12 +57,12 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, SampleSize)
+		data := make([]int, shared.SampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -91,8 +81,8 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -103,12 +93,12 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], SampleSize)
+		data := make([]PQItem[int], shared.SampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
@@ -125,8 +115,8 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 // BenchmarkPriorityQueue_ParallelOperations benchmarks parallel operations of PriorityQueue.
 func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -139,12 +129,12 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(Cpus(), func(data int) (int, error) {
-			return Double(data), nil
+		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
+			return shared.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], SampleSize)
+		data := make([]PQItem[int], shared.SampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}

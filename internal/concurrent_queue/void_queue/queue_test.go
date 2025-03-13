@@ -1,14 +1,17 @@
-package gocq
+package void_queue
 
 import (
 	"testing"
 	"time"
+
+	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
+	"github.com/fahimfaisaal/gocq/internal/shared"
 )
 
 func TestConcurrentVoidQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
-		q := NewVoidQueue(2, func(data int) error {
-			Double(data)
+		q := NewQueue(2, func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -17,8 +20,8 @@ func TestConcurrentVoidQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll", func(t *testing.T) {
-		q := NewVoidQueue(2, func(data int) error {
-			Double(data)
+		q := NewQueue(2, func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -27,8 +30,8 @@ func TestConcurrentVoidQueue(t *testing.T) {
 	})
 
 	t.Run("PauseAndResume", func(t *testing.T) {
-		q := NewVoidQueue(2, func(data int) error {
-			Double(data)
+		q := NewQueue(2, func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.Close()
@@ -57,8 +60,8 @@ func TestConcurrentVoidQueue(t *testing.T) {
 
 func TestConcurrentVoidPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
-		q := NewVoidPriorityQueue(1, func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(1, func(data int) error {
+			shared.Double(data)
 			return nil
 		}).Pause()
 		defer q.Close()
@@ -83,13 +86,13 @@ func TestConcurrentVoidPriorityQueue(t *testing.T) {
 	})
 
 	t.Run("AddAll with Priority", func(t *testing.T) {
-		q := NewVoidPriorityQueue(2, func(data int) error {
-			Double(data)
+		q := NewPriorityQueue(2, func(data int) error {
+			shared.Double(data)
 			return nil
 		})
 		defer q.Close()
 
-		q.AddAll([]PQItem[int]{
+		q.AddAll([]cq.PQItem[int]{
 			{Value: 1, Priority: 2},
 			{Value: 2, Priority: 1},
 			{Value: 4, Priority: 2},

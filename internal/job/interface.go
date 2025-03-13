@@ -7,13 +7,3 @@ type IJob interface {
 	State() string
 	io.Closer
 }
-
-type AwaitableJob[T any] interface {
-	IJob
-	WaitForResult() (T, error)
-}
-
-type AwaitableVoidJob[T any] interface {
-	IJob
-	WaitForError() error
-}
