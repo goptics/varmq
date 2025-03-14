@@ -8,6 +8,13 @@ type ResultChannel[R any] struct {
 	Err  chan error
 }
 
+func NewResultChannel[R any](bufferSize int) *ResultChannel[R] {
+	return &ResultChannel[R]{
+		Data: make(chan R, bufferSize),
+		Err:  make(chan error, bufferSize),
+	}
+}
+
 // Close safely closes both the Data and Err channels if they're not nil.
 // It always returns nil, indicating successful closure.
 func (c *ResultChannel[R]) Close() error {

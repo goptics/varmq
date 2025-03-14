@@ -208,13 +208,7 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 // Add adds a new Job to the queue and returns a channel to receive the result.
 // Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
-	j := &job.Job[T, R]{
-		Data: data,
-		ResultChannel: &job.ResultChannel[R]{
-			Data: make(chan R, 1),
-			Err:  make(chan error, 1),
-		},
-	}
+	j := job.New[T, R](data)
 
 	q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j})
 	return j

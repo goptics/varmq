@@ -40,13 +40,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() IConcurrentPriorityQueue[T, R] {
 // Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 // Time complexity: O(log n)
 func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R] {
-	j := &job.Job[T, R]{
-		Data: data,
-		ResultChannel: &job.ResultChannel[R]{
-			Data: make(chan R, 1),
-			Err:  make(chan error, 1),
-		},
-	}
+	j := job.New[T, R](data)
 
 	q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: priority})
 

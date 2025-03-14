@@ -29,6 +29,14 @@ type Job[T, R any] struct {
 	mx   sync.Mutex
 }
 
+func New[T, R any](data T) *Job[T, R] {
+	return &Job[T, R]{
+		Status:        Queued,
+		Data:          data,
+		ResultChannel: NewResultChannel[R](1),
+	}
+}
+
 // State returns the current status of the job as a string.
 func (j *Job[T, R]) State() string {
 	j.mx.Lock()
