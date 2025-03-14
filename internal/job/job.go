@@ -9,7 +9,7 @@ import (
 type Status uint8
 
 const (
-	// Queued indicates the job is waiting to be processed
+	// Queued indicates the job is waiting in the queue to be processed
 	Queued Status = iota
 	// Processing indicates the job is currently being executed
 	Processing
@@ -33,6 +33,7 @@ type Job[T, R any] struct {
 func (j *Job[T, R]) State() string {
 	j.mx.Lock()
 	defer j.mx.Unlock()
+
 	switch j.Status {
 	case Queued:
 		return "Queued"

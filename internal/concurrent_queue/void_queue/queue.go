@@ -13,7 +13,7 @@ type ConcurrentVoidQueue[T any] struct {
 }
 
 type IConcurrentVoidQueue[T any] interface {
-	cq.IQueue[T, any]
+	cq.ICQueue[T, any]
 	Pause() IConcurrentVoidQueue[T]
 	Add(data T) cq.EnqueuedVoidJob
 	AddAll(items []T) <-chan error

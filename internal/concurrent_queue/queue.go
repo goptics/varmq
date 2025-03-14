@@ -10,8 +10,9 @@ import (
 )
 
 type ConcurrentQueue[T, R any] struct {
-	Concurrency   uint32
-	Worker        any
+	Concurrency uint32
+	Worker      any
+	// channels for each concurrency level and store them in a stack.
 	ChannelsStack []chan *job.Job[T, R]
 	curProcessing uint32
 	JobQueue      queue.IQueue[*job.Job[T, R]]
@@ -21,7 +22,7 @@ type ConcurrentQueue[T, R any] struct {
 }
 
 type IConcurrentQueue[T, R any] interface {
-	IQueue[T, R]
+	ICQueue[T, R]
 	Pause() IConcurrentQueue[T, R]
 	Add(data T) EnqueuedJob[R]
 	AddAll(data []T) <-chan Result[R]
@@ -44,17 +45,25 @@ func NewQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentQueu
 // Restart restarts the queue and initializes the worker goroutines based on the concurrency.
 // Time complexity: O(n) where n is the concurrency
 func (q *ConcurrentQueue[T, R]) Restart() {
-	q.isPaused.Store(false)
+	// first pause the queue to avoid routine leaks or deadlocks
+	q.Pause()
+	// wait until all ongoing processes are done to gracefully close the channels if any.
+	q.WaitUntilFinished()
 
+	// restart the queue with new channels and start the worker goroutines
 	for i := range q.ChannelsStack {
 		// close old channels to avoid routine leaks
 		if q.ChannelsStack[i] != nil {
 			close(q.ChannelsStack[i])
 		}
 
+		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
 		q.ChannelsStack[i] = make(chan *job.Job[T, R])
 		go q.spawnWorker(q.ChannelsStack[i])
 	}
+
+	// resume the queue to process pending Jobs
+	q.Resume()
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the channel.
@@ -81,6 +90,7 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 		q.wg.Done()
 
 		q.mx.Lock()
+		// push the channel back to the stack, so it can be used for the next Job
 		q.ChannelsStack = append(q.ChannelsStack, channel)
 		q.curProcessing--
 
@@ -133,7 +143,8 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 
 	if j.IsClosed() {
 		q.wg.Done()
-		q.processNextJob() // process next Job recursively if the current one is closed
+		// process next Job recursively if the current one is closed
+		q.processNextJob()
 		return
 	}
 

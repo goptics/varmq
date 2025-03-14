@@ -12,7 +12,7 @@ type ConcurrentPriorityQueue[T, R any] struct {
 }
 
 type IConcurrentPriorityQueue[T, R any] interface {
-	IQueue[T, R]
+	ICQueue[T, R]
 	Pause() IConcurrentPriorityQueue[T, R]
 	Add(data T, priority int) EnqueuedJob[R]
 	AddAll(items []PQItem[T]) <-chan Result[R]

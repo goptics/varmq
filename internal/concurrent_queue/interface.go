@@ -2,7 +2,8 @@ package concurrent_queue
 
 import "io"
 
-type IQueue[T, R any] interface {
+// ICQueue represents the interface for a generic common concurrent queue.
+type ICQueue[T, R any] interface {
 	io.Closer
 	Restart()
 	Resume()
