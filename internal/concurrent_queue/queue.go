@@ -87,12 +87,12 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 
 		j.ChangeStatus(job.Finished)
 		j.Close()
-		q.wg.Done()
 
 		q.mx.Lock()
 		// push the channel back to the stack, so it can be used for the next Job
 		q.ChannelsStack = append(q.ChannelsStack, channel)
 		q.curProcessing--
+		q.wg.Done()
 
 		if q.shouldProcessNextJob("worker") {
 			q.processNextJob()
@@ -220,24 +220,21 @@ func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 	wg := sync.WaitGroup{}
 	result := make(chan Result[R], len(data))
-	dataCh, err := make(chan R, q.Concurrency), make(chan error, q.Concurrency)
-	channel := &job.ResultChannel[R]{
-		Data: dataCh,
-		Err:  err,
-	}
+	channel := job.NewResultChannel[R](int(q.Concurrency))
+	j := job.NewWithResultChannel[T, R](channel).Lock()
 
 	// consume data and err channels from the worker
-	go func() {
+	go func(c *job.ResultChannel[R]) {
 		for {
 			select {
-			case val, ok := <-dataCh:
+			case val, ok := <-c.Data:
 				if ok {
 					result <- Result[R]{Data: val}
 					wg.Done()
 				} else {
 					return
 				}
-			case err, ok := <-err:
+			case err, ok := <-c.Err:
 				if ok {
 					result <- Result[R]{Err: err}
 					wg.Done()
@@ -246,17 +243,13 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 				}
 			}
 		}
-	}()
+	}(channel)
 
 	wg.Add(len(data))
 	for _, item := range data {
-		j := &job.Job[T, R]{
-			Data:          item,
-			ResultChannel: channel,
-			Lock:          true,
-		}
+		initJob := j.Init(item)
 
-		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: initJob})
 	}
 
 	go func() {

@@ -54,27 +54,21 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan error {
 	wg := sync.WaitGroup{}
 	result := make(chan error, len(items))
-	err := make(chan error, 1)
-	channel := &job.ResultChannel[any]{
-		Err: err,
-	}
+	channel := job.NewVoidResultChannel()
+	j := job.NewWithResultChannel[T, any](channel).Lock()
 
-	go func(err <-chan error) {
-		for e := range err {
+	go func() {
+		for e := range channel.Err {
 			result <- e
 			wg.Done()
 		}
-	}(err)
+	}()
 
 	wg.Add(len(items))
 	for _, item := range items {
-		j := &job.Job[T, any]{
-			Data:          item.Value,
-			ResultChannel: channel,
-			Lock:          true,
-		}
+		initJob := j.Init(item.Value)
 
-		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: initJob, Priority: item.Priority})
 	}
 
 	go func() {

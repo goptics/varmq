@@ -16,6 +16,13 @@ func NewResultChannel[R any](bufferSize int) *ResultChannel[R] {
 	}
 }
 
+// NewVoidResultChannel creates a new ResultChannel with nil Data channel.
+func NewVoidResultChannel() *ResultChannel[any] {
+	return &ResultChannel[any]{
+		Err: make(chan error, 1),
+	}
+}
+
 // Close safely closes both the Data and Err channels if they're not nil.
 // It always returns nil, indicating successful closure.
 func (c *ResultChannel[R]) Close() error {

@@ -52,24 +52,21 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R]
 func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[R] {
 	wg := sync.WaitGroup{}
 	result := make(chan Result[R], len(items))
-	data, err := make(chan R, q.Concurrency), make(chan error, q.Concurrency)
-	channel := &job.ResultChannel[R]{
-		Data: data,
-		Err:  err,
-	}
+	channel := job.NewResultChannel[R](int(q.Concurrency))
+	j := job.NewWithResultChannel[T, R](channel).Lock()
 
 	// consume data and err channels from the worker
-	go func() {
+	go func(c *job.ResultChannel[R]) {
 		for {
 			select {
-			case val, ok := <-data:
+			case val, ok := <-c.Data:
 				if ok {
 					result <- Result[R]{Data: val}
 					wg.Done()
 				} else {
 					return
 				}
-			case err, ok := <-err:
+			case err, ok := <-c.Err:
 				if ok {
 					result <- Result[R]{Err: err}
 					wg.Done()
@@ -78,17 +75,13 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[
 				}
 			}
 		}
-	}()
+	}(channel)
 
 	wg.Add(len(items))
 	for _, item := range items {
-		j := &job.Job[T, R]{
-			Data:          item.Value,
-			ResultChannel: channel,
-			Lock:          true,
-		}
+		initJob := j.Init(item.Value)
 
-		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: initJob, Priority: item.Priority})
 	}
 
 	go func() {
