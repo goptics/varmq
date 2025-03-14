@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+
 	// Create a queue with 2 concurrent workers
 	queue := gocq.NewQueue(1, func(data int) (int, error) {
 		time.Sleep(100 * time.Millisecond)

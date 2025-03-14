@@ -1,6 +1,7 @@
 package concurrent_queue
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
 		worker := func(data int) (int, error) {
+			if data == 4 {
+				return 0, errors.New("error")
+			}
+
 			return shared.Double(data), nil
 		}
 
@@ -19,19 +24,36 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 		job1 := q.Add(1, 2)
 		job2 := q.Add(2, 1)
 		job3 := q.Add(3, 0)
+		job4 := q.Add(4, -1)
 
-		if count := q.PendingCount(); count != 3 {
-			t.Errorf("Expected pending count to be 3, got %d", count)
+		if count := q.PendingCount(); count != 4 {
+			t.Errorf("Expected pending count to be 4, got %d", count)
 		}
 
 		q.Resume()
-		if result, _ := job3.WaitForResult(); result != 6 {
+
+		if result, err := job4.WaitForResult(); err == nil {
+			t.Errorf("Expected error, got %v", err)
+		} else if result != 0 {
+			t.Errorf("Expected result to be 0, got %d", result)
+		}
+
+		if result, err := job3.WaitForResult(); err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		} else if result != 6 {
 			t.Errorf("Expected result to be 6, got %d", result)
 		}
-		if result, _ := job2.WaitForResult(); result != 4 {
+
+		if result, err := job2.WaitForResult(); err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		} else if result != 4 {
 			t.Errorf("Expected result to be 4, got %d", result)
+
 		}
-		if result, _ := job1.WaitForResult(); result != 2 {
+
+		if result, err := job1.WaitForResult(); err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		} else if result != 2 {
 			t.Errorf("Expected result to be 2, got %d", result)
 		}
 

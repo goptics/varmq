@@ -2,7 +2,7 @@ package shared
 
 import "runtime"
 
-const SampleSize = 100
+const AddAllSampleSize = 100
 
 // Double multiplies the input by 2.
 func Double(n int) int {

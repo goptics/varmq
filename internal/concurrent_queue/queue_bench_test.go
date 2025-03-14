@@ -26,7 +26,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, shared.SampleSize)
+		data := make([]int, shared.AddAllSampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -62,7 +62,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, shared.SampleSize)
+		data := make([]int, shared.AddAllSampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -98,7 +98,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], shared.SampleSize)
+		data := make([]PQItem[int], shared.AddAllSampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
@@ -134,7 +134,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], shared.SampleSize)
+		data := make([]PQItem[int], shared.AddAllSampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
