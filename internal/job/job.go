@@ -9,8 +9,10 @@ import (
 type Status uint8
 
 const (
+	// Created indicates the job has been created but not yet queued
+	Created Status = iota
 	// Queued indicates the job is waiting in the queue to be processed
-	Queued Status = iota
+	Queued
 	// Processing indicates the job is currently being executed
 	Processing
 	// Finished indicates the job has completed execution
@@ -29,9 +31,10 @@ type Job[T, R any] struct {
 	mx   sync.Mutex
 }
 
+// New creates a new Job with the provided data.
 func New[T, R any](data T) *Job[T, R] {
 	return &Job[T, R]{
-		Status:        Queued,
+		Status:        Created,
 		Data:          data,
 		ResultChannel: NewResultChannel[R](1),
 	}

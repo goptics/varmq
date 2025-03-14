@@ -42,7 +42,7 @@ func (q *ConcurrentPriorityQueue[T, R]) Pause() IConcurrentPriorityQueue[T, R] {
 func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
-	q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: priority})
+	q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: priority})
 
 	return j
 }
@@ -88,7 +88,7 @@ func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[
 			Lock:          true,
 		}
 
-		q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j, Priority: item.Priority})
 	}
 
 	go func() {

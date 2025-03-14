@@ -49,7 +49,7 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 		},
 	}
 
-	q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
+	q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j})
 
 	return j
 }
@@ -77,7 +77,7 @@ func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
 			Lock:          true,
 		}
 
-		q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j})
+		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j})
 	}
 
 	go func() {

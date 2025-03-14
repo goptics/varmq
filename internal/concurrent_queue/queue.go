@@ -179,11 +179,12 @@ func (q *ConcurrentQueue[T, R]) Pause() IConcurrentQueue[T, R] {
 	return q
 }
 
-func (q *ConcurrentQueue[T, R]) AddJob(job *job.Job[T, R], enqItem queue.EnqItem[*job.Job[T, R]]) {
+func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[*job.Job[T, R]]) {
 	q.wg.Add(1)
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	q.JobQueue.Enqueue(enqItem)
+	enqItem.Value.ChangeStatus(job.Queued)
 
 	// process next Job only when the current processing Job count is less than the concurrency
 	if q.shouldProcessNextJob("add") {
@@ -210,7 +211,7 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
-	q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j})
+	q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j})
 	return j
 }
 
@@ -255,7 +256,7 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
 			Lock:          true,
 		}
 
-		q.AddJob(j, queue.EnqItem[*job.Job[T, R]]{Value: j})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j})
 	}
 
 	go func() {

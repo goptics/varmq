@@ -45,7 +45,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 		},
 	}
 
-	q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: priority})
+	q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: priority})
 
 	return j
 }
@@ -74,7 +74,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan err
 			Lock:          true,
 		}
 
-		q.AddJob(j, queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: item.Priority})
 	}
 
 	go func() {

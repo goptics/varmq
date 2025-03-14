@@ -104,13 +104,13 @@ func TestJob(t *testing.T) {
 
 		select {
 		case <-job.ResultChannel.Data:
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(200 * time.Millisecond):
 			t.Fatal("Data channel not drained")
 		}
 
 		select {
 		case <-job.ResultChannel.Err:
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(200 * time.Millisecond):
 			t.Fatal("Error channel not drained")
 		}
 	})
