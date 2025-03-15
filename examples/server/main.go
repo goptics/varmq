@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fahimfaisaal/gocq"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 type ScrapeResult struct {
@@ -58,7 +59,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := value.(gocq.EnqueuedJob[string])
+	job := value.(types.EnqueuedJob[string])
 
 	response := ScrapeResult{
 		Status: job.Status(),
