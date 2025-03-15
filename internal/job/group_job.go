@@ -104,6 +104,20 @@ func (gj *GroupJob[T, R]) Drain() {
 	}()
 }
 
-func (gj *GroupJob[T, R]) Result() chan shared.Result[R] {
+func (gj *GroupJob[T, R]) Results() chan shared.Result[R] {
 	return gj.result
+}
+
+func (gj *GroupJob[T, R]) Errors() <-chan error {
+	err := make(chan error, cap(gj.result))
+
+	go func() {
+		for r := range gj.result {
+			err <- r.Err
+		}
+
+		close(err)
+	}()
+
+	return err
 }
