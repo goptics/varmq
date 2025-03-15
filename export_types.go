@@ -6,7 +6,6 @@ import (
 	"github.com/fahimfaisaal/gocq/internal/shared"
 )
 
-// Exported types
 type PQItem[T any] cq.PQItem[T]
 
 type ConcurrentQueue[T, R any] cq.IConcurrentQueue[T, R]

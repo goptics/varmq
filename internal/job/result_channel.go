@@ -10,6 +10,10 @@ type ResultChannel[R any] struct {
 
 // NewResultChannel creates a new ResultChannel with the specified buffer size.
 func NewResultChannel[R any](bufferSize uint32) *ResultChannel[R] {
+	if bufferSize < 1 {
+		panic("buffer size must be greater than 0")
+	}
+
 	return &ResultChannel[R]{
 		Data: make(chan R, bufferSize),
 		Err:  make(chan error, bufferSize),

@@ -12,8 +12,11 @@ type ConcurrentVoidPriorityQueue[T any] struct {
 
 type IConcurrentVoidPriorityQueue[T any] interface {
 	cq.ICQueue[T, any]
+	// Pause pauses the processing of jobs.
 	Pause() IConcurrentVoidPriorityQueue[T]
+	// Add adds a new Job with the given priority to the queue.
 	Add(data T, priority int) cq.EnqueuedVoidJob
+	// AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
 	AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob
 }
 
@@ -34,7 +37,11 @@ func NewPriorityQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *Concu
 	}
 }
 
-// Add adds a new Job with the given priority to the queue.
+func (q *ConcurrentVoidPriorityQueue[T]) Pause() IConcurrentVoidPriorityQueue[T] {
+	q.PauseQueue()
+	return q
+}
+
 func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
 		Data:          data,
@@ -46,7 +53,6 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 	return j
 }
 
-// AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
 func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob {
 	groupJob := job.NewGroupVoidJob[T](q.Concurrency).FanInVoidResult(len(items))
 
@@ -55,10 +61,4 @@ func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) cq.Enqueue
 	}
 
 	return groupJob
-}
-
-// Pause pauses the processing of jobs.
-func (q *ConcurrentVoidPriorityQueue[T]) Pause() IConcurrentVoidPriorityQueue[T] {
-	q.PauseQueue()
-	return q
 }

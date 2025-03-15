@@ -23,8 +23,13 @@ type ConcurrentQueue[T, R any] struct {
 
 type IConcurrentQueue[T, R any] interface {
 	ICQueue[T, R]
+	// Pause pauses the processing of jobs.
 	Pause() IConcurrentQueue[T, R]
+	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Time complexity: O(1)
 	Add(data T) EnqueuedJob[R]
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []T) EnqueuedGroupJob[R]
 }
 
@@ -42,8 +47,6 @@ func NewQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentQueu
 	return concurrentQueue
 }
 
-// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
-// Time complexity: O(n) where n is the concurrency
 func (q *ConcurrentQueue[T, R]) Restart() {
 	// first pause the queue to avoid routine leaks or deadlocks
 	q.Pause()
@@ -128,11 +131,6 @@ func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 	}
 }
 
-// PauseQueue pauses the processing of jobs.
-func (q *ConcurrentQueue[T, R]) PauseQueue() {
-	q.isPaused.Store(true)
-}
-
 // processNextJob processes the next Job in the queue.
 func (q *ConcurrentQueue[T, R]) processNextJob() {
 	j, has := q.JobQueue.Dequeue()
@@ -156,24 +154,23 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 	}(j)
 }
 
-// PendingCount returns the number of Jobs pending in the queue.
-// Time complexity: O(1)
+// PauseQueue pauses the processing of jobs.
+func (q *ConcurrentQueue[T, R]) PauseQueue() {
+	q.isPaused.Store(true)
+}
+
 func (q *ConcurrentQueue[T, R]) PendingCount() int {
 	return q.JobQueue.Len()
 }
 
-// IsPaused returns whether the queue is paused.
 func (q *ConcurrentQueue[T, R]) IsPaused() bool {
 	return q.isPaused.Load()
 }
 
-// CurrentProcessingCount returns the number of Jobs currently being processed.
-// Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) CurrentProcessingCount() uint32 {
 	return q.curProcessing
 }
 
-// Pause pauses the processing of jobs.
 func (q *ConcurrentQueue[T, R]) Pause() IConcurrentQueue[T, R] {
 	q.PauseQueue()
 	return q
@@ -192,7 +189,6 @@ func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[*job.Job[T, R]]) {
 	}
 }
 
-// Resume continues processing jobs.
 func (q *ConcurrentQueue[T, R]) Resume() {
 	q.isPaused.Store(false)
 
@@ -206,8 +202,6 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 	}
 }
 
-// Add adds a new Job to the queue and returns a channel to receive the result.
-// Time complexity: O(1)
 func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
@@ -215,8 +209,6 @@ func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 	return j
 }
 
-// AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
-// Time complexity: O(n) where n is the number of Jobs added
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(data))
 
@@ -227,13 +219,10 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) EnqueuedGroupJob[R] {
 	return groupJob
 }
 
-// WaitUntilFinished waits until all pending Jobs in the queue are processed.
-// Time complexity: O(n) where n is the number of pending Jobs
 func (q *ConcurrentQueue[T, R]) WaitUntilFinished() {
 	q.wg.Wait()
 }
 
-// Purge removes all pending Jobs from the queue.
 func (q *ConcurrentQueue[T, R]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -252,8 +241,6 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 	}
 }
 
-// Close closes the queue and resets all internal states.
-// Time complexity: O(n) where n is the number of channels
 func (q *ConcurrentQueue[T, R]) Close() error {
 	q.Purge()
 
@@ -272,8 +259,6 @@ func (q *ConcurrentQueue[T, R]) Close() error {
 	return nil
 }
 
-// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
-// Time complexity: O(n) where n is the number of pending Jobs
 func (q *ConcurrentQueue[T, R]) WaitAndClose() error {
 	q.wg.Wait()
 	return q.Close()

@@ -12,8 +12,13 @@ type ConcurrentVoidQueue[T any] struct {
 
 type IConcurrentVoidQueue[T any] interface {
 	cq.ICQueue[T, any]
+	// Pause pauses the processing of jobs.
 	Pause() IConcurrentVoidQueue[T]
+	// Add adds a new Job to the queue and returns a EnqueuedVoidJob to handle the void job.
+	// Time complexity: O(1)
 	Add(data T) cq.EnqueuedVoidJob
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedVoidGroupJob to handle the job.
+	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(items []T) cq.EnqueuedVoidGroupJob
 }
 
@@ -32,13 +37,11 @@ func NewQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *ConcurrentVoi
 	}
 }
 
-// Pause pauses the processing of jobs.
 func (q *ConcurrentVoidQueue[T]) Pause() IConcurrentVoidQueue[T] {
 	q.PauseQueue()
 	return q
 }
 
-// Add adds a new Job to the queue.
 func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
 		Data:          data,

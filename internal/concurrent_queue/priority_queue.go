@@ -11,8 +11,13 @@ type ConcurrentPriorityQueue[T, R any] struct {
 
 type IConcurrentPriorityQueue[T, R any] interface {
 	ICQueue[T, R]
+	// Pause pauses the processing of jobs.
 	Pause() IConcurrentPriorityQueue[T, R]
+	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Time complexity: O(log n)
 	Add(data T, priority int) EnqueuedJob[R]
+	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
+	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(items []PQItem[T]) EnqueuedGroupJob[R]
 }
 
@@ -29,14 +34,11 @@ func NewPriorityQueue[T, R any](concurrency uint32, worker Worker[T, R]) *Concur
 	return &ConcurrentPriorityQueue[T, R]{ConcurrentQueue: concurrentQueue}
 }
 
-// Pause pauses the processing of jobs.
 func (q *ConcurrentPriorityQueue[T, R]) Pause() IConcurrentPriorityQueue[T, R] {
 	q.PauseQueue()
 	return q
 }
 
-// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
-// Time complexity: O(log n)
 func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
@@ -45,8 +47,6 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R]
 	return j
 }
 
-// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
-// Time complexity: O(n log n) where n is the number of Jobs added
 func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(items))
 
