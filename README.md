@@ -1,6 +1,7 @@
 # GoCQ: High-Performance Concurrent Queue for Gophers
 
-Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations, with options for result-returning and void (non-returning) queues. Zero dependency just install, import and use any where in your go program.
+Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations, with options for result-returning and void (non-returning) queues.
+Zero dependency just install, import and use any where in your go program.
 
 [![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
@@ -104,7 +105,7 @@ queue.AddAll([]int{2, 3, 4}).Drain()
 
 ### Benchmark Results
 
-````bash
+```bash
 # Normal Queue
 
 goos: linux
@@ -142,7 +143,7 @@ BenchmarkVoidPriorityQueue_Operations/AddAll-24            11812            1082
 ```bash
 go test -bench=. -benchmem ./internal/concurrent_queue/
 go test -bench=. -benchmem ./internal/concurrent_queue/void_queue/
-````
+```
 
 ## 👤 Author
 
