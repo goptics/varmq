@@ -6,17 +6,6 @@ import (
 	"github.com/fahimfaisaal/gocq/internal/shared"
 )
 
-// Exported types
-type PQItem[T any] cq.PQItem[T]
-
-type ConcurrentQueue[T, R any] cq.IConcurrentQueue[T, R]
-
-type ConcurrentVoidQueue[T any] vq.IConcurrentVoidQueue[T]
-
-type ConcurrentPriorityQueue[T, R any] cq.IConcurrentPriorityQueue[T, R]
-
-type ConcurrentVoidPriorityQueue[T any] vq.IConcurrentVoidPriorityQueue[T]
-
 func withSafeConcurrency(concurrency uint32) uint32 {
 	// If concurrency is less than 1, use the number of CPUs as the concurrency
 	if concurrency < 1 {
