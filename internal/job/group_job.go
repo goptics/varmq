@@ -4,13 +4,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/internal/shared"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 // GroupJob represents a job that can be used in a group.
 type GroupJob[T, R any] struct {
 	*Job[T, R]
-	result chan shared.Result[R]
+	result chan types.Result[R]
 	wg     sync.WaitGroup
 }
 
@@ -41,7 +41,7 @@ func (gj *GroupJob[T, R]) NewJob(data T) *Job[T, R] {
 }
 
 func (gj *GroupJob[T, R]) FanInResult(l int) *GroupJob[T, R] {
-	gj.result = make(chan shared.Result[R], l)
+	gj.result = make(chan types.Result[R], l)
 
 	gj.wg.Add(cap(gj.result))
 	go func() {
@@ -49,14 +49,14 @@ func (gj *GroupJob[T, R]) FanInResult(l int) *GroupJob[T, R] {
 			select {
 			case val, ok := <-gj.ResultChannel.Data:
 				if ok {
-					gj.result <- shared.Result[R]{Data: val}
+					gj.result <- types.Result[R]{Data: val}
 					gj.wg.Done()
 				} else {
 					return
 				}
 			case err, ok := <-gj.ResultChannel.Err:
 				if ok {
-					gj.result <- shared.Result[R]{Err: err}
+					gj.result <- types.Result[R]{Err: err}
 					gj.wg.Done()
 				} else {
 					return
@@ -76,12 +76,12 @@ func (gj *GroupJob[T, R]) FanInResult(l int) *GroupJob[T, R] {
 }
 
 func (gj *GroupJob[T, R]) FanInVoidResult(l int) *GroupJob[T, R] {
-	gj.result = make(chan shared.Result[R], l)
+	gj.result = make(chan types.Result[R], l)
 
 	gj.wg.Add(cap(gj.result))
 	go func() {
 		for e := range gj.ResultChannel.Err {
-			gj.result <- shared.Result[R]{Err: e}
+			gj.result <- types.Result[R]{Err: e}
 			gj.wg.Done()
 		}
 	}()
@@ -104,7 +104,7 @@ func (gj *GroupJob[T, R]) Drain() {
 	}()
 }
 
-func (gj *GroupJob[T, R]) Results() chan shared.Result[R] {
+func (gj *GroupJob[T, R]) Results() chan types.Result[R] {
 	return gj.result
 }
 

@@ -192,5 +192,5 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 
   - Returns a channel that will receive the errors of the void group job.
 
-- `Results() chan shared.Result[T]`
+- `Results() chan Result[T]`
   - Returns a channel that will receive the results of the group job.

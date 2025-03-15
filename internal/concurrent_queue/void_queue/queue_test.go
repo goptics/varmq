@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
-	"github.com/fahimfaisaal/gocq/internal/shared"
+	"github.com/fahimfaisaal/gocq/internal/common"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 func TestConcurrentVoidQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
 		q := NewQueue(2, func(data int) error {
-			shared.Double(data)
+			common.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -21,7 +21,7 @@ func TestConcurrentVoidQueue(t *testing.T) {
 
 	t.Run("AddAll", func(t *testing.T) {
 		q := NewQueue(2, func(data int) error {
-			shared.Double(data)
+			common.Double(data)
 			return nil
 		})
 		defer q.WaitAndClose()
@@ -31,7 +31,7 @@ func TestConcurrentVoidQueue(t *testing.T) {
 
 	t.Run("PauseAndResume", func(t *testing.T) {
 		q := NewQueue(2, func(data int) error {
-			shared.Double(data)
+			common.Double(data)
 			return nil
 		})
 		defer q.Close()
@@ -61,7 +61,7 @@ func TestConcurrentVoidQueue(t *testing.T) {
 func TestConcurrentVoidPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
 		q := NewPriorityQueue(1, func(data int) error {
-			shared.Double(data)
+			common.Double(data)
 			return nil
 		}).Pause()
 		defer q.Close()
@@ -87,12 +87,12 @@ func TestConcurrentVoidPriorityQueue(t *testing.T) {
 
 	t.Run("AddAll with Priority", func(t *testing.T) {
 		q := NewPriorityQueue(2, func(data int) error {
-			shared.Double(data)
+			common.Double(data)
 			return nil
 		})
 		defer q.Close()
 
-		q.AddAll([]cq.PQItem[int]{
+		q.AddAll([]types.PQItem[int]{
 			{Value: 1, Priority: 2},
 			{Value: 2, Priority: 1},
 			{Value: 4, Priority: 2},

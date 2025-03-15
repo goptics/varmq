@@ -1,4 +1,4 @@
-package concurrent_queue
+package types
 
 // Worker is a worker function that takes an input of type T and returns an output of type R along with an error.
 type Worker[T, R any] func(T) (R, error)

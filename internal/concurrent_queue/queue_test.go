@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/internal/shared"
+	"github.com/fahimfaisaal/gocq/internal/common"
 )
 
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
@@ -16,7 +16,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 				return 0, errors.New("error")
 			}
 
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		}
 
 		q := NewPriorityQueue(1, worker).Pause()
@@ -72,7 +72,7 @@ func TestConcurrentQueue(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
 		t.Parallel()
 		q := NewQueue(2, func(data int) (int, error) {
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		})
 		defer q.Close()
 
@@ -85,7 +85,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("WaitUntilFinished", func(t *testing.T) {
 		q := NewQueue(2, func(data int) (int, error) {
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		})
 		defer q.Close()
 
@@ -107,7 +107,7 @@ func TestConcurrentQueue(t *testing.T) {
 		t.Parallel()
 		concurrency := uint32(2)
 		q := NewQueue(concurrency, func(data int) (int, error) {
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		})
 		defer q.Close()
 
@@ -127,7 +127,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("WaitAndClose", func(t *testing.T) {
 		q := NewQueue(2, func(data int) (int, error) {
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		})
 
 		q.Add(1)
@@ -146,7 +146,7 @@ func TestConcurrentQueue(t *testing.T) {
 
 	t.Run("PauseAndResume", func(t *testing.T) {
 		worker := func(data int) (int, error) {
-			return shared.Double(data), nil
+			return common.Double(data), nil
 		}
 
 		q := NewQueue(2, worker)

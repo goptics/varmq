@@ -1,4 +1,4 @@
-package job
+package types
 
 type IJob interface {
 	// IsLocked returns whether the job is closed.

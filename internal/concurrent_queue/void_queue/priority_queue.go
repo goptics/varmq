@@ -4,24 +4,15 @@ import (
 	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 type ConcurrentVoidPriorityQueue[T any] struct {
 	*cq.ConcurrentPriorityQueue[T, any]
 }
 
-type IConcurrentVoidPriorityQueue[T any] interface {
-	cq.ICQueue[T, any]
-	// Pause pauses the processing of jobs.
-	Pause() IConcurrentVoidPriorityQueue[T]
-	// Add adds a new Job with the given priority to the queue.
-	Add(data T, priority int) cq.EnqueuedVoidJob
-	// AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
-	AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob
-}
-
 // Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and worker function.
-func NewPriorityQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *ConcurrentVoidPriorityQueue[T] {
+func NewPriorityQueue[T any](concurrency uint32, worker types.VoidWorker[T]) *ConcurrentVoidPriorityQueue[T] {
 	concurrentQueue := &cq.ConcurrentQueue[T, any]{
 		Concurrency:   concurrency,
 		Worker:        worker,
@@ -37,12 +28,12 @@ func NewPriorityQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *Concu
 	}
 }
 
-func (q *ConcurrentVoidPriorityQueue[T]) Pause() IConcurrentVoidPriorityQueue[T] {
+func (q *ConcurrentVoidPriorityQueue[T]) Pause() types.IConcurrentVoidPriorityQueue[T] {
 	q.PauseQueue()
 	return q
 }
 
-func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVoidJob {
+func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) types.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
 		Data:          data,
 		ResultChannel: job.NewVoidResultChannel(),
@@ -53,7 +44,7 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 	return j
 }
 
-func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob {
+func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []types.PQItem[T]) types.EnqueuedVoidGroupJob {
 	groupJob := job.NewGroupVoidJob[T](q.Concurrency).FanInVoidResult(len(items))
 
 	for _, item := range items {

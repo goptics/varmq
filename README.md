@@ -75,7 +75,7 @@ queue := gocq.NewPriorityQueue(1, func(data int) (int, error) {
 })
 defer queue.WaitAndClose()
 
-items := []gocq.PQItem[int]{
+items := []types.PQItem[int]{
     {Value: 1, Priority: 2}, // Lowest priority
     {Value: 2, Priority: 1}, // Medium priority
     {Value: 3}, // Highest priority

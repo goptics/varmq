@@ -3,14 +3,15 @@ package concurrent_queue
 import (
 	"testing"
 
-	"github.com/fahimfaisaal/gocq/internal/shared"
+	"github.com/fahimfaisaal/gocq/internal/common"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -21,12 +22,12 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, shared.AddAllSampleSize)
+		data := make([]int, common.AddAllSampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -43,8 +44,8 @@ func BenchmarkQueue_Operations(b *testing.B) {
 // BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -57,12 +58,12 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, shared.AddAllSampleSize)
+		data := make([]int, common.AddAllSampleSize)
 		for i := range data {
 			data[i] = i
 		}
@@ -81,8 +82,8 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -93,14 +94,14 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], shared.AddAllSampleSize)
+		data := make([]types.PQItem[int], common.AddAllSampleSize)
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = types.PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -115,8 +116,8 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 // BenchmarkPriorityQueue_ParallelOperations benchmarks parallel operations of PriorityQueue.
 func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -129,14 +130,14 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(shared.Cpus(), func(data int) (int, error) {
-			return shared.Double(data), nil
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], shared.AddAllSampleSize)
+		data := make([]types.PQItem[int], common.AddAllSampleSize)
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = types.PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()

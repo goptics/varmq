@@ -7,6 +7,7 @@ import (
 
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
+	"github.com/fahimfaisaal/gocq/types"
 )
 
 type ConcurrentQueue[T, R any] struct {
@@ -21,21 +22,9 @@ type ConcurrentQueue[T, R any] struct {
 	isPaused      atomic.Bool
 }
 
-type IConcurrentQueue[T, R any] interface {
-	ICQueue[T, R]
-	// Pause pauses the processing of jobs.
-	Pause() IConcurrentQueue[T, R]
-	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
-	// Time complexity: O(1)
-	Add(data T) EnqueuedJob[R]
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
-	// Time complexity: O(n) where n is the number of Jobs added
-	AddAll(data []T) EnqueuedGroupJob[R]
-}
-
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
-func NewQueue[T, R any](concurrency uint32, worker Worker[T, R]) *ConcurrentQueue[T, R] {
+func NewQueue[T, R any](concurrency uint32, worker types.Worker[T, R]) *ConcurrentQueue[T, R] {
 	concurrentQueue := &ConcurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
@@ -73,10 +62,10 @@ func (q *ConcurrentQueue[T, R]) Restart() {
 func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 	for j := range channel {
 		switch worker := q.Worker.(type) {
-		case VoidWorker[T]:
+		case types.VoidWorker[T]:
 			err := worker(j.Data)
 			j.ResultChannel.Err <- err
-		case Worker[T, R]:
+		case types.Worker[T, R]:
 			result, err := worker(j.Data)
 			if err != nil {
 				j.ResultChannel.Err <- err
@@ -171,7 +160,7 @@ func (q *ConcurrentQueue[T, R]) CurrentProcessingCount() uint32 {
 	return q.curProcessing
 }
 
-func (q *ConcurrentQueue[T, R]) Pause() IConcurrentQueue[T, R] {
+func (q *ConcurrentQueue[T, R]) Pause() types.IConcurrentQueue[T, R] {
 	q.PauseQueue()
 	return q
 }
@@ -202,14 +191,14 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 	}
 }
 
-func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
+func (q *ConcurrentQueue[T, R]) Add(data T) types.EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
 	q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j})
 	return j
 }
 
-func (q *ConcurrentQueue[T, R]) AddAll(data []T) EnqueuedGroupJob[R] {
+func (q *ConcurrentQueue[T, R]) AddAll(data []T) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(data))
 
 	for _, item := range data {
