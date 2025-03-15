@@ -1,4 +1,4 @@
-package types
+package queue
 
 type EnqItem[T any] struct {
 	Value    T

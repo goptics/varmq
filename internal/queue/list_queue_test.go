@@ -2,8 +2,6 @@ package queue
 
 import (
 	"testing"
-
-	"github.com/fahimfaisaal/gocq/internal/queue/types"
 )
 
 func TestQueue(t *testing.T) {
@@ -14,8 +12,8 @@ func TestQueue(t *testing.T) {
 			t.Errorf("expected length 0, got %d", len)
 		}
 
-		q.Enqueue(types.EnqItem[int]{Value: 1})
-		q.Enqueue(types.EnqItem[int]{Value: 2})
+		q.Enqueue(EnqItem[int]{Value: 1})
+		q.Enqueue(EnqItem[int]{Value: 2})
 
 		if len := q.Len(); len != 2 {
 			t.Errorf("expected length 2, got %d", len)
@@ -51,8 +49,8 @@ func TestQueue(t *testing.T) {
 
 	t.Run("Values Method", func(t *testing.T) {
 		q := NewQueue[int]()
-		q.Enqueue(types.EnqItem[int]{Value: 1})
-		q.Enqueue(types.EnqItem[int]{Value: 2})
+		q.Enqueue(EnqItem[int]{Value: 1})
+		q.Enqueue(EnqItem[int]{Value: 2})
 
 		values := q.Values()
 		expected := []int{1, 2}
