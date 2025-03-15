@@ -101,6 +101,10 @@ queue.Add(1).Drain()
 queue.AddAll([]int{2, 3, 4}).Drain()
 ```
 
+## Documentation
+
+For detailed API documentation, please refer to the [API Reference](./docs/API_REFERENCE.md).
+
 ## 🚀 Performance
 
 ### Benchmark Results
