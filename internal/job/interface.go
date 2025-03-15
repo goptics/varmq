@@ -4,7 +4,7 @@ import "io"
 
 type IJob interface {
 	IsClosed() bool
-	State() string
+	Status() string
 	Drain()
 	io.Closer
 }

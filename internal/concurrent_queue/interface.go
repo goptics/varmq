@@ -4,7 +4,7 @@ import "io"
 
 // ICQueue represents the interface for a generic common concurrent queue.
 type ICQueue[T, R any] interface {
-	io.Closer
+	IsPaused() bool
 	Restart()
 	Resume()
 	PendingCount() int
@@ -12,4 +12,5 @@ type ICQueue[T, R any] interface {
 	WaitUntilFinished()
 	Purge()
 	WaitAndClose() error
+	io.Closer
 }

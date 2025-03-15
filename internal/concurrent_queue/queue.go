@@ -25,7 +25,7 @@ type IConcurrentQueue[T, R any] interface {
 	ICQueue[T, R]
 	Pause() IConcurrentQueue[T, R]
 	Add(data T) EnqueuedJob[R]
-	AddAll(data []T) <-chan Result[R]
+	AddAll(data []T) EnqueuedGroupJob[R]
 }
 
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
@@ -217,49 +217,14 @@ func (q *ConcurrentQueue[T, R]) Add(data T) EnqueuedJob[R] {
 
 // AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
 // Time complexity: O(n) where n is the number of Jobs added
-func (q *ConcurrentQueue[T, R]) AddAll(data []T) <-chan Result[R] {
-	wg := sync.WaitGroup{}
-	result := make(chan Result[R], len(data))
-	channel := job.NewResultChannel[R](int(q.Concurrency))
-	j := job.NewWithResultChannel[T, R](channel).Lock()
+func (q *ConcurrentQueue[T, R]) AddAll(data []T) EnqueuedGroupJob[R] {
+	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(data))
 
-	// consume data and err channels from the worker
-	go func(c *job.ResultChannel[R]) {
-		for {
-			select {
-			case val, ok := <-c.Data:
-				if ok {
-					result <- Result[R]{Data: val}
-					wg.Done()
-				} else {
-					return
-				}
-			case err, ok := <-c.Err:
-				if ok {
-					result <- Result[R]{Err: err}
-					wg.Done()
-				} else {
-					return
-				}
-			}
-		}
-	}(channel)
-
-	wg.Add(len(data))
 	for _, item := range data {
-		initJob := j.Init(item)
-
-		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: initJob})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: groupJob.NewJob(item).Lock()})
 	}
 
-	go func() {
-		wg.Wait()
-
-		channel.Close()
-		close(result)
-	}()
-
-	return result
+	return groupJob
 }
 
 // WaitUntilFinished waits until all pending Jobs in the queue are processed.

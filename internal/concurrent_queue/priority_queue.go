@@ -1,8 +1,6 @@
 package concurrent_queue
 
 import (
-	"sync"
-
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
 )
@@ -15,7 +13,7 @@ type IConcurrentPriorityQueue[T, R any] interface {
 	ICQueue[T, R]
 	Pause() IConcurrentPriorityQueue[T, R]
 	Add(data T, priority int) EnqueuedJob[R]
-	AddAll(items []PQItem[T]) <-chan Result[R]
+	AddAll(items []PQItem[T]) EnqueuedGroupJob[R]
 }
 
 // NewPriorityQueue creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
@@ -49,47 +47,12 @@ func (q *ConcurrentPriorityQueue[T, R]) Add(data T, priority int) EnqueuedJob[R]
 
 // AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 // Time complexity: O(n log n) where n is the number of Jobs added
-func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) <-chan Result[R] {
-	wg := sync.WaitGroup{}
-	result := make(chan Result[R], len(items))
-	channel := job.NewResultChannel[R](int(q.Concurrency))
-	j := job.NewWithResultChannel[T, R](channel).Lock()
+func (q *ConcurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJob[R] {
+	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(items))
 
-	// consume data and err channels from the worker
-	go func(c *job.ResultChannel[R]) {
-		for {
-			select {
-			case val, ok := <-c.Data:
-				if ok {
-					result <- Result[R]{Data: val}
-					wg.Done()
-				} else {
-					return
-				}
-			case err, ok := <-c.Err:
-				if ok {
-					result <- Result[R]{Err: err}
-					wg.Done()
-				} else {
-					return
-				}
-			}
-		}
-	}(channel)
-
-	wg.Add(len(items))
 	for _, item := range items {
-		initJob := j.Init(item.Value)
-
-		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: initJob, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: groupJob.NewJob(item.Value).Lock(), Priority: item.Priority})
 	}
 
-	go func() {
-		wg.Wait()
-
-		channel.Close()
-		close(result)
-	}()
-
-	return result
+	return groupJob
 }

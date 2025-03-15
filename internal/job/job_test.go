@@ -7,33 +7,33 @@ import (
 )
 
 func TestJob(t *testing.T) {
-	t.Run("State", func(t *testing.T) {
+	t.Run("Status", func(t *testing.T) {
 		job := New[int, int](0)
 
-		if job.State() != "Created" {
-			t.Errorf("expected Created, got %s", job.State())
+		if job.Status() != "Created" {
+			t.Errorf("expected Created, got %s", job.Status())
 		}
 
 		job.ChangeStatus(Queued)
 
-		if job.State() != "Queued" {
-			t.Errorf("expected Queued, got %s", job.State())
+		if job.Status() != "Queued" {
+			t.Errorf("expected Queued, got %s", job.Status())
 		}
 
 		job.ChangeStatus(Processing)
 
-		if job.State() != "Processing" {
-			t.Errorf("expected Processing, got %s", job.State())
+		if job.Status() != "Processing" {
+			t.Errorf("expected Processing, got %s", job.Status())
 		}
 
 		job.ChangeStatus(Finished)
-		if job.State() != "Finished" {
-			t.Errorf("expected Finished, got %s", job.State())
+		if job.Status() != "Finished" {
+			t.Errorf("expected Finished, got %s", job.Status())
 		}
 
 		job.ChangeStatus(Closed)
-		if job.State() != "Closed" {
-			t.Errorf("expected Closed, got %s", job.State())
+		if job.Status() != "Closed" {
+			t.Errorf("expected Closed, got %s", job.Status())
 		}
 	})
 
@@ -53,32 +53,32 @@ func TestJob(t *testing.T) {
 	t.Run("ChangeStatus", func(t *testing.T) {
 		job := New[int, int](0)
 
-		if job.Status != Created {
-			t.Errorf("expected Created, got %d", job.Status)
+		if status := job.status.Load(); status != Created {
+			t.Errorf("expected Created, got %d", status)
 		}
 
 		job.ChangeStatus(Queued)
 
-		if job.Status != Queued {
-			t.Errorf("expected Queued, got %d", job.Status)
+		if status := job.status.Load(); status != Queued {
+			t.Errorf("expected Queued, got %d", status)
 		}
 
 		job.ChangeStatus(Processing)
 
-		if job.Status != Processing {
-			t.Errorf("expected Processing, got %d", job.Status)
+		if status := job.status.Load(); status != Processing {
+			t.Errorf("expected Processing, got %d", status)
 		}
 
 		job.ChangeStatus(Finished)
 
-		if job.Status != Finished {
-			t.Errorf("expected Finished, got %d", job.Status)
+		if status := job.status.Load(); status != Finished {
+			t.Errorf("expected Finished, got %d", status)
 		}
 
 		job.ChangeStatus(Closed)
 
-		if job.Status != Closed {
-			t.Errorf("expected Closed, got %d", job.Status)
+		if status := job.status.Load(); status != Closed {
+			t.Errorf("expected Closed, got %d", status)
 		}
 	})
 
@@ -142,8 +142,9 @@ func TestJob(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
-		if job.Status != Closed {
-			t.Errorf("expected Closed, got %d", job.Status)
+
+		if job.Status() != "Closed" {
+			t.Errorf("expected Closed, got %s", job.Status())
 		}
 
 		err = job.Close()

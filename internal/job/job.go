@@ -2,16 +2,14 @@ package job
 
 import (
 	"errors"
-	"sync"
 	"sync/atomic"
 )
 
-// Status represents the current state of a job
-type Status uint8
+// status represents the current state of a job
 
 const (
 	// Created indicates the job has been created but not yet queued
-	Created Status = iota
+	Created uint32 = iota
 	// Queued indicates the job is waiting in the queue to be processed
 	Queued
 	// Processing indicates the job is currently being executed
@@ -25,42 +23,27 @@ const (
 // Job represents a task to be executed by a worker. It maintains the task's
 // current status, input data, and channels for receiving results.
 type Job[T, R any] struct {
-	Status Status
-	Data   T
+	Data T
 	*ResultChannel[R]
-	lock atomic.Bool
-	mx   sync.Mutex
+	status atomic.Uint32
+	lock   atomic.Bool
 }
 
 // New creates a new Job with the provided data.
 func New[T, R any](data T) *Job[T, R] {
 	return &Job[T, R]{
-		Status:        Created,
 		Data:          data,
 		ResultChannel: NewResultChannel[R](1),
+		status:        atomic.Uint32{},
 	}
 }
 
 func NewWithResultChannel[T, R any](resultChannel *ResultChannel[R]) *Job[T, R] {
 	return &Job[T, R]{
-		Status:        Created,
 		Data:          *new(T),
 		ResultChannel: resultChannel,
+		status:        atomic.Uint32{},
 	}
-}
-
-// Init returns a initial Job with the provided data. with same result channel and including old
-func (j *Job[T, R]) Init(data T) *Job[T, R] {
-	newJob := &Job[T, R]{
-		Status:        j.Status,
-		Data:          data,
-		ResultChannel: j.ResultChannel,
-	}
-	// Transfer the lock state without copying
-	if j.IsLocked() {
-		newJob.Lock()
-	}
-	return newJob
 }
 
 func (j *Job[T, R]) IsLocked() bool {
@@ -78,11 +61,8 @@ func (j *Job[T, R]) Unlock() *Job[T, R] {
 }
 
 // State returns the current status of the job as a string.
-func (j *Job[T, R]) State() string {
-	j.mx.Lock()
-	defer j.mx.Unlock()
-
-	switch j.Status {
+func (j *Job[T, R]) Status() string {
+	switch j.status.Load() {
 	case Created:
 		return "Created"
 	case Queued:
@@ -100,17 +80,12 @@ func (j *Job[T, R]) State() string {
 
 // IsClosed returns true if the job has been closed.
 func (j *Job[T, R]) IsClosed() bool {
-	j.mx.Lock()
-	defer j.mx.Unlock()
-	return j.Status == Closed
+	return j.status.Load() == Closed
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *Job[T, R]) ChangeStatus(status Status) *Job[T, R] {
-	j.mx.Lock()
-	defer j.mx.Unlock()
-	j.Status = status
-
+func (j *Job[T, R]) ChangeStatus(status uint32) *Job[T, R] {
+	j.status.Store(status)
 	return j
 }
 
@@ -145,14 +120,11 @@ func (j *Job[T, R]) Drain() {
 // Close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
 func (j *Job[T, R]) Close() error {
-	j.mx.Lock()
-	defer j.mx.Unlock()
-
 	if j.IsLocked() {
 		return errors.New("job is not closeable due to lock")
 	}
 
-	switch j.Status {
+	switch j.status.Load() {
 	case Processing:
 		return errors.New("job is processing")
 	case Closed:
@@ -160,7 +132,7 @@ func (j *Job[T, R]) Close() error {
 	}
 
 	j.ResultChannel.Close()
-	j.Status = Closed
+	j.status.Store(Closed)
 
 	return nil
 }

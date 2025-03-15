@@ -35,7 +35,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data) {
+			for range q.AddAll(data).Result() {
 				// drain the channel
 			}
 		}
@@ -73,7 +73,7 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data) {
+				for range q.AddAll(data).Result() {
 					// drain the channel
 				}
 			}
@@ -109,7 +109,7 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data) {
+			for range q.AddAll(data).Result() {
 				// drain the channel
 			}
 		}
@@ -147,7 +147,7 @@ func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data) {
+				for range q.AddAll(data).Result() {
 					// drain the channel
 				}
 			}

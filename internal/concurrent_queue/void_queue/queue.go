@@ -1,8 +1,6 @@
 package void_queue
 
 import (
-	"sync"
-
 	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
@@ -16,7 +14,7 @@ type IConcurrentVoidQueue[T any] interface {
 	cq.ICQueue[T, any]
 	Pause() IConcurrentVoidQueue[T]
 	Add(data T) cq.EnqueuedVoidJob
-	AddAll(items []T) <-chan error
+	AddAll(items []T) cq.EnqueuedVoidGroupJob
 }
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
@@ -43,10 +41,8 @@ func (q *ConcurrentVoidQueue[T]) Pause() IConcurrentVoidQueue[T] {
 // Add adds a new Job to the queue.
 func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
-		Data: data,
-		ResultChannel: &job.ResultChannel[any]{
-			Err: make(chan error, 1),
-		},
+		Data:          data,
+		ResultChannel: job.NewVoidResultChannel(),
 	}
 
 	q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j})
@@ -54,32 +50,12 @@ func (q *ConcurrentVoidQueue[T]) Add(data T) cq.EnqueuedVoidJob {
 	return j
 }
 
-func (q *ConcurrentVoidQueue[T]) AddAll(data []T) <-chan error {
-	wg := sync.WaitGroup{}
-	result := make(chan error, len(data))
-	channel := job.NewVoidResultChannel()
-	j := job.NewWithResultChannel[T, any](channel).Lock()
+func (q *ConcurrentVoidQueue[T]) AddAll(data []T) cq.EnqueuedVoidGroupJob {
+	groupJob := job.NewGroupVoidJob[T](q.Concurrency).FanInVoidResult(len(data))
 
-	go func() {
-		for e := range channel.Err {
-			result <- e
-			wg.Done()
-		}
-	}()
-
-	wg.Add(len(data))
 	for _, item := range data {
-		initJob := j.Init(item)
-
-		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: initJob})
+		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: groupJob.NewJob(item).Lock()})
 	}
 
-	go func() {
-		wg.Wait()
-
-		channel.Close()
-		close(result)
-	}()
-
-	return result
+	return groupJob
 }

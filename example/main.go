@@ -26,7 +26,7 @@ func main() {
 	job4 := queue.Add(20)
 
 	fmt.Println("Pending count:", queue.PendingCount())
-	fmt.Println(job1.State())
+	fmt.Println(job1.Status())
 	queue.Resume()
 	if result, err := job4.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
@@ -46,11 +46,11 @@ func main() {
 		fmt.Println("Result:", result)
 	}
 
-	fmt.Println(job1.State())
+	fmt.Println(job1.Status())
 	if result, err := job1.WaitForResult(); err != nil {
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", result)
 	}
-	fmt.Println(job1.State())
+	fmt.Println(job1.Status())
 }

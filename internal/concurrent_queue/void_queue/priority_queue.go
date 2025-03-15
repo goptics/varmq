@@ -1,8 +1,6 @@
 package void_queue
 
 import (
-	"sync"
-
 	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
 	"github.com/fahimfaisaal/gocq/internal/job"
 	"github.com/fahimfaisaal/gocq/internal/queue"
@@ -16,7 +14,7 @@ type IConcurrentVoidPriorityQueue[T any] interface {
 	cq.ICQueue[T, any]
 	Pause() IConcurrentVoidPriorityQueue[T]
 	Add(data T, priority int) cq.EnqueuedVoidJob
-	AddAll(items []cq.PQItem[T]) <-chan error
+	AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob
 }
 
 // Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and worker function.
@@ -39,10 +37,8 @@ func NewPriorityQueue[T any](concurrency uint32, worker cq.VoidWorker[T]) *Concu
 // Add adds a new Job with the given priority to the queue.
 func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVoidJob {
 	j := &job.Job[T, any]{
-		Data: data,
-		ResultChannel: &job.ResultChannel[any]{
-			Err: make(chan error, 1),
-		},
+		Data:          data,
+		ResultChannel: job.NewVoidResultChannel(),
 	}
 
 	q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: j, Priority: priority})
@@ -51,34 +47,14 @@ func (q *ConcurrentVoidPriorityQueue[T]) Add(data T, priority int) cq.EnqueuedVo
 }
 
 // AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
-func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) <-chan error {
-	wg := sync.WaitGroup{}
-	result := make(chan error, len(items))
-	channel := job.NewVoidResultChannel()
-	j := job.NewWithResultChannel[T, any](channel).Lock()
+func (q *ConcurrentVoidPriorityQueue[T]) AddAll(items []cq.PQItem[T]) cq.EnqueuedVoidGroupJob {
+	groupJob := job.NewGroupVoidJob[T](q.Concurrency).FanInVoidResult(len(items))
 
-	go func() {
-		for e := range channel.Err {
-			result <- e
-			wg.Done()
-		}
-	}()
-
-	wg.Add(len(items))
 	for _, item := range items {
-		initJob := j.Init(item.Value)
-
-		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: initJob, Priority: item.Priority})
+		q.AddJob(queue.EnqItem[*job.Job[T, any]]{Value: groupJob.NewJob(item.Value).Lock(), Priority: item.Priority})
 	}
 
-	go func() {
-		wg.Wait()
-
-		channel.Close()
-		close(result)
-	}()
-
-	return result
+	return groupJob
 }
 
 // Pause pauses the processing of jobs.

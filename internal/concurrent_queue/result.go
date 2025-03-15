@@ -1,13 +1,11 @@
 package concurrent_queue
 
-import "github.com/fahimfaisaal/gocq/internal/job"
+import (
+	"github.com/fahimfaisaal/gocq/internal/job"
+	"github.com/fahimfaisaal/gocq/internal/shared"
+)
 
 // Result represents the result of a job, containing the data and any error that occurred.
-type Result[T any] struct {
-	Data T
-	Err  error
-}
-
 // EnqueuedJob represents a job that has been enqueued and can wait for a result.
 type EnqueuedJob[T any] interface {
 	job.IJob
@@ -18,4 +16,14 @@ type EnqueuedJob[T any] interface {
 type EnqueuedVoidJob interface {
 	job.IJob
 	WaitForError() error
+}
+
+type EnqueuedGroupJob[T any] interface {
+	Drain()
+	Result() chan shared.Result[T]
+}
+
+type EnqueuedVoidGroupJob interface {
+	EnqueuedGroupJob[any]
+	Result() chan shared.Result[any]
 }
