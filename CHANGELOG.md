@@ -1,5 +1,81 @@
 # Changelog
 
+## [v2.0.0] (2025-03-14)
+
+### 🔄 Breaking Changes
+
+- Complete API redesign for better type safety and error handling
+- Replaced channel-based result handling with Job interface
+- Introduced new Job types for better control and status tracking
+- Separated void (non-returning) queues into dedicated implementations
+
+### ✨ New Features
+
+- Added `EnqueuedJob` interface for handling individual job results
+- Added `EnqueuedGroupJob` interface for handling batch job results
+- Introduced void queue variants for operations without return values
+- Added job status tracking (`Status()` method)
+- Added `IsClosed()` method to check job state
+- Added `Drain()` method for discarding results
+- Enhanced error handling with dedicated error channels
+- Added `WaitForResult()` and `WaitForError()` method for synchronous result retrieval
+- Added `Errors()` method for retrieving errors from void group jobs
+- Added `Results()` method for retrieving results from group jobs
+- Added `Close()` method for closing jobs and associated channels
+
+### 🔧 API Changes
+
+#### Queue Creation
+
+- Old: `NewQueue[T, R](concurrency uint, worker func(T) R)`
+- New: `NewQueue[T, R](concurrency uint32, worker Worker[T, R])`
+
+#### Job Submission
+
+- Old: `Add(data T) <-chan R`
+- New: `Add(data T) EnqueuedJob[R]`
+
+#### Batch Operations
+
+- Old: `AddAll(data ...T) <-chan R`
+- New: `AddAll(data []T) EnqueuedGroupJob[R]`
+
+#### Priority Queue
+
+- Old: `Add(data T, priority int) <-chan R`
+- New: `Add(data T, priority int) EnqueuedJob[R]`
+- Old: `AddAll(items []PQItem[T]) <-chan R`
+- New: `AddAll(items []PQItem[T]) EnqueuedGroupJob[R]`
+
+### 🚀 Performance Improvements
+
+- Optimized memory usage with better channel management
+- Reduced goroutine overhead
+- Improved priority queue operations
+- Reduced spawning of n number of goroutines to constant inside `AddAll` method
+
+### 🛠️ Technical Improvements
+
+- Enhanced type safety with generic constraints
+- Better resource cleanup mechanisms
+- Improved concurrency control
+- Added comprehensive error handling
+- Thread-safe operations guaranteed
+
+### 📚 Documentation
+
+- Updated API reference with new interfaces and methods
+- Added more code examples
+- Improved documentation clarity
+- Added performance benchmarks
+
+### 🔧 Other Changes
+
+- Minimum Go version requirement updated to 1.24+
+- Internal refactoring for better maintainability
+- Enhanced test coverage
+- Added benchmarks for normal and void queue operations
+
 ## [v1.0.0] (2025-03-7)
 
 ### 🎉 Initial Release
