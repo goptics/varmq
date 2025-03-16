@@ -1,9 +1,9 @@
 package concurrent_queue
 
 import (
-	"github.com/fahimfaisaal/gocq/internal/job"
-	"github.com/fahimfaisaal/gocq/internal/queue"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/internal/job"
+	"github.com/fahimfaisaal/gocq/v2/internal/queue"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 type ConcurrentPriorityQueue[T, R any] struct {

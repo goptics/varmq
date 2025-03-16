@@ -3,8 +3,8 @@ package void_queue
 import (
 	"testing"
 
-	"github.com/fahimfaisaal/gocq/internal/common"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/internal/common"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 func BenchmarkVoidQueue_Operations(b *testing.B) {

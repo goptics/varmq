@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fahimfaisaal/gocq"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 type ScrapeResult struct {

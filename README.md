@@ -3,12 +3,12 @@
 Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations, with options for result-returning and void (non-returning) queues.
 Zero dependency just install, import and use any where in your go program.
 
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
+[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq/v2)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq/v2)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/v2/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq/v2)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq/v2?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 ## 🌟 Features
@@ -27,7 +27,7 @@ Zero dependency just install, import and use any where in your go program.
 ## 🔧 Installation
 
 ```bash
-go get github.com/fahimfaisaal/gocq
+go get github.com/fahimfaisaal/gocq/v2
 ```
 
 ## 🚀 Quick Start
@@ -38,7 +38,7 @@ package main
 import (
     "fmt"
     "time"
-    "github.com/fahimfaisaal/gocq"
+    "github.com/fahimfaisaal/gocq/v2"
 )
 
 func main() {
@@ -75,7 +75,7 @@ queue := gocq.NewPriorityQueue(1, func(data int) (int, error) {
 })
 defer queue.WaitAndClose()
 
-// import "github.com/fahimfaisaal/gocq/types"
+// import "github.com/fahimfaisaal/gocq/v2/types"
 items := []types.PQItem[int]{
     {Value: 1, Priority: 2}, // Lowest priority
     {Value: 2, Priority: 1}, // Medium priority
@@ -115,7 +115,7 @@ For detailed API documentation, please refer to the [API Reference](./docs/API_R
 
 goos: linux
 goarch: amd64
-pkg: github.com/fahimfaisaal/gocq/internal/concurrent_queue
+pkg: github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
 BenchmarkQueue_Operations/Add-24                         1113538              1467 ns/op             376 B/op          8 allocs/op
 BenchmarkQueue_Operations/AddAll-24                        15778            131428 ns/op           17353 B/op        510 allocs/op
@@ -128,7 +128,7 @@ BenchmarkPriorityQueue_Operations/AddAll-24                10000            1210
 
 goos: linux
 goarch: amd64
-pkg: github.com/fahimfaisaal/gocq/internal/concurrent_queue/void_queue
+pkg: github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue/void_queue
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
 BenchmarkVoidQueue_Operations/Add-24                     1987044              1001 ns/op             240 B/op          7 allocs/op
 BenchmarkVoidQueue_Operations/AddAll-24                    10000            134711 ns/op           16989 B/op        512 allocs/op

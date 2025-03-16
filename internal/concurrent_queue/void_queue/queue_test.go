@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/internal/common"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/internal/common"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 func TestConcurrentVoidQueue(t *testing.T) {
