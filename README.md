@@ -4,11 +4,11 @@ Package gocq offers a concurrent queue system using channels and goroutines, sup
 Zero dependency just install, import and use any where in your go program.
 
 [![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq/v2)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq/v2)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/v2/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq/v2)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq/v2?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq/)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 ## 🌟 Features
