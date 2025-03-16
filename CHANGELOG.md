@@ -110,7 +110,7 @@ Benchmark results on Intel i7-13700:
 ```bash
 goos: linux
 goarch: amd64
-pkg: github.com/fahimfaisaal/gocq
+pkg: github.com/fahimfaisaal/gocq/v2
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
 BenchmarkPriorityQueue_Operations/Add-24                 1378249              1278 ns/op
 BenchmarkPriorityQueue_Operations/AddAll-24               795332              1712 ns/op

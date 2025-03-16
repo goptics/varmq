@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 // GroupJob represents a job that can be used in a group.

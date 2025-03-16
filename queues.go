@@ -1,10 +1,10 @@
 package gocq
 
 import (
-	"github.com/fahimfaisaal/gocq/internal/common"
-	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
-	vq "github.com/fahimfaisaal/gocq/internal/concurrent_queue/void_queue"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/internal/common"
+	cq "github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue"
+	vq "github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue/void_queue"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 func withSafeConcurrency(concurrency uint32) uint32 {

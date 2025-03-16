@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/internal/common"
+	"github.com/fahimfaisaal/gocq/v2/internal/common"
 )
 
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.

@@ -1,10 +1,10 @@
 package void_queue
 
 import (
-	cq "github.com/fahimfaisaal/gocq/internal/concurrent_queue"
-	"github.com/fahimfaisaal/gocq/internal/job"
-	"github.com/fahimfaisaal/gocq/internal/queue"
-	"github.com/fahimfaisaal/gocq/types"
+	cq "github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue"
+	"github.com/fahimfaisaal/gocq/v2/internal/job"
+	"github.com/fahimfaisaal/gocq/v2/internal/queue"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 type ConcurrentVoidPriorityQueue[T any] struct {

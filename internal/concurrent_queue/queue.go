@@ -5,9 +5,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/internal/job"
-	"github.com/fahimfaisaal/gocq/internal/queue"
-	"github.com/fahimfaisaal/gocq/types"
+	"github.com/fahimfaisaal/gocq/v2/internal/job"
+	"github.com/fahimfaisaal/gocq/v2/internal/queue"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 type ConcurrentQueue[T, R any] struct {
