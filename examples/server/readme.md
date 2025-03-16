@@ -43,9 +43,10 @@ The server will start and listen on port 8080.
 
 **Response:**
 
-```json
+```jsonc
 {
   "Status": "job_status"
+  "Result": "scraped_content" // dummy scraped content
 }
 ```
 

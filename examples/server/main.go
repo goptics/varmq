@@ -14,6 +14,7 @@ import (
 
 type ScrapeResult struct {
 	Status string
+	Result string
 }
 
 var (
@@ -61,6 +62,17 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	job := value.(types.EnqueuedJob[string])
 
+	if job.Status() == "Closed" {
+		jobResults.Delete(jobID)
+		result, _ := job.WaitForResult()
+		response := ScrapeResult{
+			Status: job.Status(),
+			Result: result,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 	response := ScrapeResult{
 		Status: job.Status(),
 	}
