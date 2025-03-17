@@ -6,21 +6,21 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
-// GroupJob represents a job that can be used in a group.
-type GroupJob[T, R any] struct {
+// groupJob represents a job that can be used in a group.
+type groupJob[T, R any] struct {
 	*job[T, R]
 	wg *sync.WaitGroup
 }
 
-type IGroupJob[T, R any] interface {
+type GroupJob[T, R any] interface {
 	Job[T, R]
 	types.EnqueuedGroupJob[R]
-	NewJob(data T) IGroupJob[T, R]
+	NewJob(data T) GroupJob[T, R]
 	Done()
 }
 
-func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
-	gj := &GroupJob[T, R]{
+func NewGroupJob[T, R any](bufferSize uint32) GroupJob[T, R] {
+	gj := &groupJob[T, R]{
 		job: &job[T, R]{
 			resultChannel: NewResultChannel[R](),
 		},
@@ -32,8 +32,8 @@ func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
 	return gj
 }
 
-func (gj *GroupJob[T, R]) NewJob(data T) IGroupJob[T, R] {
-	return &GroupJob[T, R]{
+func (gj *groupJob[T, R]) NewJob(data T) GroupJob[T, R] {
+	return &groupJob[T, R]{
 		job: &job[T, R]{
 			data:          data,
 			resultChannel: gj.resultChannel,
@@ -42,7 +42,7 @@ func (gj *GroupJob[T, R]) NewJob(data T) IGroupJob[T, R] {
 	}
 }
 
-func (gj *GroupJob[T, R]) Results() chan types.Result[R] {
+func (gj *groupJob[T, R]) Results() chan types.Result[R] {
 	// Start a goroutine to close the channel when all jobs are done
 	go func() {
 		gj.wg.Wait()
@@ -51,6 +51,6 @@ func (gj *GroupJob[T, R]) Results() chan types.Result[R] {
 	return gj.resultChannel
 }
 
-func (gj *GroupJob[T, R]) Done() {
+func (gj *groupJob[T, R]) Done() {
 	gj.wg.Done()
 }

@@ -92,7 +92,7 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 		j.ChangeStatus(job.Finished)
 
 		switch jobType := j.(type) {
-		case job.IGroupJob[T, R]:
+		case job.GroupJob[T, R]:
 			jobType.Done()
 		case job.Job[T, R]:
 			jobType.Close()
