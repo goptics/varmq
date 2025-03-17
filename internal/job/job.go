@@ -22,38 +22,38 @@ const (
 	Closed
 )
 
-// Job represents a task to be executed by a worker. It maintains the task's
+// job represents a task to be executed by a worker. It maintains the task's
 // current status, input data, and channels for receiving results.
-type Job[T, R any] struct {
+type job[T, R any] struct {
 	resultChannel ResultChannel[R]
 	data          T
 	status        atomic.Uint32
 }
 
-type IJob[T, R any] interface {
+type Job[T, R any] interface {
 	types.EnqueuedJob[R]
 	Data() T
 	SendResult(result R)
 	SendError(err error)
-	ChangeStatus(status uint32) IJob[T, R]
+	ChangeStatus(status uint32) Job[T, R]
 	CloseResultChannel()
 }
 
-// New creates a new Job with the provided data.
-func New[T, R any](data T) *Job[T, R] {
-	return &Job[T, R]{
+// New creates a new job with the provided data.
+func New[T, R any](data T) *job[T, R] {
+	return &job[T, R]{
 		data:          data,
 		resultChannel: NewResultChannel[R](),
 		status:        atomic.Uint32{},
 	}
 }
 
-func (j *Job[T, R]) Data() T {
+func (j *job[T, R]) Data() T {
 	return j.data
 }
 
 // State returns the current status of the job as a string.
-func (j *Job[T, R]) Status() string {
+func (j *job[T, R]) Status() string {
 	switch j.status.Load() {
 	case Created:
 		return "Created"
@@ -71,28 +71,28 @@ func (j *Job[T, R]) Status() string {
 }
 
 // IsClosed returns true if the job has been closed.
-func (j *Job[T, R]) IsClosed() bool {
+func (j *job[T, R]) IsClosed() bool {
 	return j.status.Load() == Closed
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *Job[T, R]) ChangeStatus(status uint32) IJob[T, R] {
+func (j *job[T, R]) ChangeStatus(status uint32) Job[T, R] {
 	j.status.Store(status)
 	return j
 }
 
-func (j *Job[T, R]) SendResult(result R) {
+func (j *job[T, R]) SendResult(result R) {
 	j.resultChannel <- types.Result[R]{Data: result}
 }
 
-func (j *Job[T, R]) SendError(err error) {
+func (j *job[T, R]) SendError(err error) {
 	j.resultChannel <- types.Result[R]{Err: err}
 }
 
 // WaitForResult blocks until the job completes and returns the result and any error.
 // If the job's result channel is closed without a value, it returns the zero value
 // and any error from the error channel.
-func (j *Job[T, R]) WaitForResult() (R, error) {
+func (j *job[T, R]) WaitForResult() (R, error) {
 	result, ok := <-j.resultChannel
 
 	if ok {
@@ -105,7 +105,7 @@ func (j *Job[T, R]) WaitForResult() (R, error) {
 // Drain discards the job's result and error values asynchronously.
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
-func (j *Job[T, R]) Drain() {
+func (j *job[T, R]) Drain() {
 	go func() {
 		for range j.resultChannel {
 			// drain
@@ -113,13 +113,13 @@ func (j *Job[T, R]) Drain() {
 	}()
 }
 
-func (j *Job[T, R]) CloseResultChannel() {
+func (j *job[T, R]) CloseResultChannel() {
 	j.resultChannel.Close()
 }
 
 // Close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
-func (j *Job[T, R]) Close() error {
+func (j *job[T, R]) Close() error {
 	switch j.status.Load() {
 	case Processing:
 		return errors.New("job is processing")

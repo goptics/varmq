@@ -8,12 +8,12 @@ import (
 
 // GroupJob represents a job that can be used in a group.
 type GroupJob[T, R any] struct {
-	*Job[T, R]
+	*job[T, R]
 	wg *sync.WaitGroup
 }
 
 type IGroupJob[T, R any] interface {
-	IJob[T, R]
+	Job[T, R]
 	types.EnqueuedGroupJob[R]
 	NewJob(data T) IGroupJob[T, R]
 	Done()
@@ -21,7 +21,7 @@ type IGroupJob[T, R any] interface {
 
 func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
 	gj := &GroupJob[T, R]{
-		Job: &Job[T, R]{
+		job: &job[T, R]{
 			resultChannel: NewResultChannel[R](),
 		},
 		wg: new(sync.WaitGroup),
@@ -34,7 +34,7 @@ func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
 
 func (gj *GroupJob[T, R]) NewJob(data T) IGroupJob[T, R] {
 	return &GroupJob[T, R]{
-		Job: &Job[T, R]{
+		job: &job[T, R]{
 			data:          data,
 			resultChannel: gj.resultChannel,
 		},

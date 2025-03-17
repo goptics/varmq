@@ -34,8 +34,8 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 	concurrentQueue := &concurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
-		ChannelsStack: make([]chan job.IJob[T, R], concurrency),
-		JobQueue:      queue.NewPriorityQueue[job.IJob[T, R]](),
+		ChannelsStack: make([]chan job.Job[T, R], concurrency),
+		JobQueue:      queue.NewPriorityQueue[job.Job[T, R]](),
 	}
 
 	concurrentQueue.Restart()
@@ -50,7 +50,7 @@ func (q *concurrentPriorityQueue[T, R]) Pause() ConcurrentPriorityQueue[T, R] {
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int) types.EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
-	q.AddJob(queue.EnqItem[job.IJob[T, R]]{Value: j, Priority: priority})
+	q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
 
 	return j
 }
@@ -59,7 +59,7 @@ func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.Enqueued
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
 	for _, item := range items {
-		q.AddJob(queue.EnqItem[job.IJob[T, R]]{Value: groupJob.NewJob(item.Value), Priority: item.Priority})
+		q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: groupJob.NewJob(item.Value), Priority: item.Priority})
 	}
 
 	return groupJob
