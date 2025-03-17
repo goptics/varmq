@@ -9,7 +9,7 @@ import (
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -21,7 +21,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -43,7 +43,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 // BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -57,7 +57,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -81,7 +81,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -93,7 +93,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -115,7 +115,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 // BenchmarkPriorityQueue_ParallelOperations benchmarks parallel operations of PriorityQueue.
 func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -129,7 +129,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(0, func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -137,6 +137,78 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		data := make([]PQItem[int], common.AddAllSampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+		}
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for range q.AddAll(data).Results() {
+					// drain the channel
+				}
+			}
+		})
+	})
+}
+
+// BenchmarkVoidQueue_Operations benchmarks the operations of VoidQueue.
+func BenchmarkVoidQueue_Operations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewVoidQueue(0, func(data int) error {
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		for j := 0; j < b.N; j++ {
+			q.Add(j).WaitForResult()
+		}
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
+		q := NewVoidQueue(0, func(data int) error {
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		data := make([]int, common.AddAllSampleSize)
+		for i := range data {
+			data[i] = i
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for range q.AddAll(data).Results() {
+				// drain the channel
+			}
+		}
+	})
+}
+
+// BenchmarkVoidQueue_ParallelOperations benchmarks parallel operations of VoidQueue.
+func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		q := NewVoidQueue(0, func(data int) error {
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1).WaitForResult()
+			}
+		})
+	})
+
+	b.Run("AddAll", func(b *testing.B) {
+		q := NewVoidQueue(0, func(data int) error {
+			return nil
+		})
+		defer q.WaitAndClose()
+
+		data := make([]int, common.AddAllSampleSize)
+		for i := range data {
+			data[i] = i
 		}
 
 		b.ResetTimer()
