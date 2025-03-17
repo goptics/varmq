@@ -42,7 +42,7 @@ func (gj *groupJob[T, R]) NewJob(data T) GroupJob[T, R] {
 	}
 }
 
-func (gj *groupJob[T, R]) Results() chan types.Result[R] {
+func (gj *groupJob[T, R]) Results() <-chan types.Result[R] {
 	// Start a goroutine to close the channel when all jobs are done
 	go func() {
 		gj.wg.Wait()

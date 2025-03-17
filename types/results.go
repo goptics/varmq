@@ -17,5 +17,5 @@ type EnqueuedGroupJob[T any] interface {
 	// Drain discards the job's result and error values asynchronously.
 	Drain()
 	// Results returns a channel that will receive the results of the group
-	Results() chan Result[T]
+	Results() <-chan Result[T]
 }
