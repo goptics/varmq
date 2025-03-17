@@ -116,16 +116,6 @@ func TestJob(t *testing.T) {
 		}
 	})
 
-	t.Run("CloseLocked", func(t *testing.T) {
-		job := New[int, int](0)
-		job.Lock()
-
-		err := job.Close()
-		if err == nil || err.Error() != "job is not closeable due to lock" {
-			t.Errorf("expected job is not closeable due to lock, got %v", err)
-		}
-	})
-
 	t.Run("CloseProcessing", func(t *testing.T) {
 		job := New[int, int](0).ChangeStatus(Processing)
 

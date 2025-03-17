@@ -28,7 +28,6 @@ type Job[T, R any] struct {
 	resultChannel ResultChannel[R]
 	data          T
 	status        atomic.Uint32
-	lock          atomic.Bool
 }
 
 type IJob[T, R any] interface {
@@ -47,20 +46,6 @@ func New[T, R any](data T) *Job[T, R] {
 		resultChannel: NewResultChannel[R](),
 		status:        atomic.Uint32{},
 	}
-}
-
-func (j *Job[T, R]) IsLocked() bool {
-	return j.lock.Load()
-}
-
-func (j *Job[T, R]) Lock() types.IJob {
-	j.lock.Store(true)
-	return j
-}
-
-func (j *Job[T, R]) Unlock() types.IJob {
-	j.lock.Store(false)
-	return j
 }
 
 func (j *Job[T, R]) Data() T {
@@ -133,10 +118,6 @@ func (j *Job[T, R]) CloseResultChannel() {
 // Close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
 func (j *Job[T, R]) Close() error {
-	if j.IsLocked() {
-		return errors.New("job is not closeable due to lock")
-	}
-
 	switch j.status.Load() {
 	case Processing:
 		return errors.New("job is processing")
