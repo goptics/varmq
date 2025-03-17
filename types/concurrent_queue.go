@@ -1,7 +1,7 @@
 package types
 
 // PQItem represents the interface for a generic common concurrent queue.
-type ICQueue[T, R any] interface {
+type ICQueue interface {
 	// IsPaused returns whether the queue is paused.
 	IsPaused() bool
 	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
@@ -30,7 +30,7 @@ type ICQueue[T, R any] interface {
 }
 
 type IConcurrentQueue[T, R any] interface {
-	ICQueue[T, R]
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() IConcurrentQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
@@ -42,7 +42,7 @@ type IConcurrentQueue[T, R any] interface {
 }
 
 type IConcurrentPriorityQueue[T, R any] interface {
-	ICQueue[T, R]
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() IConcurrentPriorityQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
@@ -54,7 +54,7 @@ type IConcurrentPriorityQueue[T, R any] interface {
 }
 
 type IConcurrentVoidPriorityQueue[T any] interface {
-	ICQueue[T, any]
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() IConcurrentVoidPriorityQueue[T]
 	// Add adds a new Job with the given priority to the queue.
@@ -64,7 +64,7 @@ type IConcurrentVoidPriorityQueue[T any] interface {
 }
 
 type IConcurrentVoidQueue[T any] interface {
-	ICQueue[T, any]
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() IConcurrentVoidQueue[T]
 	// Add adds a new Job to the queue and returns a EnqueuedVoidJob to handle the void job.

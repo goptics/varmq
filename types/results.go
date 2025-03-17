@@ -1,16 +1,16 @@
 package types
 
+// Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {
 	Data T
 	Err  error
 }
 
-// Result represents the result of a job, containing the data and any error that occurred.
 // EnqueuedJob represents a job that has been enqueued and can wait for a result.
-type EnqueuedJob[T any] interface {
+type EnqueuedJob[R any] interface {
 	IJob
 	// WaitForResult blocks until the job completes and returns the result and any error.
-	WaitForResult() (T, error)
+	WaitForResult() (R, error)
 }
 
 // EnqueuedVoidJob represents a void job that has been enqueued and can wait for an error.
