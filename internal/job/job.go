@@ -99,7 +99,7 @@ func (j *Job[T, R]) WaitForResult() (R, error) {
 		return result.Data, result.Err
 	}
 
-	return *new(R), nil
+	return *new(R), errors.New("job is closed")
 }
 
 // Drain discards the job's result and error values asynchronously.
