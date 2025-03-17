@@ -1,10 +1,9 @@
-package concurrent_queue
+package gocq
 
 import (
 	"testing"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
-	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
@@ -99,9 +98,9 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]types.PQItem[int], common.AddAllSampleSize)
+		data := make([]PQItem[int], common.AddAllSampleSize)
 		for i := range data {
-			data[i] = types.PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -135,9 +134,9 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]types.PQItem[int], common.AddAllSampleSize)
+		data := make([]PQItem[int], common.AddAllSampleSize)
 		for i := range data {
-			data[i] = types.PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()

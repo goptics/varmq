@@ -10,15 +10,13 @@ import (
 // GroupJob represents a job that can be used in a group.
 type GroupJob[T, R any] struct {
 	*Job[T, R]
-	wg       sync.WaitGroup
-	jobCount atomic.Uint32
+	wg *sync.WaitGroup
 }
 
 type IGroupJob[T, R any] interface {
 	IJob[T, R]
+	types.EnqueuedGroupJob[R]
 	NewJob(data T) IGroupJob[T, R]
-	Drain()
-	Results() chan types.Result[R]
 	Done()
 }
 
@@ -26,10 +24,11 @@ func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
 	gj := &GroupJob[T, R]{
 		Job: &Job[T, R]{
 			resultChannel: NewResultChannel[R](bufferSize),
-			status:        atomic.Uint32{},
 		},
+		wg: new(sync.WaitGroup),
 	}
-	gj.jobCount.Store(bufferSize)
+
+	gj.wg.Add(int(bufferSize))
 
 	return gj
 }
@@ -41,26 +40,27 @@ func (gj *GroupJob[T, R]) NewJob(data T) IGroupJob[T, R] {
 			resultChannel: gj.resultChannel,
 			status:        atomic.Uint32{},
 		},
+		wg: gj.wg,
 	}
 }
 
 func (gj *GroupJob[T, R]) Drain() {
 	go func() {
-		for range gj.Job.resultChannel {
+		for range gj.resultChannel {
 			// drain
 		}
 	}()
 }
 
 func (gj *GroupJob[T, R]) Results() chan types.Result[R] {
-	return gj.Job.resultChannel
+	// Start a goroutine to close the channel when all jobs are done
+	go func() {
+		gj.wg.Wait()
+		gj.CloseResultChannel()
+	}()
+	return gj.resultChannel
 }
 
 func (gj *GroupJob[T, R]) Done() {
 	gj.wg.Done()
-	gj.jobCount.Store(gj.jobCount.Load() - 1)
-
-	if gj.jobCount.Load() == 0 {
-		gj.Job.CloseResultChannel()
-	}
 }

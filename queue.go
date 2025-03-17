@@ -1,4 +1,4 @@
-package concurrent_queue
+package gocq
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
-type ConcurrentQueue[T, R any] struct {
+type concurrentQueue[T, R any] struct {
 	Concurrency uint32
 	Worker      any
 	// channels for each concurrency level and store them in a stack.
@@ -22,10 +22,22 @@ type ConcurrentQueue[T, R any] struct {
 	isPaused      atomic.Bool
 }
 
-// Creates a new ConcurrentQueue with the specified concurrency and worker function.
+type ConcurrentQueue[T, R any] interface {
+	iCQueue
+	// Pause pauses the processing of jobs.
+	Pause() ConcurrentQueue[T, R]
+	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Time complexity: O(1)
+	Add(data T) types.EnqueuedJob[R]
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// Time complexity: O(n) where n is the number of Jobs added
+	AddAll(data []T) types.EnqueuedGroupJob[R]
+}
+
+// Creates a new concurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
-func NewQueue[T, R any](concurrency uint32, worker any) *ConcurrentQueue[T, R] {
-	concurrentQueue := &ConcurrentQueue[T, R]{
+func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
+	concurrentQueue := &concurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
 		ChannelsStack: make([]chan job.IJob[T, R], concurrency),
@@ -36,7 +48,7 @@ func NewQueue[T, R any](concurrency uint32, worker any) *ConcurrentQueue[T, R] {
 	return concurrentQueue
 }
 
-func (q *ConcurrentQueue[T, R]) Restart() {
+func (q *concurrentQueue[T, R]) Restart() {
 	// first pause the queue to avoid routine leaks or deadlocks
 	q.Pause()
 	// wait until all ongoing processes are done to gracefully close the channels if any.
@@ -59,13 +71,13 @@ func (q *ConcurrentQueue[T, R]) Restart() {
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the channel.
-func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan job.IJob[T, R]) {
+func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.IJob[T, R]) {
 	for j := range channel {
 		switch worker := q.Worker.(type) {
-		case types.VoidWorker[T]:
+		case VoidWorker[T]:
 			err := worker(j.Data())
 			j.SendError(err)
-		case types.Worker[T, R]:
+		case Worker[T, R]:
 			result, err := worker(j.Data())
 			if err != nil {
 				j.SendError(err)
@@ -101,7 +113,7 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan job.IJob[T, R]) {
 
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
-func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- job.IJob[T, R] {
+func (q *concurrentQueue[T, R]) pickNextChannel() chan<- job.IJob[T, R] {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	l := len(q.ChannelsStack)
@@ -113,7 +125,7 @@ func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- job.IJob[T, R] {
 }
 
 // shouldProcessNextJob determines if the next job should be processed based on the current state.
-func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
+func (q *concurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 	switch action {
 	case "add":
 		return !q.isPaused.Load() && q.curProcessing < q.Concurrency
@@ -127,7 +139,7 @@ func (q *ConcurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
 }
 
 // processNextJob processes the next Job in the queue.
-func (q *ConcurrentQueue[T, R]) processNextJob() {
+func (q *concurrentQueue[T, R]) processNextJob() {
 	j, has := q.JobQueue.Dequeue()
 
 	if !has {
@@ -150,28 +162,28 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 }
 
 // PauseQueue pauses the processing of jobs.
-func (q *ConcurrentQueue[T, R]) PauseQueue() {
+func (q *concurrentQueue[T, R]) PauseQueue() {
 	q.isPaused.Store(true)
 }
 
-func (q *ConcurrentQueue[T, R]) PendingCount() int {
+func (q *concurrentQueue[T, R]) PendingCount() int {
 	return q.JobQueue.Len()
 }
 
-func (q *ConcurrentQueue[T, R]) IsPaused() bool {
+func (q *concurrentQueue[T, R]) IsPaused() bool {
 	return q.isPaused.Load()
 }
 
-func (q *ConcurrentQueue[T, R]) CurrentProcessingCount() uint32 {
+func (q *concurrentQueue[T, R]) CurrentProcessingCount() uint32 {
 	return q.curProcessing
 }
 
-func (q *ConcurrentQueue[T, R]) Pause() types.IConcurrentQueue[T, R] {
+func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
 	q.PauseQueue()
 	return q
 }
 
-func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.IJob[T, R]]) {
+func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.IJob[T, R]]) {
 	q.wg.Add(1)
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -184,7 +196,7 @@ func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.IJob[T, R]]) {
 	}
 }
 
-func (q *ConcurrentQueue[T, R]) Resume() {
+func (q *concurrentQueue[T, R]) Resume() {
 	q.isPaused.Store(false)
 
 	// Process pending jobs if any
@@ -197,14 +209,14 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 	}
 }
 
-func (q *ConcurrentQueue[T, R]) Add(data T) types.EnqueuedJob[R] {
+func (q *concurrentQueue[T, R]) Add(data T) types.EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
 	q.AddJob(queue.EnqItem[job.IJob[T, R]]{Value: j})
 	return j
 }
 
-func (q *ConcurrentQueue[T, R]) AddAll(data []T) types.EnqueuedGroupJob[R] {
+func (q *concurrentQueue[T, R]) AddAll(data []T) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](uint32(len(data)))
 
 	for _, item := range data {
@@ -214,11 +226,11 @@ func (q *ConcurrentQueue[T, R]) AddAll(data []T) types.EnqueuedGroupJob[R] {
 	return groupJob
 }
 
-func (q *ConcurrentQueue[T, R]) WaitUntilFinished() {
+func (q *concurrentQueue[T, R]) WaitUntilFinished() {
 	q.wg.Wait()
 }
 
-func (q *ConcurrentQueue[T, R]) Purge() {
+func (q *concurrentQueue[T, R]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
@@ -232,7 +244,7 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 	}
 }
 
-func (q *ConcurrentQueue[T, R]) Close() error {
+func (q *concurrentQueue[T, R]) Close() error {
 	q.Purge()
 
 	// wait until all ongoing processes are done to gracefully close the channels
@@ -250,7 +262,7 @@ func (q *ConcurrentQueue[T, R]) Close() error {
 	return nil
 }
 
-func (q *ConcurrentQueue[T, R]) WaitAndClose() error {
+func (q *concurrentQueue[T, R]) WaitAndClose() error {
 	q.wg.Wait()
 	return q.Close()
 }

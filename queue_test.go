@@ -1,4 +1,4 @@
-package concurrent_queue
+package gocq
 
 import (
 	"errors"
@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
-	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
-		var worker types.Worker[int, int] = func(data int) (int, error) {
+		var worker Worker[int, int] = func(data int) (int, error) {
 			if data == 4 {
 				return 0, errors.New("error")
 			}
@@ -70,7 +69,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 
 // TestConcurrentQueue tests the functionality of ConcurrentQueue.
 func TestConcurrentQueue(t *testing.T) {
-	var worker types.Worker[int, int] = func(data int) (int, error) {
+	var worker Worker[int, int] = func(data int) (int, error) {
 		return common.Double(data), nil
 	}
 

@@ -2,7 +2,6 @@ package job
 
 import (
 	"errors"
-	"fmt"
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/v2/types"
@@ -111,7 +110,6 @@ func (j *Job[T, R]) SendError(err error) {
 func (j *Job[T, R]) WaitForResult() (R, error) {
 	result, ok := <-j.resultChannel
 
-	fmt.Println("res", result, ok)
 	if ok {
 		return result.Data, result.Err
 	}
