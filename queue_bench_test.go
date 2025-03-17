@@ -9,7 +9,7 @@ import (
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -21,7 +21,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -43,7 +43,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 // BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -57,7 +57,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -81,7 +81,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 // BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -93,7 +93,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -115,7 +115,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 // BenchmarkPriorityQueue_ParallelOperations benchmarks parallel operations of PriorityQueue.
 func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
-		q := NewPriorityQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
@@ -129,7 +129,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 
 	b.Run("AddAll", func(b *testing.B) {
-		q := NewPriorityQueue[int, int](common.Cpus(), func(data int) (int, error) {
+		q := NewPriorityQueue(common.Cpus(), func(data int) (int, error) {
 			return common.Double(data), nil
 		})
 		defer q.WaitAndClose()
