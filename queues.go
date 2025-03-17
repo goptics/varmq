@@ -3,7 +3,6 @@ package gocq
 import (
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
 	cq "github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue"
-	vq "github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue/void_queue"
 	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
@@ -23,8 +22,8 @@ func NewQueue[T, R any](concurrency uint32, worker types.Worker[T, R]) types.ICo
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and void worker function.
 // if concurrency is less than 1, it will use the number of CPUs as the concurrency
-func NewVoidQueue[T any](concurrency uint32, worker types.VoidWorker[T]) types.IConcurrentVoidQueue[T] {
-	return vq.NewQueue[T](withSafeConcurrency(concurrency), worker)
+func NewVoidQueue[T any](concurrency uint32, worker types.VoidWorker[T]) types.IConcurrentQueue[T, any] {
+	return cq.NewQueue[T, any](withSafeConcurrency(concurrency), worker)
 }
 
 // Creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
@@ -35,6 +34,6 @@ func NewPriorityQueue[T, R any](concurrency uint32, worker types.Worker[T, R]) t
 
 // Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and void worker function.
 // if concurrency is less than 1, it will use the number of CPUs as the concurrency
-func NewVoidPriorityQueue[T any](concurrency uint32, worker types.VoidWorker[T]) types.IConcurrentVoidPriorityQueue[T] {
-	return vq.NewPriorityQueue[T](withSafeConcurrency(concurrency), worker)
+func NewVoidPriorityQueue[T any](concurrency uint32, worker types.VoidWorker[T]) types.IConcurrentPriorityQueue[T, any] {
+	return cq.NewPriorityQueue[T, any](withSafeConcurrency(concurrency), worker)
 }

@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
-		worker := func(data int) (int, error) {
+		var worker types.Worker[int, int] = func(data int) (int, error) {
 			if data == 4 {
 				return 0, errors.New("error")
 			}
@@ -19,7 +20,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 			return common.Double(data), nil
 		}
 
-		q := NewPriorityQueue(1, worker).Pause()
+		q := NewPriorityQueue[int, int](1, worker).Pause()
 
 		job1 := q.Add(1, 2)
 		job2 := q.Add(2, 1)
@@ -69,11 +70,14 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 
 // TestConcurrentQueue tests the functionality of ConcurrentQueue.
 func TestConcurrentQueue(t *testing.T) {
+	var worker types.Worker[int, int] = func(data int) (int, error) {
+		return common.Double(data), nil
+	}
+
 	t.Run("Add", func(t *testing.T) {
 		t.Parallel()
-		q := NewQueue(2, func(data int) (int, error) {
-			return common.Double(data), nil
-		})
+
+		q := NewQueue[int, int](2, worker)
 		defer q.Close()
 
 		result, _ := q.Add(5).WaitForResult()
@@ -84,9 +88,7 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("WaitUntilFinished", func(t *testing.T) {
-		q := NewQueue(2, func(data int) (int, error) {
-			return common.Double(data), nil
-		})
+		q := NewQueue[int, int](2, worker)
 		defer q.Close()
 
 		q.Add(1)
@@ -106,9 +108,7 @@ func TestConcurrentQueue(t *testing.T) {
 	t.Run("Concurrency", func(t *testing.T) {
 		t.Parallel()
 		concurrency := uint32(2)
-		q := NewQueue(concurrency, func(data int) (int, error) {
-			return common.Double(data), nil
-		})
+		q := NewQueue[int, int](concurrency, worker)
 		defer q.Close()
 
 		// Add more Jobs than concurrency
@@ -126,9 +126,7 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("WaitAndClose", func(t *testing.T) {
-		q := NewQueue(2, func(data int) (int, error) {
-			return common.Double(data), nil
-		})
+		q := NewQueue[int, int](2, worker)
 
 		q.Add(1)
 		q.Add(2)
@@ -145,11 +143,7 @@ func TestConcurrentQueue(t *testing.T) {
 	})
 
 	t.Run("PauseAndResume", func(t *testing.T) {
-		worker := func(data int) (int, error) {
-			return common.Double(data), nil
-		}
-
-		q := NewQueue(2, worker)
+		q := NewQueue[int, int](2, worker)
 
 		job1 := q.Add(1)
 		job2 := q.Add(2)

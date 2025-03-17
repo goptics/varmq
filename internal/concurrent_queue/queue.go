@@ -14,9 +14,9 @@ type ConcurrentQueue[T, R any] struct {
 	Concurrency uint32
 	Worker      any
 	// channels for each concurrency level and store them in a stack.
-	ChannelsStack []chan *job.Job[T, R]
+	ChannelsStack []chan job.IJob[T, R]
 	curProcessing uint32
-	JobQueue      queue.IQueue[*job.Job[T, R]]
+	JobQueue      queue.IQueue[job.IJob[T, R]]
 	wg            sync.WaitGroup
 	mx            sync.Mutex
 	isPaused      atomic.Bool
@@ -24,12 +24,12 @@ type ConcurrentQueue[T, R any] struct {
 
 // Creates a new ConcurrentQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
-func NewQueue[T, R any](concurrency uint32, worker types.Worker[T, R]) *ConcurrentQueue[T, R] {
+func NewQueue[T, R any](concurrency uint32, worker any) *ConcurrentQueue[T, R] {
 	concurrentQueue := &ConcurrentQueue[T, R]{
 		Concurrency:   concurrency,
 		Worker:        worker,
-		ChannelsStack: make([]chan *job.Job[T, R], concurrency),
-		JobQueue:      queue.NewQueue[*job.Job[T, R]](),
+		ChannelsStack: make([]chan job.IJob[T, R], concurrency),
+		JobQueue:      queue.NewQueue[job.IJob[T, R]](),
 	}
 
 	concurrentQueue.Restart()
@@ -50,7 +50,7 @@ func (q *ConcurrentQueue[T, R]) Restart() {
 		}
 
 		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
-		q.ChannelsStack[i] = make(chan *job.Job[T, R])
+		q.ChannelsStack[i] = make(chan job.IJob[T, R])
 		go q.spawnWorker(q.ChannelsStack[i])
 	}
 
@@ -59,26 +59,32 @@ func (q *ConcurrentQueue[T, R]) Restart() {
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the channel.
-func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
+func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan job.IJob[T, R]) {
 	for j := range channel {
 		switch worker := q.Worker.(type) {
 		case types.VoidWorker[T]:
-			err := worker(j.Data)
-			j.ResultChannel.Err <- err
+			err := worker(j.Data())
+			j.SendError(err)
 		case types.Worker[T, R]:
-			result, err := worker(j.Data)
+			result, err := worker(j.Data())
 			if err != nil {
-				j.ResultChannel.Err <- err
+				j.SendError(err)
 			} else {
-				j.ResultChannel.Data <- result
+				j.SendResult(result)
 			}
 		default:
 			// Log or handle the invalid type to avoid silent failures
-			j.ResultChannel.Err <- errors.New("unsupported worker type passed to queue")
+			j.SendError(errors.New("unsupported worker type passed to queue"))
 		}
 
 		j.ChangeStatus(job.Finished)
-		j.Close()
+
+		switch jobType := j.(type) {
+		case job.IGroupJob[T, R]:
+			jobType.Done()
+		case job.IJob[T, R]:
+			jobType.Close()
+		}
 
 		q.mx.Lock()
 		// push the channel back to the stack, so it can be used for the next Job
@@ -95,7 +101,7 @@ func (q *ConcurrentQueue[T, R]) spawnWorker(channel chan *job.Job[T, R]) {
 
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
-func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- *job.Job[T, R] {
+func (q *ConcurrentQueue[T, R]) pickNextChannel() chan<- job.IJob[T, R] {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	l := len(q.ChannelsStack)
@@ -138,7 +144,7 @@ func (q *ConcurrentQueue[T, R]) processNextJob() {
 	q.curProcessing++
 	j.ChangeStatus(job.Processing)
 
-	go func(job *job.Job[T, R]) {
+	go func(job job.IJob[T, R]) {
 		q.pickNextChannel() <- job
 	}(j)
 }
@@ -165,7 +171,7 @@ func (q *ConcurrentQueue[T, R]) Pause() types.IConcurrentQueue[T, R] {
 	return q
 }
 
-func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[*job.Job[T, R]]) {
+func (q *ConcurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.IJob[T, R]]) {
 	q.wg.Add(1)
 	q.mx.Lock()
 	defer q.mx.Unlock()
@@ -194,15 +200,15 @@ func (q *ConcurrentQueue[T, R]) Resume() {
 func (q *ConcurrentQueue[T, R]) Add(data T) types.EnqueuedJob[R] {
 	j := job.New[T, R](data)
 
-	q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: j})
+	q.AddJob(queue.EnqItem[job.IJob[T, R]]{Value: j})
 	return j
 }
 
 func (q *ConcurrentQueue[T, R]) AddAll(data []T) types.EnqueuedGroupJob[R] {
-	groupJob := job.NewGroupJob[T, R](q.Concurrency).FanInResult(len(data))
+	groupJob := job.NewGroupJob[T, R](uint32(len(data)))
 
 	for _, item := range data {
-		q.AddJob(queue.EnqItem[*job.Job[T, R]]{Value: groupJob.NewJob(item).Lock()})
+		q.AddJob(queue.EnqItem[job.IJob[T, R]]{Value: groupJob.NewJob(item)})
 	}
 
 	return groupJob
@@ -222,11 +228,7 @@ func (q *ConcurrentQueue[T, R]) Purge() {
 
 	// close all pending channels to avoid routine leaks
 	for _, job := range prevValues {
-		if job.ResultChannel.Data == nil {
-			continue
-		}
-
-		close(job.ResultChannel.Data)
+		job.CloseResultChannel()
 	}
 }
 
@@ -244,7 +246,7 @@ func (q *ConcurrentQueue[T, R]) Close() error {
 		close(channel)
 	}
 
-	q.ChannelsStack = make([]chan *job.Job[T, R], q.Concurrency)
+	q.ChannelsStack = make([]chan job.IJob[T, R], q.Concurrency)
 	return nil
 }
 

@@ -2,7 +2,10 @@ package job
 
 import (
 	"errors"
+	"fmt"
 	"sync/atomic"
+
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
 // status represents the current state of a job
@@ -23,25 +26,26 @@ const (
 // Job represents a task to be executed by a worker. It maintains the task's
 // current status, input data, and channels for receiving results.
 type Job[T, R any] struct {
-	Data T
-	*ResultChannel[R]
-	status atomic.Uint32
-	lock   atomic.Bool
+	resultChannel ResultChannel[R]
+	data          T
+	status        atomic.Uint32
+	lock          atomic.Bool
+}
+
+type IJob[T, R any] interface {
+	types.EnqueuedJob[R]
+	Data() T
+	SendResult(result R)
+	SendError(err error)
+	ChangeStatus(status uint32) IJob[T, R]
+	CloseResultChannel()
 }
 
 // New creates a new Job with the provided data.
 func New[T, R any](data T) *Job[T, R] {
 	return &Job[T, R]{
-		Data:          data,
-		ResultChannel: NewResultChannel[R](1),
-		status:        atomic.Uint32{},
-	}
-}
-
-func NewWithResultChannel[T, R any](resultChannel *ResultChannel[R]) *Job[T, R] {
-	return &Job[T, R]{
-		Data:          *new(T),
-		ResultChannel: resultChannel,
+		data:          data,
+		resultChannel: NewResultChannel[R](1),
 		status:        atomic.Uint32{},
 	}
 }
@@ -50,14 +54,18 @@ func (j *Job[T, R]) IsLocked() bool {
 	return j.lock.Load()
 }
 
-func (j *Job[T, R]) Lock() *Job[T, R] {
+func (j *Job[T, R]) Lock() types.IJob {
 	j.lock.Store(true)
 	return j
 }
 
-func (j *Job[T, R]) Unlock() *Job[T, R] {
+func (j *Job[T, R]) Unlock() types.IJob {
 	j.lock.Store(false)
 	return j
+}
+
+func (j *Job[T, R]) Data() T {
+	return j.data
 }
 
 // State returns the current status of the job as a string.
@@ -84,27 +92,31 @@ func (j *Job[T, R]) IsClosed() bool {
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *Job[T, R]) ChangeStatus(status uint32) *Job[T, R] {
+func (j *Job[T, R]) ChangeStatus(status uint32) IJob[T, R] {
 	j.status.Store(status)
 	return j
+}
+
+func (j *Job[T, R]) SendResult(result R) {
+	j.resultChannel <- types.Result[R]{Data: result}
+}
+
+func (j *Job[T, R]) SendError(err error) {
+	j.resultChannel <- types.Result[R]{Err: err}
 }
 
 // WaitForResult blocks until the job completes and returns the result and any error.
 // If the job's result channel is closed without a value, it returns the zero value
 // and any error from the error channel.
 func (j *Job[T, R]) WaitForResult() (R, error) {
-	data, ok := <-j.ResultChannel.Data
+	result, ok := <-j.resultChannel
 
+	fmt.Println("res", result, ok)
 	if ok {
-		return data, nil
+		return result.Data, result.Err
 	}
 
-	return *new(R), <-j.ResultChannel.Err
-}
-
-// WaitForError blocks until an error is received on the error channel.
-func (j *Job[T, R]) WaitForError() error {
-	return <-j.ResultChannel.Err
+	return *new(R), nil
 }
 
 // Drain discards the job's result and error values asynchronously.
@@ -112,9 +124,12 @@ func (j *Job[T, R]) WaitForError() error {
 // the channels are emptied.
 func (j *Job[T, R]) Drain() {
 	go func() {
-		<-j.ResultChannel.Data
-		<-j.ResultChannel.Err
+		<-j.resultChannel
 	}()
+}
+
+func (j *Job[T, R]) CloseResultChannel() {
+	j.resultChannel.Close()
 }
 
 // Close closes the job and its associated channels.
@@ -131,7 +146,7 @@ func (j *Job[T, R]) Close() error {
 		return errors.New("job is already closed")
 	}
 
-	j.ResultChannel.Close()
+	j.resultChannel.Close()
 	j.status.Store(Closed)
 
 	return nil

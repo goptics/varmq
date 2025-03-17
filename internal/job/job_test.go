@@ -1,7 +1,6 @@
 package job
 
 import (
-	"errors"
 	"testing"
 	"time"
 )
@@ -53,32 +52,32 @@ func TestJob(t *testing.T) {
 	t.Run("ChangeStatus", func(t *testing.T) {
 		job := New[int, int](0)
 
-		if status := job.status.Load(); status != Created {
-			t.Errorf("expected Created, got %d", status)
+		if status := job.Status(); status != "Created" {
+			t.Errorf("expected Created, got %s", status)
 		}
 
 		job.ChangeStatus(Queued)
 
-		if status := job.status.Load(); status != Queued {
-			t.Errorf("expected Queued, got %d", status)
+		if status := job.Status(); status != "Queued" {
+			t.Errorf("expected Queued, got %s", status)
 		}
 
 		job.ChangeStatus(Processing)
 
-		if status := job.status.Load(); status != Processing {
-			t.Errorf("expected Processing, got %d", status)
+		if status := job.Status(); status != "Processing" {
+			t.Errorf("expected Processing, got %s", status)
 		}
 
 		job.ChangeStatus(Finished)
 
-		if status := job.status.Load(); status != Finished {
-			t.Errorf("expected Finished, got %d", status)
+		if status := job.Status(); status != "Finished" {
+			t.Errorf("expected Finished, got %s", status)
 		}
 
 		job.ChangeStatus(Closed)
 
-		if status := job.status.Load(); status != Closed {
-			t.Errorf("expected Closed, got %d", status)
+		if status := job.Status(); status != "Closed" {
+			t.Errorf("expected Closed, got %s", status)
 		}
 	})
 
@@ -87,7 +86,7 @@ func TestJob(t *testing.T) {
 
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			job.ResultChannel.Data <- 42
+			job.SendResult(42)
 		}()
 
 		result, err := job.WaitForResult()
@@ -96,42 +95,6 @@ func TestJob(t *testing.T) {
 		}
 		if result != 42 {
 			t.Errorf("expected 42, got %d", result)
-		}
-	})
-
-	t.Run("WaitForError", func(t *testing.T) {
-		channel := NewVoidResultChannel()
-		job := NewWithResultChannel[int, any](channel)
-
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			job.ResultChannel.Err <- errors.New("test error")
-		}()
-
-		err := job.WaitForError()
-		if err == nil || err.Error() != "test error" {
-			t.Errorf("expected test error, got %v", err)
-		}
-	})
-
-	t.Run("Drain", func(t *testing.T) {
-		job := New[int, int](0)
-
-		job.ResultChannel.Data <- 42
-		job.ResultChannel.Err <- errors.New("test error")
-
-		job.Drain()
-
-		select {
-		case <-job.ResultChannel.Data:
-		case <-time.After(5 * time.Second):
-			t.Fatal("Data channel not drained")
-		}
-
-		select {
-		case <-job.ResultChannel.Err:
-		case <-time.After(5 * time.Second):
-			t.Fatal("Error channel not drained")
 		}
 	})
 
@@ -154,7 +117,8 @@ func TestJob(t *testing.T) {
 	})
 
 	t.Run("CloseLocked", func(t *testing.T) {
-		job := New[int, int](0).Lock()
+		job := New[int, int](0)
+		job.Lock()
 
 		err := job.Close()
 		if err == nil || err.Error() != "job is not closeable due to lock" {

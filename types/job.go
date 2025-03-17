@@ -1,7 +1,10 @@
 package types
 
 type IJob interface {
-	// IsLocked returns whether the job is closed.
+	Lock() IJob
+
+	Unlock() IJob
+	// IsClosed returns whether the job is closed.
 	IsClosed() bool
 	// Status returns the current status of the job.
 	Status() string

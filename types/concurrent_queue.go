@@ -52,25 +52,3 @@ type IConcurrentPriorityQueue[T, R any] interface {
 	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(items []PQItem[T]) EnqueuedGroupJob[R]
 }
-
-type IConcurrentVoidPriorityQueue[T any] interface {
-	ICQueue
-	// Pause pauses the processing of jobs.
-	Pause() IConcurrentVoidPriorityQueue[T]
-	// Add adds a new Job with the given priority to the queue.
-	Add(data T, priority int) EnqueuedVoidJob
-	// AddAll adds multiple Jobs with the given items to the queue and returns a channel to receive all error responses.
-	AddAll(items []PQItem[T]) EnqueuedVoidGroupJob
-}
-
-type IConcurrentVoidQueue[T any] interface {
-	ICQueue
-	// Pause pauses the processing of jobs.
-	Pause() IConcurrentVoidQueue[T]
-	// Add adds a new Job to the queue and returns a EnqueuedVoidJob to handle the void job.
-	// Time complexity: O(1)
-	Add(data T) EnqueuedVoidJob
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedVoidGroupJob to handle the job.
-	// Time complexity: O(n) where n is the number of Jobs added
-	AddAll(items []T) EnqueuedVoidGroupJob
-}
