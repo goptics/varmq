@@ -44,7 +44,7 @@ type IJob[T, R any] interface {
 func New[T, R any](data T) *Job[T, R] {
 	return &Job[T, R]{
 		data:          data,
-		resultChannel: NewResultChannel[R](1),
+		resultChannel: NewResultChannel[R](),
 		status:        atomic.Uint32{},
 	}
 }

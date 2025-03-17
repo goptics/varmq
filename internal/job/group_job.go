@@ -23,7 +23,7 @@ type IGroupJob[T, R any] interface {
 func NewGroupJob[T, R any](bufferSize uint32) IGroupJob[T, R] {
 	gj := &GroupJob[T, R]{
 		Job: &Job[T, R]{
-			resultChannel: NewResultChannel[R](bufferSize),
+			resultChannel: NewResultChannel[R](),
 		},
 		wg: new(sync.WaitGroup),
 	}
