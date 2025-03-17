@@ -107,7 +107,9 @@ func (j *Job[T, R]) WaitForResult() (R, error) {
 // the channels are emptied.
 func (j *Job[T, R]) Drain() {
 	go func() {
-		<-j.resultChannel
+		for range j.resultChannel {
+			// drain
+		}
 	}()
 }
 

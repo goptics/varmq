@@ -2,7 +2,6 @@ package job
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/v2/types"
 )
@@ -38,18 +37,9 @@ func (gj *GroupJob[T, R]) NewJob(data T) IGroupJob[T, R] {
 		Job: &Job[T, R]{
 			data:          data,
 			resultChannel: gj.resultChannel,
-			status:        atomic.Uint32{},
 		},
 		wg: gj.wg,
 	}
-}
-
-func (gj *GroupJob[T, R]) Drain() {
-	go func() {
-		for range gj.resultChannel {
-			// drain
-		}
-	}()
 }
 
 func (gj *GroupJob[T, R]) Results() chan types.Result[R] {

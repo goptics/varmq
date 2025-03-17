@@ -8,15 +8,15 @@ import (
 )
 
 func main() {
-	q := gocq.NewQueue(4, func(data string) (string, error) {
+	q := gocq.NewVoidQueue(4, func(data string) error {
 		fmt.Println("Scraping:", data)
 		time.Sleep(1 * time.Second)
-		return data, nil
+		return nil
 	})
 	defer q.WaitAndClose()
 
-	q.Add("https://example.com").Drain()
-	q.AddAll([]string{
+	q.Add("https://example.com")
+	r := q.AddAll([]string{
 		"https://example.com/1",
 		"https://example.com/2",
 		"https://example.com/3",
@@ -33,4 +33,12 @@ func main() {
 		"https://example.com/14",
 		"https://example.com/15",
 	}).Results()
+
+	for result := range r {
+		if result.Err != nil {
+			fmt.Printf("Error: %v\n", result.Err)
+			continue
+		}
+		fmt.Println(result.Data)
+	}
 }
