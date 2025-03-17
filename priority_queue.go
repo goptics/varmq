@@ -18,7 +18,7 @@ type PQItem[T any] struct {
 }
 
 type ConcurrentPriorityQueue[T, R any] interface {
-	iCQueue
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() ConcurrentPriorityQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.

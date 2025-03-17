@@ -23,7 +23,7 @@ type concurrentQueue[T, R any] struct {
 }
 
 type ConcurrentQueue[T, R any] interface {
-	iCQueue
+	ICQueue
 	// Pause pauses the processing of jobs.
 	Pause() ConcurrentQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.

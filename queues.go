@@ -4,7 +4,7 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
 )
 
-type iCQueue interface {
+type ICQueue interface {
 	// IsPaused returns whether the queue is paused.
 	IsPaused() bool
 	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
