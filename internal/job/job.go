@@ -122,7 +122,7 @@ func (j *job[T, R]) CloseResultChannel() {
 func (j *job[T, R]) Close() error {
 	switch j.status.Load() {
 	case Processing:
-		return errors.New("job is processing")
+		return errors.New("job is processing, you can't close processing job")
 	case Closed:
 		return errors.New("job is already closed")
 	}
