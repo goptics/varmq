@@ -7,11 +7,11 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
-// status represents the current state of a job
+type Status = uint32
 
 const (
 	// Created indicates the job has been created but not yet queued
-	Created uint32 = iota
+	Created Status = iota
 	// Queued indicates the job is waiting in the queue to be processed
 	Queued
 	// Processing indicates the job is currently being executed
@@ -35,7 +35,7 @@ type Job[T, R any] interface {
 	Data() T
 	SendResult(result R)
 	SendError(err error)
-	ChangeStatus(status uint32) Job[T, R]
+	ChangeStatus(status Status) Job[T, R]
 	CloseResultChannel()
 }
 
@@ -76,7 +76,7 @@ func (j *job[T, R]) IsClosed() bool {
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *job[T, R]) ChangeStatus(status uint32) Job[T, R] {
+func (j *job[T, R]) ChangeStatus(status Status) Job[T, R] {
 	j.status.Store(status)
 	return j
 }
