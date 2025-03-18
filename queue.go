@@ -15,11 +15,12 @@ type concurrentQueue[T, R any] struct {
 	Worker      any
 	// channels for each concurrency level and store them in a stack.
 	ChannelsStack []chan job.Job[T, R]
-	curProcessing uint32
+	curProcessing atomic.Uint32
 	JobQueue      queue.IQueue[job.Job[T, R]]
 	wg            sync.WaitGroup
 	mx            sync.Mutex
 	isPaused      atomic.Bool
+	jobNotifier   job.Notifier
 }
 
 type ConcurrentQueue[T, R any] interface {
@@ -54,6 +55,12 @@ func (q *concurrentQueue[T, R]) Restart() {
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	q.WaitUntilFinished()
 
+	if q.jobNotifier != nil {
+		q.jobNotifier.Close()
+	}
+
+	q.jobNotifier = job.NewNotifier()
+
 	// restart the queue with new channels and start the worker goroutines
 	for i := range q.ChannelsStack {
 		// close old channels to avoid routine leaks
@@ -62,9 +69,10 @@ func (q *concurrentQueue[T, R]) Restart() {
 		}
 
 		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
-		q.ChannelsStack[i] = make(chan job.Job[T, R])
+		q.ChannelsStack[i] = make(chan job.Job[T, R], 1)
 		go q.spawnWorker(q.ChannelsStack[i])
 	}
+	go q.processJobs()
 
 	// resume the queue to process pending Jobs
 	q.Resume()
@@ -100,12 +108,9 @@ func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
 	defer q.mx.Unlock()
 	// push the channel back to the stack, so it can be used for the next Job
 	q.ChannelsStack = append(q.ChannelsStack, channel)
-	q.curProcessing--
+	q.curProcessing.Add(^uint32(0))
 	q.wg.Done()
-
-	if q.shouldProcessNextJob("worker") {
-		q.processNextJob()
-	}
+	q.jobNotifier.Notify()
 }
 
 // pickNextChannel picks the next available channel for processing a Job.
@@ -121,17 +126,11 @@ func (q *concurrentQueue[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	return channel
 }
 
-// shouldProcessNextJob determines if the next job should be processed based on the current state.
-func (q *concurrentQueue[T, R]) shouldProcessNextJob(action string) bool {
-	switch action {
-	case "add":
-		return !q.isPaused.Load() && q.curProcessing < q.Concurrency
-	case "resume":
-		return q.curProcessing < q.Concurrency && q.JobQueue.Len() > 0
-	case "worker":
-		return !q.isPaused.Load() && q.JobQueue.Len() != 0
-	default:
-		return false
+func (q *concurrentQueue[T, R]) processJobs() {
+	for range q.jobNotifier {
+		for !q.isPaused.Load() && q.curProcessing.Load() < q.Concurrency && q.JobQueue.Len() > 0 {
+			q.processNextJob()
+		}
 	}
 }
 
@@ -150,12 +149,10 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 		return
 	}
 
-	q.curProcessing++
+	q.curProcessing.Add(1)
 	j.ChangeStatus(job.Processing)
 
-	go func(job job.Job[T, R]) {
-		q.pickNextChannel() <- job
-	}(j)
+	q.pickNextChannel() <- j
 }
 
 // PauseQueue pauses the processing of jobs.
@@ -172,7 +169,7 @@ func (q *concurrentQueue[T, R]) IsPaused() bool {
 }
 
 func (q *concurrentQueue[T, R]) CurrentProcessingCount() uint32 {
-	return q.curProcessing
+	return q.curProcessing.Load()
 }
 
 func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
@@ -187,10 +184,7 @@ func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.Job[T, R]]) {
 	q.JobQueue.Enqueue(enqItem)
 	enqItem.Value.ChangeStatus(job.Queued)
 
-	// process next Job only when the current processing Job count is less than the concurrency
-	if q.shouldProcessNextJob("add") {
-		q.processNextJob()
-	}
+	q.jobNotifier.Notify()
 }
 
 func (q *concurrentQueue[T, R]) Resume() error {
@@ -199,15 +193,7 @@ func (q *concurrentQueue[T, R]) Resume() error {
 	}
 
 	q.isPaused.Store(false)
-
-	// Process pending jobs if any
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	// Process jobs up to concurrency limit
-	for q.shouldProcessNextJob("resume") {
-		q.processNextJob()
-	}
+	q.jobNotifier.Notify()
 
 	return nil
 }
@@ -234,9 +220,6 @@ func (q *concurrentQueue[T, R]) WaitUntilFinished() {
 }
 
 func (q *concurrentQueue[T, R]) Purge() {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
 	prevValues := q.JobQueue.Values()
 	q.JobQueue.Init()
 	q.wg.Add(-len(prevValues))
@@ -252,7 +235,7 @@ func (q *concurrentQueue[T, R]) Close() error {
 
 	// wait until all ongoing processes are done to gracefully close the channels
 	q.wg.Wait()
-
+	q.jobNotifier.Close()
 	for _, channel := range q.ChannelsStack {
 		if channel == nil {
 			continue
@@ -261,7 +244,6 @@ func (q *concurrentQueue[T, R]) Close() error {
 		close(channel)
 	}
 
-	q.ChannelsStack = make([]chan job.Job[T, R], q.Concurrency)
 	return nil
 }
 
