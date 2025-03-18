@@ -2,39 +2,38 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v2"
 )
 
 func main() {
-	q := gocq.NewVoidQueue(4, func(data string) error {
-		fmt.Println("Scraping:", data)
+	start := time.Now()
+	defer func() {
+		fmt.Println("Time taken:", time.Since(start))
+	}()
+
+	q := gocq.NewQueue(10, func(url string) (string, error) {
+		fmt.Println("Scraping:", url)
 		time.Sleep(1 * time.Second)
-		return nil
+		splitUrl := strings.Split(url, "/")
+		// simulate an error for every 10th url
+		if num, err := strconv.Atoi(splitUrl[3]); err == nil && num%10 == 0 {
+			return "", fmt.Errorf("error scraping %s", url)
+		}
+
+		return fmt.Sprintf("Scraped content of %s", url), nil
 	})
 	defer q.WaitAndClose()
+	links := make([]string, 0)
 
-	q.Add("https://example.com")
-	r := q.AddAll([]string{
-		"https://example.com/1",
-		"https://example.com/2",
-		"https://example.com/3",
-		"https://example.com/4",
-		"https://example.com/5",
-		"https://example.com/6",
-		"https://example.com/7",
-		"https://example.com/8",
-		"https://example.com/9",
-		"https://example.com/10",
-		"https://example.com/11",
-		"https://example.com/12",
-		"https://example.com/13",
-		"https://example.com/14",
-		"https://example.com/15",
-	}).Results()
+	for i := range 100 {
+		links = append(links, fmt.Sprintf("https://example.com/%d", i+1))
+	}
 
-	for result := range r {
+	for result := range q.AddAll(links).Results() {
 		if result.Err != nil {
 			fmt.Printf("Error: %v\n", result.Err)
 			continue
