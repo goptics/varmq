@@ -113,6 +113,15 @@ func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
 	q.jobNotifier.Notify()
 }
 
+// processJobs processes the jobs in the queue every time a new Job is added.
+func (q *concurrentQueue[T, R]) processJobs() {
+	q.jobNotifier.Listen(func() {
+		for !q.isPaused.Load() && q.curProcessing.Load() < q.Concurrency && q.JobQueue.Len() > 0 {
+			q.processNextJob()
+		}
+	})
+}
+
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
 func (q *concurrentQueue[T, R]) pickNextChannel() chan<- job.Job[T, R] {
@@ -124,14 +133,6 @@ func (q *concurrentQueue[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	channel := q.ChannelsStack[l-1]
 	q.ChannelsStack = q.ChannelsStack[:l-1]
 	return channel
-}
-
-func (q *concurrentQueue[T, R]) processJobs() {
-	for range q.jobNotifier {
-		for !q.isPaused.Load() && q.curProcessing.Load() < q.Concurrency && q.JobQueue.Len() > 0 {
-			q.processNextJob()
-		}
-	}
 }
 
 // processNextJob processes the next Job in the queue.

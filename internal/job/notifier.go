@@ -14,6 +14,12 @@ func (j Notifier) Notify() {
 	}
 }
 
+func (j Notifier) Listen(fn func()) {
+	for range j {
+		fn()
+	}
+}
+
 func (j Notifier) Close() error {
 	close(j)
 	return nil
