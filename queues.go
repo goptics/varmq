@@ -11,7 +11,7 @@ type ICQueue interface {
 	// Time complexity: O(n) where n is the concurrency
 	Restart()
 	// Resume continues processing jobs those are pending in the queue.
-	Resume()
+	Resume() error
 	// PendingCount returns the number of Jobs pending in the queue.
 	// Time complexity: O(1)
 	PendingCount() int

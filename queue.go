@@ -91,17 +91,20 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 
 		j.ChangeStatus(job.Finished)
 		j.Close()
+		q.freeChannel(channel)
+	}
+}
 
-		q.mx.Lock()
-		// push the channel back to the stack, so it can be used for the next Job
-		q.ChannelsStack = append(q.ChannelsStack, channel)
-		q.curProcessing--
-		q.wg.Done()
+func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+	// push the channel back to the stack, so it can be used for the next Job
+	q.ChannelsStack = append(q.ChannelsStack, channel)
+	q.curProcessing--
+	q.wg.Done()
 
-		if q.shouldProcessNextJob("worker") {
-			q.processNextJob()
-		}
-		q.mx.Unlock()
+	if q.shouldProcessNextJob("worker") {
+		q.processNextJob()
 	}
 }
 
@@ -190,7 +193,11 @@ func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.Job[T, R]]) {
 	}
 }
 
-func (q *concurrentQueue[T, R]) Resume() {
+func (q *concurrentQueue[T, R]) Resume() error {
+	if !q.isPaused.Load() {
+		return errors.New("queue is already running")
+	}
+
 	q.isPaused.Store(false)
 
 	// Process pending jobs if any
@@ -201,6 +208,8 @@ func (q *concurrentQueue[T, R]) Resume() {
 	for q.shouldProcessNextJob("resume") {
 		q.processNextJob()
 	}
+
+	return nil
 }
 
 func (q *concurrentQueue[T, R]) Add(data T) types.EnqueuedJob[R] {
