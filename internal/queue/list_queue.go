@@ -2,11 +2,13 @@ package queue
 
 import (
 	"container/list"
+	"sync"
 )
 
 // Queue holds a linked list-based queue of generic items.
 type Queue[T any] struct {
 	internal *list.List
+	mx       sync.Mutex
 }
 
 // newQueue creates an empty Queue using container/list.
@@ -16,11 +18,15 @@ func NewQueue[T any]() *Queue[T] {
 
 // Init initializes the queue.
 func (q *Queue[T]) Init() {
+	q.mx.Lock()
+	defer q.mx.Unlock()
 	q.internal.Init()
 }
 
 // Values returns a slice of all values in the queue.
 func (q *Queue[T]) Values() []T {
+	q.mx.Lock()
+	defer q.mx.Unlock()
 	values := make([]T, 0)
 
 	for e := q.internal.Front(); e != nil; e = e.Next() {
@@ -32,18 +38,24 @@ func (q *Queue[T]) Values() []T {
 
 // Len returns the number of items in the queue.
 func (q *Queue[T]) Len() int {
+	q.mx.Lock()
+	defer q.mx.Unlock()
 	return q.internal.Len()
 }
 
 // Enqueue adds an item at the back of the list.
 // Time complexity: O(1)
 func (q *Queue[T]) Enqueue(item EnqItem[T]) {
+	q.mx.Lock()
+	defer q.mx.Unlock()
 	q.internal.PushBack(item.Value)
 }
 
 // Dequeue removes and returns the front item.
 // Time complexity: O(1)
 func (q *Queue[T]) Dequeue() (T, bool) {
+	q.mx.Lock()
+	defer q.mx.Unlock()
 	front := q.internal.Front()
 	if front == nil {
 		// Return zero value + false if empty
