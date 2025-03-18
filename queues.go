@@ -32,8 +32,8 @@ type ICQueue[R any] interface {
 	// Time complexity: O(n) where n is the number of channels
 	Close() error
 
-	GetJob(id string) (types.EnqueuedJob[R], bool)
-	GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], bool)
+	GetJob(id string) (types.EnqueuedJob[R], error)
+	GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], error)
 }
 
 func withSafeConcurrency(concurrency uint32) uint32 {

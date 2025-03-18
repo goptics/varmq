@@ -3,7 +3,6 @@ package job
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/fahimfaisaal/gocq/v2/types"
@@ -51,15 +50,6 @@ func (gj *groupJob[T, R]) NewJob(data T, id string) GroupJob[T, R] {
 	}
 }
 
-func (gj *groupJob[T, R]) ID() string {
-	after, ok := strings.CutPrefix(gj.id, groupIdPrefixed)
-	if !ok {
-		return gj.id
-	}
-
-	return after
-}
-
 func (gj *groupJob[T, R]) Results() (<-chan types.Result[R], error) {
 	ch := gj.resultChannel.Read()
 
@@ -73,7 +63,7 @@ func (gj *groupJob[T, R]) Results() (<-chan types.Result[R], error) {
 		return ch, nil
 	}
 
-	tempCh := make(chan types.Result[R], 0)
+	tempCh := make(chan types.Result[R], 1)
 	close(tempCh)
 
 	// return a closed channel

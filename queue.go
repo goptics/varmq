@@ -17,7 +17,7 @@ type concurrentQueue[T, R any] struct {
 	ChannelsStack []chan job.Job[T, R]
 	curProcessing atomic.Uint32
 	JobQueue      queue.IQueue[job.Job[T, R]]
-	jobMap        sync.Map
+	jobCache      Cache
 	wg            sync.WaitGroup
 	mx            sync.Mutex
 	isPaused      atomic.Bool
@@ -26,6 +26,8 @@ type concurrentQueue[T, R any] struct {
 
 type ConcurrentQueue[T, R any] interface {
 	ICQueue[R]
+	// WithCache sets the cache for the queue.
+	WithCache(cache Cache) ConcurrentQueue[T, R]
 	// Pause pauses the processing of jobs.
 	Pause() ConcurrentQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
@@ -49,6 +51,7 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 		Worker:        worker,
 		ChannelsStack: make([]chan job.Job[T, R], concurrency),
 		JobQueue:      queue.NewQueue[job.Job[T, R]](),
+		jobCache:      getCache(),
 	}
 
 	concurrentQueue.Restart()
@@ -76,7 +79,6 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 
 		j.ChangeStatus(job.Finished)
 		j.Close()
-		q.jobMap.Delete(j.ID())
 		q.freeChannel(channel)
 	}
 }
@@ -123,7 +125,10 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 
 	if j.IsClosed() {
 		q.wg.Done()
-		q.jobMap.Delete(j.ID())
+
+		if q.jobCache != nil {
+			q.jobCache.Delete(j.ID())
+		}
 		// process next Job recursively if the current one is closed
 		q.processNextJob()
 		return
@@ -164,6 +169,11 @@ func (q *concurrentQueue[T, R]) Restart() {
 	q.Resume()
 }
 
+func (q *concurrentQueue[T, R]) WithCache(cache Cache) ConcurrentQueue[T, R] {
+	q.jobCache = cache
+	return q
+}
+
 // PauseQueue pauses the processing of jobs.
 func (q *concurrentQueue[T, R]) PauseQueue() {
 	q.isPaused.Store(true)
@@ -194,30 +204,30 @@ func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.Job[T, R]]) {
 	enqItem.Value.ChangeStatus(job.Queued)
 
 	if id := enqItem.Value.ID(); id != "" {
-		q.jobMap.Store(job.GenerateGroupId(id), enqItem.Value)
+		q.jobCache.Store(id, enqItem.Value)
 	}
 
 	// notify the processJobs goroutine to process the new Job
 	q.jobNotifier.Notify()
 }
 
-func (q *concurrentQueue[T, R]) GetJob(id string) (types.EnqueuedJob[R], bool) {
-	val, ok := q.jobMap.Load(id)
+func (q *concurrentQueue[T, R]) GetJob(id string) (types.EnqueuedJob[R], error) {
+	val, ok := q.jobCache.Load(id)
 	if !ok {
-		return nil, false
+		return nil, errors.New("job not found")
 	}
 
-	return val.(types.EnqueuedJob[R]), true
+	return val.(types.EnqueuedJob[R]), nil
 }
 
-func (q *concurrentQueue[T, R]) GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], bool) {
-	val, ok := q.jobMap.Load(job.GenerateGroupId(id))
+func (q *concurrentQueue[T, R]) GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], error) {
+	val, ok := q.jobCache.Load(job.GenerateGroupId(id))
 
 	if !ok {
-		return nil, false
+		return nil, errors.New("job not found")
 	}
 
-	return val.(types.EnqueuedSingleGroupJob[R]), true
+	return val.(types.EnqueuedSingleGroupJob[R]), nil
 }
 
 func (q *concurrentQueue[T, R]) Resume() error {

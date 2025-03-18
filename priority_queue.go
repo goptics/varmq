@@ -20,6 +20,8 @@ type PQItem[T any] struct {
 
 type ConcurrentPriorityQueue[T, R any] interface {
 	ICQueue[R]
+	// WithCache sets the cache for the queue.
+	WithCache(cache Cache) ConcurrentPriorityQueue[T, R]
 	// Pause pauses the processing of jobs.
 	Pause() ConcurrentPriorityQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
@@ -37,6 +39,7 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 		Worker:        worker,
 		ChannelsStack: make([]chan job.Job[T, R], concurrency),
 		JobQueue:      queue.NewPriorityQueue[job.Job[T, R]](),
+		jobCache:      getCache(),
 	}
 
 	concurrentQueue.Restart()
@@ -45,6 +48,11 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 
 func (q *concurrentPriorityQueue[T, R]) Pause() ConcurrentPriorityQueue[T, R] {
 	q.PauseQueue()
+	return q
+}
+
+func (q *concurrentPriorityQueue[T, R]) WithCache(cache Cache) ConcurrentPriorityQueue[T, R] {
+	q.jobCache = cache
 	return q
 }
 
