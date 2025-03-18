@@ -90,13 +90,7 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 		}
 
 		j.ChangeStatus(job.Finished)
-
-		switch jobType := j.(type) {
-		case job.GroupJob[T, R]:
-			jobType.Done()
-		case job.Job[T, R]:
-			jobType.Close()
-		}
+		j.Close()
 
 		q.mx.Lock()
 		// push the channel back to the stack, so it can be used for the next Job

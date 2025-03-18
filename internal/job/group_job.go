@@ -16,7 +16,6 @@ type GroupJob[T, R any] interface {
 	Job[T, R]
 	types.EnqueuedGroupJob[R]
 	NewJob(data T) GroupJob[T, R]
-	Done()
 }
 
 func NewGroupJob[T, R any](bufferSize uint32) GroupJob[T, R] {
@@ -51,6 +50,7 @@ func (gj *groupJob[T, R]) Results() <-chan types.Result[R] {
 	return gj.resultChannel
 }
 
-func (gj *groupJob[T, R]) Done() {
+func (gj *groupJob[T, R]) Close() error {
 	gj.wg.Done()
+	return nil
 }

@@ -40,6 +40,7 @@ func TestGroupJob(t *testing.T) {
 
 		gj.SendResult(42)
 		gj.Drain()
+		gj.Close()
 
 		select {
 		case <-gj.Results():

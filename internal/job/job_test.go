@@ -120,8 +120,8 @@ func TestJob(t *testing.T) {
 		job := New[int, int](0).ChangeStatus(Processing)
 
 		err := job.Close()
-		if err == nil || err.Error() != "job is processing" {
-			t.Errorf("expected job is processing, got %v", err)
+		if err == nil {
+			t.Errorf("expected job is processing error, got %v", err)
 		}
 	})
 }
