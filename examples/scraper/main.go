@@ -25,19 +25,14 @@ func main() {
 		}
 
 		return fmt.Sprintf("Scraped content of %s", url), nil
-	})
+	}).Pause()
 	defer q.WaitAndClose()
-	links := make([]string, 0)
+	links := make([]gocq.Item[string], 0)
 
-	for i := range 100 {
-		links = append(links, fmt.Sprintf("https://example.com/%d", i+1))
+	for i := range 20 {
+		links = append(links, gocq.Item[string]{Value: fmt.Sprintf("https://example.com/%d", i), ID: strconv.Itoa(i)})
 	}
 
-	for result := range q.AddAll(links).Results() {
-		if result.Err != nil {
-			fmt.Printf("Error: %v\n", result.Err)
-			continue
-		}
-		fmt.Println(result.Data)
-	}
+	q.AddAll(links)
+	q.Resume()
 }

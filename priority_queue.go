@@ -11,6 +11,7 @@ type concurrentPriorityQueue[T, R any] struct {
 }
 
 type PQItem[T any] struct {
+	ID string
 	// Value contains the actual data stored in the queue
 	Value T
 	// Priority determines the item's position in the queue
@@ -18,12 +19,12 @@ type PQItem[T any] struct {
 }
 
 type ConcurrentPriorityQueue[T, R any] interface {
-	ICQueue
+	ICQueue[R]
 	// Pause pauses the processing of jobs.
 	Pause() ConcurrentPriorityQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)
-	Add(data T, priority int) types.EnqueuedJob[R]
+	Add(data T, priority int, id ...string) types.EnqueuedJob[R]
 	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R]
@@ -47,8 +48,8 @@ func (q *concurrentPriorityQueue[T, R]) Pause() ConcurrentPriorityQueue[T, R] {
 	return q
 }
 
-func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int) types.EnqueuedJob[R] {
-	j := job.New[T, R](data)
+func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
+	j := job.New[T, R](data, id...)
 
 	q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
 
@@ -59,7 +60,7 @@ func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.Enqueued
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
 	for _, item := range items {
-		q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: groupJob.NewJob(item.Value), Priority: item.Priority})
+		q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: groupJob.NewJob(item.Value, item.ID), Priority: item.Priority})
 	}
 
 	return groupJob

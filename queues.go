@@ -2,9 +2,10 @@ package gocq
 
 import (
 	"github.com/fahimfaisaal/gocq/v2/internal/common"
+	"github.com/fahimfaisaal/gocq/v2/types"
 )
 
-type ICQueue interface {
+type ICQueue[R any] interface {
 	// IsPaused returns whether the queue is paused.
 	IsPaused() bool
 	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
@@ -30,6 +31,9 @@ type ICQueue interface {
 	// Close closes the queue and resets all internal states.
 	// Time complexity: O(n) where n is the number of channels
 	Close() error
+
+	GetJob(id string) (types.EnqueuedJob[R], bool)
+	GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], bool)
 }
 
 func withSafeConcurrency(concurrency uint32) uint32 {

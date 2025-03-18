@@ -26,14 +26,15 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 		q := NewVoidQueue(0, worker)
 		defer q.WaitAndClose()
 
-		data := make([]int, common.AddAllSampleSize)
-		for i := range data {
-			data[i] = i
+		items := make([]Item[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = Item[int]{Value: i}
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data).Results() {
+			results, _ := q.AddAll(items).Results()
+			for range results {
 				// drain the channel
 			}
 		}
@@ -63,15 +64,16 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 		q := NewVoidQueue(0, worker)
 		defer q.WaitAndClose()
 
-		data := make([]int, common.AddAllSampleSize)
-		for i := range data {
-			data[i] = i
+		items := make([]Item[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = Item[int]{Value: i}
 		}
 
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data).Results() {
+				results, _ := q.AddAll(items).Results()
+				for range results {
 					// drain the channel
 				}
 			}
@@ -99,14 +101,15 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 		q := NewVoidPriorityQueue(0, worker)
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], common.AddAllSampleSize)
-		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+		items := make([]PQItem[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data).Results() {
+			results, _ := q.AddAll(items).Results()
+			for range results {
 				// drain the channel
 			}
 		}
@@ -136,15 +139,16 @@ func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 		q := NewVoidPriorityQueue(0, worker)
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], common.AddAllSampleSize)
-		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+		items := make([]PQItem[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data).Results() {
+				results, _ := q.AddAll(items).Results()
+				for range results {
 					// drain the channel
 				}
 			}

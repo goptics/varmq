@@ -15,7 +15,7 @@ func TestGroupJob(t *testing.T) {
 
 	t.Run("NewJob", func(t *testing.T) {
 		gj := NewGroupJob[int, int](1)
-		job := gj.NewJob(42)
+		job := gj.NewJob(42, "test")
 		if job.Data() != 42 {
 			t.Errorf("expected 42, got %d", job.Data())
 		}
@@ -29,7 +29,8 @@ func TestGroupJob(t *testing.T) {
 			gj.SendResult(42)
 		}()
 
-		result := <-gj.Results()
+		r, _ := gj.Results()
+		result := <-r
 		if result.Data != 42 {
 			t.Errorf("expected 42, got %d", result.Data)
 		}
@@ -42,8 +43,10 @@ func TestGroupJob(t *testing.T) {
 		gj.Drain()
 		gj.Close()
 
+		rc, _ := gj.Results()
+
 		select {
-		case <-gj.Results():
+		case <-rc:
 		case <-time.After(5 * time.Second):
 			t.Fatal("Result channel not drained")
 		}

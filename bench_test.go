@@ -26,14 +26,15 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, common.AddAllSampleSize)
-		for i := range data {
-			data[i] = i
+		items := make([]Item[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = Item[int]{Value: i}
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data).Results() {
+			results, _ := q.AddAll(items).Results()
+			for range results {
 				// drain the channel
 			}
 		}
@@ -62,15 +63,16 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]int, common.AddAllSampleSize)
-		for i := range data {
-			data[i] = i
+		items := make([]Item[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = Item[int]{Value: i}
 		}
 
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data).Results() {
+				results, _ := q.AddAll(items).Results()
+				for range results {
 					// drain the channel
 				}
 			}
@@ -105,7 +107,8 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for range q.AddAll(data).Results() {
+			results, _ := q.AddAll(data).Results()
+			for range results {
 				// drain the channel
 			}
 		}
@@ -134,15 +137,16 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], common.AddAllSampleSize)
-		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+		items := make([]PQItem[int], common.AddAllSampleSize)
+		for i := range items {
+			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				for range q.AddAll(data).Results() {
+				results, _ := q.AddAll(items).Results()
+				for range results {
 					// drain the channel
 				}
 			}
