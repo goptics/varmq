@@ -24,7 +24,7 @@ func WithSafe(name string, fn func()) (err error) {
 }
 
 // WithSafeGo runs the provided function in a goroutine and returns a channel that will receive any panic errors as an error.
-func WithSafeGo(name string, fn func()) <-chan error {
+func GoWithSafe(name string, fn func()) <-chan error {
 	err := make(chan error, 1)
 	go func() {
 		if e := WithSafe(name, fn); e != nil {

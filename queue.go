@@ -16,14 +16,14 @@ type concurrentQueue[T, R any] struct {
 	Concurrency uint32
 	Worker      any
 	// channels for each concurrency level and store them in a stack.
-	ChannelsStack []chan job.Job[T, R]
-	curProcessing atomic.Uint32
-	JobQueue      queue.IQueue[job.Job[T, R]]
-	jobCache      Cache
-	wg            sync.WaitGroup
-	mx            sync.Mutex
-	isPaused      atomic.Bool
-	jobPuller     job.Notifier
+	ChannelsStack   []chan job.Job[T, R]
+	curProcessing   atomic.Uint32
+	JobQueue        queue.IQueue[job.Job[T, R]]
+	jobCache        Cache
+	wg              sync.WaitGroup
+	mx              sync.Mutex
+	isPaused        atomic.Bool
+	jobPullNotifier job.Notifier
 }
 
 type ConcurrentQueue[T, R any] interface {
@@ -49,12 +49,12 @@ type Item[T any] struct {
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 	concurrentQueue := &concurrentQueue[T, R]{
-		Concurrency:   concurrency,
-		Worker:        worker,
-		ChannelsStack: make([]chan job.Job[T, R], concurrency),
-		JobQueue:      queue.NewQueue[job.Job[T, R]](),
-		jobCache:      getCache(),
-		jobPuller:     job.NewNotifier(),
+		Concurrency:     concurrency,
+		Worker:          worker,
+		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
+		JobQueue:        queue.NewQueue[job.Job[T, R]](),
+		jobCache:        getCache(),
+		jobPullNotifier: job.NewNotifier(),
 	}
 
 	concurrentQueue.Restart()
@@ -96,7 +96,7 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 	for j := range channel {
 		func() {
 			defer q.wg.Done()
-			defer q.jobPuller.Notify()
+			defer q.jobPullNotifier.Notify()
 			defer q.curProcessing.Add(^uint32(0))
 			defer q.freeChannel(channel)
 			defer j.Close()
@@ -116,7 +116,7 @@ func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
 
 // pullNextJobs processes the jobs in the queue every time a new Job is added.
 func (q *concurrentQueue[T, R]) pullNextJobs() {
-	q.jobPuller.Listen(func() {
+	q.jobPullNotifier.Listen(func() {
 		for !q.isPaused.Load() && q.curProcessing.Load() < q.Concurrency && q.JobQueue.Len() > 0 {
 			q.processNextJob()
 		}
@@ -181,11 +181,8 @@ func (q *concurrentQueue[T, R]) Restart() {
 	q.WaitUntilFinished()
 
 	// close the old notifier to avoid routine leaks
-	if q.jobPuller != nil {
-		q.jobPuller.Close()
-	}
-
-	q.jobPuller = job.NewNotifier()
+	q.jobPullNotifier.Close()
+	q.jobPullNotifier = job.NewNotifier()
 
 	// restart the queue with new channels and start the worker goroutines
 	for i := range q.ChannelsStack {
@@ -234,7 +231,7 @@ func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 	j.ChangeStatus(job.Queued)
-	q.jobPuller.Notify()
+	q.jobPullNotifier.Notify()
 
 	if id := j.ID(); id != "" {
 		q.jobCache.Store(id, j)
@@ -266,7 +263,7 @@ func (q *concurrentQueue[T, R]) Resume() error {
 	}
 
 	q.isPaused.Store(false)
-	q.jobPuller.Notify()
+	q.jobPullNotifier.Notify()
 
 	return nil
 }
@@ -314,7 +311,7 @@ func (q *concurrentQueue[T, R]) Close() error {
 
 	// wait until all ongoing processes are done to gracefully close the channels
 	q.wg.Wait()
-	q.jobPuller.Close()
+	q.jobPullNotifier.Close()
 	for _, channel := range q.ChannelsStack {
 		if channel == nil {
 			continue
