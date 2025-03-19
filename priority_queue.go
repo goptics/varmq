@@ -60,7 +60,9 @@ func (q *concurrentPriorityQueue[T, R]) WithCache(cache Cache) ConcurrentPriorit
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.wg.Add(1)
+	q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.postEnqueue(j)
 
 	return j
 }
@@ -68,8 +70,12 @@ func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) 
 func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
+	q.wg.Add(len(items))
 	for _, item := range items {
-		q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: groupJob.NewJob(item.Value, item.ID), Priority: item.Priority})
+		j := groupJob.NewJob(item.Value, item.ID)
+
+		q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.postEnqueue(j)
 	}
 
 	return groupJob

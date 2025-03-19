@@ -230,19 +230,13 @@ func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
 	return q
 }
 
-func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.Job[T, R]]) {
-	q.wg.Add(1)
-	q.mx.Lock()
-	defer q.mx.Unlock()
-	q.JobQueue.Enqueue(enqItem)
-	enqItem.Value.ChangeStatus(job.Queued)
-
-	if id := enqItem.Value.ID(); id != "" {
-		q.jobCache.Store(id, enqItem.Value)
-	}
-
-	// notify the processJobs goroutine to process the new Job
+func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
+	j.ChangeStatus(job.Queued)
 	q.jobNotifier.Notify()
+
+	if id := j.ID(); id != "" {
+		q.jobCache.Store(id, j)
+	}
 }
 
 func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error) {
@@ -278,15 +272,21 @@ func (q *concurrentQueue[T, R]) Resume() error {
 func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: j})
+	q.wg.Add(1)
+	q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+	q.postEnqueue(j)
+
 	return j
 }
 
 func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
+	q.wg.Add(len(items))
 	for _, item := range items {
-		q.AddJob(queue.EnqItem[job.Job[T, R]]{Value: groupJob.NewJob(item.Value, item.ID)})
+		j := groupJob.NewJob(item.Value, item.ID)
+		q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+		q.postEnqueue(j)
 	}
 
 	return groupJob
