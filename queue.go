@@ -79,6 +79,7 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 				if e != nil {
 					err = e
 				} else {
+					j.SaveResult(types.Result[R]{Data: result})
 					j.SendResult(result)
 				}
 			})
@@ -89,6 +90,7 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 
 		// send error if any
 		if err := selectError(panicErr, err); err != nil {
+			j.SaveResult(types.Result[R]{Err: err})
 			j.SendError(err)
 		}
 
@@ -133,9 +135,23 @@ func (q *concurrentQueue[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 
 // processNextJob processes the next Job in the queue.
 func (q *concurrentQueue[T, R]) processNextJob() {
-	j, has := q.JobQueue.Dequeue()
+	v, ok := q.JobQueue.Dequeue()
+	if !ok {
+		return
+	}
 
-	if !has {
+	var j job.Job[T, R]
+
+	switch value := v.(type) {
+	case job.Job[T, R]:
+		j = value
+	case []byte:
+		var err error
+		j, err = job.ParseToJob[T, R](value)
+		if err != nil {
+			return
+		}
+	default:
 		return
 	}
 

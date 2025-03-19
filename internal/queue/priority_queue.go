@@ -49,9 +49,11 @@ func (q *PriorityQueue[T]) Values() []T {
 
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
-func (q *PriorityQueue[T]) Enqueue(t EnqItem[T]) {
+func (q *PriorityQueue[T]) Enqueue(item any) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
+	t := item.(EnqItem[T])
+
 	t.Index = q.insertionCount
 	q.insertionCount++
 	heap.Push(q.internal, &t) // O(log n)
@@ -59,7 +61,7 @@ func (q *PriorityQueue[T]) Enqueue(t EnqItem[T]) {
 
 // Dequeue removes and returns the item with the *smallest* Priority.
 // Time complexity: O(log n)
-func (q *PriorityQueue[T]) Dequeue() (T, bool) {
+func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	var zeroValue T
@@ -68,5 +70,4 @@ func (q *PriorityQueue[T]) Dequeue() (T, bool) {
 	}
 	popped := heap.Pop(q.internal).(*EnqItem[T]) // O(log n)
 	return popped.Value, true
-
 }

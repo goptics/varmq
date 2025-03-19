@@ -8,4 +8,6 @@ type IJob interface {
 	Status() string
 	// Close closes the job and its associated channels.
 	Close() error
+	// Json returns the JSON representation of the job.
+	Json() ([]byte, error)
 }

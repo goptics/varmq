@@ -45,15 +45,16 @@ func (q *Queue[T]) Len() int {
 
 // Enqueue adds an item at the back of the list.
 // Time complexity: O(1)
-func (q *Queue[T]) Enqueue(item EnqItem[T]) {
+func (q *Queue[T]) Enqueue(item any) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	q.internal.PushBack(item.Value)
+
+	q.internal.PushBack(item.(EnqItem[T]).Value)
 }
 
 // Dequeue removes and returns the front item.
 // Time complexity: O(1)
-func (q *Queue[T]) Dequeue() (T, bool) {
+func (q *Queue[T]) Dequeue() (any, bool) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	front := q.internal.Front()

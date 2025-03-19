@@ -43,7 +43,7 @@ func (gj *groupJob[T, R]) NewJob(data T, id string) GroupJob[T, R] {
 	return &groupJob[T, R]{
 		job: &job[T, R]{
 			id:            GenerateGroupId(id),
-			data:          data,
+			Input:         data,
 			resultChannel: gj.resultChannel,
 		},
 		wg: gj.wg,

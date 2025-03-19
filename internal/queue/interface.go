@@ -1,8 +1,8 @@
 package queue
 
 type IQueue[T any] interface {
-	Dequeue() (T, bool)
-	Enqueue(item EnqItem[T])
+	Dequeue() (any, bool)
+	Enqueue(item any)
 	Init()
 	Len() int
 	Values() []T

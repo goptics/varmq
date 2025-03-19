@@ -1,7 +1,9 @@
 package job
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 
@@ -28,8 +30,16 @@ const (
 type job[T, R any] struct {
 	id            string
 	resultChannel *ResultChannel[R]
-	data          T
+	Input         T
 	status        atomic.Uint32
+	Output        *types.Result[R]
+}
+
+type jobView[T, R any] struct {
+	Id     string           `json:"id"`
+	Status string           `json:"status"`
+	Input  T                `json:"input"`
+	Output *types.Result[R] `json:"output"`
 }
 
 type Job[T, R any] interface {
@@ -37,6 +47,7 @@ type Job[T, R any] interface {
 	types.EnqueuedJob[R]
 	Data() T
 	SendResult(result R)
+	SaveResult(result types.Result[R])
 	SendError(err error)
 	ChangeStatus(status Status) Job[T, R]
 	CloseResultChannel()
@@ -46,9 +57,10 @@ type Job[T, R any] interface {
 func New[T, R any](data T, id ...string) *job[T, R] {
 	return &job[T, R]{
 		id:            strings.Join(id, "-"),
-		data:          data,
+		Input:         data,
 		resultChannel: NewResultChannel[R](1),
 		status:        atomic.Uint32{},
+		Output:        &types.Result[R]{},
 	}
 }
 
@@ -57,7 +69,7 @@ func (j *job[T, R]) ID() string {
 }
 
 func (j *job[T, R]) Data() T {
-	return j.data
+	return j.Input
 }
 
 // State returns the current status of the job as a string.
@@ -94,6 +106,11 @@ func (j *job[T, R]) SendResult(result R) {
 	j.resultChannel.Send(types.Result[R]{Data: result})
 }
 
+// SendResult sends a result to the job's result channel.
+func (j *job[T, R]) SaveResult(result types.Result[R]) {
+	j.Output = &result
+}
+
 // SendError sends an error to the job's result channel.
 func (j *job[T, R]) SendError(err error) {
 	j.resultChannel.Send(types.Result[R]{Err: err})
@@ -109,7 +126,7 @@ func (j *job[T, R]) Result() (R, error) {
 		return result.Data, result.Err
 	}
 
-	return *new(R), errors.New("job is closed")
+	return j.Output.Data, j.Output.Err
 }
 
 // Drain discards the job's result and error values asynchronously.
@@ -144,6 +161,49 @@ func (j *job[T, R]) isCloseable() error {
 	}
 
 	return nil
+}
+
+func (j *job[T, R]) Json() ([]byte, error) {
+	view := jobView[T, R]{
+		Id:     j.ID(),
+		Status: j.Status(),
+		Input:  j.Input,
+		Output: j.Output,
+	}
+
+	return json.Marshal(view)
+}
+
+func ParseToJob[T, R any](data []byte) (Job[T, R], error) {
+	var view jobView[T, R]
+	if err := json.Unmarshal(data, &view); err != nil {
+		return nil, fmt.Errorf("failed to parse job: %w", err)
+	}
+
+	j := &job[T, R]{
+		id:            view.Id,
+		Input:         view.Input,
+		Output:        view.Output,
+		resultChannel: NewResultChannel[R](1),
+	}
+
+	// Set the status
+	switch view.Status {
+	case "Created":
+		j.status.Store(Created)
+	case "Queued":
+		j.status.Store(Queued)
+	case "Processing":
+		j.status.Store(Processing)
+	case "Finished":
+		j.status.Store(Finished)
+	case "Closed":
+		j.status.Store(Closed)
+	default:
+		return nil, fmt.Errorf("invalid status: %s", view.Status)
+	}
+
+	return j, nil
 }
 
 // Close closes the job and its associated channels.

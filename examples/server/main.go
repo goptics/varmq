@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v2"
@@ -16,7 +17,7 @@ type ScrapeResult struct {
 }
 
 var (
-	queue = gocq.NewQueue(10, scrapeWorker)
+	queue = gocq.NewQueue(10, scrapeWorker).WithCache(new(sync.Map))
 )
 
 func init() {
@@ -58,23 +59,17 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if job.IsClosed() {
-		result, _ := job.Result()
-		response := ScrapeResult{
-			Status: job.Status(),
-			Result: result,
-		}
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+	bytes, err := job.Json()
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	response := ScrapeResult{
-		Status: job.Status(),
-	}
-
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	w.Write(bytes)
 }
 
 func main() {
