@@ -54,6 +54,7 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 		ChannelsStack: make([]chan job.Job[T, R], concurrency),
 		JobQueue:      queue.NewQueue[job.Job[T, R]](),
 		jobCache:      getCache(),
+		jobNotifier:   job.NewNotifier(),
 	}
 
 	concurrentQueue.Restart()

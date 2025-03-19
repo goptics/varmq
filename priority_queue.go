@@ -40,6 +40,7 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 		ChannelsStack: make([]chan job.Job[T, R], concurrency),
 		JobQueue:      queue.NewPriorityQueue[job.Job[T, R]](),
 		jobCache:      getCache(),
+		jobNotifier:   job.NewNotifier(),
 	}
 
 	concurrentQueue.Restart()
