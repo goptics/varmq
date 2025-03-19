@@ -82,7 +82,7 @@ func (q *concurrentQueue[T, R]) processSingleJob(j job.Job[T, R]) {
 		})
 	default:
 		// Log or handle the invalid type to avoid silent failures
-		j.SaveAndSendError(errors.New("unsupported worker type passed to queue"))
+		err = errors.New("unsupported worker type passed to queue")
 	}
 
 	// send error if any
