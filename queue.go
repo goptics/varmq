@@ -97,18 +97,17 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 		j.ChangeStatus(job.Finished)
 		j.Close()
 		q.freeChannel(channel)
+		q.curProcessing.Add(^uint32(0))
+		q.jobNotifier.Notify()
+		q.wg.Done()
 	}
 }
 
 func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
-	// push the channel back to the stack, so it can be used for the next Job
 	q.mx.Lock()
+	defer q.mx.Unlock()
+	// push the channel back to the stack, so it can be used for the next Job
 	q.ChannelsStack = append(q.ChannelsStack, channel)
-	q.mx.Unlock()
-
-	q.curProcessing.Add(^uint32(0))
-	q.jobNotifier.Notify()
-	q.wg.Done()
 }
 
 // processJobs processes the jobs in the queue every time a new Job is added.
