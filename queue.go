@@ -64,18 +64,19 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 	for j := range channel {
 		var panicErr error
+		var err error
+
 		switch worker := q.Worker.(type) {
 		case VoidWorker[T]:
-			panicErr = utils.Safe("void worker", func() {
-				err := worker(j.Data())
-				j.SendError(err)
+			panicErr = utils.WithSafe("void worker", func() {
+				err = worker(j.Data())
 			})
 
 		case Worker[T, R]:
-			panicErr = utils.Safe("worker", func() {
-				result, err := worker(j.Data())
-				if err != nil {
-					j.SendError(err)
+			panicErr = utils.WithSafe("worker", func() {
+				result, e := worker(j.Data())
+				if e != nil {
+					err = e
 				} else {
 					j.SendResult(result)
 				}
@@ -85,9 +86,9 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 			j.SendError(errors.New("unsupported worker type passed to queue"))
 		}
 
-		// send panic error if any
-		if panicErr != nil {
-			j.SendError(panicErr)
+		// send error if any
+		if err := selectError(panicErr, err); err != nil {
+			j.SendError(err)
 		}
 
 		j.ChangeStatus(job.Finished)

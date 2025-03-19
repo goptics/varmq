@@ -10,8 +10,8 @@ func Cpus() uint32 {
 	return uint32(runtime.NumCPU())
 }
 
-// Safe runs the provided function and returns any panic errors as an error.
-func Safe(name string, fn func()) (err error) {
+// WithSafe runs the provided function and returns any panic errors as an error.
+func WithSafe(name string, fn func()) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic recovered inside %s: %v", name, r)
@@ -23,11 +23,11 @@ func Safe(name string, fn func()) (err error) {
 	return err
 }
 
-// SafeGo runs the provided function in a goroutine and returns a channel that will receive any panic errors as an error.
-func SafeGo(name string, fn func()) <-chan error {
+// WithSafeGo runs the provided function in a goroutine and returns a channel that will receive any panic errors as an error.
+func WithSafeGo(name string, fn func()) <-chan error {
 	err := make(chan error, 1)
 	go func() {
-		if e := Safe(name, fn); e != nil {
+		if e := WithSafe(name, fn); e != nil {
 			err <- e
 		}
 		close(err)
