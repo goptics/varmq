@@ -26,7 +26,7 @@ func TestGroupJob(t *testing.T) {
 
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			gj.SendResult(42)
+			gj.SaveAndSendResult(42)
 		}()
 
 		r, _ := gj.Results()
@@ -39,7 +39,7 @@ func TestGroupJob(t *testing.T) {
 	t.Run("Drain", func(t *testing.T) {
 		gj := NewGroupJob[int, int](1)
 
-		gj.SendResult(42)
+		gj.SaveAndSendResult(42)
 		gj.Drain()
 		gj.Close()
 

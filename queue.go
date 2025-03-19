@@ -77,19 +77,17 @@ func (q *concurrentQueue[T, R]) processSingleJob(j job.Job[T, R]) {
 			if e != nil {
 				err = e
 			} else {
-				j.SaveResult(types.Result[R]{Data: result})
-				j.SendResult(result)
+				j.SaveAndSendResult(result)
 			}
 		})
 	default:
 		// Log or handle the invalid type to avoid silent failures
-		j.SendError(errors.New("unsupported worker type passed to queue"))
+		j.SaveAndSendError(errors.New("unsupported worker type passed to queue"))
 	}
 
 	// send error if any
 	if err := selectError(panicErr, err); err != nil {
-		j.SaveResult(types.Result[R]{Err: err})
-		j.SendError(err)
+		j.SaveAndSendError(err)
 	}
 }
 
@@ -162,10 +160,8 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 
 	if j.IsClosed() {
 		q.wg.Done()
+		q.jobCache.Delete(j.ID())
 
-		if q.jobCache != nil {
-			q.jobCache.Delete(j.ID())
-		}
 		// process next Job recursively if the current one is closed
 		q.processNextJob()
 		return

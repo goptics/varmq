@@ -46,9 +46,8 @@ type Job[T, R any] interface {
 	types.IJob
 	types.EnqueuedJob[R]
 	Data() T
-	SendResult(result R)
-	SaveResult(result types.Result[R])
-	SendError(err error)
+	SaveAndSendResult(result R)
+	SaveAndSendError(err error)
 	ChangeStatus(status Status) Job[T, R]
 	CloseResultChannel()
 }
@@ -101,19 +100,18 @@ func (j *job[T, R]) ChangeStatus(status Status) Job[T, R] {
 	return j
 }
 
-// SendResult sends a result to the job's result channel.
-func (j *job[T, R]) SendResult(result R) {
-	j.resultChannel.Send(types.Result[R]{Data: result})
+// SaveAndSendResult sends a result to the job's result channel.
+func (j *job[T, R]) SaveAndSendResult(result R) {
+	r := types.Result[R]{Data: result}
+	j.Output = &r
+	j.resultChannel.Send(r)
 }
 
-// SendResult sends a result to the job's result channel.
-func (j *job[T, R]) SaveResult(result types.Result[R]) {
-	j.Output = &result
-}
-
-// SendError sends an error to the job's result channel.
-func (j *job[T, R]) SendError(err error) {
-	j.resultChannel.Send(types.Result[R]{Err: err})
+// SaveAndSendError sends an error to the job's result channel.
+func (j *job[T, R]) SaveAndSendError(err error) {
+	r := types.Result[R]{Err: err}
+	j.Output = &r
+	j.resultChannel.Send(r)
 }
 
 // Result blocks until the job completes and returns the result and any error.

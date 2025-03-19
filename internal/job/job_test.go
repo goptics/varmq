@@ -86,7 +86,7 @@ func TestJob(t *testing.T) {
 
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			job.SendResult(42)
+			job.SaveAndSendResult(42)
 		}()
 
 		result, err := job.Result()
