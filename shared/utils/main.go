@@ -10,7 +10,7 @@ func Cpus() uint32 {
 	return uint32(runtime.NumCPU())
 }
 
-// Safe runs the provided function and returns any panic errors.
+// Safe runs the provided function and returns any panic errors as an error.
 func Safe(name string, fn func()) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -23,7 +23,7 @@ func Safe(name string, fn func()) (err error) {
 	return err
 }
 
-// SafeGo runs the provided function in a goroutine and returns a channel that will receive any panic errors.
+// SafeGo runs the provided function in a goroutine and returns a channel that will receive any panic errors as an error.
 func SafeGo(name string, fn func()) <-chan error {
 	err := make(chan error, 1)
 	go func() {
