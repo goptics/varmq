@@ -28,3 +28,15 @@ func Safe(name string, fn func()) (err error) {
 
 	return err
 }
+
+func SafeGo(name string, fn func()) <-chan error {
+	err := make(chan error, 1)
+	go func() {
+		if e := Safe(name, fn); e != nil {
+			err <- e
+		}
+		close(err)
+	}()
+
+	return err
+}
