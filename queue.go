@@ -23,7 +23,7 @@ type concurrentQueue[T, R any] struct {
 	wg            sync.WaitGroup
 	mx            sync.Mutex
 	isPaused      atomic.Bool
-	jobNotifier   job.Notifier
+	jobPuller     job.Notifier
 }
 
 type ConcurrentQueue[T, R any] interface {
@@ -54,52 +54,58 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 		ChannelsStack: make([]chan job.Job[T, R], concurrency),
 		JobQueue:      queue.NewQueue[job.Job[T, R]](),
 		jobCache:      getCache(),
-		jobNotifier:   job.NewNotifier(),
+		jobPuller:     job.NewNotifier(),
 	}
 
 	concurrentQueue.Restart()
 	return concurrentQueue
 }
 
+func (q *concurrentQueue[T, R]) processSingleJob(j job.Job[T, R]) {
+	var panicErr error
+	var err error
+
+	switch worker := q.Worker.(type) {
+	case VoidWorker[T]:
+		panicErr = utils.WithSafe("void worker", func() {
+			err = worker(j.Data())
+		})
+
+	case Worker[T, R]:
+		panicErr = utils.WithSafe("worker", func() {
+			result, e := worker(j.Data())
+			if e != nil {
+				err = e
+			} else {
+				j.SaveResult(types.Result[R]{Data: result})
+				j.SendResult(result)
+			}
+		})
+	default:
+		// Log or handle the invalid type to avoid silent failures
+		j.SendError(errors.New("unsupported worker type passed to queue"))
+	}
+
+	// send error if any
+	if err := selectError(panicErr, err); err != nil {
+		j.SaveResult(types.Result[R]{Err: err})
+		j.SendError(err)
+	}
+}
+
 // spawnWorker starts a worker goroutine to process jobs from the channel.
 func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 	for j := range channel {
-		var panicErr error
-		var err error
+		func() {
+			defer q.wg.Done()
+			defer q.jobPuller.Notify()
+			defer q.curProcessing.Add(^uint32(0))
+			defer q.freeChannel(channel)
+			defer j.Close()
+			defer j.ChangeStatus(job.Finished)
 
-		switch worker := q.Worker.(type) {
-		case VoidWorker[T]:
-			panicErr = utils.WithSafe("void worker", func() {
-				err = worker(j.Data())
-			})
-
-		case Worker[T, R]:
-			panicErr = utils.WithSafe("worker", func() {
-				result, e := worker(j.Data())
-				if e != nil {
-					err = e
-				} else {
-					j.SaveResult(types.Result[R]{Data: result})
-					j.SendResult(result)
-				}
-			})
-		default:
-			// Log or handle the invalid type to avoid silent failures
-			j.SendError(errors.New("unsupported worker type passed to queue"))
-		}
-
-		// send error if any
-		if err := selectError(panicErr, err); err != nil {
-			j.SaveResult(types.Result[R]{Err: err})
-			j.SendError(err)
-		}
-
-		j.ChangeStatus(job.Finished)
-		j.Close()
-		q.freeChannel(channel)
-		q.curProcessing.Add(^uint32(0))
-		q.jobNotifier.Notify()
-		q.wg.Done()
+			q.processSingleJob(j)
+		}()
 	}
 }
 
@@ -110,9 +116,9 @@ func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
 	q.ChannelsStack = append(q.ChannelsStack, channel)
 }
 
-// processJobs processes the jobs in the queue every time a new Job is added.
-func (q *concurrentQueue[T, R]) processJobs() {
-	q.jobNotifier.Listen(func() {
+// pullNextJobs processes the jobs in the queue every time a new Job is added.
+func (q *concurrentQueue[T, R]) pullNextJobs() {
+	q.jobPuller.Listen(func() {
 		for !q.isPaused.Load() && q.curProcessing.Load() < q.Concurrency && q.JobQueue.Len() > 0 {
 			q.processNextJob()
 		}
@@ -178,11 +184,11 @@ func (q *concurrentQueue[T, R]) Restart() {
 	q.WaitUntilFinished()
 
 	// close the old notifier to avoid routine leaks
-	if q.jobNotifier != nil {
-		q.jobNotifier.Close()
+	if q.jobPuller != nil {
+		q.jobPuller.Close()
 	}
 
-	q.jobNotifier = job.NewNotifier()
+	q.jobPuller = job.NewNotifier()
 
 	// restart the queue with new channels and start the worker goroutines
 	for i := range q.ChannelsStack {
@@ -196,7 +202,7 @@ func (q *concurrentQueue[T, R]) Restart() {
 		go q.spawnWorker(q.ChannelsStack[i])
 	}
 
-	go q.processJobs()
+	go q.pullNextJobs()
 
 	// resume the queue to process pending Jobs
 	q.Resume()
@@ -231,7 +237,7 @@ func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 	j.ChangeStatus(job.Queued)
-	q.jobNotifier.Notify()
+	q.jobPuller.Notify()
 
 	if id := j.ID(); id != "" {
 		q.jobCache.Store(id, j)
@@ -263,7 +269,7 @@ func (q *concurrentQueue[T, R]) Resume() error {
 	}
 
 	q.isPaused.Store(false)
-	q.jobNotifier.Notify()
+	q.jobPuller.Notify()
 
 	return nil
 }
@@ -311,7 +317,7 @@ func (q *concurrentQueue[T, R]) Close() error {
 
 	// wait until all ongoing processes are done to gracefully close the channels
 	q.wg.Wait()
-	q.jobNotifier.Close()
+	q.jobPuller.Close()
 	for _, channel := range q.ChannelsStack {
 		if channel == nil {
 			continue
