@@ -170,6 +170,7 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 	q.curProcessing.Add(1)
 	j.ChangeStatus(job.Processing)
 
+	// then job will be process by the processSingleJob function inside spawnWorker
 	q.pickNextChannel() <- j
 }
 
