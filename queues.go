@@ -1,8 +1,8 @@
 package gocq
 
 import (
-	"github.com/fahimfaisaal/gocq/v2/internal/common"
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 )
 
 type ICQueue[R any] interface {
@@ -40,7 +40,7 @@ type ICQueue[R any] interface {
 func withSafeConcurrency(concurrency uint32) uint32 {
 	// If concurrency is less than 1, use the number of CPUs as the concurrency
 	if concurrency < 1 {
-		return common.Cpus()
+		return utils.Cpus()
 	}
 	return concurrency
 }

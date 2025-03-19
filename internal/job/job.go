@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 type Status = uint32

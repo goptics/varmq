@@ -2,14 +2,12 @@ package gocq
 
 import (
 	"testing"
-
-	"github.com/fahimfaisaal/gocq/v2/internal/common"
 )
 
 // BenchmarkVoidQueue_Operations benchmarks the operations of VoidQueue.
 func BenchmarkVoidQueue_Operations(b *testing.B) {
 	worker := func(data int) error {
-		common.Double(data)
+		double(data)
 		return nil
 	}
 	b.Run("Add", func(b *testing.B) {
@@ -26,7 +24,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 		q := NewVoidQueue(0, worker)
 		defer q.WaitAndClose()
 
-		items := make([]Item[int], common.AddAllSampleSize)
+		items := make([]Item[int], addAllSampleSize)
 		for i := range items {
 			items[i] = Item[int]{Value: i}
 		}
@@ -44,7 +42,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 // BenchmarkVoidQueue_ParallelOperations benchmarks parallel operations of VoidQueue.
 func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 	worker := func(data int) error {
-		common.Double(data)
+		double(data)
 		return nil
 	}
 
@@ -64,7 +62,7 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 		q := NewVoidQueue(0, worker)
 		defer q.WaitAndClose()
 
-		items := make([]Item[int], common.AddAllSampleSize)
+		items := make([]Item[int], addAllSampleSize)
 		for i := range items {
 			items[i] = Item[int]{Value: i}
 		}
@@ -84,7 +82,7 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 // BenchmarkVoidPriorityQueue_Operations benchmarks the operations of VoidPriorityQueue.
 func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 	worker := func(data int) error {
-		common.Double(data)
+		double(data)
 		return nil
 	}
 	b.Run("Add", func(b *testing.B) {
@@ -101,7 +99,7 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 		q := NewVoidPriorityQueue(0, worker)
 		defer q.WaitAndClose()
 
-		items := make([]PQItem[int], common.AddAllSampleSize)
+		items := make([]PQItem[int], addAllSampleSize)
 		for i := range items {
 			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
@@ -119,7 +117,7 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 // BenchmarkVoidPriorityQueue_ParallelOperations benchmarks parallel operations of VoidPriorityQueue.
 func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 	worker := func(data int) error {
-		common.Double(data)
+		double(data)
 		return nil
 	}
 
@@ -139,7 +137,7 @@ func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 		q := NewVoidPriorityQueue(0, worker)
 		defer q.WaitAndClose()
 
-		items := make([]PQItem[int], common.AddAllSampleSize)
+		items := make([]PQItem[int], addAllSampleSize)
 		for i := range items {
 			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}

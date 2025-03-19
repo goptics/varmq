@@ -3,7 +3,7 @@ package gocq
 import (
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 type concurrentPriorityQueue[T, R any] struct {

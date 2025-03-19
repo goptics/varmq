@@ -3,7 +3,7 @@ package job
 import (
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 // ResultChannel contains channels for receiving both successful results and errors

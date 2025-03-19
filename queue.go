@@ -6,10 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/fahimfaisaal/gocq/v2/internal/common"
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 )
 
 type concurrentQueue[T, R any] struct {
@@ -66,13 +66,13 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 		var panicErr error
 		switch worker := q.Worker.(type) {
 		case VoidWorker[T]:
-			panicErr = common.Safe("void worker", func() {
+			panicErr = utils.Safe("void worker", func() {
 				err := worker(j.Data())
 				j.SendError(err)
 			})
 
 		case Worker[T, R]:
-			panicErr = common.Safe("worker", func() {
+			panicErr = utils.Safe("worker", func() {
 				result, err := worker(j.Data())
 				if err != nil {
 					j.SendError(err)

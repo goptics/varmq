@@ -2,15 +2,13 @@ package gocq
 
 import (
 	"testing"
-
-	"github.com/fahimfaisaal/gocq/v2/internal/common"
 )
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		q := NewQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -22,11 +20,11 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		items := make([]Item[int], common.AddAllSampleSize)
+		items := make([]Item[int], addAllSampleSize)
 		for i := range items {
 			items[i] = Item[int]{Value: i}
 		}
@@ -45,7 +43,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		q := NewQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -59,11 +57,11 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		items := make([]Item[int], common.AddAllSampleSize)
+		items := make([]Item[int], addAllSampleSize)
 		for i := range items {
 			items[i] = Item[int]{Value: i}
 		}
@@ -84,7 +82,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 func BenchmarkPriorityQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		q := NewPriorityQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -96,11 +94,11 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewPriorityQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], common.AddAllSampleSize)
+		data := make([]PQItem[int], addAllSampleSize)
 		for i := range data {
 			data[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}
@@ -119,7 +117,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		q := NewPriorityQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
@@ -133,11 +131,11 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		q := NewPriorityQueue(0, func(data int) (int, error) {
-			return common.Double(data), nil
+			return double(data), nil
 		})
 		defer q.WaitAndClose()
 
-		items := make([]PQItem[int], common.AddAllSampleSize)
+		items := make([]PQItem[int], addAllSampleSize)
 		for i := range items {
 			items[i] = PQItem[int]{Value: i, Priority: i % 10}
 		}

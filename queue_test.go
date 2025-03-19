@@ -4,8 +4,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/fahimfaisaal/gocq/v2/internal/common"
 )
 
 // TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
@@ -16,7 +14,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 				return 0, errors.New("error")
 			}
 
-			return common.Double(data), nil
+			return double(data), nil
 		}
 
 		q := NewPriorityQueue(1, worker).Pause()
@@ -70,7 +68,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 // TestConcurrentQueue tests the functionality of ConcurrentQueue.
 func TestConcurrentQueue(t *testing.T) {
 	worker := func(data int) (int, error) {
-		return common.Double(data), nil
+		return double(data), nil
 	}
 
 	t.Run("Add", func(t *testing.T) {

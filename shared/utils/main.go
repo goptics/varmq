@@ -1,16 +1,9 @@
-package common
+package utils
 
 import (
 	"fmt"
 	"runtime"
 )
-
-const AddAllSampleSize = 100
-
-// Double multiplies the input by 2.
-func Double(n int) int {
-	return n * 2
-}
 
 // Cpus returns the number of logical CPUs available on the system.
 func Cpus() uint32 {

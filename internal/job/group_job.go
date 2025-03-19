@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 // groupJob represents a job that can be used in a group.
