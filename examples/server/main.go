@@ -50,7 +50,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	jobID := r.URL.Path[len("/scrape/status/"):]
 
-	job, err := queue.GetJob(jobID)
+	job, err := queue.JobById(jobID)
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)

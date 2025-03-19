@@ -2,6 +2,7 @@ package gocq
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -226,20 +227,20 @@ func (q *concurrentQueue[T, R]) AddJob(enqItem queue.EnqItem[job.Job[T, R]]) {
 	q.jobNotifier.Notify()
 }
 
-func (q *concurrentQueue[T, R]) GetJob(id string) (types.EnqueuedJob[R], error) {
+func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error) {
 	val, ok := q.jobCache.Load(id)
 	if !ok {
-		return nil, errors.New("job not found")
+		return nil, fmt.Errorf("job not found for id: %s", id)
 	}
 
 	return val.(types.EnqueuedJob[R]), nil
 }
 
-func (q *concurrentQueue[T, R]) GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], error) {
+func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error) {
 	val, ok := q.jobCache.Load(job.GenerateGroupId(id))
 
 	if !ok {
-		return nil, errors.New("job not found")
+		return nil, fmt.Errorf("group job not found for id: %s", id)
 	}
 
 	return val.(types.EnqueuedSingleGroupJob[R]), nil

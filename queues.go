@@ -6,6 +6,10 @@ import (
 )
 
 type ICQueue[R any] interface {
+	// JobById returns the job with the given id.
+	JobById(id string) (types.EnqueuedJob[R], error)
+	// GroupsJobById returns the groups job with the given id.
+	GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error)
 	// IsPaused returns whether the queue is paused.
 	IsPaused() bool
 	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
@@ -31,9 +35,6 @@ type ICQueue[R any] interface {
 	// Close closes the queue and resets all internal states.
 	// Time complexity: O(n) where n is the number of channels
 	Close() error
-
-	GetJob(id string) (types.EnqueuedJob[R], error)
-	GetGroupJob(id string) (types.EnqueuedSingleGroupJob[R], error)
 }
 
 func withSafeConcurrency(concurrency uint32) uint32 {
