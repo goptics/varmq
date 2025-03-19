@@ -33,9 +33,9 @@ func main() {
 
 		return fmt.Sprintf("Scraped content of %s", url), nil
 	}).Pause()
-	defer q.WaitAndClose()
-	links := make([]gocq.Item[string], 0)
+	defer q.Close()
 
+	links := make([]gocq.Item[string], 0)
 	for i := range 100 {
 		links = append(links, gocq.Item[string]{Value: fmt.Sprintf("https://example.com/%d", i+1), ID: strconv.Itoa(i + 1)})
 	}
