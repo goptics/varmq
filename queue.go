@@ -107,8 +107,8 @@ func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
 	q.mx.Unlock()
 
 	q.curProcessing.Add(^uint32(0))
-	q.wg.Done()
 	q.jobNotifier.Notify()
+	q.wg.Done()
 }
 
 // processJobs processes the jobs in the queue every time a new Job is added.
