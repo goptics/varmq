@@ -18,7 +18,7 @@ func BenchmarkVoidQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			q.Add(j).WaitForResult()
+			q.Add(j).Result()
 		}
 	})
 
@@ -55,7 +55,7 @@ func BenchmarkVoidQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1).WaitForResult()
+				q.Add(1).Result()
 			}
 		})
 	})
@@ -93,7 +93,7 @@ func BenchmarkVoidPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			q.Add(j, j%10).WaitForResult()
+			q.Add(j, j%10).Result()
 		}
 	})
 
@@ -130,7 +130,7 @@ func BenchmarkVoidPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1, 0).WaitForResult()
+				q.Add(1, 0).Result()
 			}
 		})
 	})

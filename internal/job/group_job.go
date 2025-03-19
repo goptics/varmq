@@ -67,7 +67,31 @@ func (gj *groupJob[T, R]) Results() (<-chan types.Result[R], error) {
 	close(tempCh)
 
 	// return a closed channel
-	return tempCh, errors.New("multiple calls to Results()")
+	return tempCh, errors.New("result channel has already been consumed")
+}
+
+// Drain discards the job's result and error values asynchronously.
+// This is useful when you no longer need the results but want to ensure
+// the channels are emptied.
+func (gj *groupJob[T, R]) Drain() error {
+	ch := gj.resultChannel.Read()
+
+	if ch == nil {
+		return errors.New("result channel has already been consumed")
+	}
+
+	go func() {
+		for range ch {
+			// drain
+		}
+	}()
+
+	go func() {
+		gj.wg.Wait()
+		gj.CloseResultChannel()
+	}()
+
+	return nil
 }
 
 func (gj *groupJob[T, R]) Close() error {

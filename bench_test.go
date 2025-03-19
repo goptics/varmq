@@ -16,7 +16,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			q.Add(j).WaitForResult()
+			q.Add(j).Result()
 		}
 	})
 
@@ -90,7 +90,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			q.Add(i, i%10).WaitForResult()
+			q.Add(i, i%10).Result()
 		}
 	})
 
@@ -126,7 +126,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1, 0).WaitForResult()
+				q.Add(1, 0).Result()
 			}
 		})
 	})

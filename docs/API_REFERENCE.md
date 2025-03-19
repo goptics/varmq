@@ -180,7 +180,7 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 
   - Closes the job and its associated channels.
 
-- `WaitForResult() (R, error)`
+- `Result() (R, error)`
 
   - Blocks until the job completes and returns the result and any error.
 

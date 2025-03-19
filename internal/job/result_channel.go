@@ -25,6 +25,7 @@ func (rc *ResultChannel[R]) Read() <-chan types.Result[R] {
 	if rc.consumed.CompareAndSwap(false, true) {
 		return rc.ch
 	}
+
 	return nil
 }
 

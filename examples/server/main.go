@@ -59,7 +59,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if job.IsClosed() {
-		result, _ := job.WaitForResult()
+		result, _ := job.Result()
 		response := ScrapeResult{
 			Status: job.Status(),
 			Result: result,

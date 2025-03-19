@@ -10,14 +10,14 @@ type Result[T any] struct {
 type EnqueuedJob[R any] interface {
 	IJob
 	// Drain discards the job's result and error values asynchronously.
-	Drain()
-	// WaitForResult blocks until the job completes and returns the result and any error.
-	WaitForResult() (R, error)
+	Drain() error
+	// Result blocks until the job completes and returns the result and any error.
+	Result() (R, error)
 }
 
 type EnqueuedGroupJob[T any] interface {
 	// Drain discards the job's result and error values asynchronously.
-	Drain()
+	Drain() error
 	// Results returns a channel that will receive the results of the group
 	Results() (<-chan Result[T], error)
 }

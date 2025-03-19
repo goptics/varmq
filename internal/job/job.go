@@ -98,10 +98,10 @@ func (j *job[T, R]) SendError(err error) {
 	j.resultChannel.Send(types.Result[R]{Err: err})
 }
 
-// WaitForResult blocks until the job completes and returns the result and any error.
+// Result blocks until the job completes and returns the result and any error.
 // If the job's result channel is closed without a value, it returns the zero value
 // and any error from the error channel.
-func (j *job[T, R]) WaitForResult() (R, error) {
+func (j *job[T, R]) Result() (R, error) {
 	result, ok := <-j.resultChannel.ch
 
 	if ok {
@@ -114,12 +114,20 @@ func (j *job[T, R]) WaitForResult() (R, error) {
 // Drain discards the job's result and error values asynchronously.
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
-func (j *job[T, R]) Drain() {
+func (j *job[T, R]) Drain() error {
+	ch := j.resultChannel.Read()
+
+	if ch == nil {
+		return errors.New("result channel has already been consumed")
+	}
+
 	go func() {
-		for range j.resultChannel.Read() {
+		for range ch {
 			// drain
 		}
 	}()
+
+	return nil
 }
 
 func (j *job[T, R]) CloseResultChannel() {

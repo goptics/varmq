@@ -50,7 +50,7 @@ func main() {
     defer queue.Close()
 
     // Add a single job
-    result, err := queue.Add(5).WaitForResult()
+    result, err := queue.Add(5).Result()
     fmt.Println(result, err) // Output: 10 nil
 
     // Add multiple jobs

@@ -81,7 +81,7 @@ func TestJob(t *testing.T) {
 		}
 	})
 
-	t.Run("WaitForResult", func(t *testing.T) {
+	t.Run("Result", func(t *testing.T) {
 		job := New[int, int](0)
 
 		go func() {
@@ -89,7 +89,7 @@ func TestJob(t *testing.T) {
 			job.SendResult(42)
 		}()
 
-		result, err := job.WaitForResult()
+		result, err := job.Result()
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
