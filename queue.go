@@ -96,10 +96,11 @@ func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 }
 
 func (q *concurrentQueue[T, R]) freeChannel(channel chan job.Job[T, R]) {
-	q.mx.Lock()
-	defer q.mx.Unlock()
 	// push the channel back to the stack, so it can be used for the next Job
+	q.mx.Lock()
 	q.ChannelsStack = append(q.ChannelsStack, channel)
+	q.mx.Unlock()
+
 	q.curProcessing.Add(^uint32(0))
 	q.wg.Done()
 	q.jobNotifier.Notify()
@@ -158,6 +159,7 @@ func (q *concurrentQueue[T, R]) Restart() {
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	q.WaitUntilFinished()
 
+	// close the old notifier to avoid routine leaks
 	if q.jobNotifier != nil {
 		q.jobNotifier.Close()
 	}
