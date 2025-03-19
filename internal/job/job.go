@@ -33,6 +33,7 @@ type job[T, R any] struct {
 }
 
 type Job[T, R any] interface {
+	types.IJob
 	types.EnqueuedJob[R]
 	Data() T
 	SendResult(result R)

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/fahimfaisaal/gocq/v2/internal/common"
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
 	"github.com/fahimfaisaal/gocq/v2/types"
@@ -61,20 +62,31 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 // spawnWorker starts a worker goroutine to process jobs from the channel.
 func (q *concurrentQueue[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 	for j := range channel {
+		var panicErr error
 		switch worker := q.Worker.(type) {
 		case VoidWorker[T]:
-			err := worker(j.Data())
-			j.SendError(err)
-		case Worker[T, R]:
-			result, err := worker(j.Data())
-			if err != nil {
+			panicErr = common.Safe("void worker", func() {
+				err := worker(j.Data())
 				j.SendError(err)
-			} else {
-				j.SendResult(result)
-			}
+			})
+
+		case Worker[T, R]:
+			panicErr = common.Safe("worker", func() {
+				result, err := worker(j.Data())
+				if err != nil {
+					j.SendError(err)
+				} else {
+					j.SendResult(result)
+				}
+			})
 		default:
 			// Log or handle the invalid type to avoid silent failures
 			j.SendError(errors.New("unsupported worker type passed to queue"))
+		}
+
+		// send panic error if any
+		if panicErr != nil {
+			j.SendError(panicErr)
 		}
 
 		j.ChangeStatus(job.Finished)
@@ -163,6 +175,7 @@ func (q *concurrentQueue[T, R]) Restart() {
 		q.ChannelsStack[i] = make(chan job.Job[T, R], 1)
 		go q.spawnWorker(q.ChannelsStack[i])
 	}
+
 	go q.processJobs()
 
 	// resume the queue to process pending Jobs

@@ -21,7 +21,8 @@ func main() {
 		splitUrl := strings.Split(url, "/")
 		// simulate an error for every 10th url
 		if num, err := strconv.Atoi(splitUrl[3]); err == nil && num%10 == 0 {
-			return "", fmt.Errorf("error scraping %s", url)
+			// return "", fmt.Errorf("error scraping %s", url)
+			panic("I am panicking")
 		}
 
 		return fmt.Sprintf("Scraped content of %s", url), nil
@@ -33,6 +34,16 @@ func main() {
 		links = append(links, gocq.Item[string]{Value: fmt.Sprintf("https://example.com/%d", i), ID: strconv.Itoa(i)})
 	}
 
-	q.AddAll(links)
+	job := q.AddAll(links)
 	q.Resume()
+
+	results, _ := job.Results()
+	for result := range results {
+		if result.Err != nil {
+			fmt.Printf("Error: %v\n", result.Err)
+			continue
+		}
+		fmt.Println(result.Data)
+	}
+
 }
