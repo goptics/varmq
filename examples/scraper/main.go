@@ -41,6 +41,7 @@ func main() {
 	}
 
 	job := q.AddAll(links)
+	fmt.Println("Pending jobs:", q.PendingCount())
 	q.Resume()
 
 	results, _ := job.Results()
