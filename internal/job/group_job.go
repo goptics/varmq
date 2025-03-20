@@ -14,7 +14,7 @@ type groupJob[T, R any] struct {
 	wg *sync.WaitGroup
 }
 
-const groupIdPrefixed = "g:"
+const GroupIdPrefixed = "g:"
 
 type GroupJob[T, R any] interface {
 	Job[T, R]
@@ -36,7 +36,7 @@ func NewGroupJob[T, R any](bufferSize uint32) GroupJob[T, R] {
 }
 
 func GenerateGroupId(id string) string {
-	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
+	return fmt.Sprintf("%s%s", GroupIdPrefixed, id)
 }
 
 func (gj *groupJob[T, R]) NewJob(data T, id string) GroupJob[T, R] {

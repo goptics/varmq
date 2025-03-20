@@ -3,6 +3,7 @@ package gocq
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -255,10 +256,14 @@ func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error)
 }
 
 func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error) {
-	val, ok := q.jobCache.Load(job.GenerateGroupId(id))
+	if !strings.HasPrefix(id, job.GroupIdPrefixed) {
+		id = job.GenerateGroupId(id)
+	}
+
+	val, ok := q.jobCache.Load(id)
 
 	if !ok {
-		return nil, fmt.Errorf("group job not found for id: %s", id)
+		return nil, fmt.Errorf("groups job not found for id: %s", id)
 	}
 
 	return val.(types.EnqueuedSingleGroupJob[R]), nil
