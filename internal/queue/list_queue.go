@@ -24,13 +24,13 @@ func (q *Queue[T]) Init() {
 }
 
 // Values returns a slice of all values in the queue.
-func (q *Queue[T]) Values() []T {
+func (q *Queue[T]) Values() []any {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	values := make([]T, 0)
+	values := make([]any, 0)
 
 	for e := q.internal.Front(); e != nil; e = e.Next() {
-		values = append(values, e.Value.(T))
+		values = append(values, e.Value)
 	}
 
 	return values

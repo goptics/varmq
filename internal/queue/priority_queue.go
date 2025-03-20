@@ -37,10 +37,10 @@ func (q *PriorityQueue[T]) Init() {
 }
 
 // Values returns a slice of all values in the priority queue.
-func (q *PriorityQueue[T]) Values() []T {
+func (q *PriorityQueue[T]) Values() []any {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	values := make([]T, 0)
+	values := make([]any, 0)
 	for _, item := range q.internal.items {
 		values = append(values, item.Value)
 	}

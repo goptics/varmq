@@ -1,9 +1,9 @@
 package queue
 
-type IQueue[T any] interface {
+type IQueue interface {
 	Dequeue() (any, bool)
 	Enqueue(item any)
 	Init()
 	Len() int
-	Values() []T
+	Values() []any
 }

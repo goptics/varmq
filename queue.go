@@ -19,7 +19,7 @@ type concurrentQueue[T, R any] struct {
 	// channels for each concurrency level and store them in a stack.
 	ChannelsStack   []chan job.Job[T, R]
 	curProcessing   atomic.Uint32
-	JobQueue        queue.IQueue[job.Job[T, R]]
+	JobQueue        queue.IQueue
 	jobCache        Cache
 	wg              sync.WaitGroup
 	mx              sync.Mutex
@@ -313,8 +313,10 @@ func (q *concurrentQueue[T, R]) Purge() {
 	q.wg.Add(-len(prevValues))
 
 	// close all pending channels to avoid routine leaks
-	for _, job := range prevValues {
-		job.CloseResultChannel()
+	for _, val := range prevValues {
+		if j, ok := val.(job.Job[T, R]); ok {
+			j.CloseResultChannel()
+		}
 	}
 }
 
