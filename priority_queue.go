@@ -48,7 +48,7 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 }
 
 func (q *concurrentPriorityQueue[T, R]) Pause() ConcurrentPriorityQueue[T, R] {
-	q.PauseQueue()
+	q.pause()
 	return q
 }
 

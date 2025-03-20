@@ -9,10 +9,11 @@ type Cache interface {
 
 type nullCache struct{}
 
-func (nc *nullCache) Load(_ any) (any, bool) { return nil, false }
-func (nc *nullCache) Store(_ any, _ any)     {}
-func (nc *nullCache) Delete(_ any)           {}
-func (nc *nullCache) Clear()                 {}
+func (nc *nullCache) Load(_ any) (any, bool)            { return nil, false }
+func (nc *nullCache) Store(_ any, _ any)                {}
+func (nc *nullCache) Delete(_ any)                      {}
+func (nc *nullCache) Range(_ func(key, value any) bool) {}
+func (nc *nullCache) Clear()                            {}
 
 // Initialize a default nullCache instance
 var defaultCache Cache

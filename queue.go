@@ -58,7 +58,7 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 		jobPullNotifier: job.NewNotifier(),
 	}
 
-	concurrentQueue.Restart()
+	concurrentQueue.start()
 	return concurrentQueue
 }
 
@@ -182,16 +182,12 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 	q.pickNextChannel() <- j
 }
 
-func (q *concurrentQueue[T, R]) Restart() {
-	// first pause the queue to avoid routine leaks or deadlocks
-	q.Pause()
-	// wait until all ongoing processes are done to gracefully close the channels if any.
-	q.WaitUntilFinished()
+func (q *concurrentQueue[T, R]) start() error {
+	if q.Worker == nil {
+		return errors.New("worker is not set")
+	}
 
-	// close the old notifier to avoid routine leaks
-	q.jobPullNotifier.Close()
-	q.jobPullNotifier = job.NewNotifier()
-
+	q.wg.Add(q.PendingCount())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range q.ChannelsStack {
 		// close old channels to avoid routine leaks
@@ -206,8 +202,42 @@ func (q *concurrentQueue[T, R]) Restart() {
 
 	go q.pullNextJobs()
 
+	return nil
+}
+
+func (q *concurrentQueue[T, R]) stop() {
+	// wait until all ongoing processes are done to gracefully close the channels
+	q.jobPullNotifier.Close()
+	for _, channel := range q.ChannelsStack {
+		if channel == nil {
+			continue
+		}
+
+		close(channel)
+	}
+
+	q.jobCache = getCache()
+	q.ChannelsStack = make([]chan job.Job[T, R], q.Concurrency)
+}
+
+func (q *concurrentQueue[T, R]) Restart() error {
+	if q.Worker == nil {
+		return errors.New("worker is not set")
+	}
+
+	// first pause the queue to avoid routine leaks or deadlocks
+	// wait until all ongoing processes are done to gracefully close the channels if any.
+	q.PauseAndWait()
+
+	// close the old notifier to avoid routine leaks
+	q.jobPullNotifier.Close()
+	q.jobPullNotifier = job.NewNotifier()
+
+	err := q.start()
+
 	// resume the queue to process pending Jobs
 	q.Resume()
+	return err
 }
 
 func (q *concurrentQueue[T, R]) WithCache(cache Cache) ConcurrentQueue[T, R] {
@@ -215,8 +245,8 @@ func (q *concurrentQueue[T, R]) WithCache(cache Cache) ConcurrentQueue[T, R] {
 	return q
 }
 
-// PauseQueue pauses the processing of jobs.
-func (q *concurrentQueue[T, R]) PauseQueue() {
+// pause pauses the processing of jobs.
+func (q *concurrentQueue[T, R]) pause() {
 	q.isPaused.Store(true)
 }
 
@@ -233,8 +263,13 @@ func (q *concurrentQueue[T, R]) CurrentProcessingCount() uint32 {
 }
 
 func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
-	q.PauseQueue()
+	q.pause()
 	return q
+}
+
+func (q *concurrentQueue[T, R]) PauseAndWait() {
+	q.pause()
+	q.wg.Wait()
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
@@ -322,21 +357,8 @@ func (q *concurrentQueue[T, R]) Purge() {
 
 func (q *concurrentQueue[T, R]) Close() error {
 	q.Purge()
-
-	// wait until all ongoing processes are done to gracefully close the channels
 	q.wg.Wait()
-	q.jobPullNotifier.Close()
-	for _, channel := range q.ChannelsStack {
-		if channel == nil {
-			continue
-		}
-
-		close(channel)
-	}
-
-	q.jobCache = getCache()
-	q.ChannelsStack = make([]chan job.Job[T, R], q.Concurrency)
-
+	q.stop()
 	return nil
 }
 

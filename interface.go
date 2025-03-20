@@ -14,7 +14,7 @@ type ICQueue[R any] interface {
 	IsPaused() bool
 	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
 	// Time complexity: O(n) where n is the concurrency
-	Restart()
+	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	Resume() error
 	// PendingCount returns the number of Jobs pending in the queue.
@@ -35,4 +35,6 @@ type ICQueue[R any] interface {
 	// Close closes the queue and resets all internal states.
 	// Time complexity: O(n) where n is the number of channels
 	Close() error
+	// PauseAndWait pauses the processing of jobs and waits until all ongoing processes are done.
+	PauseAndWait()
 }
