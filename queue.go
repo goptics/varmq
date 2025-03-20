@@ -154,6 +154,13 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 		if err != nil {
 			return
 		}
+		cachedJob, ok := q.jobCache.Load(j.ID())
+
+		if ok {
+			j = cachedJob.(job.Job[T, R])
+		} else {
+			q.jobCache.Store(j.ID(), j)
+		}
 	default:
 		return
 	}
@@ -319,6 +326,9 @@ func (q *concurrentQueue[T, R]) Close() error {
 
 		close(channel)
 	}
+
+	q.jobCache = getCache()
+	q.ChannelsStack = make([]chan job.Job[T, R], q.Concurrency)
 
 	return nil
 }
