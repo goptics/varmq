@@ -34,7 +34,7 @@ func NewPersistentQueue[T, R any](concurrency uint32, persistentQ queue.IQueue) 
 		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
 		JobQueue:        persistentQ,
 		jobCache:        new(sync.Map),
-		jobPullNotifier: job.NewNotifier(),
+		jobPullNotifier: job.NewNotifier(1),
 	}}
 }
 
@@ -65,7 +65,6 @@ func (q *concurrentPersistentQueue[T, R]) Add(data T, id ...string) types.Enqueu
 	j := job.New[T, R](data, id...)
 	val, _ := j.Json()
 
-	q.wg.Add(1)
 	q.JobQueue.Enqueue(val)
 	q.postEnqueue(j)
 

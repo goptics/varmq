@@ -15,9 +15,9 @@ func main() {
 	}()
 
 	redisQueue := providers.NewRedisQueue("scraping_queue", "redis://localhost:6375")
+	defer redisQueue.Listen()
 
-	pq := gocq.NewPersistentQueue[[]string, string](200, redisQueue)
-	defer pq.WaitAndClose()
+	pq := gocq.NewPersistentQueue[[]string, string](2, redisQueue)
 
 	err := pq.SetWorker(func(data []string) (string, error) {
 		url, id := data[0], data[1]
@@ -32,4 +32,5 @@ func main() {
 	}
 
 	fmt.Println("pending jobs:", pq.PendingCount())
+	fmt.Println("listening...")
 }

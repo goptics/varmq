@@ -9,7 +9,6 @@ services:
     restart: unless-stopped
     hostname: redis
     init: true
-    env_file: .env
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

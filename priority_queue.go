@@ -40,7 +40,7 @@ func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPrior
 		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
 		JobQueue:        queue.NewPriorityQueue[job.Job[T, R]](),
 		jobCache:        getCache(),
-		jobPullNotifier: job.NewNotifier(),
+		jobPullNotifier: job.NewNotifier(1),
 	}
 
 	concurrentQueue.Restart()
@@ -60,7 +60,6 @@ func (q *concurrentPriorityQueue[T, R]) WithCache(cache Cache) ConcurrentPriorit
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.wg.Add(1)
 	q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
 	q.postEnqueue(j)
 
@@ -70,7 +69,6 @@ func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) 
 func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
-	q.wg.Add(len(items))
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
 

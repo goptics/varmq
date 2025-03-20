@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
@@ -55,7 +56,7 @@ func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
 		JobQueue:        queue.NewQueue[job.Job[T, R]](),
 		jobCache:        getCache(),
-		jobPullNotifier: job.NewNotifier(),
+		jobPullNotifier: job.NewNotifier(1),
 	}
 
 	concurrentQueue.start()
@@ -122,6 +123,14 @@ func (q *concurrentQueue[T, R]) pullNextJobs() {
 			q.processNextJob()
 		}
 	})
+}
+
+func (q *concurrentQueue[T, R]) ListenEnqueueNotification() {
+	for range q.JobQueue.NotificationChannel() {
+		q.wg.Add(1)
+		fmt.Println("new job added")
+		q.jobPullNotifier.Notify()
+	}
 }
 
 // pickNextChannel picks the next available channel for processing a Job.
@@ -201,6 +210,7 @@ func (q *concurrentQueue[T, R]) start() error {
 	}
 
 	go q.pullNextJobs()
+	go q.ListenEnqueueNotification()
 
 	return nil
 }
@@ -231,7 +241,7 @@ func (q *concurrentQueue[T, R]) Restart() error {
 
 	// close the old notifier to avoid routine leaks
 	q.jobPullNotifier.Close()
-	q.jobPullNotifier = job.NewNotifier()
+	q.jobPullNotifier = job.NewNotifier(1)
 
 	err := q.start()
 
@@ -269,12 +279,11 @@ func (q *concurrentQueue[T, R]) Pause() ConcurrentQueue[T, R] {
 
 func (q *concurrentQueue[T, R]) PauseAndWait() {
 	q.pause()
-	q.wg.Wait()
+	q.WaitUntilFinished()
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 	j.ChangeStatus(job.Queued)
-	q.jobPullNotifier.Notify()
 
 	if id := j.ID(); id != "" {
 		q.jobCache.Store(id, j)
@@ -318,7 +327,6 @@ func (q *concurrentQueue[T, R]) Resume() error {
 func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.wg.Add(1)
 	q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
 	q.postEnqueue(j)
 
@@ -328,7 +336,6 @@ func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R] {
 	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
 
-	q.wg.Add(len(items))
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
 		q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
@@ -339,6 +346,8 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R
 }
 
 func (q *concurrentQueue[T, R]) WaitUntilFinished() {
+	time.Sleep(100 * time.Millisecond)
+
 	q.wg.Wait()
 }
 
@@ -356,13 +365,14 @@ func (q *concurrentQueue[T, R]) Purge() {
 }
 
 func (q *concurrentQueue[T, R]) Close() error {
+	q.JobQueue.Close()
 	q.Purge()
-	q.wg.Wait()
+	q.WaitUntilFinished()
 	q.stop()
 	return nil
 }
 
 func (q *concurrentQueue[T, R]) WaitAndClose() error {
-	q.wg.Wait()
+	q.WaitUntilFinished()
 	return q.Close()
 }

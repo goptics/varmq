@@ -4,18 +4,25 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/redis/go-redis/v9"
 )
 
 type RedisQueue struct {
-	client     *redis.Client
-	queueKey   string
-	mx         sync.Mutex
-	ctx        context.Context
-	expiration time.Duration
+	client        *redis.Client
+	queueKey      string
+	mx            sync.Mutex
+	ctx           context.Context
+	cancel        context.CancelFunc // Add cancel function
+	pubsub        *redis.PubSub
+	notifications job.Notifier
+	expiration    time.Duration
 }
 
 func NewRedisQueue(queueKey string, url string) *RedisQueue {
@@ -25,13 +32,44 @@ func NewRedisQueue(queueKey string, url string) *RedisQueue {
 	}
 
 	client := redis.NewClient(opts)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	return &RedisQueue{
-		client:     client,
-		queueKey:   queueKey,
-		ctx:        context.Background(),
-		expiration: 0,
+	q := &RedisQueue{
+		client:        client,
+		queueKey:      queueKey,
+		ctx:           ctx,
+		cancel:        cancel,
+		expiration:    0,
+		notifications: job.NewNotifier(100),
 	}
+
+	q.startNotificationListener()
+	return q
+}
+
+func (q *RedisQueue) startNotificationListener() {
+	q.pubsub = q.client.Subscribe(q.ctx, q.queueKey+":notifications")
+
+	go func() {
+		defer q.pubsub.Close()
+
+		for {
+			select {
+			case <-q.ctx.Done():
+				return
+			case msg := <-q.pubsub.Channel():
+				if msg == nil {
+					continue
+				}
+				// Log the notification for debugging
+				q.notifications.Notify()
+			}
+		}
+	}()
+}
+
+func (q *RedisQueue) NotificationChannel() <-chan struct{} {
+	return q.notifications
 }
 
 func (q *RedisQueue) Dequeue() (any, bool) {
@@ -64,7 +102,6 @@ func (q *RedisQueue) Enqueue(item any) bool {
 	var data string
 	switch v := item.(type) {
 	case []byte:
-		// Encode bytes to base64
 		data = base64.StdEncoding.EncodeToString(v)
 	default:
 		fmt.Printf("Unsupported type for enqueueing: %T\n", item)
@@ -76,10 +113,17 @@ func (q *RedisQueue) Enqueue(item any) bool {
 	if q.expiration > 0 {
 		pipe.Expire(q.ctx, q.queueKey, q.expiration)
 	}
+
 	_, err := pipe.Exec(q.ctx)
 	if err != nil {
 		fmt.Printf("Error enqueueing item: %v\n", err)
 		return false
+	}
+
+	// Include more meaningful information in the notification
+	err = q.client.Publish(q.ctx, q.queueKey+":notifications", "").Err()
+	if err != nil {
+		fmt.Printf("Error publishing notification: %v\n", err)
 	}
 
 	return true
@@ -126,6 +170,16 @@ func (q *RedisQueue) Values() []any {
 }
 
 func (q *RedisQueue) Close() error {
-	q.ctx.Done()
+	q.cancel() // Cancel context to stop notification listener
+	if q.pubsub != nil {
+		q.pubsub.Close()
+	}
+	q.notifications.Close()
 	return q.client.Close()
+}
+
+func (q *RedisQueue) Listen() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
 }

@@ -35,6 +35,7 @@ type job[T, R any] struct {
 	Output        *types.Result[R]
 }
 
+// jobView represents a view of a job's state for serialization.
 type jobView[T, R any] struct {
 	Id     string           `json:"id"`
 	Status string           `json:"status"`

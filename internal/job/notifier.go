@@ -2,8 +2,8 @@ package job
 
 type Notifier chan struct{}
 
-func NewNotifier() Notifier {
-	return make(Notifier, 1)
+func NewNotifier(bufferSize uint32) Notifier {
+	return make(Notifier, bufferSize)
 }
 
 func (j Notifier) Notify() {
