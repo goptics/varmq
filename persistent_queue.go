@@ -21,7 +21,7 @@ type ConcurrentPersistentQueue[T, R any] interface {
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) types.EnqueuedGroupJob[R]
 
-	SetWorker(w Worker[T, R]) error
+	SetWorker(w WorkerFunc[T, R]) error
 }
 
 type concurrentPersistentQueue[T, R any] struct {
@@ -48,11 +48,11 @@ func (q *concurrentPersistentQueue[T, R]) Pause() ConcurrentPersistentQueue[T, R
 	return q
 }
 
-func (q *concurrentPersistentQueue[T, R]) SetWorker(w Worker[T, R]) error {
+func (q *concurrentPersistentQueue[T, R]) SetWorker(w WorkerFunc[T, R]) error {
 	q.PauseAndWait()
 
 	q.mx.Lock()
-	q.concurrentQueue.Worker = w
+	q.concurrentQueue.WorkerFunc = w
 	q.mx.Unlock()
 	err := q.start()
 

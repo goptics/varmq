@@ -28,7 +28,7 @@
 #### Queue Creation
 
 - Old: `NewQueue[T, R](concurrency uint, worker func(T) R)`
-- New: `NewQueue[T, R](concurrency uint32, worker Worker[T, R])`
+- New: `NewQueue[T, R](concurrency uint32, worker WorkerFunc[T, R])`
 
 #### Job Submission
 

@@ -36,7 +36,7 @@ type ConcurrentPriorityQueue[T, R any] interface {
 func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPriorityQueue[T, R] {
 	concurrentQueue := &concurrentQueue[T, R]{
 		Concurrency:     concurrency,
-		Worker:          worker,
+		WorkerFunc:      worker,
 		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
 		JobQueue:        queue.NewPriorityQueue[job.Job[T, R]](),
 		jobCache:        getCache(),

@@ -72,7 +72,7 @@ func main() {
 	pq := gocq.NewPersistentQueue[string, string](200, redisQueue)
 	defer pq.Close()
 
-	var w gocq.Worker[string, string]
+	var w gocq.WorkerFunc[string, string]
 
 	w = func(url string) (string, error) {
 		fmt.Println("Scraping:", url)

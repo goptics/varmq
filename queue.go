@@ -15,7 +15,7 @@ import (
 
 type concurrentQueue[T, R any] struct {
 	Concurrency uint32
-	Worker      any
+	WorkerFunc  any
 	// channels for each concurrency level and store them in a stack.
 	ChannelsStack   []chan job.Job[T, R]
 	curProcessing   atomic.Uint32
@@ -51,7 +51,7 @@ type Item[T any] struct {
 func newQueue[T, R any](concurrency uint32, worker any) *concurrentQueue[T, R] {
 	concurrentQueue := &concurrentQueue[T, R]{
 		Concurrency:     concurrency,
-		Worker:          worker,
+		WorkerFunc:      worker,
 		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
 		JobQueue:        queue.NewQueue[job.Job[T, R]](),
 		jobCache:        getCache(),
@@ -66,13 +66,13 @@ func (q *concurrentQueue[T, R]) processSingleJob(j job.Job[T, R]) {
 	var panicErr error
 	var err error
 
-	switch worker := q.Worker.(type) {
-	case VoidWorker[T]:
+	switch worker := q.WorkerFunc.(type) {
+	case WorkerErrFunc[T]:
 		panicErr = utils.WithSafe("void worker", func() {
 			err = worker(j.Data())
 		})
 
-	case Worker[T, R]:
+	case WorkerFunc[T, R]:
 		panicErr = utils.WithSafe("worker", func() {
 			result, e := worker(j.Data())
 			if e != nil {
@@ -190,7 +190,7 @@ func (q *concurrentQueue[T, R]) processNextJob() {
 }
 
 func (q *concurrentQueue[T, R]) start() error {
-	if q.Worker == nil {
+	if q.WorkerFunc == nil {
 		return errors.New("worker is not set")
 	}
 
@@ -229,7 +229,7 @@ func (q *concurrentQueue[T, R]) stop() {
 }
 
 func (q *concurrentQueue[T, R]) Restart() error {
-	if q.Worker == nil {
+	if q.WorkerFunc == nil {
 		return errors.New("worker is not set")
 	}
 
