@@ -20,10 +20,6 @@ type PQItem[T any] struct {
 
 type ConcurrentPriorityQueue[T, R any] interface {
 	ICQueue[R]
-	// WithCache sets the cache for the queue.
-	WithCache(cache Cache) ConcurrentPriorityQueue[T, R]
-	// Pause pauses the processing of jobs.
-	Pause() ConcurrentPriorityQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)
 	Add(data T, priority int, id ...string) types.EnqueuedJob[R]
@@ -33,46 +29,31 @@ type ConcurrentPriorityQueue[T, R any] interface {
 }
 
 // NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
-func newPriorityQueue[T, R any](concurrency uint32, worker any) *concurrentPriorityQueue[T, R] {
-	concurrentQueue := &concurrentQueue[T, R]{
-		Concurrency:     concurrency,
-		WorkerFunc:      worker,
-		ChannelsStack:   make([]chan job.Job[T, R], concurrency),
-		JobQueue:        queue.NewPriorityQueue[job.Job[T, R]](),
-		jobCache:        getCache(),
-		jobPullNotifier: job.NewNotifier(1),
+func newPriorityQueue[T, R any](worker Worker[T, R]) *concurrentPriorityQueue[T, R] {
+	return &concurrentPriorityQueue[T, R]{
+		concurrentQueue: newQueue[T, R](worker),
 	}
-
-	concurrentQueue.Restart()
-	return &concurrentPriorityQueue[T, R]{concurrentQueue: concurrentQueue}
-}
-
-func (q *concurrentPriorityQueue[T, R]) Pause() ConcurrentPriorityQueue[T, R] {
-	q.pause()
-	return q
-}
-
-func (q *concurrentPriorityQueue[T, R]) WithCache(cache Cache) ConcurrentPriorityQueue[T, R] {
-	q.jobCache = cache
-	return q
 }
 
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.syncGroup().wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
 }
 
 func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R] {
-	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
+	l := len(items)
+	groupJob := job.NewGroupJob[T, R](uint32(l))
 
+	q.syncGroup().wg.Add(l)
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
 
-		q.JobQueue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
 		q.postEnqueue(j)
 	}
 
