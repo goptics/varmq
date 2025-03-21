@@ -2,7 +2,6 @@ package gocq
 
 import (
 	"errors"
-	"fmt"
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
@@ -38,8 +37,6 @@ type Worker[T, R any] interface {
 	// WithCache sets the cache for the queue.
 	WithCache(cache Cache) Worker[T, R]
 
-	start() error
-
 	Stop()
 
 	Restart() error
@@ -48,18 +45,6 @@ type Worker[T, R any] interface {
 	// CurrentProcessingCount returns the number of Jobs currently being processed.
 	// Time complexity: O(1)
 	CurrentProcessingCount() uint32
-
-	notify()
-
-	queue() types.IQueue
-
-	cache() Cache
-
-	syncGroup() *syncGroup
-
-	setQueue(q types.IQueue)
-
-	listenEnqueueNotification()
 }
 
 func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
@@ -74,18 +59,6 @@ func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
 		jobPullNotifier: job.NewNotifier(1),
 		sync:            syncGroup{},
 	}
-}
-
-func (w *worker[T, R]) queue() types.IQueue {
-	return w.Queue
-}
-
-func (w *worker[T, R]) cache() Cache {
-	return w.Cache
-}
-
-func (w *worker[T, R]) syncGroup() *syncGroup {
-	return &w.sync
 }
 
 func (w *worker[T, R]) notify() {
@@ -230,7 +203,6 @@ func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 }
 
 func (w *worker[T, R]) start() error {
-	fmt.Println("Calling start function")
 	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
@@ -246,7 +218,6 @@ func (w *worker[T, R]) start() error {
 
 	go w.pullNextJobs()
 
-	fmt.Println("Worker Started")
 	return nil
 }
 

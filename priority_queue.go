@@ -29,7 +29,7 @@ type ConcurrentPriorityQueue[T, R any] interface {
 }
 
 // NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
-func newPriorityQueue[T, R any](worker Worker[T, R]) *concurrentPriorityQueue[T, R] {
+func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T, R] {
 	return &concurrentPriorityQueue[T, R]{
 		concurrentQueue: newQueue[T, R](worker),
 	}
@@ -38,8 +38,8 @@ func newPriorityQueue[T, R any](worker Worker[T, R]) *concurrentPriorityQueue[T,
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
-	q.syncGroup().wg.Add(1)
+	q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.sync.wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
@@ -49,11 +49,11 @@ func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.Enqueued
 	l := len(items)
 	groupJob := job.NewGroupJob[T, R](uint32(l))
 
-	q.syncGroup().wg.Add(l)
+	q.sync.wg.Add(l)
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
 
-		q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
 		q.postEnqueue(j)
 	}
 

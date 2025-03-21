@@ -13,10 +13,10 @@ type Queues[T, R any] interface {
 }
 
 type queues[T, R any] struct {
-	worker Worker[T, R]
+	*worker[T, R]
 }
 
-func newQueues[T, R any](worker Worker[T, R]) Queues[T, R] {
+func newQueues[T, R any](worker *worker[T, R]) Queues[T, R] {
 	return &queues[T, R]{
 		worker: worker,
 	}

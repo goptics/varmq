@@ -10,7 +10,7 @@ import (
 )
 
 type concurrentQueue[T, R any] struct {
-	Worker[T, R]
+	*worker[T, R]
 }
 
 type ConcurrentQueue[T, R any] interface {
@@ -30,14 +30,14 @@ type Item[T any] struct {
 
 // Creates a new CQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
-func newQueue[T, R any](worker Worker[T, R]) *concurrentQueue[T, R] {
+func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
 	return &concurrentQueue[T, R]{
-		Worker: worker,
+		worker: worker,
 	}
 }
 
 func (q *concurrentQueue[T, R]) PendingCount() int {
-	return q.queue().Len()
+	return q.Queue.Len()
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
@@ -45,12 +45,12 @@ func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 	j.ChangeStatus(job.Queued)
 
 	if id := j.ID(); id != "" {
-		q.cache().Store(id, j)
+		q.Cache.Store(id, j)
 	}
 }
 
 func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error) {
-	val, ok := q.cache().Load(id)
+	val, ok := q.Cache.Load(id)
 	if !ok {
 		return nil, fmt.Errorf("job not found for id: %s", id)
 	}
@@ -63,7 +63,7 @@ func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGr
 		id = job.GenerateGroupId(id)
 	}
 
-	val, ok := q.cache().Load(id)
+	val, ok := q.Cache.Load(id)
 
 	if !ok {
 		return nil, fmt.Errorf("groups job not found for id: %s", id)
@@ -75,8 +75,8 @@ func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGr
 func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
-	q.syncGroup().wg.Add(1)
+	q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+	q.sync.wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
@@ -86,10 +86,10 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R
 	l := len(items)
 	groupJob := job.NewGroupJob[T, R](uint32(l))
 
-	q.syncGroup().wg.Add(l)
+	q.sync.wg.Add(l)
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
-		q.queue().Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+		q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
 		q.postEnqueue(j)
 	}
 
@@ -97,13 +97,13 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R
 }
 
 func (q *concurrentQueue[T, R]) WaitUntilFinished() {
-	q.syncGroup().wg.Wait()
+	q.sync.wg.Wait()
 }
 
 func (q *concurrentQueue[T, R]) Purge() {
-	prevValues := q.queue().Values()
-	q.queue().Init()
-	q.syncGroup().wg.Add(-len(prevValues))
+	prevValues := q.Queue.Values()
+	q.Queue.Init()
+	q.sync.wg.Add(-len(prevValues))
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
@@ -115,7 +115,7 @@ func (q *concurrentQueue[T, R]) Purge() {
 
 func (q *concurrentQueue[T, R]) Close() error {
 	q.Purge()
-	err := q.queue().Close()
+	err := q.Queue.Close()
 	q.WaitUntilFinished()
 	q.Stop()
 
