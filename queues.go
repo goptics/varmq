@@ -10,6 +10,7 @@ type Queues[T, R any] interface {
 	Queue() ConcurrentQueue[T, R]
 	PriorityQueue() ConcurrentPriorityQueue[T, R]
 	PersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
+	DistributedQueue(dq types.IQueue) DistributedQueue[T, R]
 }
 
 type queues[T, R any] struct {
