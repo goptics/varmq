@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
@@ -128,7 +127,6 @@ func (q *concurrentQueue[T, R]) pullNextJobs() {
 func (q *concurrentQueue[T, R]) ListenEnqueueNotification() {
 	for range q.JobQueue.NotificationChannel() {
 		q.wg.Add(1)
-		fmt.Println("new job added")
 		q.jobPullNotifier.Notify()
 	}
 }
@@ -346,8 +344,6 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R
 }
 
 func (q *concurrentQueue[T, R]) WaitUntilFinished() {
-	time.Sleep(100 * time.Millisecond)
-
 	q.wg.Wait()
 }
 
@@ -365,8 +361,8 @@ func (q *concurrentQueue[T, R]) Purge() {
 }
 
 func (q *concurrentQueue[T, R]) Close() error {
-	q.JobQueue.Close()
 	q.Purge()
+	q.JobQueue.Close()
 	q.WaitUntilFinished()
 	q.stop()
 	return nil

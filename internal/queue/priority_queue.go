@@ -3,8 +3,6 @@ package queue
 import (
 	"container/heap"
 	"sync"
-
-	job "github.com/fahimfaisaal/gocq/v2/internal/job"
 )
 
 // PriorityQueue is the user-facing wrapper around heapQueue[T].
@@ -12,7 +10,6 @@ type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
 	insertionCount int
 	mx             sync.Mutex
-	notifier       job.Notifier
 }
 
 // newPriorityQueue initializes an empty priority queue.
@@ -21,7 +18,7 @@ func NewPriorityQueue[T any]() *PriorityQueue[T] {
 		items: make([]*EnqItem[T], 0),
 	}
 	heap.Init(pq)
-	return &PriorityQueue[T]{internal: pq, notifier: job.NewNotifier(100)}
+	return &PriorityQueue[T]{internal: pq}
 }
 
 // Len returns the number of items in the priority queue.
@@ -60,7 +57,6 @@ func (q *PriorityQueue[T]) Enqueue(item any) bool {
 		return false
 	}
 
-	q.notifier.Notify()
 	t.Index = q.insertionCount
 	q.insertionCount++
 	heap.Push(q.internal, &t) // O(log n)
@@ -82,7 +78,7 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 
 // to satisfy the IQueue interface
 func (q *PriorityQueue[T]) NotificationChannel() <-chan struct{} {
-	return q.notifier
+	return nil
 }
 
 // to satisfy the IQueue interface
