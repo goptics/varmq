@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
+	"github.com/fahimfaisaal/gocq/v2/internal/queue"
 	"github.com/fahimfaisaal/gocq/v2/shared/types"
 	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 )
@@ -24,7 +25,6 @@ type worker[T, R any] struct {
 	isPaused        atomic.Bool
 	jobPullNotifier job.Notifier
 	sync            syncGroup
-	isDistributed   bool
 }
 
 type Worker[T, R any] interface {
@@ -38,7 +38,7 @@ type Worker[T, R any] interface {
 	// WithCache sets the cache for the queue.
 	WithCache(cache Cache) Worker[T, R]
 
-	Start() error
+	start() error
 
 	Stop()
 
@@ -56,6 +56,10 @@ type Worker[T, R any] interface {
 	cache() Cache
 
 	syncGroup() *syncGroup
+
+	setQueue(q types.IQueue)
+
+	listenEnqueueNotification()
 }
 
 func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
@@ -65,10 +69,9 @@ func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
 		workerFunc:      w,
 		Concurrency:     c.Concurrency,
 		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
-		Queue:           c.Queue,
+		Queue:           queue.GetNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: job.NewNotifier(1),
-		isDistributed:   c.IsDistributed,
 		sync:            syncGroup{},
 	}
 }
@@ -89,6 +92,9 @@ func (w *worker[T, R]) notify() {
 	w.jobPullNotifier.Notify()
 }
 
+func (w *worker[T, R]) setQueue(q types.IQueue) {
+	w.Queue = q
+}
 
 func (w *worker[T, R]) listenEnqueueNotification() {
 	for range w.Queue.NotificationChannel() {
@@ -223,7 +229,8 @@ func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	return channel
 }
 
-func (w *worker[T, R]) Start() error {
+func (w *worker[T, R]) start() error {
+	fmt.Println("Calling start function")
 	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
@@ -239,18 +246,14 @@ func (w *worker[T, R]) Start() error {
 
 	go w.pullNextJobs()
 
-	if w.isDistributed {
-		go w.listenEnqueueNotification()
-	}
-
-	fmt.Println("worker started")
-
+	fmt.Println("Worker Started")
 	return nil
 }
 
 func (w *worker[T, R]) Stop() {
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.jobPullNotifier.Close()
+	w.sync.wg.Wait()
 	for _, channel := range w.ChannelsStack {
 		if channel == nil {
 			continue
@@ -272,7 +275,7 @@ func (w *worker[T, R]) Restart() error {
 	w.jobPullNotifier.Close()
 	w.jobPullNotifier = job.NewNotifier(1)
 
-	err := w.Start()
+	err := w.start()
 
 	// resume the queue to process pending Jobs
 	w.Resume()

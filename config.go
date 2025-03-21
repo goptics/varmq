@@ -1,25 +1,19 @@
 package gocq
 
 import (
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
 	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 )
 
 type Config func(*Configs)
 
 type Configs struct {
-	Concurrency   uint32
-	Queue         types.IQueue
-	Cache         Cache
-	IsDistributed bool
+	Concurrency uint32
+	Cache       Cache
 }
 
 func loadConfigs[T, R any](configs ...Config) Configs {
 	c := Configs{
 		Concurrency: withSafeConcurrency(0),
-		Queue:       queue.NewQueue[job.Job[T, R]](),
 		Cache:       getCache(),
 	}
 
@@ -28,12 +22,6 @@ func loadConfigs[T, R any](configs ...Config) Configs {
 	}
 
 	return c
-}
-
-func WithQueue(queue types.IQueue) Config {
-	return func(c *Configs) {
-		c.Queue = queue
-	}
 }
 
 func WithCache(cache Cache) Config {
@@ -45,12 +33,6 @@ func WithCache(cache Cache) Config {
 func WithConcurrency(concurrency uint32) Config {
 	return func(c *Configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
-	}
-}
-
-func WithDistribution(enabled bool) Config {
-	return func(c *Configs) {
-		c.IsDistributed = enabled
 	}
 }
 

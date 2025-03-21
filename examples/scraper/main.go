@@ -18,7 +18,7 @@ func main() {
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Processed: %d\n", data)
 		return data * 2, nil
-	}).Queue()
+	}, gocq.WithConcurrency(10)).Queue()
 
 	for i := range 1000 {
 		q.Add(i)
