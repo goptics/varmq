@@ -34,13 +34,16 @@ func (q *distributedQueue[T, R]) PendingCount() int {
 }
 
 func (q *distributedQueue[T, R]) Add(data T, id ...string) bool {
-	j, err := job.New[T, R](data, id...).Json()
+	j := job.New[T, R](data, id...)
+	j.CloseResultChannel() // don't need result channel for distributed queue
+
+	jBytes, err := j.Json()
 
 	if err != nil {
 		return false
 	}
 
-	return q.queue.Enqueue(j)
+	return q.queue.Enqueue(jBytes)
 }
 
 func (q *distributedQueue[T, R]) Close() error {
