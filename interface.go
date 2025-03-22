@@ -4,7 +4,7 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
-// ICQueue is an interface for concurrent queue operations.
+// ICQueue is the root interface of concurrent queue operations.
 type ICQueue[T, R any] interface {
 	Worker() Worker[T, R]
 	// JobById returns the job with the given id.

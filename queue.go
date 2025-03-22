@@ -43,7 +43,7 @@ func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
-	defer q.notify()
+	defer q.notifyToPullJobs()
 	j.ChangeStatus(job.Queued)
 
 	if id := j.ID(); id != "" {

@@ -2,6 +2,7 @@ package gocq
 
 import (
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,8 +12,13 @@ import (
 	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 )
 
+// WorkerFunc represents a function that processes a Job and returns a result and an error.
 type WorkerFunc[T, R any] func(T) (R, error)
+
+// WorkerErrFunc represents a function that processes a Job and returns an error.
 type WorkerErrFunc[T any] func(T) error
+
+// VoidWorkerFunc represents a function that processes a Job and returns nothing.
 type VoidWorkerFunc[T any] func(T)
 
 type Status = uint32
@@ -41,9 +47,10 @@ type worker[T, R any] struct {
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	sync            syncGroup
-	tickers         []*time.Ticker
+	tickers         *sync.Map
 }
 
+// Worker represents a worker that processes Jobs.
 type Worker[T, R any] interface {
 	// IsPaused returns whether the worker is paused.
 	IsPaused() bool
@@ -89,7 +96,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		Configs:         c,
 		sync:            syncGroup{},
-		tickers:         make([]*time.Ticker, 0),
+		tickers:         new(sync.Map),
 	}
 
 	w.Concurrency.Store(c.Concurrency)
@@ -227,7 +234,7 @@ func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	return channel
 }
 
-func (w *worker[T, R]) notify() {
+func (w *worker[T, R]) notifyToPullJobs() {
 	w.jobPullNotifier.Notify()
 }
 
@@ -243,7 +250,7 @@ func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		sync:            syncGroup{},
 		Configs:         c,
-		tickers:         make([]*time.Ticker, 0),
+		tickers:         w.tickers,
 	}
 
 	newWorker.Concurrency.Store(c.Concurrency)
@@ -253,8 +260,15 @@ func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
 
 // cleanupCacheInterval periodically cleans up finished jobs from the cache based on the configured duration
 func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
+	_, ok := w.tickers.Load(w.Cache)
+
+	// if the ticker is already running for the same cache, return
+	if ok {
+		return
+	}
+
 	ticker := time.NewTicker(interval)
-	w.tickers = append(w.tickers, ticker)
+	w.tickers.Store(w.Cache, ticker)
 
 	for range ticker.C {
 		w.Cache.Range(func(key, value any) bool {
@@ -266,12 +280,24 @@ func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
 	}
 }
 
+func (w *worker[T, R]) stopTickers() {
+	defer w.tickers.Clear()
+
+	w.tickers.Range(func(key, value any) bool {
+		if ticker, ok := value.(*time.Ticker); ok {
+			ticker.Stop()
+		}
+
+		return true
+	})
+}
+
 func (w *worker[T, R]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
 	}
 
-	defer w.notify()
+	defer w.notifyToPullJobs()
 	defer w.status.Store(Running)
 	w.sync.wg.Add(w.Queue.Len())
 
@@ -309,6 +335,8 @@ func (w *worker[T, R]) ChangeConcurrency(concurrency uint32) error {
 
 func (w *worker[T, R]) Stop() {
 	defer w.status.Store(Stopped)
+	w.stopTickers()
+
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.jobPullNotifier.Close()
 	w.sync.wg.Wait()
@@ -321,11 +349,6 @@ func (w *worker[T, R]) Stop() {
 	}
 
 	w.Cache.Clear()
-
-	// stop all tickers
-	for _, t := range w.tickers {
-		t.Stop()
-	}
 
 	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency.Load())
 }
