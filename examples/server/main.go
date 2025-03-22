@@ -17,7 +17,7 @@ type ScrapeResult struct {
 }
 
 var (
-	queue = gocq.NewQueue(10, scrapeWorker).WithCache(new(sync.Map))
+	queue = gocq.NewWorker(scrapeWorker, gocq.WithCache(new(sync.Map))).BindQueue()
 )
 
 func init() {

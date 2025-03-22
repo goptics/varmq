@@ -10,7 +10,7 @@ type ICQueue[R any] interface {
 	JobById(id string) (types.EnqueuedJob[R], error)
 	// GroupsJobById returns the groups job with the given id.
 	GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error)
-
+	// PendingCount returns the number of Jobs pending in the queue.
 	PendingCount() int
 	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
 	// Time complexity: O(n) where n is the number of pending Jobs
