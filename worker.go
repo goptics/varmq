@@ -64,9 +64,6 @@ type Worker[T, R any] interface {
 	Copy(config ...any) Queues[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
-	// ChangeConcurrency changes the concurrency of the worker. it will pause the worker and then restart it with the new concurrency.
-	// Time complexity: O(n) where n is the concurrency
-	ChangeConcurrency(concurrency uint32) error
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	// Time complexity: O(n) where n is the number of channels
 	Stop()
@@ -185,18 +182,18 @@ func (w *worker[T, R]) processNextJob() {
 
 	var j job.Job[T, R]
 
+	// check the type of the value
+	// and cast it to the appropriate job type
 	switch value := v.(type) {
 	case job.Job[T, R]:
 		j = value
 	case []byte:
 		var err error
-		j, err = job.ParseToJob[T, R](value)
-		if err != nil {
+		if j, err = job.ParseToJob[T, R](value); err != nil {
 			return
 		}
-		cachedJob, ok := w.Cache.Load(j.ID())
 
-		if ok {
+		if cachedJob, ok := w.Cache.Load(j.ID()); ok {
 			j = cachedJob.(job.Job[T, R])
 		} else {
 			w.Cache.Store(j.ID(), j)
@@ -234,6 +231,7 @@ func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	return channel
 }
 
+// notifyToPullJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, R]) notifyToPullJobs() {
 	w.jobPullNotifier.Notify()
 }
@@ -292,6 +290,12 @@ func (w *worker[T, R]) stopTickers() {
 	})
 }
 
+func (w *worker[T, R]) waitUnitCurrentProcessing() {
+	for w.CurrentProcessingCount() != 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func (w *worker[T, R]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
@@ -327,19 +331,13 @@ func (w *worker[T, R]) Pause() Worker[T, R] {
 	return w
 }
 
-func (w *worker[T, R]) ChangeConcurrency(concurrency uint32) error {
-	w.Pause()
-	w.Concurrency.Store(concurrency)
-	return w.Restart()
-}
-
 func (w *worker[T, R]) Stop() {
 	defer w.status.Store(Stopped)
 	w.stopTickers()
 
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.jobPullNotifier.Close()
-	w.sync.wg.Wait()
+	w.PauseAndWait()
 	for _, channel := range w.ChannelsStack {
 		if channel == nil {
 			continue
@@ -354,20 +352,21 @@ func (w *worker[T, R]) Stop() {
 }
 
 func (w *worker[T, R]) Restart() error {
-	defer w.status.Store(Running)
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	w.PauseAndWait()
-
+	w.sync.wg.Add(-w.Queue.Len())
 	// close the old notifier to avoid routine leaks
 	w.jobPullNotifier.Close()
 	w.jobPullNotifier = utils.NewNotifier(1)
 
-	err := w.start()
+	if err := w.start(); err != nil {
+		return err
+	}
 
 	// resume the queue to process pending Jobs
 	w.Resume()
-	return err
+	return nil
 }
 
 func (w *worker[T, R]) IsPaused() bool {
@@ -418,5 +417,5 @@ func (w *worker[T, R]) Resume() error {
 
 func (w *worker[T, R]) PauseAndWait() {
 	w.Pause()
-	w.sync.wg.Wait()
+	w.waitUnitCurrentProcessing()
 }
