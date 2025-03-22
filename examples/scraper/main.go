@@ -21,11 +21,19 @@ func main() {
 	}, 1)
 
 	q := w.BindQueue()
+	pq := w.Copy().BindPriorityQueue()
+	defer q.Close()
+	defer pq.Close()
 
 	for i := range 10 {
 		q.Add(i)
 	}
 
+	for i := range 20 {
+		pq.Add(i, i%10)
+	}
+
 	fmt.Println("added jobs")
 	q.WaitUntilFinished()
+	pq.WaitUntilFinished()
 }

@@ -1,4 +1,4 @@
-package job
+package utils
 
 type Notifier chan struct{}
 

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
+	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -22,7 +22,7 @@ type RedisQueue struct {
 	cancel              context.CancelFunc
 	pubsub              *redis.PubSub
 	notificationKey     string
-	notifications       job.Notifier
+	notifications       utils.Notifier
 	expiration          time.Duration
 	enabledDistribution bool
 }
@@ -42,7 +42,7 @@ func NewRedisQueue(queueKey string, url string) *RedisQueue {
 		ctx:             ctx,
 		cancel:          cancel,
 		notificationKey: queueKey + ":notifications",
-		notifications:   job.NewNotifier(100),
+		notifications:   utils.NewNotifier(100),
 	}
 
 	q.startNotificationListener()
@@ -201,5 +201,13 @@ func (q *RedisQueue) Close() error {
 func (q *RedisQueue) Listen() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	if r := recover(); r != nil {
+		q.Close()
+		signal.Stop(sigChan)
+		close(sigChan)
+		panic("Redis queue listener terminated due to panic")
+	}
+
 	<-sigChan
 }

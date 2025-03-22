@@ -20,7 +20,7 @@ type PQItem[T any] struct {
 }
 
 type ConcurrentPriorityQueue[T, R any] interface {
-	ICQueue[R]
+	ICQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)
 	Add(data T, priority int, id ...string) types.EnqueuedJob[R]
@@ -32,6 +32,7 @@ type ConcurrentPriorityQueue[T, R any] interface {
 // NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
 func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T, R] {
 	q := queue.NewPriorityQueue[job.Job[T, R]]()
+
 	worker.setQueue(q)
 
 	return &concurrentPriorityQueue[T, R]{

@@ -31,7 +31,7 @@ type worker[T, R any] struct {
 	Queue           types.IWorkerQueue
 	Cache           Cache
 	status          atomic.Uint32
-	jobPullNotifier job.Notifier
+	jobPullNotifier utils.Notifier
 	sync            syncGroup
 }
 
@@ -44,6 +44,8 @@ type Worker[T, R any] interface {
 	IsRunning() bool
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
+	// Copy returns a copy of the worker.
+	Copy() Queues[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
 	// ChangeConcurrency changes the concurrency of the worker. it will pause the worker and then restart it with the new concurrency.
@@ -75,7 +77,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
 		Queue:           queue.GetNullQueue(),
 		Cache:           c.Cache,
-		jobPullNotifier: job.NewNotifier(1),
+		jobPullNotifier: utils.NewNotifier(1),
 		sync:            syncGroup{},
 	}
 
@@ -218,7 +220,27 @@ func (w *worker[T, R]) notify() {
 	w.jobPullNotifier.Notify()
 }
 
+func (w *worker[T, R]) Copy() Queues[T, R] {
+	newWorker := &worker[T, R]{
+		workerFunc:      w.workerFunc,
+		Concurrency:     atomic.Uint32{},
+		ChannelsStack:   make([]chan job.Job[T, R], w.Concurrency.Load()),
+		Queue:           queue.GetNullQueue(),
+		Cache:           w.Cache,
+		jobPullNotifier: utils.NewNotifier(1),
+		sync:            syncGroup{},
+	}
+
+	newWorker.Concurrency.Store(w.Concurrency.Load())
+
+	return newQueues[T, R](newWorker)
+}
+
 func (w *worker[T, R]) start() error {
+	if w.IsRunning() {
+		return errors.New("queue is already running")
+	}
+
 	defer w.notify()
 	defer w.status.Store(Running)
 	w.sync.wg.Add(w.Queue.Len())
@@ -275,7 +297,7 @@ func (w *worker[T, R]) Restart() error {
 
 	// close the old notifier to avoid routine leaks
 	w.jobPullNotifier.Close()
-	w.jobPullNotifier = job.NewNotifier(1)
+	w.jobPullNotifier = utils.NewNotifier(1)
 
 	err := w.start()
 

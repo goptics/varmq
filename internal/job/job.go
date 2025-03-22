@@ -43,6 +43,18 @@ type jobView[T, R any] struct {
 	Output *types.Result[R] `json:"output"`
 }
 
+type IJob interface {
+	ID() string
+	// IsClosed returns whether the job is closed.
+	IsClosed() bool
+	// Status returns the current status of the job.
+	Status() string
+	// Close closes the job and its associated channels.
+	Close() error
+	// Json returns the JSON representation of the job.
+	Json() ([]byte, error)
+}
+
 type Job[T, R any] interface {
 	types.IJob
 	types.EnqueuedJob[R]

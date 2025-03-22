@@ -15,7 +15,7 @@ type concurrentQueue[T, R any] struct {
 }
 
 type ConcurrentQueue[T, R any] interface {
-	ICQueue[R]
+	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
 	// Time complexity: O(1)
 	Add(data T, id ...string) types.EnqueuedJob[R]
@@ -33,16 +33,13 @@ type Item[T any] struct {
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
 	q := queue.NewQueue[job.Job[T, R]]()
+
 	worker.setQueue(q)
 
 	return &concurrentQueue[T, R]{
 		worker: worker,
 		queue:  q,
 	}
-}
-
-func (q *concurrentQueue[T, R]) PendingCount() int {
-	return q.queue.Len()
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
@@ -52,6 +49,14 @@ func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 	if id := j.ID(); id != "" {
 		q.Cache.Store(id, j)
 	}
+}
+
+func (q *concurrentQueue[T, R]) PendingCount() int {
+	return q.queue.Len()
+}
+
+func (q *concurrentQueue[T, R]) Worker() Worker[T, R] {
+	return q.worker
 }
 
 func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error) {

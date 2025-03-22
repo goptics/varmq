@@ -24,11 +24,7 @@ func main() {
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
 	}, 1)
 
-	q, err := w.BindWithDistributedQueue(redisQueue)
-
-	if err != nil {
-		panic(err)
-	}
+	q := w.BindWithDistributedQueue(redisQueue)
 
 	fmt.Println("pending jobs:", q.PendingCount())
 	fmt.Println("listening...")

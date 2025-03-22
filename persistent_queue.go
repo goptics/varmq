@@ -6,7 +6,7 @@ import (
 )
 
 type ConcurrentPersistentQueue[T, R any] interface {
-	ICQueue[R]
+	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a channel to receive the result.
 	// Time complexity: O(1)
 	Add(data T, id ...string) types.EnqueuedJob[R]

@@ -5,7 +5,8 @@ import (
 )
 
 // ICQueue is an interface for concurrent queue operations.
-type ICQueue[R any] interface {
+type ICQueue[T, R any] interface {
+	Worker() Worker[T, R]
 	// JobById returns the job with the given id.
 	JobById(id string) (types.EnqueuedJob[R], error)
 	// GroupsJobById returns the groups job with the given id.

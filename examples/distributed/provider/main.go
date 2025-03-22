@@ -29,7 +29,7 @@ func main() {
 	pq := gocq.NewDistributedQueue[[]string, string](redisQueue)
 	defer pq.Close()
 
-	for i := range 1000 {
+	for i := range 10 {
 		id := generateJobID()
 		data := []string{fmt.Sprintf("https://example.com/%s", strconv.Itoa(i)), id}
 		pq.Add(data, id)

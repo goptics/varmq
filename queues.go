@@ -3,6 +3,7 @@ package gocq
 import (
 	"sync"
 
+	"github.com/fahimfaisaal/gocq/v2/internal/queue"
 	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
@@ -11,7 +12,7 @@ type Queues[T, R any] interface {
 	BindQueue() ConcurrentQueue[T, R]
 	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
 	BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
-	BindWithDistributedQueue(dq types.IDistributedQueue) (DistributedQueue[T, R], error)
+	BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R]
 }
 
 type queues[T, R any] struct {
@@ -24,18 +25,27 @@ func newQueues[T, R any](worker *worker[T, R]) Queues[T, R] {
 	}
 }
 
-func (q *queues[T, R]) BindQueue() ConcurrentQueue[T, R] {
-	defer q.worker.start()
+func (qs *queues[T, R]) isBound() {
+	if qs.Queue != queue.GetNullQueue() {
+		panic(ErrWorkerAlreadyBound)
+	}
+}
 
-	return newQueue[T, R](q.worker)
+func (qs *queues[T, R]) BindQueue() ConcurrentQueue[T, R] {
+	qs.isBound()
+
+	defer qs.worker.start()
+	return newQueue[T, R](qs.worker)
 }
 
 func (q *queues[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
+	q.isBound()
 	defer q.worker.start()
 	return newPriorityQueue[T, R](q.worker)
 }
 
 func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R] {
+	q.isBound()
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.Cache == getCache() {
@@ -45,22 +55,18 @@ func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersis
 	return newPersistentQueue[T, R](q.worker, pq)
 }
 
-func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) (_ DistributedQueue[T, R], err error) {
+func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R] {
+	q.isBound()
 	queue := NewDistributedQueue[T, R](dq)
+
 	defer func() {
-		if err != nil {
-			queue.Close()
-		} else {
-			go queue.listenEnqueueNotification(func() {
-				q.worker.sync.wg.Add(1)
-				q.worker.jobPullNotifier.Notify()
-			})
-		}
+		go queue.listenEnqueueNotification(func() {
+			q.worker.sync.wg.Add(1)
+			q.worker.jobPullNotifier.Notify()
+		})
 	}()
-	defer func() {
-		err = q.worker.start()
-	}()
+	defer q.worker.start()
 
 	q.worker.setQueue(dq)
-	return queue, err
+	return queue
 }
