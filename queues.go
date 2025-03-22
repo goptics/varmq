@@ -1,6 +1,8 @@
 package gocq
 
 import (
+	"sync"
+
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
 	"github.com/fahimfaisaal/gocq/v2/shared/types"
@@ -40,16 +42,26 @@ func (q *queues[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
 func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R] {
 	defer q.worker.start()
 	q.worker.setQueue(pq)
+
+	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
+	if q.worker.Cache == getCache() {
+		q.worker.Cache = new(sync.Map)
+	}
+
 	return newPersistentQueue[T, R](q.worker)
 }
 
 func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) (_ DistributedQueue[T, R], err error) {
 	queue := NewDistributedQueue[T, R](dq)
 	defer func() {
-		go queue.listenEnqueueNotification(func() {
-			q.worker.sync.wg.Add(1)
-			q.worker.jobPullNotifier.Notify()
-		})
+		if err != nil {
+			queue.Close()
+		} else {
+			go queue.listenEnqueueNotification(func() {
+				q.worker.sync.wg.Add(1)
+				q.worker.jobPullNotifier.Notify()
+			})
+		}
 	}()
 	defer func() {
 		err = q.worker.start()

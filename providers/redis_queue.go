@@ -19,7 +19,7 @@ type RedisQueue struct {
 	queueKey      string
 	mx            sync.Mutex
 	ctx           context.Context
-	cancel        context.CancelFunc // Add cancel function
+	cancel        context.CancelFunc
 	pubsub        *redis.PubSub
 	notifications job.Notifier
 	expiration    time.Duration

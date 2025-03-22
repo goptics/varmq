@@ -11,7 +11,7 @@ type Configs struct {
 	Cache       Cache
 }
 
-func loadConfigs[T, R any](configs ...Config) Configs {
+func loadConfigs(configs ...Config) Configs {
 	c := Configs{
 		Concurrency: withSafeConcurrency(0),
 		Cache:       getCache(),

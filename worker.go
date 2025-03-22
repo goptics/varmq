@@ -61,7 +61,7 @@ type Worker[T, R any] interface {
 }
 
 func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
-	c := loadConfigs[T, R](configs...)
+	c := loadConfigs(configs...)
 
 	return &worker[T, R]{
 		workerFunc:      w,
@@ -113,7 +113,7 @@ func (w *worker[T, R]) processSingleJob(j job.Job[T, R]) {
 		})
 
 	case WorkerErrFunc[T]:
-		panicErr = utils.WithSafe("worker error", func() {
+		panicErr = utils.WithSafe("error worker", func() {
 			err = worker(j.Data())
 		})
 
