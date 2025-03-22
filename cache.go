@@ -4,6 +4,7 @@ type Cache interface {
 	Load(key any) (any, bool)
 	Store(key any, value any)
 	Delete(key any)
+	Range(f func(key, value any) bool)
 	Clear()
 }
 

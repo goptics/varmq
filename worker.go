@@ -3,6 +3,7 @@ package gocq
 import (
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
 	"github.com/fahimfaisaal/gocq/v2/internal/queue"
@@ -23,6 +24,12 @@ const (
 	Stopped
 )
 
+var (
+	errWorkerAlreadyBound = errors.New("the worker is already bound to a queue")
+	errInvalidWorkerType  = errors.New("invalid worker type passed to worker")
+	errRunningWorker      = errors.New("worker is already running")
+)
+
 type worker[T, R any] struct {
 	workerFunc      any
 	Concurrency     atomic.Uint32
@@ -30,9 +37,11 @@ type worker[T, R any] struct {
 	CurProcessing   atomic.Uint32
 	Queue           types.IWorkerQueue
 	Cache           Cache
+	Configs         Configs
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	sync            syncGroup
+	tickers         map[string]*time.Ticker
 }
 
 type Worker[T, R any] interface {
@@ -45,7 +54,7 @@ type Worker[T, R any] interface {
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// Copy returns a copy of the worker.
-	Copy() Queues[T, R]
+	Copy(config ...any) Queues[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
 	// ChangeConcurrency changes the concurrency of the worker. it will pause the worker and then restart it with the new concurrency.
@@ -78,7 +87,9 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		Queue:           queue.GetNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
+		Configs:         c,
 		sync:            syncGroup{},
+		tickers:         make(map[string]*time.Ticker),
 	}
 
 	w.Concurrency.Store(c.Concurrency)
@@ -140,7 +151,7 @@ func (w *worker[T, R]) processSingleJob(j job.Job[T, R]) {
 		})
 	default:
 		// Log or handle the invalid type to avoid silent failures
-		err = errors.New("unsupported worker type passed to queue")
+		err = errInvalidWorkerType
 	}
 
 	// send error if any
@@ -220,30 +231,56 @@ func (w *worker[T, R]) notify() {
 	w.jobPullNotifier.Notify()
 }
 
-func (w *worker[T, R]) Copy() Queues[T, R] {
+func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
+	c := mergeConfigs(w.Configs, config...)
+
 	newWorker := &worker[T, R]{
 		workerFunc:      w.workerFunc,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan job.Job[T, R], w.Concurrency.Load()),
+		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
 		Queue:           queue.GetNullQueue(),
-		Cache:           w.Cache,
+		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
 		sync:            syncGroup{},
+		Configs:         c,
+		tickers:         w.tickers,
 	}
 
-	newWorker.Concurrency.Store(w.Concurrency.Load())
+	newWorker.Concurrency.Store(c.Concurrency)
 
 	return newQueues[T, R](newWorker)
 }
 
+// cleanupCacheInterval periodically cleans up finished jobs from the cache based on the configured duration
+func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
+	key := "cleanupCacheInterval"
+	// check if the ticker is already running
+	if _, ok := w.tickers[key]; ok {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	w.tickers[key] = ticker
+
+	for range ticker.C {
+		w.Cache.Range(func(key, value any) bool {
+			if j, ok := value.(job.Job[T, R]); ok && j.Status() == "Closed" {
+				w.Cache.Delete(key)
+			}
+			return true
+		})
+	}
+}
+
 func (w *worker[T, R]) start() error {
 	if w.IsRunning() {
-		return errors.New("queue is already running")
+		return errRunningWorker
 	}
 
 	defer w.notify()
 	defer w.status.Store(Running)
 	w.sync.wg.Add(w.Queue.Len())
+
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
 		// close old channels to avoid routine leaks
@@ -257,6 +294,10 @@ func (w *worker[T, R]) start() error {
 	}
 
 	go w.pullNextJobs()
+
+	if w.Configs.CleanupCacheInterval > 0 {
+		go w.cleanupCacheInterval(w.Configs.CleanupCacheInterval)
+	}
 
 	return nil
 }
@@ -286,6 +327,12 @@ func (w *worker[T, R]) Stop() {
 	}
 
 	w.Cache.Clear()
+
+	// stop all tickers
+	for _, t := range w.tickers {
+		t.Stop()
+	}
+
 	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency.Load())
 }
 
@@ -343,7 +390,7 @@ func (w *worker[T, R]) Resume() error {
 	}
 
 	if w.IsRunning() {
-		return errors.New("queue is already running")
+		return errRunningWorker
 	}
 
 	w.status.Store(Running)
