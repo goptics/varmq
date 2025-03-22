@@ -8,6 +8,7 @@ import (
 
 type concurrentPriorityQueue[T, R any] struct {
 	*concurrentQueue[T, R]
+	queue types.IPriorityQueue
 }
 
 type PQItem[T any] struct {
@@ -30,15 +31,21 @@ type ConcurrentPriorityQueue[T, R any] interface {
 
 // NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
 func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T, R] {
+	q := queue.NewPriorityQueue[job.Job[T, R]]()
+	worker.setQueue(q)
+
 	return &concurrentPriorityQueue[T, R]{
-		concurrentQueue: newQueue[T, R](worker),
+		concurrentQueue: &concurrentQueue[T, R]{
+			worker: worker,
+		},
+		queue: q,
 	}
 }
 
 func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: priority})
+	q.queue.Enqueue(j, priority)
 	q.sync.wg.Add(1)
 	q.postEnqueue(j)
 
@@ -53,7 +60,7 @@ func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.Enqueued
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
 
-		q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j, Priority: item.Priority})
+		q.queue.Enqueue(j, item.Priority)
 		q.postEnqueue(j)
 	}
 

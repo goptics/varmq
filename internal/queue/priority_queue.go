@@ -5,6 +5,12 @@ import (
 	"sync"
 )
 
+type enqItem[T any] struct {
+	Value    T
+	Priority int
+	Index    int
+}
+
 // PriorityQueue is the user-facing wrapper around heapQueue[T].
 type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
@@ -15,7 +21,7 @@ type PriorityQueue[T any] struct {
 // newPriorityQueue initializes an empty priority queue.
 func NewPriorityQueue[T any]() *PriorityQueue[T] {
 	pq := &heapQueue[T]{
-		items: make([]*EnqItem[T], 0),
+		items: make([]*enqItem[T], 0),
 	}
 	heap.Init(pq)
 	return &PriorityQueue[T]{internal: pq}
@@ -41,17 +47,18 @@ func (q *PriorityQueue[T]) Values() []any {
 
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
-func (q *PriorityQueue[T]) Enqueue(item any) bool {
+func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	t, ok := item.(EnqItem[T])
-	if !ok {
-		return false
+
+	i := enqItem[T]{
+		Value:    item.(T),
+		Priority: priority,
+		Index:    q.insertionCount,
 	}
 
-	t.Index = q.insertionCount
 	q.insertionCount++
-	heap.Push(q.internal, &t) // O(log n)
+	heap.Push(q.internal, &i) // O(log n)
 	return true
 }
 
@@ -64,7 +71,7 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	if q.internal.Len() == 0 {
 		return zeroValue, false
 	}
-	popped := heap.Pop(q.internal).(*EnqItem[T]) // O(log n)
+	popped := heap.Pop(q.internal).(*enqItem[T]) // O(log n)
 	return popped.Value, true
 }
 
@@ -72,7 +79,7 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 func (q *PriorityQueue[T]) Close() error {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	q.internal.items = make([]*EnqItem[T], 0)
+	q.internal.items = make([]*enqItem[T], 0)
 	heap.Init(q.internal)
 	return nil
 }

@@ -41,7 +41,7 @@ func (q *Queue[T]) Len() int {
 func (q *Queue[T]) Enqueue(item any) bool {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	q.internal.PushBack(item.(EnqItem[T]).Value)
+	q.internal.PushBack(item)
 	return true
 }
 

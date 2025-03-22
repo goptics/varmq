@@ -15,14 +15,16 @@ import (
 )
 
 type RedisQueue struct {
-	client        *redis.Client
-	queueKey      string
-	mx            sync.Mutex
-	ctx           context.Context
-	cancel        context.CancelFunc
-	pubsub        *redis.PubSub
-	notifications job.Notifier
-	expiration    time.Duration
+	client              *redis.Client
+	queueKey            string
+	mx                  sync.Mutex
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	pubsub              *redis.PubSub
+	notificationKey     string
+	notifications       job.Notifier
+	expiration          time.Duration
+	enabledDistribution bool
 }
 
 func NewRedisQueue(queueKey string, url string) *RedisQueue {
@@ -35,12 +37,12 @@ func NewRedisQueue(queueKey string, url string) *RedisQueue {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	q := &RedisQueue{
-		client:        client,
-		queueKey:      queueKey,
-		ctx:           ctx,
-		cancel:        cancel,
-		expiration:    0,
-		notifications: job.NewNotifier(100),
+		client:          client,
+		queueKey:        queueKey,
+		ctx:             ctx,
+		cancel:          cancel,
+		notificationKey: queueKey + ":notifications",
+		notifications:   job.NewNotifier(100),
 	}
 
 	q.startNotificationListener()
@@ -48,7 +50,7 @@ func NewRedisQueue(queueKey string, url string) *RedisQueue {
 }
 
 func (q *RedisQueue) startNotificationListener() {
-	q.pubsub = q.client.Subscribe(q.ctx, q.queueKey+":notifications")
+	q.pubsub = q.client.Subscribe(q.ctx, q.notificationKey)
 
 	go func() {
 		defer q.pubsub.Close()
@@ -66,6 +68,33 @@ func (q *RedisQueue) startNotificationListener() {
 			}
 		}
 	}()
+}
+
+func (q *RedisQueue) notify() {
+	err := q.client.Publish(q.ctx, q.notificationKey, "").Err()
+	if err != nil {
+		fmt.Printf("Error publishing notification: %v\n", err)
+	}
+}
+
+// SetExpiration sets the expiration time for the RedisQueue
+func (q *RedisQueue) SetExpiration(expiration time.Duration) {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+	q.expiration = expiration
+}
+
+// EnableDistribution turns the RedisQueue into a distributed queue by starting the notification listener and pubsub
+func (q *RedisQueue) EnableDistribution() *RedisQueue {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+
+	if !q.enabledDistribution {
+		q.enabledDistribution = true
+		q.startNotificationListener()
+	}
+
+	return q
 }
 
 func (q *RedisQueue) NotificationChannel() <-chan struct{} {
@@ -110,20 +139,18 @@ func (q *RedisQueue) Enqueue(item any) bool {
 
 	pipe := q.client.Pipeline()
 	pipe.RPush(q.ctx, q.queueKey, data)
+
 	if q.expiration > 0 {
 		pipe.Expire(q.ctx, q.queueKey, q.expiration)
 	}
 
-	_, err := pipe.Exec(q.ctx)
-	if err != nil {
+	if _, err := pipe.Exec(q.ctx); err != nil {
 		fmt.Printf("Error enqueueing item: %v\n", err)
 		return false
 	}
 
-	// Include more meaningful information in the notification
-	err = q.client.Publish(q.ctx, q.queueKey+":notifications", "").Err()
-	if err != nil {
-		fmt.Printf("Error publishing notification: %v\n", err)
+	if q.enabledDistribution {
+		q.notify()
 	}
 
 	return true

@@ -19,15 +19,19 @@ type concurrentPersistentQueue[T, R any] struct {
 	*concurrentQueue[T, R]
 }
 
-func newPersistentQueue[T, R any](w *worker[T, R]) ConcurrentPersistentQueue[T, R] {
-	return &concurrentPersistentQueue[T, R]{concurrentQueue: newQueue[T, R](w)}
+func newPersistentQueue[T, R any](w *worker[T, R], pq types.IQueue) ConcurrentPersistentQueue[T, R] {
+	w.setQueue(pq)
+	return &concurrentPersistentQueue[T, R]{concurrentQueue: &concurrentQueue[T, R]{
+		worker: w,
+		queue:  pq,
+	}}
 }
 
 func (q *concurrentPersistentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 	val, _ := j.Json()
 
-	q.Queue.Enqueue(val)
+	q.queue.Enqueue(val)
 	q.postEnqueue(j)
 
 	return j
@@ -41,7 +45,7 @@ func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) types.Enqueued
 		j := groupJob.NewJob(item.Value, item.ID)
 		val, _ := j.Json()
 
-		q.Queue.Enqueue(val)
+		q.queue.Enqueue(val)
 		q.postEnqueue(j)
 	}
 

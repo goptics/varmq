@@ -11,6 +11,7 @@ import (
 
 type concurrentQueue[T, R any] struct {
 	*worker[T, R]
+	queue types.IQueue
 }
 
 type ConcurrentQueue[T, R any] interface {
@@ -31,13 +32,17 @@ type Item[T any] struct {
 // Creates a new CQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
+	q := queue.NewQueue[job.Job[T, R]]()
+	worker.setQueue(q)
+
 	return &concurrentQueue[T, R]{
 		worker: worker,
+		queue:  q,
 	}
 }
 
 func (q *concurrentQueue[T, R]) PendingCount() int {
-	return q.Queue.Len()
+	return q.queue.Len()
 }
 
 func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
@@ -75,7 +80,7 @@ func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGr
 func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	j := job.New[T, R](data, id...)
 
-	q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+	q.queue.Enqueue(j)
 	q.sync.wg.Add(1)
 	q.postEnqueue(j)
 
@@ -89,7 +94,7 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R
 	q.sync.wg.Add(l)
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, item.ID)
-		q.Queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+		q.queue.Enqueue(j)
 		q.postEnqueue(j)
 	}
 

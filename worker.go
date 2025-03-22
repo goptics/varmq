@@ -28,7 +28,7 @@ type worker[T, R any] struct {
 	Concurrency     atomic.Uint32
 	ChannelsStack   []chan job.Job[T, R]
 	CurProcessing   atomic.Uint32
-	Queue           types.IQueue
+	Queue           types.IWorkerQueue
 	Cache           Cache
 	status          atomic.Uint32
 	jobPullNotifier job.Notifier
@@ -84,7 +84,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	return w
 }
 
-func (w *worker[T, R]) setQueue(q types.IQueue) {
+func (w *worker[T, R]) setQueue(q types.IWorkerQueue) {
 	w.Queue = q
 }
 

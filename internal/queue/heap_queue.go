@@ -2,7 +2,7 @@ package queue
 
 // heapQueue implements heap.Interface for a slice of *EnqItem[T].
 type heapQueue[T any] struct {
-	items []*EnqItem[T]
+	items []*enqItem[T]
 }
 
 // Len, Less, Swap are standard for heap.Interface.
@@ -27,7 +27,7 @@ func (pq *heapQueue[T]) Swap(i, j int) {
 // Push is called by heap.Push to add a new element to the end.
 // Time complexity: O(1)
 func (pq *heapQueue[T]) Push(x any) {
-	pq.items = append(pq.items, x.(*EnqItem[T]))
+	pq.items = append(pq.items, x.(*enqItem[T]))
 }
 
 // Pop is called by heap.Pop to remove the last element from the slice.

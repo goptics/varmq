@@ -25,7 +25,7 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	redisQueue := providers.NewRedisQueue("scraping_queue", "redis://localhost:6375")
+	redisQueue := providers.NewRedisQueue("scraping_queue", "redis://localhost:6375").EnableDistribution()
 	pq := gocq.NewDistributedQueue[[]string, string](redisQueue)
 	defer pq.Close()
 
