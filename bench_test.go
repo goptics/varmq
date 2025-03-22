@@ -4,6 +4,13 @@ import (
 	"testing"
 )
 
+const addAllSampleSize = 100
+
+// Double multiplies the input by 2.
+func double(n int) int {
+	return n * 2
+}
+
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
