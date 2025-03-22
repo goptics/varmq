@@ -41,7 +41,7 @@ type worker[T, R any] struct {
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	sync            syncGroup
-	tickers         map[string]*time.Ticker
+	tickers         []*time.Ticker
 }
 
 type Worker[T, R any] interface {
@@ -89,7 +89,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		Configs:         c,
 		sync:            syncGroup{},
-		tickers:         make(map[string]*time.Ticker),
+		tickers:         make([]*time.Ticker, 0),
 	}
 
 	w.Concurrency.Store(c.Concurrency)
@@ -243,7 +243,7 @@ func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		sync:            syncGroup{},
 		Configs:         c,
-		tickers:         w.tickers,
+		tickers:         make([]*time.Ticker, 0),
 	}
 
 	newWorker.Concurrency.Store(c.Concurrency)
@@ -253,14 +253,8 @@ func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
 
 // cleanupCacheInterval periodically cleans up finished jobs from the cache based on the configured duration
 func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
-	key := "cleanupCacheInterval"
-	// check if the ticker is already running
-	if _, ok := w.tickers[key]; ok {
-		return
-	}
-
 	ticker := time.NewTicker(interval)
-	w.tickers[key] = ticker
+	w.tickers = append(w.tickers, ticker)
 
 	for range ticker.C {
 		w.Cache.Range(func(key, value any) bool {
