@@ -22,7 +22,7 @@ func main() {
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
-	}, gocq.WithConcurrency(100))
+	}, 1)
 
 	q, err := w.BindWithDistributedQueue(redisQueue)
 

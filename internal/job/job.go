@@ -46,10 +46,15 @@ type jobView[T, R any] struct {
 type Job[T, R any] interface {
 	types.IJob
 	types.EnqueuedJob[R]
+	// Data returns the input data of the job.
 	Data() T
+	// SaveAndSendResult saves the result and sends it to the job's result channel.
 	SaveAndSendResult(result R)
+	// SaveAndSendError saves the error and sends it to the job's error channel.
 	SaveAndSendError(err error)
+	// ChangeStatus changes the status of the job.
 	ChangeStatus(status Status) Job[T, R]
+	// CloseResultChannel closes the result channel.
 	CloseResultChannel()
 }
 

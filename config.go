@@ -11,14 +11,19 @@ type Configs struct {
 	Cache       Cache
 }
 
-func loadConfigs(configs ...Config) Configs {
+func loadConfigs(configs ...any) Configs {
 	c := Configs{
 		Concurrency: withSafeConcurrency(0),
 		Cache:       getCache(),
 	}
 
 	for _, config := range configs {
-		config(&c)
+		switch config := config.(type) {
+		case Config:
+			config(&c)
+		case int:
+			c.Concurrency = withSafeConcurrency(config)
+		}
 	}
 
 	return c
@@ -30,16 +35,16 @@ func WithCache(cache Cache) Config {
 	}
 }
 
-func WithConcurrency(concurrency uint32) Config {
+func WithConcurrency(concurrency int) Config {
 	return func(c *Configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
-func withSafeConcurrency(concurrency uint32) uint32 {
+func withSafeConcurrency(concurrency int) uint32 {
 	// If concurrency is less than 1, use the number of CPUs as the concurrency
 	if concurrency < 1 {
 		return utils.Cpus()
 	}
-	return concurrency
+	return uint32(concurrency)
 }

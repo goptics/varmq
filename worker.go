@@ -25,7 +25,7 @@ const (
 
 type worker[T, R any] struct {
 	workerFunc      any
-	Concurrency     uint32
+	Concurrency     atomic.Uint32
 	ChannelsStack   []chan job.Job[T, R]
 	CurProcessing   atomic.Uint32
 	Queue           types.IQueue
@@ -43,35 +43,45 @@ type Worker[T, R any] interface {
 	// IsRunning returns whether the worker is running.
 	IsRunning() bool
 	// Pause pauses the worker.
-	// Time complexity: O(n) where n is the concurrency
 	Pause() Worker[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
+	// ChangeConcurrency changes the concurrency of the worker. it will pause the worker and then restart it with the new concurrency.
+	// Time complexity: O(n) where n is the concurrency
+	ChangeConcurrency(concurrency uint32) error
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
+	// Time complexity: O(n) where n is the number of channels
 	Stop()
 	// Status returns the current status of the worker.
+	// Time complexity: O(1)
 	Status() string
 	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
+	// Time complexity: O(n) where n is the concurrency
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
+	// Time complexity: O(n) where n is the concurrency
 	Resume() error
 	// CurrentProcessingCount returns the number of Jobs currently being processed by the worker.
 	// Time complexity: O(1)
 	CurrentProcessingCount() uint32
 }
 
-func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
+func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	c := loadConfigs(configs...)
 
-	return &worker[T, R]{
-		workerFunc:      w,
-		Concurrency:     c.Concurrency,
+	w := &worker[T, R]{
+		workerFunc:      wf,
+		Concurrency:     atomic.Uint32{},
 		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
 		Queue:           queue.GetNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: job.NewNotifier(1),
 		sync:            syncGroup{},
 	}
+
+	w.Concurrency.Store(c.Concurrency)
+
+	return w
 }
 
 func (w *worker[T, R]) setQueue(q types.IQueue) {
@@ -140,7 +150,7 @@ func (w *worker[T, R]) processSingleJob(j job.Job[T, R]) {
 // pullNextJobs processes the jobs in the queue every time a new Job is added.
 func (w *worker[T, R]) pullNextJobs() {
 	w.jobPullNotifier.Listen(func() {
-		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency && w.Queue.Len() > 0 {
+		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
 	})
@@ -234,6 +244,12 @@ func (w *worker[T, R]) Pause() Worker[T, R] {
 	return w
 }
 
+func (w *worker[T, R]) ChangeConcurrency(concurrency uint32) error {
+	w.Pause()
+	w.Concurrency.Store(concurrency)
+	return w.Restart()
+}
+
 func (w *worker[T, R]) Stop() {
 	defer w.status.Store(Stopped)
 	// wait until all ongoing processes are done to gracefully close the channels
@@ -248,7 +264,7 @@ func (w *worker[T, R]) Stop() {
 	}
 
 	w.Cache.Clear()
-	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency)
+	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency.Load())
 }
 
 func (w *worker[T, R]) Restart() error {
