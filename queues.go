@@ -27,7 +27,7 @@ func newQueues[T, R any](worker *worker[T, R]) Queues[T, R] {
 
 func (qs *queues[T, R]) isBound() {
 	if qs.Queue != queue.GetNullQueue() {
-		panic(ErrWorkerAlreadyBound)
+		panic(errWorkerAlreadyBound)
 	}
 }
 
