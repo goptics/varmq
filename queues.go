@@ -7,10 +7,11 @@ import (
 )
 
 type Queues[T, R any] interface {
-	Queue() ConcurrentQueue[T, R]
-	PriorityQueue() ConcurrentPriorityQueue[T, R]
-	PersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
-	DistributedQueue(dq types.IQueue) DistributedQueue[T, R]
+	Worker[T, R]
+	BindQueue() ConcurrentQueue[T, R]
+	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
+	BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
+	BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R]
 }
 
 type queues[T, R any] struct {
@@ -23,30 +24,35 @@ func newQueues[T, R any](worker *worker[T, R]) Queues[T, R] {
 	}
 }
 
-func (q *queues[T, R]) Queue() ConcurrentQueue[T, R] {
+func (q *queues[T, R]) BindQueue() ConcurrentQueue[T, R] {
 	defer q.worker.start()
 
 	q.worker.setQueue(queue.NewQueue[job.Job[T, R]]())
 	return newQueue[T, R](q.worker)
 }
 
-func (q *queues[T, R]) PriorityQueue() ConcurrentPriorityQueue[T, R] {
+func (q *queues[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
 	defer q.worker.start()
 	q.worker.setQueue(queue.NewPriorityQueue[job.Job[T, R]]())
 	return newPriorityQueue[T, R](q.worker)
 }
 
-func (q *queues[T, R]) PersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R] {
+func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R] {
 	defer q.worker.start()
 	q.worker.setQueue(pq)
 	return newPersistentQueue[T, R](q.worker)
 }
 
-func (q *queues[T, R]) DistributedQueue(dq types.IQueue) DistributedQueue[T, R] {
+func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R] {
+	queue := NewDistributedQueue[T, R](dq)
 	defer func() {
-		go q.worker.listenEnqueueNotification()
+		go queue.listenEnqueueNotification(func() {
+			q.worker.sync.wg.Add(1)
+			q.worker.jobPullNotifier.Notify()
+		})
 	}()
 	defer q.worker.start()
+
 	q.worker.setQueue(dq)
-	return NewDistributedQueue[T, R](dq)
+	return queue
 }

@@ -16,13 +16,6 @@ func NewQueue[T any]() *Queue[T] {
 	return &Queue[T]{internal: new(list.List)}
 }
 
-// Init initializes the queue.
-func (q *Queue[T]) Init() {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-	q.internal.Init()
-}
-
 // Values returns a slice of all values in the queue.
 func (q *Queue[T]) Values() []any {
 	q.mx.Lock()
@@ -70,12 +63,9 @@ func (q *Queue[T]) Dequeue() (any, bool) {
 	return val, true
 }
 
-// to satisfy the IQueue interface
-func (q *Queue[T]) NotificationChannel() <-chan struct{} {
-	return nil
-}
-
-// to satisfy the IQueue interface
 func (q *Queue[T]) Close() error {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+	q.internal.Init()
 	return nil
 }

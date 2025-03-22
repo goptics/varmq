@@ -102,7 +102,7 @@ func (q *concurrentQueue[T, R]) WaitUntilFinished() {
 
 func (q *concurrentQueue[T, R]) Purge() {
 	prevValues := q.Queue.Values()
-	q.Queue.Init()
+	q.Queue.Close()
 	q.sync.wg.Add(-len(prevValues))
 
 	// close all pending channels to avoid routine leaks

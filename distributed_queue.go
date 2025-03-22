@@ -9,15 +9,23 @@ import (
 type DistributedQueue[T, R any] interface {
 	// Time complexity: O(1)
 	Add(data T, id ...string) bool
+
+	listenEnqueueNotification(func())
 }
 
 type distributedQueue[T, R any] struct {
-	queue types.IQueue
+	queue types.IDistributedQueue
 }
 
-func NewDistributedQueue[T, R any](queue types.IQueue) DistributedQueue[T, R] {
+func NewDistributedQueue[T, R any](queue types.IDistributedQueue) DistributedQueue[T, R] {
 	return &distributedQueue[T, R]{
 		queue: queue,
+	}
+}
+
+func (dq *distributedQueue[T, R]) listenEnqueueNotification(fn func()) {
+	for range dq.queue.NotificationChannel() {
+		fn()
 	}
 }
 

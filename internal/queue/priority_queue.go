@@ -28,14 +28,6 @@ func (q *PriorityQueue[T]) Len() int {
 	return q.internal.Len()
 }
 
-// Init initializes the priority queue.
-func (q *PriorityQueue[T]) Init() {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-	q.internal.items = make([]*EnqItem[T], 0)
-	heap.Init(q.internal)
-}
-
 // Values returns a slice of all values in the priority queue.
 func (q *PriorityQueue[T]) Values() []any {
 	q.mx.Lock()
@@ -77,11 +69,10 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 }
 
 // to satisfy the IQueue interface
-func (q *PriorityQueue[T]) NotificationChannel() <-chan struct{} {
-	return nil
-}
-
-// to satisfy the IQueue interface
 func (q *PriorityQueue[T]) Close() error {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+	q.internal.items = make([]*EnqItem[T], 0)
+	heap.Init(q.internal)
 	return nil
 }

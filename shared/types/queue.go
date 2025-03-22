@@ -1,11 +1,14 @@
 package types
 
 type IQueue interface {
-	NotificationChannel() <-chan struct{}
+	Len() int
 	Dequeue() (any, bool)
 	Enqueue(item any) bool
-	Init()
-	Len() int
 	Values() []any
 	Close() error
+}
+
+type IDistributedQueue interface {
+	IQueue
+	NotificationChannel() <-chan struct{}
 }

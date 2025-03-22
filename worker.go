@@ -14,6 +14,15 @@ type WorkerFunc[T, R any] func(T) (R, error)
 type WorkerErrFunc[T any] func(T) error
 type VoidWorkerFunc[T any] func(T)
 
+type Status = uint32
+
+const (
+	Initiated Status = iota
+	Running
+	Paused
+	Stopped
+)
+
 type worker[T, R any] struct {
 	workerFunc      any
 	Concurrency     uint32
@@ -21,28 +30,32 @@ type worker[T, R any] struct {
 	CurProcessing   atomic.Uint32
 	Queue           types.IQueue
 	Cache           Cache
-	isPaused        atomic.Bool
+	status          atomic.Uint32
 	jobPullNotifier job.Notifier
 	sync            syncGroup
 }
 
 type Worker[T, R any] interface {
+	// IsPaused returns whether the worker is paused.
 	IsPaused() bool
-	// Restart restarts the queue and initializes the worker goroutines based on the concurrency.
+	// IsStopped returns whether the worker is stopped.
+	IsStopped() bool
+	// IsRunning returns whether the worker is running.
+	IsRunning() bool
+	// Pause pauses the worker.
 	// Time complexity: O(n) where n is the concurrency
 	Pause() Worker[T, R]
-
+	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
-
-	// WithCache sets the cache for the queue.
-	WithCache(cache Cache) Worker[T, R]
-
+	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	Stop()
-
+	// Status returns the current status of the worker.
+	Status() string
+	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	Resume() error
-	// CurrentProcessingCount returns the number of Jobs currently being processed.
+	// CurrentProcessingCount returns the number of Jobs currently being processed by the worker.
 	// Time complexity: O(1)
 	CurrentProcessingCount() uint32
 }
@@ -61,19 +74,8 @@ func newWorker[T, R any](w any, configs ...Config) *worker[T, R] {
 	}
 }
 
-func (w *worker[T, R]) notify() {
-	w.jobPullNotifier.Notify()
-}
-
 func (w *worker[T, R]) setQueue(q types.IQueue) {
 	w.Queue = q
-}
-
-func (w *worker[T, R]) listenEnqueueNotification() {
-	for range w.Queue.NotificationChannel() {
-		w.sync.wg.Add(1)
-		w.jobPullNotifier.Notify()
-	}
 }
 
 // freeChannel frees the channel for the next Job.
@@ -138,7 +140,7 @@ func (w *worker[T, R]) processSingleJob(j job.Job[T, R]) {
 // pullNextJobs processes the jobs in the queue every time a new Job is added.
 func (w *worker[T, R]) pullNextJobs() {
 	w.jobPullNotifier.Listen(func() {
-		for !w.isPaused.Load() && w.CurProcessing.Load() < w.Concurrency && w.Queue.Len() > 0 {
+		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
 	})
@@ -202,7 +204,12 @@ func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
 	return channel
 }
 
+func (w *worker[T, R]) notify() {
+	w.jobPullNotifier.Notify()
+}
+
 func (w *worker[T, R]) start() error {
+	defer w.status.Store(Running)
 	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
@@ -221,7 +228,13 @@ func (w *worker[T, R]) start() error {
 	return nil
 }
 
+func (w *worker[T, R]) Pause() Worker[T, R] {
+	w.status.Store(Paused)
+	return w
+}
+
 func (w *worker[T, R]) Stop() {
+	defer w.status.Store(Stopped)
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.jobPullNotifier.Close()
 	w.sync.wg.Wait()
@@ -233,11 +246,12 @@ func (w *worker[T, R]) Stop() {
 		close(channel)
 	}
 
-	w.Cache = getCache()
+	w.Cache.Clear()
 	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency)
 }
 
 func (w *worker[T, R]) Restart() error {
+	defer w.status.Store(Running)
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	w.PauseAndWait()
@@ -254,32 +268,49 @@ func (w *worker[T, R]) Restart() error {
 }
 
 func (w *worker[T, R]) IsPaused() bool {
-	return w.isPaused.Load()
+	return w.status.Load() == Paused
+}
+
+func (w *worker[T, R]) IsRunning() bool {
+	return w.status.Load() == Running
+}
+
+func (w *worker[T, R]) IsStopped() bool {
+	return w.status.Load() == Stopped
+}
+
+func (w *worker[T, R]) Status() string {
+	switch w.status.Load() {
+	case Initiated:
+		return "Initiated"
+	case Running:
+		return "Running"
+	case Paused:
+		return "Paused"
+	case Stopped:
+		return "Stopped"
+	default:
+		return "Unknown"
+	}
 }
 
 func (w *worker[T, R]) CurrentProcessingCount() uint32 {
 	return w.CurProcessing.Load()
 }
 
-func (w *worker[T, R]) Pause() Worker[T, R] {
-	w.isPaused.Store(true)
-	return w
-}
-
 func (w *worker[T, R]) Resume() error {
-	if !w.isPaused.Load() {
+	if w.status.Load() == Initiated {
+		return w.start()
+	}
+
+	if w.IsRunning() {
 		return errors.New("queue is already running")
 	}
 
-	w.isPaused.Store(false)
+	w.status.Store(Running)
 	w.jobPullNotifier.Notify()
 
 	return nil
-}
-
-func (w *worker[T, R]) WithCache(cache Cache) Worker[T, R] {
-	w.Cache = cache
-	return w
 }
 
 func (w *worker[T, R]) PauseAndWait() {
