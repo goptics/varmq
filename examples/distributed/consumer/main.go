@@ -14,7 +14,7 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	redisQueue := providers.NewRedisQueue("scraping_queue", "redis://localhost:6375")
+	redisQueue := providers.NewRedisDistributedQueue("scraping_queue", "redis://localhost:6375")
 	defer redisQueue.Listen()
 
 	w := gocq.NewVoidWorker(func(data []string) {

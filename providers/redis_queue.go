@@ -10,21 +10,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2/shared/utils"
 	"github.com/redis/go-redis/v9"
 )
 
 type RedisQueue struct {
-	client              *redis.Client
-	queueKey            string
-	mx                  sync.Mutex
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	pubsub              *redis.PubSub
-	notificationKey     string
-	notifications       utils.Notifier
-	expiration          time.Duration
-	enabledDistribution bool
+	client     *redis.Client
+	queueKey   string
+	mx         sync.Mutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+	expiration time.Duration
 }
 
 func NewRedisQueue(queueKey string, url string) *RedisQueue {
@@ -36,44 +31,11 @@ func NewRedisQueue(queueKey string, url string) *RedisQueue {
 	client := redis.NewClient(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	q := &RedisQueue{
-		client:          client,
-		queueKey:        queueKey,
-		ctx:             ctx,
-		cancel:          cancel,
-		notificationKey: queueKey + ":notifications",
-		notifications:   utils.NewNotifier(100),
-	}
-
-	q.startNotificationListener()
-	return q
-}
-
-func (q *RedisQueue) startNotificationListener() {
-	q.pubsub = q.client.Subscribe(q.ctx, q.notificationKey)
-
-	go func() {
-		defer q.pubsub.Close()
-
-		for {
-			select {
-			case <-q.ctx.Done():
-				return
-			case msg := <-q.pubsub.Channel():
-				if msg == nil {
-					continue
-				}
-				// Log the notification for debugging
-				q.notifications.Notify()
-			}
-		}
-	}()
-}
-
-func (q *RedisQueue) notify() {
-	err := q.client.Publish(q.ctx, q.notificationKey, "").Err()
-	if err != nil {
-		fmt.Printf("Error publishing notification: %v\n", err)
+	return &RedisQueue{
+		client:   client,
+		queueKey: queueKey,
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
@@ -82,23 +44,6 @@ func (q *RedisQueue) SetExpiration(expiration time.Duration) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	q.expiration = expiration
-}
-
-// EnableDistribution turns the RedisQueue into a distributed queue by starting the notification listener and pubsub
-func (q *RedisQueue) EnableDistribution() *RedisQueue {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	if !q.enabledDistribution {
-		q.enabledDistribution = true
-		q.startNotificationListener()
-	}
-
-	return q
-}
-
-func (q *RedisQueue) NotificationChannel() <-chan struct{} {
-	return q.notifications
 }
 
 func (q *RedisQueue) Dequeue() (any, bool) {
@@ -149,10 +94,6 @@ func (q *RedisQueue) Enqueue(item any) bool {
 		return false
 	}
 
-	if q.enabledDistribution {
-		q.notify()
-	}
-
 	return true
 }
 
@@ -191,10 +132,6 @@ func (q *RedisQueue) Values() []any {
 
 func (q *RedisQueue) Close() error {
 	q.cancel() // Cancel context to stop notification listener
-	if q.pubsub != nil {
-		q.pubsub.Close()
-	}
-	q.notifications.Close()
 	return q.client.Close()
 }
 
