@@ -52,7 +52,7 @@ func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
 }
 
 func (q *concurrentQueue[T, R]) PendingCount() int {
-	return q.queue.Len()
+	return q.Queue.Len()
 }
 
 func (q *concurrentQueue[T, R]) Worker() Worker[T, R] {
