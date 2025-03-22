@@ -13,12 +13,14 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	q := gocq.NewWorker(func(data int) (int, error) {
+	w := gocq.NewWorker(func(data int) (int, error) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Processed: %d\n", data)
 		return data * 2, nil
-	}, gocq.WithConcurrency(10)).BindQueue()
+	}, gocq.WithConcurrency(20))
+
+	q := w.BindQueue()
 
 	for i := range 1000 {
 		q.Add(i)

@@ -26,8 +26,7 @@ func main() {
 	}()
 
 	redisQueue := providers.NewRedisQueue("scraping_queue", "redis://localhost:6375")
-
-	pq := gocq.NewPersistentQueue[[]string, string](1, redisQueue)
+	pq := gocq.NewDistributedQueue[[]string, string](redisQueue)
 	defer pq.Close()
 
 	for i := range 1000 {

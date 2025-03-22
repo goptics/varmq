@@ -2,14 +2,14 @@ package gocq
 
 import (
 	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
 	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 type DistributedQueue[T, R any] interface {
+	PendingCount() int
 	// Time complexity: O(1)
 	Add(data T, id ...string) bool
-
+	Close() error
 	listenEnqueueNotification(func())
 }
 
@@ -29,8 +29,20 @@ func (dq *distributedQueue[T, R]) listenEnqueueNotification(fn func()) {
 	}
 }
 
-func (q *distributedQueue[T, R]) Add(data T, id ...string) bool {
-	j := job.New[T, R](data, id...)
+func (q *distributedQueue[T, R]) PendingCount() int {
+	return q.queue.Len()
+}
 
-	return q.queue.Enqueue(queue.EnqItem[job.Job[T, R]]{Value: j})
+func (q *distributedQueue[T, R]) Add(data T, id ...string) bool {
+	j, err := job.New[T, R](data, id...).Json()
+
+	if err != nil {
+		return false
+	}
+
+	return q.queue.Enqueue(j)
+}
+
+func (q *distributedQueue[T, R]) Close() error {
+	return q.queue.Close()
 }

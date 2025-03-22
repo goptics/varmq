@@ -11,7 +11,7 @@ type Queues[T, R any] interface {
 	BindQueue() ConcurrentQueue[T, R]
 	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
 	BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
-	BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R]
+	BindWithDistributedQueue(dq types.IDistributedQueue) (DistributedQueue[T, R], error)
 }
 
 type queues[T, R any] struct {
@@ -43,7 +43,7 @@ func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersis
 	return newPersistentQueue[T, R](q.worker)
 }
 
-func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R] {
+func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) (_ DistributedQueue[T, R], err error) {
 	queue := NewDistributedQueue[T, R](dq)
 	defer func() {
 		go queue.listenEnqueueNotification(func() {
@@ -51,8 +51,10 @@ func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) Dist
 			q.worker.jobPullNotifier.Notify()
 		})
 	}()
-	defer q.worker.start()
+	defer func() {
+		err = q.worker.start()
+	}()
 
 	q.worker.setQueue(dq)
-	return queue
+	return queue, err
 }

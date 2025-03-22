@@ -209,6 +209,7 @@ func (w *worker[T, R]) notify() {
 }
 
 func (w *worker[T, R]) start() error {
+	defer w.notify()
 	defer w.status.Store(Running)
 	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines

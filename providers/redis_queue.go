@@ -129,13 +129,6 @@ func (q *RedisQueue) Enqueue(item any) bool {
 	return true
 }
 
-func (q *RedisQueue) Init() {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	q.client.Del(q.ctx, q.queueKey)
-}
-
 func (q *RedisQueue) Len() int {
 	q.mx.Lock()
 	defer q.mx.Unlock()
