@@ -29,6 +29,7 @@ type job[T, R any] struct {
 	Input         T
 	status        atomic.Uint32
 	Output        *Result[R]
+	priority      int
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -40,7 +41,12 @@ type jobView[T, R any] struct {
 }
 
 type Job interface {
+	// ID returns the unique identifier of the job.
 	ID() string
+	// Priority returns the priority of the job.
+	Priority() int
+	// SetPriority sets the priority of the job.
+	SetPriority(priority int) error
 	// IsClosed returns whether the job is closed.
 	IsClosed() bool
 	// Status returns the current status of the job.
@@ -83,6 +89,19 @@ func (j *job[T, R]) ID() string {
 
 func (j *job[T, R]) Data() T {
 	return j.Input
+}
+
+func (j *job[T, R]) Priority() int {
+	return j.priority
+}
+
+func (j *job[T, R]) SetPriority(priority int) error {
+	if s := j.Status(); s != "Queued" || s != "Created" {
+		return fmt.Errorf("job is %s, you can't change priority", s)
+	}
+
+	j.priority = priority
+	return nil
 }
 
 // State returns the current status of the job as a string.
