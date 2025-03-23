@@ -105,6 +105,10 @@ func (w *worker[T, R]) setQueue(q types.IWorkerQueue) {
 	w.Queue = q
 }
 
+func (w *worker[T, R]) isNullCache() bool {
+	return w.Cache == getCache()
+}
+
 // freeChannel frees the channel for the next Job.
 func (w *worker[T, R]) freeChannel(channel chan job.Job[T, R]) {
 	w.sync.mx.Lock()
@@ -301,10 +305,15 @@ func (w *worker[T, R]) start() error {
 		return errRunningWorker
 	}
 
+	// if cache is been set and cleanup interval is not set, use default cleanup interval for 10 minutes
+	if !w.isNullCache() && w.Configs.CleanupCacheInterval == 0 {
+		w.Configs.CleanupCacheInterval = 10 * time.Minute
+	}
+
 	defer w.notifyToPullJobs()
 	defer w.status.Store(Running)
-	w.sync.wg.Add(w.Queue.Len())
 
+	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
 		// close old channels to avoid routine leaks

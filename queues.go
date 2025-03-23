@@ -9,9 +9,13 @@ import (
 
 type Queues[T, R any] interface {
 	Worker[T, R]
+	// BindQueue binds the worker to a ConcurrentQueue.
 	BindQueue() ConcurrentQueue[T, R]
+	// BindPriorityQueue binds the worker to a ConcurrentPriorityQueue.
 	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
+	// BindWithPersistentQueue binds the worker to a ConcurrentPersistentQueue.
 	BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
+	// BindWithDistributedQueue binds the worker to a DistributedQueue.
 	BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R]
 }
 
@@ -48,7 +52,7 @@ func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersis
 	q.isBound()
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
-	if q.worker.Cache == getCache() {
+	if q.worker.isNullCache() {
 		q.worker.Cache = new(sync.Map)
 	}
 
