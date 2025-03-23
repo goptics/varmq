@@ -1,5 +1,6 @@
 package gocq
 
+// IWorkerQueue is the root interface of queue operations. workers queue needs to implement this interface.
 type IWorkerQueue interface {
 	Len() int
 	Dequeue() (any, bool)
@@ -7,20 +8,24 @@ type IWorkerQueue interface {
 	Close() error
 }
 
+// IQueue is the root interface of queue operations.
 type IQueue interface {
 	IWorkerQueue
 	Enqueue(item any) bool
 }
 
+// IPriorityQueue is the root interface of priority queue operations.
 type IPriorityQueue interface {
 	IWorkerQueue
 	Enqueue(item any, priority int) bool
 }
 
+// INotifiable is the root interface of notifiable operations.
 type INotifiable interface {
 	NotificationChannel() <-chan struct{}
 }
 
+// IDistributedQueue is the root interface of distributed queue operations.
 type IDistributedQueue interface {
 	IQueue
 	INotifiable
