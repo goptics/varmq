@@ -10,7 +10,7 @@ type configFunc func(*configs)
 
 type configs struct {
 	Concurrency          uint32
-	Cache                Cache
+	Cache                ICache
 	CleanupCacheInterval time.Duration
 	JobIdGenerator       func() string
 }
@@ -37,7 +37,7 @@ func mergeConfigs(c configs, cs ...any) configs {
 	return c
 }
 
-func WithCache(cache Cache) configFunc {
+func WithCache(cache ICache) configFunc {
 	return func(c *configs) {
 		c.Cache = cache
 	}

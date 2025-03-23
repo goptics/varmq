@@ -1,6 +1,6 @@
 package gocq
 
-type Cache interface {
+type ICache interface {
 	Load(key any) (any, bool)
 	Store(key any, value any)
 	Delete(key any)
@@ -17,9 +17,9 @@ func (nc *nullCache) Range(_ func(key, value any) bool) {}
 func (nc *nullCache) Clear()                            {}
 
 // Initialize a default nullCache instance
-var defaultCache Cache
+var defaultCache ICache
 
-func getCache() Cache {
+func getCache() ICache {
 	if defaultCache != nil {
 		return defaultCache
 	}

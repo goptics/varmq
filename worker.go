@@ -39,7 +39,7 @@ type worker[T, R any] struct {
 	ChannelsStack   []chan iJob[T, R]
 	CurProcessing   atomic.Uint32
 	Queue           IWorkerQueue
-	Cache           Cache
+	Cache           ICache
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	sync            syncGroup
