@@ -12,6 +12,7 @@ type Configs struct {
 	Concurrency          uint32
 	Cache                Cache
 	CleanupCacheInterval time.Duration
+	JobIdGenerator       func() string
 }
 
 func loadConfigs(configs ...any) Configs {
@@ -51,6 +52,12 @@ func WithConcurrency(concurrency int) Config {
 func WithAutoCleanupCache(duration time.Duration) Config {
 	return func(c *Configs) {
 		c.CleanupCacheInterval = duration
+	}
+}
+
+func WithJobIdGenerator(fn func() string) Config {
+	return func(c *Configs) {
+		c.JobIdGenerator = fn
 	}
 }
 
