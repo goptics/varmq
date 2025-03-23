@@ -1,10 +1,5 @@
 package gocq
 
-import (
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
-)
-
 type DistributedQueue[T, R any] interface {
 	PendingCount() int
 	// Time complexity: O(1)
@@ -14,10 +9,10 @@ type DistributedQueue[T, R any] interface {
 }
 
 type distributedQueue[T, R any] struct {
-	queue types.IDistributedQueue
+	queue IDistributedQueue
 }
 
-func NewDistributedQueue[T, R any](queue types.IDistributedQueue) DistributedQueue[T, R] {
+func NewDistributedQueue[T, R any](queue IDistributedQueue) DistributedQueue[T, R] {
 	return &distributedQueue[T, R]{
 		queue: queue,
 	}
@@ -34,7 +29,7 @@ func (q *distributedQueue[T, R]) PendingCount() int {
 }
 
 func (q *distributedQueue[T, R]) Add(data T, id ...string) bool {
-	j := job.New[T, R](data, id...)
+	j := newJob[T, R](data, id...)
 	j.CloseResultChannel() // don't need result channel for distributed queue
 
 	jBytes, err := j.Json()

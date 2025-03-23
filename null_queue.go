@@ -1,9 +1,7 @@
-package queue
+package gocq
 
 import (
 	"sync/atomic"
-
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 // nullQueue is a no-op implementation of IQueue interface
@@ -12,10 +10,10 @@ type nullQueue struct {
 }
 
 // Initialize a default nullQueue instance
-var defaultNullQueue types.IQueue
+var defaultNullQueue IQueue
 
 // getNullQueue returns a singleton instance of nullQueue
-func GetNullQueue() types.IQueue {
+func getNullQueue() IQueue {
 	if defaultNullQueue != nil {
 		return defaultNullQueue
 	}

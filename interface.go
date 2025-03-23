@@ -1,16 +1,43 @@
 package gocq
 
-import (
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
-)
+type IWorkerQueue interface {
+	Len() int
+	Dequeue() (any, bool)
+	Values() []any
+	Close() error
+}
+
+type IQueue interface {
+	IWorkerQueue
+	Enqueue(item any) bool
+}
+
+type IPriorityQueue interface {
+	IWorkerQueue
+	Enqueue(item any, priority int) bool
+}
+
+type INotifiable interface {
+	NotificationChannel() <-chan struct{}
+}
+
+type IDistributedQueue interface {
+	IQueue
+	INotifiable
+}
+
+type IDistributedPriorityQueue interface {
+	IPriorityQueue
+	INotifiable
+}
 
 // ICQueue is the root interface of concurrent queue operations.
 type ICQueue[T, R any] interface {
 	Worker() Worker[T, R]
 	// JobById returns the job with the given id.
-	JobById(id string) (types.EnqueuedJob[R], error)
+	JobById(id string) (EnqueuedJob[R], error)
 	// GroupsJobById returns the groups job with the given id.
-	GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error)
+	GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error)
 	// PendingCount returns the number of Jobs pending in the queue.
 	PendingCount() int
 	// WaitUntilFinished waits until all pending Jobs in the queue are processed.

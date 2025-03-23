@@ -3,31 +3,31 @@ package gocq
 import (
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2/shared/utils"
+	"github.com/fahimfaisaal/gocq/v3/utils"
 )
 
-type Config func(*Configs)
+type configFunc func(*configs)
 
-type Configs struct {
+type configs struct {
 	Concurrency          uint32
 	Cache                Cache
 	CleanupCacheInterval time.Duration
 	JobIdGenerator       func() string
 }
 
-func loadConfigs(configs ...any) Configs {
-	c := Configs{
+func loadConfigs(config ...any) configs {
+	c := configs{
 		Concurrency: withSafeConcurrency(0),
 		Cache:       getCache(),
 	}
 
-	return mergeConfigs(c, configs...)
+	return mergeConfigs(c, config...)
 }
 
-func mergeConfigs(c Configs, cs ...any) Configs {
+func mergeConfigs(c configs, cs ...any) configs {
 	for _, config := range cs {
 		switch config := config.(type) {
-		case Config:
+		case configFunc:
 			config(&c)
 		case int:
 			c.Concurrency = withSafeConcurrency(config)
@@ -37,26 +37,26 @@ func mergeConfigs(c Configs, cs ...any) Configs {
 	return c
 }
 
-func WithCache(cache Cache) Config {
-	return func(c *Configs) {
+func WithCache(cache Cache) configFunc {
+	return func(c *configs) {
 		c.Cache = cache
 	}
 }
 
-func WithConcurrency(concurrency int) Config {
-	return func(c *Configs) {
+func WithConcurrency(concurrency int) configFunc {
+	return func(c *configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
-func WithAutoCleanupCache(duration time.Duration) Config {
-	return func(c *Configs) {
+func WithAutoCleanupCache(duration time.Duration) configFunc {
+	return func(c *configs) {
 		c.CleanupCacheInterval = duration
 	}
 }
 
-func WithJobIdGenerator(fn func() string) Config {
-	return func(c *Configs) {
+func WithJobIdGenerator(fn func() string) configFunc {
+	return func(c *configs) {
 		c.JobIdGenerator = fn
 	}
 }

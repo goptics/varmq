@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2"
+	"github.com/fahimfaisaal/gocq/v3"
 )
 
 func main() {

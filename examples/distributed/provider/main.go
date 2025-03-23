@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2"
-	"github.com/fahimfaisaal/gocq/v2/providers"
+	"github.com/fahimfaisaal/gocq/v3"
+	"github.com/fahimfaisaal/gocq/v3/providers"
 )
 
 func generateJobID() string {

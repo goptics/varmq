@@ -1,25 +1,20 @@
 package gocq
 
-import (
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
-)
-
 type ConcurrentPersistentQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a channel to receive the result.
 	// Time complexity: O(1)
-	Add(data T, id ...string) types.EnqueuedJob[R]
+	Add(data T, id ...string) EnqueuedJob[R]
 	// AddAll adds multiple Jobs to the queue and returns a channel to receive all responses.
 	// Time complexity: O(n) where n is the number of Jobs added
-	AddAll(data []Item[T]) types.EnqueuedGroupJob[R]
+	AddAll(data []Item[T]) EnqueuedGroupJob[R]
 }
 
 type concurrentPersistentQueue[T, R any] struct {
 	*concurrentQueue[T, R]
 }
 
-func newPersistentQueue[T, R any](w *worker[T, R], pq types.IQueue) ConcurrentPersistentQueue[T, R] {
+func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) ConcurrentPersistentQueue[T, R] {
 	w.setQueue(pq)
 	return &concurrentPersistentQueue[T, R]{concurrentQueue: &concurrentQueue[T, R]{
 		worker: w,
@@ -27,8 +22,8 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq types.IQueue) ConcurrentPe
 	}}
 }
 
-func (q *concurrentPersistentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
-	j := job.New[T, R](data, id...)
+func (q *concurrentPersistentQueue[T, R]) Add(data T, id ...string) EnqueuedJob[R] {
+	j := newJob[T, R](data, id...)
 	val, _ := j.Json()
 
 	q.queue.Enqueue(val)
@@ -37,8 +32,8 @@ func (q *concurrentPersistentQueue[T, R]) Add(data T, id ...string) types.Enqueu
 	return j
 }
 
-func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R] {
-	groupJob := job.NewGroupJob[T, R](uint32(len(items)))
+func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
+	groupJob := newGroupJob[T, R](uint32(len(items)))
 
 	q.sync.wg.Add(len(items))
 	for _, item := range items {

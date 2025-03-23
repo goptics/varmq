@@ -4,24 +4,22 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
+	"github.com/fahimfaisaal/gocq/v3/internal/queue"
 )
 
 type concurrentQueue[T, R any] struct {
 	*worker[T, R]
-	queue types.IQueue
+	queue IQueue
 }
 
 type ConcurrentQueue[T, R any] interface {
 	ICQueue[T, R]
-	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the
 	// Time complexity: O(1)
-	Add(data T, id ...string) types.EnqueuedJob[R]
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	Add(data T, id ...string) EnqueuedJob[R]
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the
 	// Time complexity: O(n) where n is the number of Jobs added
-	AddAll(data []Item[T]) types.EnqueuedGroupJob[R]
+	AddAll(data []Item[T]) EnqueuedGroupJob[R]
 }
 
 type Item[T any] struct {
@@ -32,7 +30,7 @@ type Item[T any] struct {
 // Creates a new CQueue with the specified concurrency and worker function.
 // Internally it calls Init() to start the worker goroutines based on the concurrency.
 func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
-	q := queue.NewQueue[job.Job[T, R]]()
+	q := queue.NewQueue[iJob[T, R]]()
 
 	worker.setQueue(q)
 
@@ -42,9 +40,9 @@ func newQueue[T, R any](worker *worker[T, R]) *concurrentQueue[T, R] {
 	}
 }
 
-func (q *concurrentQueue[T, R]) postEnqueue(j job.Job[T, R]) {
+func (q *concurrentQueue[T, R]) postEnqueue(j iJob[T, R]) {
 	defer q.notifyToPullJobs()
-	j.ChangeStatus(job.Queued)
+	j.ChangeStatus(queued)
 
 	if id := j.ID(); id != "" {
 		q.Cache.Store(id, j)
@@ -59,18 +57,18 @@ func (q *concurrentQueue[T, R]) Worker() Worker[T, R] {
 	return q.worker
 }
 
-func (q *concurrentQueue[T, R]) JobById(id string) (types.EnqueuedJob[R], error) {
+func (q *concurrentQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
 	val, ok := q.Cache.Load(id)
 	if !ok {
 		return nil, fmt.Errorf("job not found for id: %s", id)
 	}
 
-	return val.(types.EnqueuedJob[R]), nil
+	return val.(EnqueuedJob[R]), nil
 }
 
-func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGroupJob[R], error) {
-	if !strings.HasPrefix(id, job.GroupIdPrefixed) {
-		id = job.GenerateGroupId(id)
+func (q *concurrentQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
+	if !strings.HasPrefix(id, groupIdPrefixed) {
+		id = generateGroupId(id)
 	}
 
 	val, ok := q.Cache.Load(id)
@@ -79,11 +77,11 @@ func (q *concurrentQueue[T, R]) GroupsJobById(id string) (types.EnqueuedSingleGr
 		return nil, fmt.Errorf("groups job not found for id: %s", id)
 	}
 
-	return val.(types.EnqueuedSingleGroupJob[R]), nil
+	return val.(EnqueuedSingleGroupJob[R]), nil
 }
 
-func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
-	j := job.New[T, R](data, id...)
+func (q *concurrentQueue[T, R]) Add(data T, id ...string) EnqueuedJob[R] {
+	j := newJob[T, R](data, id...)
 
 	q.queue.Enqueue(j)
 	q.sync.wg.Add(1)
@@ -92,9 +90,9 @@ func (q *concurrentQueue[T, R]) Add(data T, id ...string) types.EnqueuedJob[R] {
 	return j
 }
 
-func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) types.EnqueuedGroupJob[R] {
+func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	l := len(items)
-	groupJob := job.NewGroupJob[T, R](uint32(l))
+	groupJob := newGroupJob[T, R](uint32(l))
 
 	q.sync.wg.Add(l)
 	for _, item := range items {
@@ -117,7 +115,7 @@ func (q *concurrentQueue[T, R]) Purge() {
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
-		if j, ok := val.(job.Job[T, R]); ok {
+		if j, ok := val.(iJob[T, R]); ok {
 			j.CloseResultChannel()
 		}
 	}

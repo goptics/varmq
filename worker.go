@@ -6,10 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
-	"github.com/fahimfaisaal/gocq/v2/shared/utils"
+	"github.com/fahimfaisaal/gocq/v3/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.
@@ -21,13 +18,13 @@ type WorkerErrFunc[T any] func(T) error
 // VoidWorkerFunc represents a function that processes a Job and returns nothing.
 type VoidWorkerFunc[T any] func(T)
 
-type Status = uint32
+type status = uint32
 
 const (
-	Initiated Status = iota
-	Running
-	Paused
-	Stopped
+	initiated status = iota
+	running
+	paused
+	stopped
 )
 
 var (
@@ -39,15 +36,15 @@ var (
 type worker[T, R any] struct {
 	workerFunc      any
 	Concurrency     atomic.Uint32
-	ChannelsStack   []chan job.Job[T, R]
+	ChannelsStack   []chan iJob[T, R]
 	CurProcessing   atomic.Uint32
-	Queue           types.IWorkerQueue
+	Queue           IWorkerQueue
 	Cache           Cache
-	Configs         Configs
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	sync            syncGroup
 	tickers         *sync.Map
+	configs
 }
 
 // Worker represents a worker that processes Jobs.
@@ -61,7 +58,7 @@ type Worker[T, R any] interface {
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// Copy returns a copy of the worker.
-	Copy(config ...any) Queues[T, R]
+	Copy(config ...any) IWorkerBinder[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
@@ -87,11 +84,11 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	w := &worker[T, R]{
 		workerFunc:      wf,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
-		Queue:           queue.GetNullQueue(),
+		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
+		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
-		Configs:         c,
+		configs:         c,
 		sync:            syncGroup{},
 		tickers:         new(sync.Map),
 	}
@@ -101,7 +98,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	return w
 }
 
-func (w *worker[T, R]) setQueue(q types.IWorkerQueue) {
+func (w *worker[T, R]) setQueue(q IWorkerQueue) {
 	w.Queue = q
 }
 
@@ -110,7 +107,7 @@ func (w *worker[T, R]) isNullCache() bool {
 }
 
 // freeChannel frees the channel for the next Job.
-func (w *worker[T, R]) freeChannel(channel chan job.Job[T, R]) {
+func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
 	w.sync.mx.Lock()
 	defer w.sync.mx.Unlock()
 	// push the channel back to the stack, so it can be used for the next Job
@@ -118,7 +115,7 @@ func (w *worker[T, R]) freeChannel(channel chan job.Job[T, R]) {
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the channel.
-func (w *worker[T, R]) spawnWorker(channel chan job.Job[T, R]) {
+func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
 		func() {
 			defer w.sync.wg.Done()
@@ -126,14 +123,14 @@ func (w *worker[T, R]) spawnWorker(channel chan job.Job[T, R]) {
 			defer w.CurProcessing.Add(^uint32(0))
 			defer w.freeChannel(channel)
 			defer j.Close()
-			defer j.ChangeStatus(job.Finished)
+			defer j.ChangeStatus(finished)
 
 			w.processSingleJob(j)
 		}()
 	}
 }
 
-func (w *worker[T, R]) processSingleJob(j job.Job[T, R]) {
+func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	var panicErr error
 	var err error
 
@@ -184,21 +181,21 @@ func (w *worker[T, R]) processNextJob() {
 		return
 	}
 
-	var j job.Job[T, R]
+	var j iJob[T, R]
 
 	// check the type of the value
 	// and cast it to the appropriate job type
 	switch value := v.(type) {
-	case job.Job[T, R]:
+	case iJob[T, R]:
 		j = value
 	case []byte:
 		var err error
-		if j, err = job.ParseToJob[T, R](value); err != nil {
+		if j, err = parseToJob[T, R](value); err != nil {
 			return
 		}
 
 		if cachedJob, ok := w.Cache.Load(j.ID()); ok {
-			j = cachedJob.(job.Job[T, R])
+			j = cachedJob.(iJob[T, R])
 		} else {
 			w.Cache.Store(j.ID(), j)
 		}
@@ -216,7 +213,7 @@ func (w *worker[T, R]) processNextJob() {
 	}
 
 	w.CurProcessing.Add(1)
-	j.ChangeStatus(job.Processing)
+	j.ChangeStatus(processing)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.pickNextChannel() <- j
@@ -224,7 +221,7 @@ func (w *worker[T, R]) processNextJob() {
 
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
-func (w *worker[T, R]) pickNextChannel() chan<- job.Job[T, R] {
+func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	w.sync.mx.Lock()
 	defer w.sync.mx.Unlock()
 	l := len(w.ChannelsStack)
@@ -240,18 +237,18 @@ func (w *worker[T, R]) notifyToPullJobs() {
 	w.jobPullNotifier.Notify()
 }
 
-func (w *worker[T, R]) Copy(config ...any) Queues[T, R] {
-	c := mergeConfigs(w.Configs, config...)
+func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
+	c := mergeConfigs(w.configs, config...)
 
 	newWorker := &worker[T, R]{
 		workerFunc:      w.workerFunc,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan job.Job[T, R], c.Concurrency),
-		Queue:           queue.GetNullQueue(),
+		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
+		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
 		sync:            syncGroup{},
-		Configs:         c,
+		configs:         c,
 		tickers:         w.tickers,
 	}
 
@@ -274,7 +271,7 @@ func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
 
 	for range ticker.C {
 		w.Cache.Range(func(key, value any) bool {
-			if j, ok := value.(job.Job[T, R]); ok && j.Status() == "Closed" {
+			if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
 				w.Cache.Delete(key)
 			}
 			return true
@@ -306,12 +303,12 @@ func (w *worker[T, R]) start() error {
 	}
 
 	// if cache is been set and cleanup interval is not set, use default cleanup interval for 10 minutes
-	if !w.isNullCache() && w.Configs.CleanupCacheInterval == 0 {
-		w.Configs.CleanupCacheInterval = 10 * time.Minute
+	if !w.isNullCache() && w.configs.CleanupCacheInterval == 0 {
+		w.configs.CleanupCacheInterval = 10 * time.Minute
 	}
 
 	defer w.notifyToPullJobs()
-	defer w.status.Store(Running)
+	defer w.status.Store(running)
 
 	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
@@ -322,26 +319,26 @@ func (w *worker[T, R]) start() error {
 		}
 
 		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
-		w.ChannelsStack[i] = make(chan job.Job[T, R], 1)
+		w.ChannelsStack[i] = make(chan iJob[T, R], 1)
 		go w.spawnWorker(w.ChannelsStack[i])
 	}
 
 	go w.pullNextJobs()
 
-	if w.Configs.CleanupCacheInterval > 0 {
-		go w.cleanupCacheInterval(w.Configs.CleanupCacheInterval)
+	if w.configs.CleanupCacheInterval > 0 {
+		go w.cleanupCacheInterval(w.configs.CleanupCacheInterval)
 	}
 
 	return nil
 }
 
 func (w *worker[T, R]) Pause() Worker[T, R] {
-	w.status.Store(Paused)
+	w.status.Store(paused)
 	return w
 }
 
 func (w *worker[T, R]) Stop() {
-	defer w.status.Store(Stopped)
+	defer w.status.Store(stopped)
 	w.stopTickers()
 
 	// wait until all ongoing processes are done to gracefully close the channels
@@ -357,7 +354,7 @@ func (w *worker[T, R]) Stop() {
 
 	w.Cache.Clear()
 
-	w.ChannelsStack = make([]chan job.Job[T, R], w.Concurrency.Load())
+	w.ChannelsStack = make([]chan iJob[T, R], w.Concurrency.Load())
 }
 
 func (w *worker[T, R]) Restart() error {
@@ -379,26 +376,26 @@ func (w *worker[T, R]) Restart() error {
 }
 
 func (w *worker[T, R]) IsPaused() bool {
-	return w.status.Load() == Paused
+	return w.status.Load() == paused
 }
 
 func (w *worker[T, R]) IsRunning() bool {
-	return w.status.Load() == Running
+	return w.status.Load() == running
 }
 
 func (w *worker[T, R]) IsStopped() bool {
-	return w.status.Load() == Stopped
+	return w.status.Load() == stopped
 }
 
 func (w *worker[T, R]) Status() string {
 	switch w.status.Load() {
-	case Initiated:
+	case initiated:
 		return "Initiated"
-	case Running:
+	case running:
 		return "Running"
-	case Paused:
+	case paused:
 		return "Paused"
-	case Stopped:
+	case stopped:
 		return "Stopped"
 	default:
 		return "Unknown"
@@ -410,7 +407,7 @@ func (w *worker[T, R]) CurrentProcessingCount() uint32 {
 }
 
 func (w *worker[T, R]) Resume() error {
-	if w.status.Load() == Initiated {
+	if w.status.Load() == initiated {
 		return w.start()
 	}
 
@@ -418,7 +415,7 @@ func (w *worker[T, R]) Resume() error {
 		return errRunningWorker
 	}
 
-	w.status.Store(Running)
+	w.status.Store(running)
 	w.jobPullNotifier.Notify()
 
 	return nil

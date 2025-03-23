@@ -2,54 +2,51 @@ package gocq
 
 import (
 	"sync"
-
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
-type Queues[T, R any] interface {
+type IWorkerBinder[T, R any] interface {
 	Worker[T, R]
 	// BindQueue binds the worker to a ConcurrentQueue.
 	BindQueue() ConcurrentQueue[T, R]
 	// BindPriorityQueue binds the worker to a ConcurrentPriorityQueue.
 	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a ConcurrentPersistentQueue.
-	BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R]
+	BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R]
 	// BindWithDistributedQueue binds the worker to a DistributedQueue.
-	BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R]
+	BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R]
 }
 
-type queues[T, R any] struct {
+type workerBinder[T, R any] struct {
 	*worker[T, R]
 }
 
-func newQueues[T, R any](worker *worker[T, R]) Queues[T, R] {
-	return &queues[T, R]{
+func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
+	return &workerBinder[T, R]{
 		worker: worker,
 	}
 }
 
-func (qs *queues[T, R]) isBound() {
-	if qs.Queue != queue.GetNullQueue() {
+func (qs *workerBinder[T, R]) isBound() {
+	if qs.Queue != getNullQueue() {
 		panic(errWorkerAlreadyBound)
 	}
 }
 
-func (qs *queues[T, R]) BindQueue() ConcurrentQueue[T, R] {
+func (qs *workerBinder[T, R]) BindQueue() ConcurrentQueue[T, R] {
 	qs.isBound()
 	defer qs.worker.start()
 
 	return newQueue[T, R](qs.worker)
 }
 
-func (q *queues[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
+func (q *workerBinder[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
 	q.isBound()
 	defer q.worker.start()
 
 	return newPriorityQueue[T, R](q.worker)
 }
 
-func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersistentQueue[T, R] {
+func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R] {
 	q.isBound()
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
@@ -60,7 +57,7 @@ func (q *queues[T, R]) BindWithPersistentQueue(pq types.IQueue) ConcurrentPersis
 	return newPersistentQueue[T, R](q.worker, pq)
 }
 
-func (q *queues[T, R]) BindWithDistributedQueue(dq types.IDistributedQueue) DistributedQueue[T, R] {
+func (q *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
 	q.isBound()
 	queue := NewDistributedQueue[T, R](dq)
 

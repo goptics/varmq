@@ -3,7 +3,7 @@ package providers
 import (
 	"fmt"
 
-	"github.com/fahimfaisaal/gocq/v2/shared/utils"
+	"github.com/fahimfaisaal/gocq/v3/utils"
 	"github.com/redis/go-redis/v9"
 )
 

@@ -1,4 +1,4 @@
-package types
+package gocq
 
 // Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {
@@ -8,7 +8,7 @@ type Result[T any] struct {
 
 // EnqueuedJob represents a job that has been enqueued and can wait for a result.
 type EnqueuedJob[R any] interface {
-	IJob
+	Job
 	// Drain discards the job's result and error values asynchronously.
 	Drain() error
 	// Result blocks until the job completes and returns the result and any error.
@@ -23,6 +23,6 @@ type EnqueuedGroupJob[T any] interface {
 }
 
 type EnqueuedSingleGroupJob[R any] interface {
-	IJob
+	Job
 	EnqueuedGroupJob[R]
 }

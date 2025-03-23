@@ -1,11 +1,9 @@
-package job
+package gocq
 
 import (
 	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
 )
 
 // groupJob represents a job that can be used in a group.
@@ -14,15 +12,15 @@ type groupJob[T, R any] struct {
 	wg *sync.WaitGroup
 }
 
-const GroupIdPrefixed = "g:"
+const groupIdPrefixed = "g:"
 
-type GroupJob[T, R any] interface {
-	Job[T, R]
-	types.EnqueuedGroupJob[R]
-	NewJob(data T, id string) GroupJob[T, R]
+type iGroupJob[T, R any] interface {
+	iJob[T, R]
+	EnqueuedGroupJob[R]
+	NewJob(data T, id string) iGroupJob[T, R]
 }
 
-func NewGroupJob[T, R any](bufferSize uint32) GroupJob[T, R] {
+func newGroupJob[T, R any](bufferSize uint32) iGroupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
 			resultChannel: NewResultChannel[R](bufferSize),
@@ -35,14 +33,14 @@ func NewGroupJob[T, R any](bufferSize uint32) GroupJob[T, R] {
 	return gj
 }
 
-func GenerateGroupId(id string) string {
-	return fmt.Sprintf("%s%s", GroupIdPrefixed, id)
+func generateGroupId(id string) string {
+	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T, R]) NewJob(data T, id string) GroupJob[T, R] {
+func (gj *groupJob[T, R]) NewJob(data T, id string) iGroupJob[T, R] {
 	return &groupJob[T, R]{
 		job: &job[T, R]{
-			id:            GenerateGroupId(id),
+			id:            generateGroupId(id),
 			Input:         data,
 			resultChannel: gj.resultChannel,
 		},
@@ -50,7 +48,7 @@ func (gj *groupJob[T, R]) NewJob(data T, id string) GroupJob[T, R] {
 	}
 }
 
-func (gj *groupJob[T, R]) Results() (<-chan types.Result[R], error) {
+func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 	ch := gj.resultChannel.Read()
 
 	// Start a goroutine to close the channel when all jobs are done
@@ -63,7 +61,7 @@ func (gj *groupJob[T, R]) Results() (<-chan types.Result[R], error) {
 		return ch, nil
 	}
 
-	tempCh := make(chan types.Result[R], 1)
+	tempCh := make(chan Result[R], 1)
 	close(tempCh)
 
 	// return a closed channel
@@ -100,6 +98,6 @@ func (gj *groupJob[T, R]) Close() error {
 	}
 
 	gj.wg.Done()
-	gj.ChangeStatus(Closed)
+	gj.ChangeStatus(closed)
 	return nil
 }

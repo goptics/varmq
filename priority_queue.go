@@ -1,14 +1,12 @@
 package gocq
 
 import (
-	"github.com/fahimfaisaal/gocq/v2/internal/job"
-	"github.com/fahimfaisaal/gocq/v2/internal/queue"
-	"github.com/fahimfaisaal/gocq/v2/shared/types"
+	"github.com/fahimfaisaal/gocq/v3/internal/queue"
 )
 
 type concurrentPriorityQueue[T, R any] struct {
 	*concurrentQueue[T, R]
-	queue types.IPriorityQueue
+	queue IPriorityQueue
 }
 
 type PQItem[T any] struct {
@@ -23,15 +21,15 @@ type ConcurrentPriorityQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)
-	Add(data T, priority int, id ...string) types.EnqueuedJob[R]
+	Add(data T, priority int, id ...string) EnqueuedJob[R]
 	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
 	// Time complexity: O(n log n) where n is the number of Jobs added
-	AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R]
+	AddAll(items []PQItem[T]) EnqueuedGroupJob[R]
 }
 
 // NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
 func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T, R] {
-	q := queue.NewPriorityQueue[job.Job[T, R]]()
+	q := queue.NewPriorityQueue[iJob[T, R]]()
 
 	worker.setQueue(q)
 
@@ -43,8 +41,8 @@ func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T
 	}
 }
 
-func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) types.EnqueuedJob[R] {
-	j := job.New[T, R](data, id...)
+func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) EnqueuedJob[R] {
+	j := newJob[T, R](data, id...)
 
 	q.queue.Enqueue(j, priority)
 	q.sync.wg.Add(1)
@@ -53,9 +51,9 @@ func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, id ...string) 
 	return j
 }
 
-func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) types.EnqueuedGroupJob[R] {
+func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJob[R] {
 	l := len(items)
-	groupJob := job.NewGroupJob[T, R](uint32(l))
+	groupJob := newGroupJob[T, R](uint32(l))
 
 	q.sync.wg.Add(l)
 	for _, item := range items {

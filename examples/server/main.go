@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2"
+	"github.com/fahimfaisaal/gocq/v3"
 )
 
 type ScrapeResult struct {
