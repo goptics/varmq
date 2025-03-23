@@ -37,14 +37,15 @@ func (qs *queues[T, R]) isBound() {
 
 func (qs *queues[T, R]) BindQueue() ConcurrentQueue[T, R] {
 	qs.isBound()
-
 	defer qs.worker.start()
+
 	return newQueue[T, R](qs.worker)
 }
 
 func (q *queues[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
 	q.isBound()
 	defer q.worker.start()
+
 	return newPriorityQueue[T, R](q.worker)
 }
 
