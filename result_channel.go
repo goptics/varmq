@@ -1,6 +1,7 @@
 package gocq
 
 import (
+	"errors"
 	"sync/atomic"
 )
 
@@ -19,12 +20,12 @@ func NewResultChannel[R any](cap uint32) *resultChannel[R] {
 	}
 }
 
-func (rc *resultChannel[R]) Read() <-chan Result[R] {
+func (rc *resultChannel[R]) Read() (<-chan Result[R], error) {
 	if rc.consumed.CompareAndSwap(false, true) {
-		return rc.ch
+		return rc.ch, nil
 	}
 
-	return nil
+	return nil, errors.New("result channel has already been consumed")
 }
 
 func (c *resultChannel[R]) Send(result Result[R]) {

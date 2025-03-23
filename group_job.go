@@ -1,7 +1,6 @@
 package gocq
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 )
@@ -49,33 +48,32 @@ func (gj *groupJob[T, R]) NewJob(data T, id string) iGroupJob[T, R] {
 }
 
 func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch := gj.resultChannel.Read()
+	ch, err := gj.resultChannel.Read()
 
-	// Start a goroutine to close the channel when all jobs are done
-	if ch != nil {
-		go func() {
-			gj.wg.Wait()
-			gj.CloseResultChannel()
-		}()
-
-		return ch, nil
+	if err != nil {
+		tempCh := make(chan Result[R], 1)
+		close(tempCh)
+		return tempCh, err
 	}
 
-	tempCh := make(chan Result[R], 1)
-	close(tempCh)
+	// Start a goroutine to close the channel when all jobs are done
+	go func() {
+		gj.wg.Wait()
+		gj.CloseResultChannel()
+	}()
 
 	// return a closed channel
-	return tempCh, errors.New("result channel has already been consumed")
+	return ch, nil
 }
 
 // Drain discards the job's result and error values asynchronously.
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
 func (gj *groupJob[T, R]) Drain() error {
-	ch := gj.resultChannel.Read()
+	ch, err := gj.resultChannel.Read()
 
-	if ch == nil {
-		return errors.New("result channel has already been consumed")
+	if ch != nil {
+		return err
 	}
 
 	go func() {

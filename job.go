@@ -34,10 +34,11 @@ type job[T, R any] struct {
 
 // jobView represents a view of a job's state for serialization.
 type jobView[T, R any] struct {
-	Id     string     `json:"id"`
-	Status string     `json:"status"`
-	Input  T          `json:"input"`
-	Output *Result[R] `json:"output"`
+	Id       string     `json:"id"`
+	Status   string     `json:"status"`
+	Input    T          `json:"input"`
+	Output   *Result[R] `json:"output"`
+	Priority int        `json:"priority"`
 }
 
 type Job interface {
@@ -164,10 +165,10 @@ func (j *job[T, R]) Result() (R, error) {
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
 func (j *job[T, R]) Drain() error {
-	ch := j.resultChannel.Read()
+	ch, err := j.resultChannel.Read()
 
-	if ch == nil {
-		return errors.New("result channel has already been consumed")
+	if ch != nil {
+		return err
 	}
 
 	go func() {
@@ -196,10 +197,11 @@ func (j *job[T, R]) isCloseable() error {
 
 func (j *job[T, R]) Json() ([]byte, error) {
 	view := jobView[T, R]{
-		Id:     j.ID(),
-		Status: j.Status(),
-		Input:  j.Input,
-		Output: j.Output,
+		Id:       j.ID(),
+		Status:   j.Status(),
+		Input:    j.Input,
+		Output:   j.Output,
+		Priority: j.priority,
 	}
 
 	return json.Marshal(view)
