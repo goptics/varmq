@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"sync/atomic"
 )
 
@@ -70,9 +69,9 @@ type iJob[T, R any] interface {
 }
 
 // New creates a new job with the provided data.
-func newJob[T, R any](data T, id ...string) *job[T, R] {
+func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 	return &job[T, R]{
-		id:            strings.Join(id, "-"),
+		id:            configs.Id,
 		Input:         data,
 		resultChannel: NewResultChannel[R](1),
 		status:        atomic.Uint32{},

@@ -43,7 +43,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Path[len("/scrape/"):]
 	jobID := generateJobID()
 
-	queue.Add(url, jobID)
+	queue.Add(url, gocq.WithJobId(jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobID})
 }

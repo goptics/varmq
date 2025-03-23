@@ -32,7 +32,7 @@ func main() {
 	for i := range 10 {
 		id := generateJobID()
 		data := []string{fmt.Sprintf("https://example.com/%s", strconv.Itoa(i)), id}
-		pq.Add(data, id)
+		pq.Add(data, gocq.WithJobId(id))
 	}
 
 	fmt.Println("added jobs")

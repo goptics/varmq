@@ -6,7 +6,7 @@ import (
 	"github.com/fahimfaisaal/gocq/v3/utils"
 )
 
-type configFunc func(*configs)
+type ConfigFunc func(*configs)
 
 type configs struct {
 	Concurrency          uint32
@@ -19,6 +19,9 @@ func loadConfigs(config ...any) configs {
 	c := configs{
 		Concurrency: withSafeConcurrency(0),
 		Cache:       getCache(),
+		JobIdGenerator: func() string {
+			return ""
+		},
 	}
 
 	return mergeConfigs(c, config...)
@@ -27,7 +30,7 @@ func loadConfigs(config ...any) configs {
 func mergeConfigs(c configs, cs ...any) configs {
 	for _, config := range cs {
 		switch config := config.(type) {
-		case configFunc:
+		case ConfigFunc:
 			config(&c)
 		case int:
 			c.Concurrency = withSafeConcurrency(config)
@@ -37,25 +40,25 @@ func mergeConfigs(c configs, cs ...any) configs {
 	return c
 }
 
-func WithCache(cache ICache) configFunc {
+func WithCache(cache ICache) ConfigFunc {
 	return func(c *configs) {
 		c.Cache = cache
 	}
 }
 
-func WithConcurrency(concurrency int) configFunc {
+func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
-func WithAutoCleanupCache(duration time.Duration) configFunc {
+func WithAutoCleanupCache(duration time.Duration) ConfigFunc {
 	return func(c *configs) {
 		c.CleanupCacheInterval = duration
 	}
 }
 
-func WithJobIdGenerator(fn func() string) configFunc {
+func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		c.JobIdGenerator = fn
 	}

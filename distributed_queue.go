@@ -3,7 +3,7 @@ package gocq
 type DistributedQueue[T, R any] interface {
 	PendingCount() int
 	// Time complexity: O(1)
-	Add(data T, id ...string) bool
+	Add(data T, configs ...JobConfigFunc) bool
 	Close() error
 	listenEnqueueNotification(func())
 }
@@ -28,8 +28,8 @@ func (q *distributedQueue[T, R]) PendingCount() int {
 	return q.queue.Len()
 }
 
-func (q *distributedQueue[T, R]) Add(data T, id ...string) bool {
-	j := newJob[T, R](data, id...)
+func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
+	j := newJob[T, R](data, loadJobConfigs(configs{}, c...))
 	j.CloseResultChannel() // don't need result channel for distributed queue
 
 	jBytes, err := j.Json()

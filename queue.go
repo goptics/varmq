@@ -16,7 +16,7 @@ type ConcurrentQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the
 	// Time complexity: O(1)
-	Add(data T, id ...string) EnqueuedJob[R]
+	Add(data T, configs ...JobConfigFunc) EnqueuedJob[R]
 	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedGroupJob[R]
@@ -80,8 +80,8 @@ func (q *concurrentQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob
 	return val.(EnqueuedSingleGroupJob[R]), nil
 }
 
-func (q *concurrentQueue[T, R]) Add(data T, id ...string) EnqueuedJob[R] {
-	j := newJob[T, R](data, id...)
+func (q *concurrentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
+	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
 
 	q.queue.Enqueue(j)
 	q.sync.wg.Add(1)
