@@ -13,27 +13,18 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	w := gocq.NewWorker(func(data int) (int, error) {
+	w := gocq.NewVoidWorker(func(data int) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
-		fmt.Printf("Processed: %d\n", data)
-		return data * 2, nil
-	}, 1)
+		fmt.Printf("Processed: %d\n", data*2)
+	}, 100)
 
 	q := w.BindQueue()
-	pq := w.Copy().BindPriorityQueue()
-	defer q.Close()
-	defer pq.Close()
+	defer q.WaitAndClose()
 
-	for i := range 10 {
+	for i := range 1000 {
 		q.Add(i)
 	}
 
-	for i := range 20 {
-		pq.Add(i, i%10)
-	}
-
 	fmt.Println("added jobs")
-	q.WaitUntilFinished()
-	pq.WaitUntilFinished()
 }
