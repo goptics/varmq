@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v3"
-	"github.com/fahimfaisaal/gocq/v3/providers"
+	"github.com/fahimfaisaal/redisq"
 )
 
 func generateJobID() string {
@@ -25,11 +25,13 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	redisQueue := providers.NewRedisDistributedQueue("scraping_queue", "redis://localhost:6375")
-	pq := gocq.NewDistributedQueue[[]string, string](redisQueue)
+	redisQueue := redisq.New("redis://localhost:6375")
+	defer redisQueue.Close()
+	rq := redisQueue.NewDistributedQueue("scraping_queue")
+	pq := gocq.NewDistributedQueue[[]string, string](rq)
 	defer pq.Close()
 
-	for i := range 10 {
+	for i := range 1000 {
 		id := generateJobID()
 		data := []string{fmt.Sprintf("https://example.com/%s", strconv.Itoa(i)), id}
 		pq.Add(data, gocq.WithJobId(id))

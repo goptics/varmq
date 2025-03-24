@@ -5,7 +5,6 @@ type DistributedQueue[T, R any] interface {
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) bool
 	Close() error
-	listenEnqueueNotification(func())
 }
 
 type distributedQueue[T, R any] struct {
@@ -15,12 +14,6 @@ type distributedQueue[T, R any] struct {
 func NewDistributedQueue[T, R any](queue IDistributedQueue) DistributedQueue[T, R] {
 	return &distributedQueue[T, R]{
 		queue: queue,
-	}
-}
-
-func (dq *distributedQueue[T, R]) listenEnqueueNotification(fn func()) {
-	for range dq.queue.NotificationChannel() {
-		fn()
 	}
 }
 

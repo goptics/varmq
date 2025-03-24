@@ -20,20 +20,20 @@ type IPriorityQueue interface {
 	Enqueue(item any, priority int) bool
 }
 
-// INotifiable is the root interface of notifiable operations.
-type INotifiable interface {
-	NotificationChannel() <-chan struct{}
+// ISubsctibable is the root interface of notifiable operations.
+type ISubscribable interface {
+	Subscribe(func(action string, data []byte))
 }
 
 // IDistributedQueue is the root interface of distributed queue operations.
 type IDistributedQueue interface {
 	IQueue
-	INotifiable
+	ISubscribable
 }
 
 type IDistributedPriorityQueue interface {
 	IPriorityQueue
-	INotifiable
+	ISubscribable
 }
 
 // ICQueue is the root interface of concurrent queue operations.

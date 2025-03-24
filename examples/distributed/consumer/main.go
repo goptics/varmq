@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/fahimfaisaal/gocq/v3"
-	"github.com/fahimfaisaal/gocq/v3/providers"
+	"github.com/fahimfaisaal/redisq"
 )
 
 func main() {
@@ -14,17 +14,20 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	redisQueue := providers.NewRedisDistributedQueue("scraping_queue", "redis://localhost:6375")
-	defer redisQueue.Listen()
+	redisQueue := redisq.New("redis://localhost:6375")
+	defer redisQueue.Close()
+	rq := redisQueue.NewDistributedQueue("scraping_queue")
+	defer rq.Close()
+	defer rq.Listen()
 
 	w := gocq.NewVoidWorker(func(data []string) {
 		url, id := data[0], data[1]
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
-	}, 1)
+	})
 
-	q := w.BindWithDistributedQueue(redisQueue)
+	q := w.BindWithDistributedQueue(rq)
 
 	fmt.Println("pending jobs:", q.PendingCount())
 	fmt.Println("listening...")

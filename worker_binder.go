@@ -59,16 +59,16 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersis
 
 func (q *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
 	q.isBound()
-	queue := NewDistributedQueue[T, R](dq)
-
-	defer func() {
-		go queue.listenEnqueueNotification(func() {
+	defer dq.Subscribe(func(action string, data []byte) {
+		switch action {
+		case "enqueued":
 			q.worker.sync.wg.Add(1)
-			q.worker.jobPullNotifier.Notify()
-		})
-	}()
+			q.worker.notifyToPullJobs()
+		}
+	})
 	defer q.worker.start()
 
+	queue := NewDistributedQueue[T, R](dq)
 	q.worker.setQueue(dq)
 	return queue
 }
