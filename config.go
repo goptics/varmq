@@ -15,14 +15,18 @@ type configs struct {
 	JobIdGenerator       func() string
 }
 
-func loadConfigs(config ...any) configs {
-	c := configs{
+func newConfig() configs {
+	return configs{
 		Concurrency: withSafeConcurrency(0),
 		Cache:       getCache(),
 		JobIdGenerator: func() string {
 			return ""
 		},
 	}
+}
+
+func loadConfigs(config ...any) configs {
+	c := newConfig()
 
 	return mergeConfigs(c, config...)
 }
