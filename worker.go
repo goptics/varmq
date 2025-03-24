@@ -102,6 +102,10 @@ func (w *worker[T, R]) setQueue(q IWorkerQueue) {
 	w.Queue = q
 }
 
+func (w *worker[T, R]) setCache(c ICache) {
+	w.Cache = c
+}
+
 func (w *worker[T, R]) isNullCache() bool {
 	return w.Cache == getCache()
 }

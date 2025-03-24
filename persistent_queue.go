@@ -1,5 +1,7 @@
 package gocq
 
+var errJobIdRequired = "job id is required for persistent queue"
+
 type ConcurrentPersistentQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a channel to receive the result.
@@ -23,10 +25,17 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) ConcurrentPersiste
 }
 
 func (q *concurrentPersistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
-	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
+	jobConfig := loadJobConfigs(q.configs, configs...)
+
+	if jobConfig.Id == "" {
+		panic(errJobIdRequired)
+	}
+
+	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
 
 	q.queue.Enqueue(val)
+	q.worker.sync.wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
@@ -35,12 +44,21 @@ func (q *concurrentPersistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) 
 func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	groupJob := newGroupJob[T, R](uint32(len(items)))
 
-	q.sync.wg.Add(len(items))
 	for _, item := range items {
-		j := groupJob.NewJob(item.Value, item.ID)
+		jConfigs := loadJobConfigs(q.configs, WithJobId(item.ID))
+		if jConfigs.Id == "" {
+			panic(errJobIdRequired)
+		}
+
+		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
 
-		q.queue.Enqueue(val)
+		ok := q.queue.Enqueue(val)
+
+		if !ok {
+			continue
+		}
+		q.worker.sync.wg.Add(1)
 		q.postEnqueue(j)
 	}
 

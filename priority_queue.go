@@ -57,7 +57,7 @@ func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJ
 
 	q.sync.wg.Add(l)
 	for _, item := range items {
-		j := groupJob.NewJob(item.Value, item.ID)
+		j := groupJob.NewJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))
 
 		q.queue.Enqueue(j, item.Priority)
 		q.postEnqueue(j)

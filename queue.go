@@ -96,7 +96,7 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 
 	q.sync.wg.Add(l)
 	for _, item := range items {
-		j := groupJob.NewJob(item.Value, item.ID)
+		j := groupJob.NewJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))
 		q.queue.Enqueue(j)
 		q.postEnqueue(j)
 	}

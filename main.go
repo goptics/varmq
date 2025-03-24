@@ -9,7 +9,7 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 
 // Creates a new ConcurrentVoidQueue with the specified concurrency and void worker function.
 // if concurrency is less than 1, it will use the number of CPUs as the concurrency
-func NewEWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any] {
+func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any] {
 	worker := newWorker[T, any](wf, config...)
 	return newQueues[T, any](worker)
 }

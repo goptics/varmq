@@ -20,6 +20,9 @@ func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
+		if id == "" {
+			return
+		}
 		c.Id = id
 	}
 }

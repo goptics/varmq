@@ -51,7 +51,7 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersis
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {
-		q.worker.Cache = new(sync.Map)
+		q.setCache(new(sync.Map))
 	}
 
 	return newPersistentQueue[T, R](q.worker, pq)
