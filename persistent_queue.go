@@ -35,7 +35,6 @@ func (q *concurrentPersistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) 
 	val, _ := j.Json()
 
 	q.queue.Enqueue(val)
-	q.worker.sync.wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
@@ -58,7 +57,6 @@ func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJ
 		if !ok {
 			continue
 		}
-		q.worker.sync.wg.Add(1)
 		q.postEnqueue(j)
 	}
 
@@ -67,7 +65,6 @@ func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJ
 
 func (q *concurrentPersistentQueue[T, R]) Purge() {
 	q.PauseAndWait()
-	q.worker.sync.wg.Add(-q.Queue.Len())
 	q.queue.Purge()
 }
 

@@ -62,7 +62,6 @@ func (q *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) Dist
 	defer dq.Subscribe(func(action string, data []byte) {
 		switch action {
 		case "enqueued":
-			q.worker.sync.wg.Add(1)
 			q.worker.notifyToPullJobs()
 		}
 	})

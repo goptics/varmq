@@ -184,6 +184,7 @@ func (w *worker[T, R]) processNextJob() {
 	if !ok {
 		return
 	}
+	w.sync.wg.Add(1)
 
 	var j iJob[T, R]
 
@@ -314,7 +315,6 @@ func (w *worker[T, R]) start() error {
 	defer w.notifyToPullJobs()
 	defer w.status.Store(running)
 
-	w.sync.wg.Add(w.Queue.Len())
 	// restart the queue with new channels and start the worker goroutines
 	for i := range w.ChannelsStack {
 		// close old channels to avoid routine leaks
@@ -365,7 +365,6 @@ func (w *worker[T, R]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	w.PauseAndWait()
-	w.sync.wg.Add(-w.Queue.Len())
 	// close the old notifier to avoid routine leaks
 	w.jobPullNotifier.Close()
 	w.jobPullNotifier = utils.NewNotifier(1)

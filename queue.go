@@ -84,7 +84,6 @@ func (q *concurrentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
 
 	q.queue.Enqueue(j)
-	q.sync.wg.Add(1)
 	q.postEnqueue(j)
 
 	return j
@@ -94,7 +93,6 @@ func (q *concurrentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	l := len(items)
 	groupJob := newGroupJob[T, R](uint32(l))
 
-	q.sync.wg.Add(l)
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))
 		q.queue.Enqueue(j)
@@ -111,7 +109,6 @@ func (q *concurrentQueue[T, R]) WaitUntilFinished() {
 func (q *concurrentQueue[T, R]) Purge() {
 	prevValues := q.Queue.Values()
 	q.Queue.Purge()
-	q.sync.wg.Add(-len(prevValues))
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
