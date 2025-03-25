@@ -21,7 +21,7 @@ type IPriorityQueue interface {
 	Enqueue(item any, priority int) bool
 }
 
-// ISubsctibable is the root interface of notifiable operations.
+// ISubscribable is the root interface of notifiable operations.
 type ISubscribable interface {
 	Subscribe(func(action string, data []byte))
 }
