@@ -44,6 +44,11 @@ func (nq *nullQueue) Values() []any {
 	return []any{}
 }
 
+func (nq *nullQueue) Purge() {
+	nq.len.Store(0)
+}
+
 func (nq *nullQueue) Close() error {
+	nq.Purge()
 	return nil
 }

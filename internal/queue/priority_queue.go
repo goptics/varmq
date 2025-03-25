@@ -75,11 +75,15 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	return popped.Value, true
 }
 
-// to satisfy the IQueue interface
-func (q *PriorityQueue[T]) Close() error {
+func (q *PriorityQueue[T]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	q.internal.items = make([]*enqItem[T], 0)
 	heap.Init(q.internal)
+}
+
+// to satisfy the IQueue interface
+func (q *PriorityQueue[T]) Close() error {
+	q.Purge()
 	return nil
 }

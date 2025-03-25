@@ -5,6 +5,7 @@ type IWorkerQueue interface {
 	Len() int
 	Dequeue() (any, bool)
 	Values() []any
+	Purge()
 	Close() error
 }
 

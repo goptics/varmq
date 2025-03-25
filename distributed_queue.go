@@ -4,6 +4,7 @@ type DistributedQueue[T, R any] interface {
 	PendingCount() int
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) bool
+	Purge()
 	Close() error
 }
 
@@ -32,6 +33,11 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 	}
 
 	return q.queue.Enqueue(jBytes)
+}
+
+func (q *distributedQueue[T, R]) Purge() {
+	// TODO: send a notification to worker to remove all pending count from wait group
+	q.queue.Purge()
 }
 
 func (q *distributedQueue[T, R]) Close() error {

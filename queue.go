@@ -110,7 +110,7 @@ func (q *concurrentQueue[T, R]) WaitUntilFinished() {
 
 func (q *concurrentQueue[T, R]) Purge() {
 	prevValues := q.Queue.Values()
-	q.Queue.Close()
+	q.Queue.Purge()
 	q.sync.wg.Add(-len(prevValues))
 
 	// close all pending channels to avoid routine leaks
@@ -123,11 +123,10 @@ func (q *concurrentQueue[T, R]) Purge() {
 
 func (q *concurrentQueue[T, R]) Close() error {
 	q.Purge()
-	err := q.Queue.Close()
-	q.WaitUntilFinished()
 	q.Stop()
+	q.WaitUntilFinished()
 
-	return err
+	return nil
 }
 
 func (q *concurrentQueue[T, R]) WaitAndClose() error {

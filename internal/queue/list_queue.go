@@ -63,9 +63,13 @@ func (q *Queue[T]) Dequeue() (any, bool) {
 	return val, true
 }
 
-func (q *Queue[T]) Close() error {
+func (q *Queue[T]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	q.internal.Init()
+}
+
+func (q *Queue[T]) Close() error {
+	q.Purge()
 	return nil
 }

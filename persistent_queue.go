@@ -64,3 +64,14 @@ func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJ
 
 	return groupJob
 }
+
+func (q *concurrentPersistentQueue[T, R]) Purge() {
+	q.PauseAndWait()
+	q.worker.sync.wg.Add(-q.Queue.Len())
+	q.queue.Purge()
+}
+
+func (q *concurrentPersistentQueue[T, R]) Close() error {
+	defer q.Stop()
+	return q.Queue.Close()
+}
