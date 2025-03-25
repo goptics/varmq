@@ -17,7 +17,7 @@ type PQItem[T any] struct {
 	Priority int
 }
 
-type ConcurrentPriorityQueue[T, R any] interface {
+type PriorityQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)

@@ -8,8 +8,8 @@ type IWorkerBinder[T, R any] interface {
 	Worker[T, R]
 	// BindQueue binds the worker to a Queue.
 	BindQueue() Queue[T, R]
-	// BindPriorityQueue binds the worker to a ConcurrentPriorityQueue.
-	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
+	// BindPriorityQueue binds the worker to a PriorityQueue.
+	BindPriorityQueue() PriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a ConcurrentPersistentQueue.
 	BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R]
 	// BindWithDistributedQueue binds the worker to a DistributedQueue.
@@ -39,7 +39,7 @@ func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
 	return newQueue[T, R](qs.worker)
 }
 
-func (q *workerBinder[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
+func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
 	defer q.worker.start()
 
 	return newPriorityQueue[T, R](q.worker)

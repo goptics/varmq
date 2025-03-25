@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// TestConcurrentPriorityQueue tests the functionality of ConcurrentPriorityQueue.
+// TestConcurrentPriorityQueue tests the functionality of PriorityQueue.
 func TestConcurrentPriorityQueue(t *testing.T) {
 	t.Run("Add with Priority", func(t *testing.T) {
 		worker := func(data int) (int, error) {
