@@ -64,7 +64,6 @@ func (q *concurrentPersistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJ
 }
 
 func (q *concurrentPersistentQueue[T, R]) Purge() {
-	q.PauseAndWait()
 	q.queue.Purge()
 }
 

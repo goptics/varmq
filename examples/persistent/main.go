@@ -21,6 +21,7 @@ func main() {
 
 	// bind with persistent queue
 	w := gocq.NewWorker(func(data int) (int, error) {
+		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
 		r := data * 3
 
@@ -47,7 +48,7 @@ func main() {
 
 	fmt.Println("pending jobs:", q.PendingCount())
 
-	q.AddAll(items)
+	// q.AddAll(items)
 
 	// terminate the program to see the persistent pending jobs in the queue
 	// comment out the q.AddAll(items) line to see the results
