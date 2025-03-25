@@ -14,6 +14,8 @@ type IWorkerBinder[T, R any] interface {
 	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
 	// BindWithDistributedQueue binds the worker to a DistributedQueue.
 	BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R]
+	// BindWithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
+	BindWithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, R]
 }
 
 type workerBinder[T, R any] struct {
