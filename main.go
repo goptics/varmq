@@ -20,7 +20,7 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
-// This is useful for fire-and-forget operations where you only care about success/failure.
+// This is useful for fire-and-forget operations where you only care about failure.
 //
 // Parameters:
 //   - wf: Worker function that processes items and returns only error
@@ -40,7 +40,7 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 }
 
 // NewVoidWorker creates a worker for operations that don't return any value (void functions).
-// This is the most performant worker type as it doesn't allocate result channels.
+// This is the most performant worker type, it uses result channel only for panic handling.
 //
 // Parameters:
 //   - wf: Worker function that processes items without returning anything
