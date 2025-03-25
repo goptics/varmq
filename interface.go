@@ -37,25 +37,29 @@ type IDistributedPriorityQueue interface {
 	ISubscribable
 }
 
+type IBaseQueue interface {
+	// PendingCount returns the number of Jobs pending in the queue.
+	PendingCount() int
+	// Purge removes all pending Jobs from the queue.
+	// Time complexity: O(n) where n is the number of pending Jobs
+	Purge()
+	// Close closes the queue and resets all internal states.
+	// Time complexity: O(n) where n is the number of channels
+	Close() error
+}
+
 // ICQueue is the root interface of concurrent queue operations.
 type ICQueue[T, R any] interface {
+	IBaseQueue
 	Worker() Worker[T, R]
 	// JobById returns the job with the given id.
 	JobById(id string) (EnqueuedJob[R], error)
 	// GroupsJobById returns the groups job with the given id.
 	GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error)
-	// PendingCount returns the number of Jobs pending in the queue.
-	PendingCount() int
 	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	WaitUntilFinished()
-	// Purge removes all pending Jobs from the queue.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	Purge()
 	// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	WaitAndClose() error
-	// Close closes the queue and resets all internal states.
-	// Time complexity: O(n) where n is the number of channels
-	Close() error
 }

@@ -307,6 +307,10 @@ func (w *worker[T, R]) start() error {
 		return errRunningWorker
 	}
 
+	if w.Queue != getNullQueue() {
+		panic(errWorkerAlreadyBound)
+	}
+
 	// if cache is been set and cleanup interval is not set, use default cleanup interval for 10 minutes
 	if !w.isNullCache() && w.configs.CleanupCacheInterval == 0 {
 		w.configs.CleanupCacheInterval = 10 * time.Minute

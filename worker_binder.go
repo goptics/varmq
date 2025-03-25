@@ -26,28 +26,26 @@ func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
 	}
 }
 
-func (qs *workerBinder[T, R]) isBound() {
-	if qs.Queue != getNullQueue() {
-		panic(errWorkerAlreadyBound)
+func (qs *workerBinder[T, R]) handleQueueSubscription(action string, data []byte) {
+	switch action {
+	case "enqueued":
+		qs.worker.notifyToPullJobs()
 	}
 }
 
 func (qs *workerBinder[T, R]) BindQueue() ConcurrentQueue[T, R] {
-	qs.isBound()
 	defer qs.worker.start()
 
 	return newQueue[T, R](qs.worker)
 }
 
 func (q *workerBinder[T, R]) BindPriorityQueue() ConcurrentPriorityQueue[T, R] {
-	q.isBound()
 	defer q.worker.start()
 
 	return newPriorityQueue[T, R](q.worker)
 }
 
 func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R] {
-	q.isBound()
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {
@@ -57,17 +55,19 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersis
 	return newPersistentQueue[T, R](q.worker, pq)
 }
 
-func (q *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
-	q.isBound()
-	defer dq.Subscribe(func(action string, data []byte) {
-		switch action {
-		case "enqueued":
-			q.worker.notifyToPullJobs()
-		}
-	})
-	defer q.worker.start()
+func (qs *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
+	qs.worker.start()
+	defer dq.Subscribe(qs.handleQueueSubscription)
 
 	queue := NewDistributedQueue[T, R](dq)
-	q.worker.setQueue(dq)
+	qs.worker.setQueue(dq)
 	return queue
+}
+
+func (qs *workerBinder[T, R]) BindWithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, R] {
+	qs.worker.start()
+	defer dq.Subscribe(qs.handleQueueSubscription)
+	defer qs.worker.setQueue(dq)
+
+	return NewDistributedPriorityQueue[T, R](dq)
 }

@@ -1,11 +1,9 @@
 package gocq
 
 type DistributedQueue[T, R any] interface {
-	PendingCount() int
+	IBaseQueue
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) bool
-	Purge()
-	Close() error
 }
 
 type distributedQueue[T, R any] struct {
