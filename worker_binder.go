@@ -10,8 +10,8 @@ type IWorkerBinder[T, R any] interface {
 	BindQueue() Queue[T, R]
 	// BindPriorityQueue binds the worker to a PriorityQueue.
 	BindPriorityQueue() PriorityQueue[T, R]
-	// BindWithPersistentQueue binds the worker to a ConcurrentPersistentQueue.
-	BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R]
+	// BindWithPersistentQueue binds the worker to a PersistentQueue.
+	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
 	// BindWithDistributedQueue binds the worker to a DistributedQueue.
 	BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R]
 }
@@ -45,7 +45,7 @@ func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
 	return newPriorityQueue[T, R](q.worker)
 }
 
-func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) ConcurrentPersistentQueue[T, R] {
+func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R] {
 	defer q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {

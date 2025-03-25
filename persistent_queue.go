@@ -2,7 +2,7 @@ package gocq
 
 var errJobIdRequired = "job id is required for persistent queue"
 
-type ConcurrentPersistentQueue[T, R any] interface {
+type PersistentQueue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a channel to receive the result.
 	// Time complexity: O(1)
@@ -16,7 +16,7 @@ type concurrentPersistentQueue[T, R any] struct {
 	*concurrentQueue[T, R]
 }
 
-func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) ConcurrentPersistentQueue[T, R] {
+func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) PersistentQueue[T, R] {
 	w.setQueue(pq)
 	return &concurrentPersistentQueue[T, R]{concurrentQueue: &concurrentQueue[T, R]{
 		worker: w,
