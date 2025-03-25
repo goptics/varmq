@@ -6,8 +6,8 @@ import (
 
 type IWorkerBinder[T, R any] interface {
 	Worker[T, R]
-	// BindQueue binds the worker to a ConcurrentQueue.
-	BindQueue() ConcurrentQueue[T, R]
+	// BindQueue binds the worker to a Queue.
+	BindQueue() Queue[T, R]
 	// BindPriorityQueue binds the worker to a ConcurrentPriorityQueue.
 	BindPriorityQueue() ConcurrentPriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a ConcurrentPersistentQueue.
@@ -33,7 +33,7 @@ func (qs *workerBinder[T, R]) handleQueueSubscription(action string, data []byte
 	}
 }
 
-func (qs *workerBinder[T, R]) BindQueue() ConcurrentQueue[T, R] {
+func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
 	defer qs.worker.start()
 
 	return newQueue[T, R](qs.worker)

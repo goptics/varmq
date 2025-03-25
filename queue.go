@@ -12,7 +12,7 @@ type concurrentQueue[T, R any] struct {
 	queue IQueue
 }
 
-type ConcurrentQueue[T, R any] interface {
+type Queue[T, R any] interface {
 	ICQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the
 	// Time complexity: O(1)

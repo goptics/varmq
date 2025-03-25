@@ -65,7 +65,7 @@ func TestConcurrentPriorityQueue(t *testing.T) {
 	})
 }
 
-// TestConcurrentQueue tests the functionality of ConcurrentQueue.
+// TestConcurrentQueue tests the functionality of Queue.
 func TestConcurrentQueue(t *testing.T) {
 	worker := func(data int) (int, error) {
 		return double(data), nil
