@@ -20,6 +20,11 @@ type VoidWorkerFunc[T any] func(T)
 
 type status = uint32
 
+type syncGroup struct {
+	wg sync.WaitGroup
+	mx sync.Mutex
+}
+
 const (
 	initiated status = iota
 	running
