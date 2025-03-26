@@ -4,6 +4,7 @@ import (
 	"sync"
 )
 
+// IWorkerBinder is the base interface for binding workers to different queue types
 type IWorkerBinder[T, R any] interface {
 	Worker[T, R]
 	// BindQueue binds the worker to a Queue.
@@ -12,18 +13,35 @@ type IWorkerBinder[T, R any] interface {
 	BindPriorityQueue() PriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a PersistentQueue.
 	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
-	// BindWithDistributedQueue binds the worker to a DistributedQueue.
-	BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R]
-	// BindWithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
-	BindWithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, R]
 }
 
+// IVoidWorkerBinder extends IWorkerBinder with distributed queue capabilities
+// specifically for void workers that don't return results
+type IVoidWorkerBinder[T any] interface {
+	IWorkerBinder[T, any]
+	// BindWithDistributedQueue binds the worker to a DistributedQueue.
+	BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, any]
+	// BindWithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
+	BindWithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, any]
+}
+
+// workerBinder implements both IWorkerBinder and IVoidWorkerBinder interfaces
 type workerBinder[T, R any] struct {
 	*worker[T, R]
 }
 
+// Creates a standard worker binder
 func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
 	return &workerBinder[T, R]{
+		worker: worker,
+	}
+}
+
+// Creates a void worker binder with distributed queue support
+func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
+	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
+	// This works because workerBinder implements all methods of IVoidWorkerBinder
+	return &workerBinder[T, any]{
 		worker: worker,
 	}
 }
