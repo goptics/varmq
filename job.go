@@ -28,16 +28,14 @@ type job[T, R any] struct {
 	Input         T
 	status        atomic.Uint32
 	Output        *Result[R]
-	priority      int
 }
 
 // jobView represents a view of a job's state for serialization.
 type jobView[T, R any] struct {
-	Id       string     `json:"id"`
-	Status   string     `json:"status"`
-	Input    T          `json:"input"`
-	Output   *Result[R] `json:"output"`
-	Priority int        `json:"priority"`
+	Id     string     `json:"id"`
+	Status string     `json:"status"`
+	Input  T          `json:"input"`
+	Output *Result[R] `json:"output,omitempty"`
 }
 
 type Job interface {
@@ -76,6 +74,15 @@ func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 		resultChannel: NewResultChannel[R](1),
 		status:        atomic.Uint32{},
 		Output:        new(Result[R]),
+	}
+}
+
+// newVoidJob creates a new job with the provided data without any result channel. This is used for distributed queues.
+// This is because distributed queue only available for void worker.
+func newVoidJob[T, R any](data T, configs jobConfigs) *job[T, R] {
+	return &job[T, R]{
+		id:    configs.Id,
+		Input: data,
 	}
 }
 
@@ -179,11 +186,10 @@ func (j *job[T, R]) isCloseable() error {
 
 func (j *job[T, R]) Json() ([]byte, error) {
 	view := jobView[T, R]{
-		Id:       j.ID(),
-		Status:   j.Status(),
-		Input:    j.Input,
-		Output:   j.Output,
-		Priority: j.priority,
+		Id:     j.ID(),
+		Status: j.Status(),
+		Input:  j.Input,
+		Output: j.Output,
 	}
 
 	return json.Marshal(view)

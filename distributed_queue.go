@@ -21,8 +21,7 @@ func (q *distributedQueue[T, R]) PendingCount() int {
 }
 
 func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
-	j := newJob[T, R](data, loadJobConfigs(newConfig(), c...))
-	j.CloseResultChannel() // don't need result channel for distributed queue
+	j := newVoidJob[T, R](data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()
 
