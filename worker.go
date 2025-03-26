@@ -242,8 +242,8 @@ func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	return channel
 }
 
-// notifyToPullJobs notifies the pullNextJobs function to process the next Job.
-func (w *worker[T, R]) notifyToPullJobs() {
+// notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
+func (w *worker[T, R]) notifyToPullNextJobs() {
 	w.jobPullNotifier.Send()
 }
 
@@ -321,7 +321,7 @@ func (w *worker[T, R]) start() error {
 		w.configs.CleanupCacheInterval = 10 * time.Minute
 	}
 
-	defer w.notifyToPullJobs()
+	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
 	// restart the queue with new channels and start the worker goroutines

@@ -49,7 +49,7 @@ func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
 func (qs *workerBinder[T, R]) handleQueueSubscription(action string, data []byte) {
 	switch action {
 	case "enqueued":
-		qs.worker.notifyToPullJobs()
+		qs.worker.notifyToPullNextJobs()
 	}
 }
 
