@@ -48,7 +48,7 @@ func main() {
 
 	fmt.Println("pending jobs:", q.PendingCount())
 
-	// q.AddAll(items)
+	q.AddAll(items)
 
 	// terminate the program to see the persistent pending jobs in the queue
 	// comment out the q.AddAll(items) line to see the results

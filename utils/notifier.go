@@ -6,21 +6,21 @@ func NewNotifier(bufferSize uint32) Notifier {
 	return make(Notifier, bufferSize)
 }
 
-func (j Notifier) Notify() {
+func (n Notifier) Send() {
 	select {
-	case j <- struct{}{}:
+	case n <- struct{}{}:
 	default:
 		// channel is full, so ignoring
 	}
 }
 
-func (j Notifier) Listen(fn func()) {
-	for range j {
+func (n Notifier) Receive(fn func()) {
+	for range n {
 		fn()
 	}
 }
 
-func (j Notifier) Close() error {
-	close(j)
+func (n Notifier) Close() error {
+	close(n)
 	return nil
 }

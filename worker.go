@@ -123,7 +123,7 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
 		func() {
 			defer w.sync.wg.Done()
-			defer w.jobPullNotifier.Notify()
+			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0))
 			defer w.freeChannel(channel)
 			defer j.Close()
@@ -169,9 +169,9 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	}
 }
 
-// pullNextJobs processes the jobs in the queue every time a new Job is added.
-func (w *worker[T, R]) pullNextJobs() {
-	w.jobPullNotifier.Listen(func() {
+// startEventLoop starts the event loop that keeps track of whether the channel stack is free and any pending jobs inside the queue or not.
+func (w *worker[T, R]) startEventLoop() {
+	w.jobPullNotifier.Receive(func() {
 		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
@@ -239,7 +239,7 @@ func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 
 // notifyToPullJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, R]) notifyToPullJobs() {
-	w.jobPullNotifier.Notify()
+	w.jobPullNotifier.Send()
 }
 
 func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
@@ -331,7 +331,7 @@ func (w *worker[T, R]) start() error {
 		go w.spawnWorker(w.ChannelsStack[i])
 	}
 
-	go w.pullNextJobs()
+	go w.startEventLoop()
 
 	if w.configs.CleanupCacheInterval > 0 {
 		go w.cleanupCacheInterval(w.configs.CleanupCacheInterval)
@@ -423,7 +423,7 @@ func (w *worker[T, R]) Resume() error {
 	}
 
 	w.status.Store(running)
-	w.jobPullNotifier.Notify()
+	w.jobPullNotifier.Send()
 
 	return nil
 }
