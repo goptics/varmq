@@ -83,6 +83,9 @@ type Worker[T, R any] interface {
 	CurrentProcessingCount() uint32
 }
 
+// newWorker creates a new worker with the given worker function and configurations
+// The worker function can be any of WorkerFunc, WorkerErrFunc, or VoidWorkerFunc
+// It initializes the worker with the configured concurrency, cache, and other settings
 func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	c := loadConfigs(configs...)
 
@@ -115,7 +118,9 @@ func (w *worker[T, R]) isNullCache() bool {
 	return w.Cache == getCache()
 }
 
-// freeChannel frees the channel for the next Job.
+// freeChannel returns a channel to the available channels stack so it can be reused
+// This is called after a job has been processed to recycle the channel
+// Time complexity: O(1)
 func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
 	w.sync.mx.Lock()
 	defer w.sync.mx.Unlock()
@@ -123,13 +128,16 @@ func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
 	w.ChannelsStack = append(w.ChannelsStack, channel)
 }
 
-// spawnWorker starts a worker goroutine to process jobs from the channel.
+// spawnWorker starts a worker goroutine to process jobs from the specified channel
+// It continuously reads jobs from the channel and processes each one
+// Each job processing is wrapped in its own function with proper cleanup
+// Time complexity: O(1) per job
 func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
 		func() {
 			defer w.sync.wg.Done()
 			defer w.jobPullNotifier.Send()
-			defer w.CurProcessing.Add(^uint32(0))
+			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 			defer w.freeChannel(channel)
 			defer j.Close()
 			defer j.ChangeStatus(finished)
@@ -139,6 +147,10 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	}
 }
 
+// processSingleJob processes a single job using the appropriate worker function type
+// It handles all three worker function types (VoidWorkerFunc, WorkerErrFunc, WorkerFunc)
+// and safely captures any panics that might occur during processing
+// It also sends any errors or results back to the job's result channel
 func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	var panicErr error
 	var err error
@@ -174,8 +186,10 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	}
 }
 
-// startEventLoop starts the event loop that keeps track of whether the channel stack is free and any pending jobs inside the queue or not.
-// if the channel stack is free and there are pending jobs, it will process the next job.
+// startEventLoop starts the event loop that processes pending jobs when workers become available
+// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
+// When all conditions are met, it processes the next job in the queue
+// Time complexity: O(1) per notification
 func (w *worker[T, R]) startEventLoop() {
 	w.jobPullNotifier.Receive(func() {
 		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency.Load() && w.Queue.Len() > 0 {
@@ -265,10 +279,12 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 
 	newWorker.Concurrency.Store(c.Concurrency)
 
-	return newQueues[T, R](newWorker)
+	return newQueues(newWorker)
 }
 
-// cleanupCacheInterval periodically cleans up finished jobs from the cache based on the configured duration
+// cleanupCacheInterval starts a background process that periodically cleans up finished jobs from the cache
+// It checks if a ticker is already running for this cache, and if so, returns without creating another one
+// If the interval is > 0, it will create a ticker that triggers cleanup at the specified interval
 func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
 	_, ok := w.tickers.Load(w.Cache)
 
