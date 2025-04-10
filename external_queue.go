@@ -74,6 +74,11 @@ func (wbq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob
 }
 
 func (wbq *externalQueue[T, R]) WaitUntilFinished() {
+	// to ignore deadlock error if the queue is paused
+	if wbq.IsPaused() {
+		wbq.Resume()
+	}
+
 	wbq.sync.wg.Wait()
 }
 

@@ -17,7 +17,7 @@ func main() {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Processed: %d\n", data*2)
-	}, 100)
+	}, 1)
 
 	q := w.BindQueue()
 	defer q.WaitAndClose()

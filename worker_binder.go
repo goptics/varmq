@@ -11,8 +11,12 @@ type IWorkerBinder[T, R any] interface {
 	Worker[T, R]
 	// BindQueue binds the worker to a Queue.
 	BindQueue() Queue[T, R]
+	// BindWithQueue binds the worker to the provided Queue.
+	BindWithQueue(q IQueue) Queue[T, R]
 	// BindPriorityQueue binds the worker to a PriorityQueue.
 	BindPriorityQueue() PriorityQueue[T, R]
+	// BindWithPriorityQueue binds the worker to the provided PriorityQueue.
+	BindWithPriorityQueue(pq IPriorityQueue) PriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a PersistentQueue.
 	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
 	// BindWithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
@@ -58,19 +62,27 @@ func (qs *workerBinder[T, R]) handleQueueSubscription(action string, _ []byte) {
 }
 
 func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
-	defer qs.worker.start()
+	return qs.BindWithQueue(queues.NewQueue[iJob[T, R]]())
+}
 
-	return newQueue(qs.worker, queues.NewQueue[iJob[T, R]]())
+func (qs *workerBinder[T, R]) BindWithQueue(q IQueue) Queue[T, R] {
+	qs.worker.start()
+
+	return newQueue(qs.worker, q)
 }
 
 func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
-	defer q.worker.start()
+	return q.BindWithPriorityQueue(queues.NewPriorityQueue[iJob[T, R]]())
+}
 
-	return newPriorityQueue(q.worker, queues.NewPriorityQueue[iJob[T, R]]())
+func (q *workerBinder[T, R]) BindWithPriorityQueue(pq IPriorityQueue) PriorityQueue[T, R] {
+	q.worker.start()
+
+	return newPriorityQueue(q.worker, pq)
 }
 
 func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R] {
-	defer q.worker.start()
+	q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {
 		q.setCache(new(sync.Map))
@@ -80,7 +92,7 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[
 }
 
 func (q *workerBinder[T, R]) BindWithPersistentPriorityQueue(pq IPriorityQueue) PersistentPriorityQueue[T, R] {
-	defer q.worker.start()
+	q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {
 		q.setCache(new(sync.Map))
