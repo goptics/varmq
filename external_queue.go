@@ -15,9 +15,6 @@ type IExternalQueue[T, R any] interface {
 
 	// Worker returns the worker.
 	Worker() Worker[T, R]
-
-	postEnqueue(j iJob[T, R])
-
 	// JobById returns the job with the given id.
 	JobById(id string) (EnqueuedJob[R], error)
 	// GroupsJobById returns the groups job with the given id.
