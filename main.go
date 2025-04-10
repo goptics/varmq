@@ -16,7 +16,7 @@ package gocq
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
 func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R] {
-	return newQueues[T, R](newWorker[T, R](wf, config...))
+	return newQueues(newWorker[T, R](wf, config...))
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
@@ -37,7 +37,7 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 //	})
 //	queue := worker.BindQueue()
 func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any] {
-	return newQueues[T, any](newWorker[T, any](wf, config...))
+	return newQueues(newWorker[T, any](wf, config...))
 }
 
 // NewVoidWorker creates a worker for operations that don't return any value (void functions).
@@ -59,5 +59,5 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 //	queue := worker.BindQueue()
 //	distQueue := worker.BindWithDistributedQueue(myDistributedQueue)
 func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T] {
-	return newVoidQueues[T](newWorker[T, any](wf, config...))
+	return newVoidQueues(newWorker[T, any](wf, config...))
 }
