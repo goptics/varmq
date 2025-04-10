@@ -20,15 +20,15 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf)
 
 		assert := assert.New(t)
-		
+
 		// Validate worker structure
 		assert.NotNil(w, "worker should not be nil")
 
 		// Check worker function
 		assert.NotNil(w.workerFunc, "worker function should not be nil")
 
-		// Check concurrency (should default to CPU count)
-		expectedConcurrency := withSafeConcurrency(0) // This will use CPU count
+		// Check concurrency (should default to 1)
+		expectedConcurrency := withSafeConcurrency(1)
 		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should match expected value")
 
 		// Check channels stack length matches concurrency
@@ -63,7 +63,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithConcurrency(int(customConcurrency)))
 
 		assert := assert.New(t)
-		
+
 		// Check concurrency is set correctly
 		assert.Equal(customConcurrency, w.Concurrency.Load(), "concurrency should be set to custom value")
 
@@ -84,7 +84,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithCache(customCache))
 
 		assert := assert.New(t)
-		
+
 		// Check cache is set correctly
 		assert.Equal(customCache, w.Cache, "cache should be set to custom cache")
 	})
@@ -109,7 +109,7 @@ func TestNewWorker(t *testing.T) {
 		)
 
 		assert := assert.New(t)
-		
+
 		// Check concurrency is set correctly
 		assert.Equal(customConcurrency, w.Concurrency.Load(), "concurrency should be set to custom value")
 
@@ -130,7 +130,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, any](wf)
 
 		assert := assert.New(t)
-		
+
 		// Validate worker structure
 		assert.NotNil(w, "worker should not be nil")
 
@@ -153,7 +153,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, any](wf)
 
 		assert := assert.New(t)
-		
+
 		// Validate worker structure
 		assert.NotNil(w, "worker should not be nil")
 
@@ -179,7 +179,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, concurrencyValue)
 
 		assert := assert.New(t)
-		
+
 		// Check concurrency is set correctly
 		expectedConcurrency := uint32(concurrencyValue)
 		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should be set to direct value")
@@ -200,7 +200,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithJobIdGenerator(customIdGenerator))
 
 		assert := assert.New(t)
-		
+
 		// Check job ID generator is set correctly
 		generatedId := w.JobIdGenerator()
 		expectedId := "test-id"
@@ -217,7 +217,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithConcurrency(0))
 
 		assert := assert.New(t)
-		
+
 		// Check concurrency equals CPU count
 		expectedConcurrency := withSafeConcurrency(0) // This will use CPU count
 		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should default to CPU count")
@@ -233,7 +233,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithConcurrency(-5))
 
 		assert := assert.New(t)
-		
+
 		// Check concurrency equals CPU count
 		expectedConcurrency := withSafeConcurrency(0) // This will use CPU count
 		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should default to CPU count with negative value")
@@ -250,7 +250,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf, WithConcurrency(concurrency))
 
 		assert := assert.New(t)
-		
+
 		// Check channel stack length matches concurrency
 		assert.Equal(concurrency, len(w.ChannelsStack), "channel stack length should match concurrency")
 
@@ -268,7 +268,7 @@ func TestNewWorker(t *testing.T) {
 		w := newWorker[string, int](wf)
 
 		assert := assert.New(t)
-		
+
 		// Check status is 'initiated'
 		assert.Equal(initiated, w.status.Load(), "Worker status should be 'initiated'")
 
@@ -341,7 +341,7 @@ func TestNewWorker(t *testing.T) {
 
 		// Test the functionality of the copied worker with updated configuration
 		assert := assert.New(t)
-		
+
 		// Verify worker state
 		assert.Equal("Initiated", workerBinder.Status(), "Worker status should be 'Initiated'")
 		assert.False(workerBinder.IsRunning(), "Worker should not be running yet")
