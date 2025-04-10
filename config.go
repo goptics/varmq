@@ -17,7 +17,7 @@ type configs struct {
 
 func newConfig() configs {
 	return configs{
-		Concurrency: withSafeConcurrency(0),
+		Concurrency: 1,
 		Cache:       getCache(),
 		JobIdGenerator: func() string {
 			return ""
