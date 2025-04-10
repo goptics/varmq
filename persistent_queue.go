@@ -49,6 +49,7 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 		ok := q.internalQueue.Enqueue(val)
 
 		if !ok {
+			groupJob.wg.Done()
 			continue
 		}
 		q.postEnqueue(j)

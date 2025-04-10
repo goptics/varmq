@@ -13,13 +13,7 @@ type groupJob[T, R any] struct {
 
 const groupIdPrefixed = "g:"
 
-type iGroupJob[T, R any] interface {
-	iJob[T, R]
-	EnqueuedGroupJob[R]
-	NewJob(data T, configs jobConfigs) iGroupJob[T, R]
-}
-
-func newGroupJob[T, R any](bufferSize uint32) iGroupJob[T, R] {
+func newGroupJob[T, R any](bufferSize uint32) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
 			resultChannel: NewResultChannel[R](bufferSize),
@@ -36,7 +30,7 @@ func generateGroupId(id string) string {
 	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) iGroupJob[T, R] {
+func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
 	return &groupJob[T, R]{
 		job: &job[T, R]{
 			id:            generateGroupId(config.Id),
