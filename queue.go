@@ -20,8 +20,6 @@ type Item[T any] struct {
 	Value T
 }
 
-// Creates a new CQueue with the specified concurrency and worker function.
-// Internally it calls Init() to start the worker goroutines based on the concurrency.
 func newQueue[T, R any](worker *worker[T, R], q IQueue) *queue[T, R] {
 	worker.setQueue(q)
 

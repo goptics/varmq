@@ -175,6 +175,7 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 }
 
 // startEventLoop starts the event loop that keeps track of whether the channel stack is free and any pending jobs inside the queue or not.
+// if the channel stack is free and there are pending jobs, it will process the next job.
 func (w *worker[T, R]) startEventLoop() {
 	w.jobPullNotifier.Receive(func() {
 		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency.Load() && w.Queue.Len() > 0 {
