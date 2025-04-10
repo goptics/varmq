@@ -15,6 +15,8 @@ type IWorkerBinder[T, R any] interface {
 	BindPriorityQueue() PriorityQueue[T, R]
 	// BindWithPersistentQueue binds the worker to a PersistentQueue.
 	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
+	// BindWithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
+	BindWithPersistentPriorityQueue(pq IPriorityQueue) PersistentPriorityQueue[T, R]
 }
 
 // IVoidWorkerBinder extends IWorkerBinder with distributed queue capabilities
