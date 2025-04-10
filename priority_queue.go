@@ -1,15 +1,12 @@
 package gocq
 
-import (
-	"github.com/fahimfaisaal/gocq/v3/internal/queue"
-)
-
-type concurrentPriorityQueue[T, R any] struct {
-	*concurrentQueue[T, R]
-	queue IPriorityQueue
+type priorityQueue[T, R any] struct {
+	*externalQueue[T, R]
+	internalQueue IPriorityQueue
 }
 
 type PQItem[T any] struct {
+	// ID is an optional identifier for the item
 	ID string
 	// Value contains the actual data stored in the queue
 	Value T
@@ -18,7 +15,7 @@ type PQItem[T any] struct {
 }
 
 type PriorityQueue[T, R any] interface {
-	ICQueue[T, R]
+	IExternalQueue[T, R]
 	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) EnqueuedJob[R]
@@ -27,37 +24,33 @@ type PriorityQueue[T, R any] interface {
 	AddAll(items []PQItem[T]) EnqueuedGroupJob[R]
 }
 
-// NewPriorityQueue creates a new concurrentPriorityQueue with the specified concurrency and worker function.
-func newPriorityQueue[T, R any](worker *worker[T, R]) *concurrentPriorityQueue[T, R] {
-	q := queue.NewPriorityQueue[iJob[T, R]]()
+// NewPriorityQueue creates a new priorityQueue with the specified concurrency and worker function.
+func newPriorityQueue[T, R any](worker *worker[T, R], pq IPriorityQueue) *priorityQueue[T, R] {
+	worker.setQueue(pq)
 
-	worker.setQueue(q)
-
-	return &concurrentPriorityQueue[T, R]{
-		concurrentQueue: &concurrentQueue[T, R]{
-			worker: worker,
-		},
-		queue: q,
+	return &priorityQueue[T, R]{
+		externalQueue: newExternalQueue(worker),
+		internalQueue: pq,
 	}
 }
 
-func (q *concurrentPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) EnqueuedJob[R] {
+func (q *priorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) EnqueuedJob[R] {
 	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
 
-	q.queue.Enqueue(j, priority)
+	q.internalQueue.Enqueue(j, priority)
 	q.postEnqueue(j)
 
 	return j
 }
 
-func (q *concurrentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJob[R] {
+func (q *priorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJob[R] {
 	l := len(items)
 	groupJob := newGroupJob[T, R](uint32(l))
 
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))
 
-		q.queue.Enqueue(j, item.Priority)
+		q.internalQueue.Enqueue(j, item.Priority)
 		q.postEnqueue(j)
 	}
 

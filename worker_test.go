@@ -44,7 +44,7 @@ func TestNewWorker(t *testing.T) {
 		assert.False(reflect.ValueOf(w.jobPullNotifier).IsNil(), "jobPullNotifier should be initialized")
 
 		// Check sync group is initialized - we're not using IsZero since struct with zero values is still initialized
-		assert.Equal(reflect.Struct, reflect.ValueOf(w.sync).Kind(), "sync group should be initialized")
+		assert.Equal(reflect.Struct, reflect.ValueOf(&w.sync).Elem().Kind(), "sync group should be initialized")
 
 		// Check tickers map is initialized
 		assert.NotNil(w.tickers, "tickers map should be initialized")
@@ -349,4 +349,5 @@ func TestNewWorker(t *testing.T) {
 		assert.False(workerBinder.IsStopped(), "Worker should not be stopped")
 		assert.Equal(uint32(0), workerBinder.CurrentProcessingCount(), "Current processing count should be 0")
 	})
+
 }

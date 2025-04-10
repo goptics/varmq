@@ -47,19 +47,3 @@ type IBaseQueue interface {
 	// Time complexity: O(n) where n is the number of channels
 	Close() error
 }
-
-// ICQueue is the root interface of concurrent queue operations.
-type ICQueue[T, R any] interface {
-	IBaseQueue
-	Worker() Worker[T, R]
-	// JobById returns the job with the given id.
-	JobById(id string) (EnqueuedJob[R], error)
-	// GroupsJobById returns the groups job with the given id.
-	GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error)
-	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	WaitUntilFinished()
-	// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	WaitAndClose() error
-}

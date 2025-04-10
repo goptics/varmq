@@ -2,6 +2,8 @@ package gocq
 
 import (
 	"sync"
+
+	"github.com/fahimfaisaal/gocq/v3/internal/queues"
 )
 
 // IWorkerBinder is the base interface for binding workers to different queue types
@@ -46,7 +48,7 @@ func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
 	}
 }
 
-func (qs *workerBinder[T, R]) handleQueueSubscription(action string, data []byte) {
+func (qs *workerBinder[T, R]) handleQueueSubscription(action string, _ []byte) {
 	switch action {
 	case "enqueued":
 		qs.worker.notifyToPullNextJobs()
@@ -56,13 +58,13 @@ func (qs *workerBinder[T, R]) handleQueueSubscription(action string, data []byte
 func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
 	defer qs.worker.start()
 
-	return newQueue[T, R](qs.worker)
+	return newQueue(qs.worker, queues.NewQueue[iJob[T, R]]())
 }
 
 func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
 	defer q.worker.start()
 
-	return newPriorityQueue[T, R](q.worker)
+	return newPriorityQueue(q.worker, queues.NewPriorityQueue[iJob[T, R]]())
 }
 
 func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R] {
@@ -72,7 +74,17 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[
 		q.setCache(new(sync.Map))
 	}
 
-	return newPersistentQueue[T, R](q.worker, pq)
+	return newPersistentQueue(q.worker, pq)
+}
+
+func (q *workerBinder[T, R]) BindWithPersistentPriorityQueue(pq IPriorityQueue) PersistentPriorityQueue[T, R] {
+	defer q.worker.start()
+	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
+	if q.worker.isNullCache() {
+		q.setCache(new(sync.Map))
+	}
+
+	return newPersistentPriorityQueue(q.worker, pq)
 }
 
 func (qs *workerBinder[T, R]) BindWithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
