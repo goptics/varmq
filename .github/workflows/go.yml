@@ -32,9 +32,3 @@ jobs:
         with:
           files: ./coverage.txt
           verbose: true
-
-      - name: Run benchmarks (Standard Queue)
-        run: go test -bench=. -benchmem ./internal/concurrent_queue/
-
-      - name: Run benchmarks (Void Queue)
-        run: go test -bench=. -benchmem ./internal/concurrent_queue/void_queue/
