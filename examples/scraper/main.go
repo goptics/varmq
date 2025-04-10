@@ -16,13 +16,13 @@ func main() {
 	w := gocq.NewVoidWorker(func(data int) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
-		fmt.Printf("Processed: %d\n", data*2)
+		fmt.Printf("Processed: %d\n", data)
 	}, 1)
 
 	q := w.BindQueue()
 	defer q.WaitAndClose()
 
-	for i := range 1000 {
+	for i := range 100 {
 		q.Add(i)
 	}
 

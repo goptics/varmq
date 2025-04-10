@@ -3,6 +3,7 @@ package gocq
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type externalQueue[T, R any] struct {
@@ -80,6 +81,11 @@ func (wbq *externalQueue[T, R]) WaitUntilFinished() {
 	}
 
 	wbq.sync.wg.Wait()
+
+	// wait until all ongoing processes are done if still pending
+	for wbq.PendingCount() > 0 || wbq.CurrentProcessingCount() > 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func (wbq *externalQueue[T, R]) Purge() {
