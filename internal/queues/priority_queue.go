@@ -51,8 +51,14 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
+	typedValue, ok := item.(T)
+
+	if !ok {
+		return false
+	}
+
 	i := enqItem[T]{
-		Value:    item.(T),
+		Value:    typedValue,
 		Priority: priority,
 		Index:    q.insertionCount,
 	}
