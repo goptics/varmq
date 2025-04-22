@@ -8,7 +8,7 @@ type persistentPriorityQueue[T, R any] struct {
 	*priorityQueue[T, R]
 }
 
-func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPriorityQueue) PersistentPriorityQueue[T, R] {
+func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
 	worker.setQueue(pq)
 	return &persistentPriorityQueue[T, R]{
 		priorityQueue: newPriorityQueue(worker, pq),

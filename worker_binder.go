@@ -82,21 +82,22 @@ type IWorkerBinder[T, R any] interface {
 	//
 	// Example usage:
 	//   persistentQueue := worker.BindWithPersistentQueue(redisQueue)
-	BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R]
+	BindWithPersistentQueue(pq IPersistentQueue) PersistentQueue[T, R]
 
 	// BindWithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
 	// This combines the benefits of persistence with priority-based processing. Jobs are
 	// both durable and processed according to their priority values.
 	//
 	// Parameters:
-	//   - pq IPriorityQueue: A priority queue implementation that provides persistence capabilities.
+	//   - pq IPersistentPriorityQueue: A priority queue implementation that provides persistence capabilities.
 	//
 	// Returns:
 	//   - PersistentPriorityQueue[T, R]: A persistent priority queue that processes jobs based on priority
 	//     while ensuring they are not lost, using this worker for processing.
 	//
 	// Example usage:
-	//   persistentPriorityQueue := worker.BindWithPersistentPriorityQueue(priorityQueue)
+	//   persistentPriorityQueue := worker.BindWithPersistentPriorityQueue(persistentPriorityQueue)
+	BindWithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R]
 }
 
 // IVoidWorkerBinder extends IWorkerBinder with distributed queue capabilities
@@ -207,7 +208,7 @@ func (q *workerBinder[T, R]) BindWithPriorityQueue(pq IPriorityQueue) PriorityQu
 	return newPriorityQueue(q.worker, pq)
 }
 
-func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[T, R] {
+func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IPersistentQueue) PersistentQueue[T, R] {
 	q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {
@@ -217,7 +218,7 @@ func (q *workerBinder[T, R]) BindWithPersistentQueue(pq IQueue) PersistentQueue[
 	return newPersistentQueue(q.worker, pq)
 }
 
-func (q *workerBinder[T, R]) BindWithPersistentPriorityQueue(pq IPriorityQueue) PersistentPriorityQueue[T, R] {
+func (q *workerBinder[T, R]) BindWithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
 	q.worker.start()
 	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
 	if q.worker.isNullCache() {

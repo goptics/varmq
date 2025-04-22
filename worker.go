@@ -139,6 +139,7 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 			defer w.freeChannel(channel)
+			defer w.notifyQueueIfPossible(j, "Finished")
 			defer j.Close()
 			defer j.ChangeStatus(finished)
 
@@ -204,8 +205,8 @@ func (w *worker[T, R]) processNextJob() {
 	if !ok {
 		return
 	}
-	w.sync.wg.Add(1)
 
+	w.sync.wg.Add(1)
 	var j iJob[T, R]
 
 	// check the type of the value
@@ -239,9 +240,20 @@ func (w *worker[T, R]) processNextJob() {
 
 	w.CurProcessing.Add(1)
 	j.ChangeStatus(processing)
+	w.notifyQueueIfPossible(j, "Processing")
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.pickNextChannel() <- j
+}
+
+// notifyQueueIfPossible checks if the queue implements INotifiable and sends notification if it does
+// It's used to notify about job states to queue like processing, finished
+// This is used for distributed and persistent queue
+func (w *worker[T, R]) notifyQueueIfPossible(j iJob[T, R], action string) {
+	if qNotifier, ok := w.Queue.(INotifiable); ok {
+		jBytes, _ := j.Json()
+		qNotifier.Notify(action, jBytes)
+	}
 }
 
 // pickNextChannel picks the next available channel for processing a Job.

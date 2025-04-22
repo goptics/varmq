@@ -9,6 +9,16 @@ type IWorkerQueue interface {
 	Close() error
 }
 
+// ISubscribable is the root interface of notifiable operations.
+type ISubscribable interface {
+	Subscribe(func(action string, data []byte))
+}
+
+// INotifiable is the root interface of notifiable operations.
+type INotifiable interface {
+	Notify(action string, data []byte)
+}
+
 // IQueue is the root interface of queue operations.
 type IQueue interface {
 	IWorkerQueue
@@ -21,19 +31,25 @@ type IPriorityQueue interface {
 	Enqueue(item any, priority int) bool
 }
 
-// ISubscribable is the root interface of notifiable operations.
-type ISubscribable interface {
-	Subscribe(func(action string, data []byte))
+type IPersistentQueue interface {
+	IQueue
+	INotifiable
+}
+
+// IPersistentPriorityQueue is the root interface of persistent priority queue operations.
+type IPersistentPriorityQueue interface {
+	IPriorityQueue
+	INotifiable
 }
 
 // IDistributedQueue is the root interface of distributed queue operations.
 type IDistributedQueue interface {
-	IQueue
+	IPersistentQueue
 	ISubscribable
 }
 
 type IDistributedPriorityQueue interface {
-	IPriorityQueue
+	IPersistentPriorityQueue
 	ISubscribable
 }
 
