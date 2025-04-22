@@ -18,7 +18,7 @@
 - Added `IsClosed()` method to check job state
 - Added `Drain()` method for discarding results
 - Enhanced error handling with dedicated error channels
-- Added `WaitForResult()` and `WaitForError()` method for synchronous result retrieval
+- Added `Result()` and `WaitForError()` method for synchronous result retrieval
 - Added `Errors()` method for retrieving errors from void group jobs
 - Added `Results()` method for retrieving results from group jobs
 - Added `Close()` method for closing jobs and associated channels
@@ -28,7 +28,7 @@
 #### Queue Creation
 
 - Old: `NewQueue[T, R](concurrency uint, worker func(T) R)`
-- New: `NewQueue[T, R](concurrency uint32, worker Worker[T, R])`
+- New: `NewQueue[T, R](concurrency uint32, worker WorkerFunc[T, R])`
 
 #### Job Submission
 

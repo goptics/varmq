@@ -8,8 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v2"
-	"github.com/fahimfaisaal/gocq/v2/types"
+	"github.com/fahimfaisaal/gocq/v3"
 )
 
 type ScrapeResult struct {
@@ -18,8 +17,7 @@ type ScrapeResult struct {
 }
 
 var (
-	queue      = gocq.NewQueue(10, scrapeWorker)
-	jobResults = sync.Map{}
+	queue = gocq.NewWorker(scrapeWorker, gocq.WithCache(new(sync.Map))).BindQueue()
 )
 
 func init() {
@@ -45,8 +43,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Path[len("/scrape/"):]
 	jobID := generateJobID()
 
-	job := queue.Add(url)
-	jobResults.Store(jobID, job)
+	queue.Add(url, gocq.WithJobId(jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobID})
 }
@@ -54,31 +51,25 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	jobID := r.URL.Path[len("/scrape/status/"):]
 
-	value, ok := jobResults.Load(jobID)
-	if !ok {
-		http.Error(w, "Job not found", http.StatusNotFound)
+	job, err := queue.JobById(jobID)
+
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	job := value.(types.EnqueuedJob[string])
+	bytes, err := job.Json()
 
-	if job.Status() == "Closed" {
-		jobResults.Delete(jobID)
-		result, _ := job.WaitForResult()
-		response := ScrapeResult{
-			Status: job.Status(),
-			Result: result,
-		}
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	response := ScrapeResult{
-		Status: job.Status(),
-	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	w.Write(bytes)
 }
 
 func main() {

@@ -24,7 +24,7 @@ A generic concurrent queue with FIFO ordering.
 
 **Methods**
 
-- `NewQueue(concurrency uint32, worker Worker[T, R]) *ConcurrentQueue[T, R]`
+- `NewQueue(concurrency uint32, worker WorkerFunc[T, R]) *ConcurrentQueue[T, R]`
 
   - Creates a new ConcurrentQueue with the specified concurrency and worker function.
 
@@ -88,7 +88,7 @@ A generic concurrent priority queue (default FIFO). inherits the methods from `C
 
 **Methods**
 
-- `NewPriorityQueue(concurrency uint32, worker Worker[T, R]) *ConcurrentPriorityQueue[T, R]`
+- `NewPriorityQueue(concurrency uint32, worker WorkerFunc[T, R]) *ConcurrentPriorityQueue[T, R]`
 
   - Creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
 
@@ -114,7 +114,7 @@ A concurrent queue for void jobs (jobs that do not return a result). It inherits
 
 **Methods**
 
-- `NewQueue(concurrency uint32, worker VoidWorker[T]) *ConcurrentVoidQueue[T]`
+- `NewQueue(concurrency uint32, worker WorkerErrFunc[T]) *ConcurrentVoidQueue[T]`
 
   - Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
 
@@ -140,7 +140,7 @@ A concurrent priority queue for void jobs (jobs that do not return a result). in
 
 **Methods**
 
-- `NewPriorityQueue(concurrency uint32, worker VoidWorker[T]) *ConcurrentVoidPriorityQueue[T]`
+- `NewPriorityQueue(concurrency uint32, worker WorkerErrFunc[T]) *ConcurrentVoidPriorityQueue[T]`
 
   - Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and worker function.
 
@@ -180,7 +180,7 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 
   - Closes the job and its associated channels.
 
-- `WaitForResult() (R, error)`
+- `Result() (R, error)`
 
   - Blocks until the job completes and returns the result and any error.
 
