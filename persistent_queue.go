@@ -70,6 +70,17 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 // Purge removes all jobs from the queue
 func (q *persistentQueue[T, R]) Purge() {
 	q.queue.Purge()
+
+	// close all pending jobs
+	q.worker.Cache.Range(func(_, value any) bool {
+		v, _ := value.(EnqueuedJob[R])
+
+		if v.Status() == "Queued" {
+			v.Close()
+		}
+
+		return true
+	})
 }
 
 // Close stops the worker and closes the underlying queue
