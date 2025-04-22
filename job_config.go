@@ -26,3 +26,11 @@ func WithJobId(id string) JobConfigFunc {
 		c.Id = id
 	}
 }
+
+func withRequiredJobId(c jobConfigs) jobConfigs {
+	if c.Id == "" {
+		panic(errJobIdRequired)
+	}
+
+	return c
+}

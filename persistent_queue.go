@@ -50,10 +50,7 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	groupJob := newGroupJob[T, R](uint32(len(items)))
 
 	for _, item := range items {
-		jConfigs := loadJobConfigs(q.configs, WithJobId(item.ID))
-		if jConfigs.Id == "" {
-			panic(errJobIdRequired)
-		}
+		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
