@@ -14,9 +14,13 @@ type ISubscribable interface {
 	Subscribe(func(action string, data []byte))
 }
 
-// INotifiable is the root interface of notifiable operations.
-type INotifiable interface {
-	Notify(action string, data []byte)
+// IAcknowledgeable is the root interface of acknowledgeable operations.
+type IAcknowledgeable interface {
+	// Returns true if the item was successfully acknowledged, false otherwise.
+	Acknowledge(ackID string) bool
+	// PrepareForAck adds an item to the pending list for acknowledgment tracking
+	// Returns an error if the operation fails
+	PrepareForAck(ackID string, item any) error
 }
 
 // IQueue is the root interface of queue operations.
@@ -33,13 +37,13 @@ type IPriorityQueue interface {
 
 type IPersistentQueue interface {
 	IQueue
-	INotifiable
+	IAcknowledgeable
 }
 
 // IPersistentPriorityQueue is the root interface of persistent priority queue operations.
 type IPersistentPriorityQueue interface {
 	IPriorityQueue
-	INotifiable
+	IAcknowledgeable
 }
 
 // IDistributedQueue is the root interface of distributed queue operations.
