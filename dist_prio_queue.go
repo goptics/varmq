@@ -21,7 +21,7 @@ func (q *distributedPriorityQueue[T, R]) PendingCount() int {
 }
 
 func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfigFunc) bool {
-	j := newVoidJob[T, R](data, loadJobConfigs(newConfig(), c...))
+	j := newVoidJob[T, R](data, withRequiredJobId(loadJobConfigs(newConfig(), c...)))
 
 	jBytes, err := j.Json()
 

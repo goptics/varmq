@@ -1,7 +1,5 @@
 package gocq
 
-var errJobIdRequired = "job id is required for persistent queue"
-
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 // where jobs can be recovered even after application restarts. All jobs must have unique IDs.
 type PersistentQueue[T, R any] interface {
@@ -27,11 +25,7 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq IPersistentQueue) Persiste
 // It will panic if no job ID is provided
 // Returns an EnqueuedJob that can be used to track the job's status and result
 func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
-	jobConfig := loadJobConfigs(q.configs, configs...)
-
-	if jobConfig.Id == "" {
-		panic(errJobIdRequired)
-	}
+	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()

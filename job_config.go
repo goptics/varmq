@@ -29,7 +29,7 @@ func WithJobId(id string) JobConfigFunc {
 
 func withRequiredJobId(c jobConfigs) jobConfigs {
 	if c.Id == "" {
-		panic(errJobIdRequired)
+		panic("job id is required for persistent queue")
 	}
 
 	return c

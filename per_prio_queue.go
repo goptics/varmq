@@ -16,11 +16,7 @@ func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPersistentPr
 }
 
 func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) EnqueuedJob[R] {
-	jobConfig := loadJobConfigs(q.configs, configs...)
-
-	if jobConfig.Id == "" {
-		panic(errJobIdRequired)
-	}
+	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
