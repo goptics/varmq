@@ -22,7 +22,7 @@ func main() {
 	// bind with persistent queue
 	w := gocq.NewWorker(func(data int) (int, error) {
 		fmt.Printf("Processing: %d\n", data)
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 		r := data * 3
 
 		// error on every 10th job
@@ -36,20 +36,18 @@ func main() {
 		}
 
 		return r, nil
-	})
+	}, 2)
 
 	q := w.WithPersistentQueue(pq)
 	defer q.WaitAndClose()
+	defer fmt.Println("pending jobs:", q.PendingCount())
 
-	items := make([]gocq.Item[int], 1000)
+	// terminate the program to see the persistent pending jobs in the queue
+	// before that comment out the following lines to see the results
+	items := make([]gocq.Item[int], 10)
 	for i := range items {
 		items[i] = gocq.Item[int]{Value: i, ID: fmt.Sprintf("%d", i)}
 	}
 
-	fmt.Println("pending jobs:", q.PendingCount())
-
 	q.AddAll(items)
-
-	// terminate the program to see the persistent pending jobs in the queue
-	// comment out the q.AddAll(items) line to see the results
 }

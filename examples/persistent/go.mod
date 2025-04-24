@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/fahimfaisaal/gocq/v3 v3.0.0
-	github.com/fahimfaisaal/redisq v1.0.0
+	github.com/fahimfaisaal/redisq v1.1.0
 )
 
 require (
