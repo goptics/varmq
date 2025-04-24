@@ -57,7 +57,7 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 //	    fmt.Printf("Processing: %d\n", data)
 //	})
 //	queue := worker.BindQueue()
-//	distQueue := worker.BindWithDistributedQueue(myDistributedQueue)
+//	distQueue := worker.WithDistributedQueue(myDistributedQueue)
 func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T] {
 	return newVoidQueues(newWorker[T, any](wf, config...))
 }

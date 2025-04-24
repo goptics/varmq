@@ -38,7 +38,7 @@ func main() {
 		return r, nil
 	})
 
-	q := w.BindWithPersistentQueue(pq)
+	q := w.WithPersistentQueue(pq)
 	defer q.WaitAndClose()
 
 	items := make([]gocq.Item[int], 1000)

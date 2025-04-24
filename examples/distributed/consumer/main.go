@@ -27,7 +27,7 @@ func main() {
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
 	})
 
-	q := w.BindWithDistributedQueue(rq)
+	q := w.WithDistributedQueue(rq)
 
 	fmt.Println("pending jobs:", q.PendingCount())
 	fmt.Println("listening...")
