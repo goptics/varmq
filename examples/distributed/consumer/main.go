@@ -23,9 +23,9 @@ func main() {
 	w := gocq.NewVoidWorker(func(data []string) {
 		url, id := data[0], data[1]
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
-	})
+	}, 5)
 
 	q := w.WithDistributedQueue(rq)
 
