@@ -9,20 +9,6 @@ type IWorkerQueue interface {
 	Close() error
 }
 
-// ISubscribable is the root interface of notifiable operations.
-type ISubscribable interface {
-	Subscribe(func(action string, data []byte))
-}
-
-// IAcknowledgeable is the root interface of acknowledgeable operations.
-type IAcknowledgeable interface {
-	// Returns true if the item was successfully acknowledged, false otherwise.
-	Acknowledge(ackID string) bool
-	// PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
-	// Returns an error if the operation fails
-	PrepareForFutureAck(ackID string, item any) error
-}
-
 // IQueue is the root interface of queue operations.
 type IQueue interface {
 	IWorkerQueue
@@ -33,6 +19,15 @@ type IQueue interface {
 type IPriorityQueue interface {
 	IWorkerQueue
 	Enqueue(item any, priority int) bool
+}
+
+// IAcknowledgeable is the root interface of acknowledgeable operations.
+type IAcknowledgeable interface {
+	// Returns true if the item was successfully acknowledged, false otherwise.
+	Acknowledge(ackID string) bool
+	// PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
+	// Returns an error if the operation fails
+	PrepareForFutureAck(ackID string, item any) error
 }
 
 type IPersistentQueue interface {
@@ -46,12 +41,18 @@ type IPersistentPriorityQueue interface {
 	IAcknowledgeable
 }
 
+// ISubscribable is the root interface of subscribable operations.
+type ISubscribable interface {
+	Subscribe(func(action string, data []byte))
+}
+
 // IDistributedQueue is the root interface of distributed queue operations.
 type IDistributedQueue interface {
 	IPersistentQueue
 	ISubscribable
 }
 
+// IDistributedPriorityQueue is the root interface of distributed priority queue operations.
 type IDistributedPriorityQueue interface {
 	IPersistentPriorityQueue
 	ISubscribable
