@@ -248,7 +248,7 @@ func (w *worker[T, R]) processNextJob() {
 	j.ChangeStatus(processing)
 
 	if q, ok := w.Queue.(IAcknowledgeable); ok {
-		q.PrepareForAck(j.ID(), v)
+		q.PrepareForFutureAck(j.ID(), v)
 	}
 
 	// then job will be process by the processSingleJob function inside spawnWorker

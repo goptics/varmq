@@ -18,9 +18,9 @@ type ISubscribable interface {
 type IAcknowledgeable interface {
 	// Returns true if the item was successfully acknowledged, false otherwise.
 	Acknowledge(ackID string) bool
-	// PrepareForAck adds an item to the pending list for acknowledgment tracking
+	// PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
 	// Returns an error if the operation fails
-	PrepareForAck(ackID string, item any) error
+	PrepareForFutureAck(ackID string, item any) error
 }
 
 // IQueue is the root interface of queue operations.
