@@ -11,6 +11,65 @@ Zero dependency just install, import and use any where in your go program.
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
+# Interface Hierarchy
+
+# Interface Hierarchy
+
+```mermaid
+classDiagram
+    class IWorkerQueue {
+        +Len() int
+        +Dequeue() (any, bool)
+        +Values() []any
+        +Purge()
+        +Close() error
+    }
+
+    class IAcknowledgeable {
+        +Acknowledge(ackID string) bool
+        +PrepareForFutureAck(ackID string, item any) error
+    }
+
+    class ISubscribable {
+        +Subscribe(func(action string, data[]byte))
+    }
+
+    class IQueue {
+        +Enqueue(item any) bool
+    }
+
+    class IPriorityQueue {
+        +Enqueue(item any, priority int) bool
+    }
+
+    class IPersistentQueue {
+    }
+
+    class IPersistentPriorityQueue {
+    }
+
+    class IDistributedQueue {
+    }
+
+    class IDistributedPriorityQueue {
+    }
+
+    IWorkerQueue <|-- IQueue
+    IWorkerQueue <|-- IPriorityQueue
+
+    IQueue <|-- IPersistentQueue
+    IAcknowledgeable <|-- IPersistentQueue
+
+    IPriorityQueue <|-- IPersistentPriorityQueue
+    IAcknowledgeable <|-- IPersistentPriorityQueue
+
+    IPersistentQueue <|-- IDistributedQueue
+    ISubscribable <|-- IDistributedQueue
+
+    IPersistentPriorityQueue <|-- IDistributedPriorityQueue
+    ISubscribable <|-- IDistributedPriorityQueue
+```
+
 ## 🌟 Features
 
 - Generic type support for both data and results
