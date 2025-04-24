@@ -1,7 +1,7 @@
 package gocq
 
 type DistributedQueue[T, R any] interface {
-	IBaseQueue
+	IExternalBaseQueue
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) bool
 }

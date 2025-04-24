@@ -1,7 +1,7 @@
 package gocq
 
 type DistributedPriorityQueue[T, R any] interface {
-	IBaseQueue
+	IExternalBaseQueue
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) bool
 }

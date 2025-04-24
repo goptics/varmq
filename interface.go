@@ -56,14 +56,3 @@ type IDistributedPriorityQueue interface {
 	IPersistentPriorityQueue
 	ISubscribable
 }
-
-type IBaseQueue interface {
-	// PendingCount returns the number of Jobs pending in the queue.
-	PendingCount() int
-	// Purge removes all pending Jobs from the queue.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	Purge()
-	// Close closes the queue and resets all internal states.
-	// Time complexity: O(n) where n is the number of channels
-	Close() error
-}
