@@ -6,157 +6,217 @@ Comprehensive API documentation for the GoCQ (Go Concurrent Queue) library.
 
 - [GoCQ API Reference](#gocq-api-reference)
   - [Table of Contents](#table-of-contents)
-  - [Standard Queue (FIFO)](#standard-queue-fifo)
-    - [`ConcurrentQueue`](#concurrentqueue)
-  - [Priority Queue](#priority-queue)
-    - [`ConcurrentPriorityQueue`](#concurrentpriorityqueue)
-  - [Void Queue](#void-queue)
-    - [`ConcurrentVoidQueue`](#concurrentvoidqueue)
-  - [Void Priority Queue](#void-priority-queue)
-    - [`ConcurrentVoidPriorityQueue`](#concurrentvoidpriorityqueue)
+  - [Worker Creation](#worker-creation)
+    - [`NewWorker`](#newworker)
+    - [`NewErrWorker`](#newerrworker)
+    - [`NewVoidWorker`](#newvoidworker)
+  - [Queue Types](#queue-types)
+    - [Standard Queue](#standard-queue)
+    - [Priority Queue](#priority-queue)
+    - [Persistent Queue](#persistent-queue)
+    - [Persistent Priority Queue](#persistent-priority-queue)
+    - [Distributed Queue](#distributed-queue)
+    - [Distributed Priority Queue](#distributed-priority-queue)
+  - [Queue Operations](#queue-operations)
+    - [Adding Jobs](#adding-jobs)
+    - [Waiting for Jobs](#waiting-for-jobs)
+    - [Shutdown Operations](#shutdown-operations)
+  - [Worker Control](#worker-control)
+  - [Interface Hierarchy](#interface-hierarchy)
+  - [Job Management](#job-management)
     - [`Job`](#job)
 
-## Standard Queue (FIFO)
+## Worker Creation
 
-### `ConcurrentQueue`
+GoCQ provides three main worker creation functions, each designed for different use cases.
 
-A generic concurrent queue with FIFO ordering.
+### `NewWorker`
 
-**Methods**
+Creates a worker that processes items and returns both a result and an error.
 
-- `NewQueue(concurrency uint32, worker WorkerFunc[T, R]) *ConcurrentQueue[T, R]`
+```go
+func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
+```
 
-  - Creates a new ConcurrentQueue with the specified concurrency and worker function.
+**Example:**
 
-- `Pause() IConcurrentQueue[T, R]`
+```go
+worker := gocq.NewWorker(func(data string) (int, error) {
+    return len(data), nil
+}, 4) // 4 concurrent workers
 
-  - Pauses the processing of jobs.
+queue := worker.BindQueue()
+queue.Add("hello") // Returns a job that will produce an int result
+```
 
-- `Add(data T) EnqueuedJob[R]`
+### `NewErrWorker`
 
-  - Adds a new Job to the queue and returns an EnqueuedJob to handle the job.
-  - Time complexity: O(1)
+Creates a worker for operations that only need to return an error status (no result value).
 
-- `AddAll(data []T) EnqueuedGroupJob[R]`
+```go
+func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any]
+```
 
-  - Adds multiple Jobs to the queue and returns an EnqueuedGroupJob to handle the job.
-  - Time complexity: O(n) where n is the number of Jobs added
+**Example:**
 
-- `Restart()`
+```go
+worker := gocq.NewErrWorker(func(data int) error {
+    log.Printf("Processing: %d", data)
+    return nil
+})
 
-  - Restarts the queue and initializes the worker goroutines based on the concurrency.
-  - Time complexity: O(n) where n is the concurrency
+queue := worker.BindQueue()
+queue.Add(42) // Returns a job that will only indicate success/failure
+```
 
-- `Resume()`
+### `NewVoidWorker`
 
-  - Continues processing jobs that are pending in the queue.
+Creates a worker for operations that don't return any value (void functions). This is the most performant worker type and the only one that can be bound to distributed queues.
 
-- `PendingCount() int`
+```go
+func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T]
+```
 
-  - Returns the number of Jobs pending in the queue.
-  - Time complexity: O(1)
+**Example:**
 
-- `CurrentProcessingCount() uint32`
+```go
+worker := gocq.NewVoidWorker(func(data int) {
+    fmt.Printf("Processing: %d\n", data)
+})
 
-  - Returns the number of Jobs currently being processed.
-  - Time complexity: O(1)
+queue := worker.BindQueue()
+queue.Add(42) // Fire and forget
+```
 
-- `WaitUntilFinished()`
+## Queue Types
 
-  - Waits until all pending Jobs in the queue are processed.
-  - Time complexity: O(n) where n is the number of pending Jobs
+GoCQ supports different queue types for various use cases.
 
-- `Purge()`
+### Standard Queue
 
-  - Removes all pending Jobs from the queue.
-  - Time complexity: O(n) where n is the number of pending Jobs
+A First-In-First-Out (FIFO) queue for sequential processing of jobs.
 
-- `WaitAndClose() error`
+```go
+// Create and bind a standard queue
+queue := worker.BindQueue()
 
-  - Waits until all pending Jobs in the queue are processed and then closes the queue.
-  - Time complexity: O(n) where n is the number of pending Jobs
+// Or use a custom queue implementation
+customQueue := myCustomQueue // implements IQueue
+queue := worker.WithQueue(customQueue)
+```
 
-- `Close() error`
-  - Closes the queue and resets all internal states.
-  - Time complexity: O(n) where n is the number of channels
+### Priority Queue
 
-## Priority Queue
+Processes jobs based on their assigned priority rather than insertion order.
 
-### `ConcurrentPriorityQueue`
+```go
+// Create and bind a priority queue
+priorityQueue := worker.BindPriorityQueue()
 
-A generic concurrent priority queue (default FIFO). inherits the methods from `ConcurrentQueue`
+// Add a job with priority (lower numbers = higher priority)
+priorityQueue.Add(data, 5)
 
-**Methods**
+// Or use a custom priority queue implementation
+customPriorityQueue := myCustomPriorityQueue // implements IPriorityQueue
+priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
+```
 
-- `NewPriorityQueue(concurrency uint32, worker WorkerFunc[T, R]) *ConcurrentPriorityQueue[T, R]`
+### Persistent Queue
 
-  - Creates a new ConcurrentPriorityQueue with the specified concurrency and worker function.
+Ensures jobs are not lost even if the application crashes or restarts.
 
-- `Pause() IConcurrentPriorityQueue[T, R]`
+```go
+// Bind to a persistent queue implementation
+persistentQueue := myPersistentQueue // implements IPersistentQueue
+queue := worker.WithPersistentQueue(persistentQueue)
+```
 
-  - Pauses the processing of jobs.
+### Persistent Priority Queue
 
-- `Add(data T, priority int) EnqueuedJob[R]`
+Combines persistence with priority-based processing.
 
-  - Adds a new Job with the given priority to the queue and returns an EnqueuedJob to handle the job.
-  - Time complexity: O(log n)
+```go
+// Bind to a persistent priority queue implementation
+persistentPriorityQueue := myPersistentPriorityQueue // implements IPersistentPriorityQueue
+queue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
+```
 
-- `AddAll(items []PQItem[T]) EnqueuedGroupJob[R]`
+### Distributed Queue
 
-  - Adds multiple Jobs with the given priority to the queue and returns an EnqueuedGroupJob to handle the job.
-  - Time complexity: O(n log n) where n is the number of Jobs added
+Allows job processing across multiple instances or processes. Only compatible with void workers.
 
-## Void Queue
+```go
+// Bind to a distributed queue implementation
+distributedQueue := myDistributedQueue // implements IDistributedQueue
+queue := voidWorker.WithDistributedQueue(distributedQueue)
+```
 
-### `ConcurrentVoidQueue`
+### Distributed Priority Queue
 
-A concurrent queue for void jobs (jobs that do not return a result). It inherits the methods from `ConcurrentQueue` but with void-specific methods.
+Combines distributed processing with priority-based ordering.
 
-**Methods**
+```go
+// Bind to a distributed priority queue implementation
+distributedPriorityQueue := myDistributedPriorityQueue // implements IDistributedPriorityQueue
+queue := voidWorker.WithDistributedPriorityQueue(distributedPriorityQueue)
+```
 
-- `NewQueue(concurrency uint32, worker WorkerErrFunc[T]) *ConcurrentVoidQueue[T]`
+## Queue Operations
 
-  - Creates a new ConcurrentVoidQueue with the specified concurrency and worker function.
+### Adding Jobs
 
-- `Pause() IConcurrentVoidQueue[T]`
+```go
+// Add a single job
+job := queue.Add(data)
 
-  - Pauses the processing of jobs.
+// Add multiple jobs
+jobs := queue.AddAll([]gocq.Item{
+    {ID: "job1", Value: data1},
+    {ID: "job2", Value: data2},
+})
+```
 
-- `Add(data T) EnqueuedVoidJob`
+### Waiting for Jobs
 
-  - Adds a new Job to the queue and returns an EnqueuedVoidJob to handle the void job.
-  - Time complexity: O(1)
+```go
+// Wait for a single job result
+result, err := job.Result()
 
-- `AddAll(items []T) EnqueuedVoidGroupJob`
+// Wait for multiple job results
+results, errs := jobs.Results()
+```
 
-  - Adds multiple Jobs to the queue and returns an EnqueuedVoidGroupJob to handle the job.
-  - Time complexity: O(n) where n is the number of Jobs added
+### Shutdown Operations
 
-## Void Priority Queue
+```go
+// Graceful shutdown - waits for all jobs to complete
+queue.WaitAndClose()
 
-### `ConcurrentVoidPriorityQueue`
+// Immediate shutdown - discards pending jobs
+queue.Close()
 
-A concurrent priority queue for void jobs (jobs that do not return a result). inherits the methods from `ConcurrentPriorityQueue`
+// Purge - removes all pending jobs without shutting down
+queue.Purge()
+```
 
-**Methods**
+## Worker Control
 
-- `NewPriorityQueue(concurrency uint32, worker WorkerErrFunc[T]) *ConcurrentVoidPriorityQueue[T]`
+```go
+// Pause worker processing
+worker.Pause()
 
-  - Creates a new ConcurrentVoidPriorityQueue with the specified concurrency and worker function.
+// Resume worker processing
+worker.Resume()
 
-- `Pause() IConcurrentVoidPriorityQueue[T]`
+// Stop worker (terminates all processing)
+worker.Stop()
+```
 
-  - Pauses the processing of jobs.
+## Interface Hierarchy
 
-- `Add(data T, priority int) EnqueuedVoidJob`
+**Click to Open [GoCQ Interface Hierarchy Diagram](../interface.drawio.png)**
 
-  - Adds a new Job with the given priority to the queue and returns an EnqueuedVoidJob to handle the job.
-  - Time complexity: O(log n)
-
-- `AddAll(items []PQItem[T]) EnqueuedVoidGroupJob`
-
-  - Adds multiple Jobs with the given priority to the queue and returns an EnqueuedVoidGroupJob to handle the job.
-  - Time complexity: O(n log n) where n is the number of Jobs added
+## Job Management
 
 ### `Job`
 
@@ -183,10 +243,6 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 - `Result() (R, error)`
 
   - Blocks until the job completes and returns the result and any error.
-
-- `WaitForError() error`
-
-  - Blocks until an error is received on the error channel.
 
 - `Errors() <-chan error`
 
