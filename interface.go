@@ -1,7 +1,7 @@
 package gocq
 
-// IWorkerQueue is the root interface of queue operations. workers queue needs to implement this interface.
-type IWorkerQueue interface {
+// IBaseQueue is the root interface of queue operations. workers queue needs to implement this interface.
+type IBaseQueue interface {
 	Len() int
 	Dequeue() (any, bool)
 	Values() []any
@@ -11,13 +11,13 @@ type IWorkerQueue interface {
 
 // IQueue is the root interface of queue operations.
 type IQueue interface {
-	IWorkerQueue
+	IBaseQueue
 	Enqueue(item any) bool
 }
 
 // IPriorityQueue is the root interface of priority queue operations.
 type IPriorityQueue interface {
-	IWorkerQueue
+	IBaseQueue
 	Enqueue(item any, priority int) bool
 }
 
@@ -43,7 +43,7 @@ type IPersistentPriorityQueue interface {
 
 // ISubscribable is the root interface of subscribable operations.
 type ISubscribable interface {
-	Subscribe(func(action string, data []byte))
+	Subscribe(func(action string))
 }
 
 // IDistributedQueue is the root interface of distributed queue operations.

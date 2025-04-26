@@ -177,7 +177,7 @@ func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
 // handleQueueSubscription processes notifications from distributed queues
 // When a job is enqueued in a distributed queue, this handler is called with the "enqueued" action
 // It then notifies the worker to pull and process the new job
-func (qs *workerBinder[T, R]) handleQueueSubscription(action string, _ []byte) {
+func (qs *workerBinder[T, R]) handleQueueSubscription(action string) {
 	switch action {
 	case "enqueued":
 		qs.worker.notifyToPullNextJobs()
