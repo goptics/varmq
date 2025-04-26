@@ -7,17 +7,17 @@ type DistributedPriorityQueue[T, R any] interface {
 }
 
 type distributedPriorityQueue[T, R any] struct {
-	queue IDistributedPriorityQueue
+	internalQueue IDistributedPriorityQueue
 }
 
-func NewDistributedPriorityQueue[T, R any](queue IDistributedPriorityQueue) DistributedPriorityQueue[T, R] {
+func NewDistributedPriorityQueue[T, R any](internalQueue IDistributedPriorityQueue) DistributedPriorityQueue[T, R] {
 	return &distributedPriorityQueue[T, R]{
-		queue: queue,
+		internalQueue: internalQueue,
 	}
 }
 
 func (q *distributedPriorityQueue[T, R]) PendingCount() int {
-	return q.queue.Len()
+	return q.internalQueue.Len()
 }
 
 func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfigFunc) bool {
@@ -29,13 +29,13 @@ func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfi
 		return false
 	}
 
-	return q.queue.Enqueue(jBytes, priority)
+	return q.internalQueue.Enqueue(jBytes, priority)
 }
 
 func (q *distributedPriorityQueue[T, R]) Purge() {
-	q.queue.Purge()
+	q.internalQueue.Purge()
 }
 
 func (q *distributedPriorityQueue[T, R]) Close() error {
-	return q.queue.Close()
+	return q.internalQueue.Close()
 }

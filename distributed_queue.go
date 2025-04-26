@@ -7,17 +7,17 @@ type DistributedQueue[T, R any] interface {
 }
 
 type distributedQueue[T, R any] struct {
-	queue IDistributedQueue
+	internalQueue IDistributedQueue
 }
 
-func NewDistributedQueue[T, R any](queue IDistributedQueue) DistributedQueue[T, R] {
+func NewDistributedQueue[T, R any](internalQueue IDistributedQueue) DistributedQueue[T, R] {
 	return &distributedQueue[T, R]{
-		queue: queue,
+		internalQueue: internalQueue,
 	}
 }
 
 func (q *distributedQueue[T, R]) PendingCount() int {
-	return q.queue.Len()
+	return q.internalQueue.Len()
 }
 
 func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
@@ -29,13 +29,13 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 		return false
 	}
 
-	return q.queue.Enqueue(jBytes)
+	return q.internalQueue.Enqueue(jBytes)
 }
 
 func (q *distributedQueue[T, R]) Purge() {
-	q.queue.Purge()
+	q.internalQueue.Purge()
 }
 
 func (q *distributedQueue[T, R]) Close() error {
-	return q.queue.Close()
+	return q.internalQueue.Close()
 }
