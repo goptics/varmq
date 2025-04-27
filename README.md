@@ -207,9 +207,9 @@ For detailed API documentation, see our [API Reference](./docs/API_REFERENCE.md)
 - [Job Management](./docs/API_REFERENCE.md#job-management)
   - [`Job`](./docs/API_REFERENCE.md#job)
 
-## GoCMQ Sequence Diagram
+## Sequence Diagram
 
-The following sequence diagram illustrates the main flow and interactions in theGoCMQ concurrent queue system.
+The following sequence diagram illustrates the main flow and interactions in the GoCMQ.
 
 ```mermaid
 sequenceDiagram
