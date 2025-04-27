@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"encoding/json"
@@ -125,14 +125,14 @@ func (j *job[T, R]) ChangeStatus(s status) iJob[T, R] {
 
 // SaveAndSendResult sends a result to the job's result channel.
 func (j *job[T, R]) SaveAndSendResult(result R) {
-	r := Result[R]{Data: result}
+	r := Result[R]{JobId: j.id, Data: result}
 	j.Output = &r
 	j.resultChannel.Send(r)
 }
 
 // SaveAndSendError sends an error to the job's result channel.
 func (j *job[T, R]) SaveAndSendError(err error) {
-	r := Result[R]{Err: err}
+	r := Result[R]{JobId: j.id, Err: err}
 	j.Output = &r
 	j.resultChannel.Send(r)
 }

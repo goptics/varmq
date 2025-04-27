@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3"
+	gocmq "github.com/fahimfaisaal/gocmq"
 )
 
 type ScrapeResult struct {
@@ -17,7 +17,7 @@ type ScrapeResult struct {
 }
 
 var (
-	queue = gocq.NewWorker(scrapeWorker, gocq.WithCache(new(sync.Map))).BindQueue()
+	queue = gocmq.NewWorker(scrapeWorker, gocmq.WithCache(new(sync.Map))).BindQueue()
 )
 
 func init() {
@@ -43,7 +43,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Path[len("/scrape/"):]
 	jobID := generateJobID()
 
-	queue.Add(url, gocq.WithJobId(jobID))
+	queue.Add(url, gocmq.WithJobId(jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobID})
 }

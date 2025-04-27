@@ -1,4 +1,4 @@
-module github.com/fahimfaisaal/gocq/v3
+module github.com/fahimfaisaal/gocmq
 
 go 1.24.0
 

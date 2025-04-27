@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type DistributedPriorityQueue[T, R any] interface {
 	IExternalBaseQueue

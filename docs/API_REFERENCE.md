@@ -1,34 +1,10 @@
-# GoCQ API Reference
+#GoCMQ API Reference
 
-Comprehensive API documentation for the GoCQ (Go Concurrent Queue) library.
-
-## Table of Contents
-
-- [GoCQ API Reference](#gocq-api-reference)
-  - [Table of Contents](#table-of-contents)
-  - [Worker Creation](#worker-creation)
-    - [`NewWorker`](#newworker)
-    - [`NewErrWorker`](#newerrworker)
-    - [`NewVoidWorker`](#newvoidworker)
-  - [Queue Types](#queue-types)
-    - [Standard Queue](#standard-queue)
-    - [Priority Queue](#priority-queue)
-    - [Persistent Queue](#persistent-queue)
-    - [Persistent Priority Queue](#persistent-priority-queue)
-    - [Distributed Queue](#distributed-queue)
-    - [Distributed Priority Queue](#distributed-priority-queue)
-  - [Queue Operations](#queue-operations)
-    - [Adding Jobs](#adding-jobs)
-    - [Waiting for Jobs](#waiting-for-jobs)
-    - [Shutdown Operations](#shutdown-operations)
-  - [Worker Control](#worker-control)
-  - [Interface Hierarchy](#interface-hierarchy)
-  - [Job Management](#job-management)
-    - [`Job`](#job)
+Comprehensive API documentation for theGoCMQ (Go Concurrent Queue) library.
 
 ## Worker Creation
 
-GoCQ provides three main worker creation functions, each designed for different use cases.
+GoCMQ provides three main worker creation functions, each designed for different use cases.
 
 ### `NewWorker`
 
@@ -41,12 +17,19 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 **Example:**
 
 ```go
-worker := gocq.NewWorker(func(data string) (int, error) {
+worker := gocmq.NewWorker(func(data string) (int, error) {
     return len(data), nil
-}, 4) // 4 concurrent workers
+})
 
 queue := worker.BindQueue()
-queue.Add("hello") // Returns a job that will produce an int result
+
+data, err := queue.Add("hello gophers").Result()
+if err != nil {
+    fmt.Printf("Error adding job: %v\n", err)
+    return
+}
+
+fmt.Printf("Result: %d\n", data)
 ```
 
 ### `NewErrWorker`
@@ -60,13 +43,13 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 **Example:**
 
 ```go
-worker := gocq.NewErrWorker(func(data int) error {
+worker := gocmq.NewErrWorker(func(data int) error {
     log.Printf("Processing: %d", data)
     return nil
 })
 
 queue := worker.BindQueue()
-queue.Add(42) // Returns a job that will only indicate success/failure
+queue.Add(42).Drain() // Returns a job that will only indicate success/failure
 ```
 
 ### `NewVoidWorker`
@@ -80,17 +63,58 @@ func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder
 **Example:**
 
 ```go
-worker := gocq.NewVoidWorker(func(data int) {
+worker := gocmq.NewVoidWorker(func(data int) {
     fmt.Printf("Processing: %d\n", data)
 })
 
 queue := worker.BindQueue()
-queue.Add(42) // Fire and forget
+queue.Add(42).Drain() // Fire and forget
+```
+
+### Worker Configuration
+
+All worker creation functions accept optional configuration parameters that customize worker behavior. These can be passed as additional arguments after the worker function.
+
+```go
+// Create a worker with 8 concurrent processors
+worker := gocmq.NewWorker(myWorkerFunc, gocmq.WithConcurrency(8))
+
+// Or simply pass an integer for concurrency (shorthand)
+worker := gocmq.NewWorker(myWorkerFunc, 8)
+
+// Multiple configurations can be combined
+worker := gocmq.NewWorker(myWorkerFunc,
+    gocmq.WithConcurrency(8),
+    gocmq.WithJobIdGenerator(myIdGenerator))
+```
+
+#### Configuration Options
+
+| Configuration                    | Description                            | Default                       |
+| -------------------------------- | -------------------------------------- | ----------------------------- |
+| `WithConcurrency(n)`             | Sets the number of concurrent workers  | `1`                           |
+| `WithCache(cache)`               | Provides a custom cache implementation | In-memory cache               |
+| `WithAutoCleanupCache(duration)` | Sets the cache cleanup interval        | No auto-cleanup               |
+| `WithJobIdGenerator(func)`       | Custom job ID generation function      | Empty string (auto-generated) |
+
+**Examples:**
+
+```go
+// Set concurrency to use all available CPU cores
+worker := gocmq.NewWorker(myFunc, gocmq.WithConcurrency(runtime.NumCPU()))
+
+// Use custom job ID generator
+worker := gocmq.NewWorker(myFunc, gocmq.WithJobIdGenerator(func() string {
+    return uuid.New().String() // Using UUID for job IDs
+}))
+
+// Configure cache to clean up every hour
+worker := gocmq.NewWorker(myFunc, gocmq.WithAutoCleanupCache(1 * time.Hour))
 ```
 
 ## Queue Types
 
-GoCQ supports different queue types for various use cases.
+GoCMQ supports different queue types for various use cases.
 
 ### Standard Queue
 
@@ -114,7 +138,7 @@ Processes jobs based on their assigned priority rather than insertion order.
 priorityQueue := worker.BindPriorityQueue()
 
 // Add a job with priority (lower numbers = higher priority)
-priorityQueue.Add(data, 5)
+priorityQueue.Add(data, 5).Drain()
 
 // Or use a custom priority queue implementation
 customPriorityQueue := myCustomPriorityQueue // implements IPriorityQueue
@@ -129,6 +153,53 @@ Ensures jobs are not lost even if the application crashes or restarts.
 // Bind to a persistent queue implementation
 persistentQueue := myPersistentQueue // implements IPersistentQueue
 queue := worker.WithPersistentQueue(persistentQueue)
+```
+
+**Redis Adapter Example:**
+
+```go
+// Using the redisq adapter (one of many possible adapters)
+import (
+    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/redisq"
+)
+
+// Connect to Redis using the adapter
+redisQueue := redisq.New("redis://localhost:6379")
+defer redisQueue.Close()
+
+// Create a persistent queue
+persistentQueue := redisQueue.NewQueue("my_jobs")
+defer persistentQueue.Close()
+
+// Create a worker and bind to the persistent queue
+worker := gocmq.NewWorker(func(data string) (string, error) {
+    return "Processed: " + data, nil
+}, 5)
+
+// Bind the worker to the persistent queue
+queue := worker.WithPersistentQueue(persistentQueue)
+```
+
+**Creating Your Own Adapter:**
+
+You can create your own persistent queue adapter by implementing the `IPersistentQueue` interface:
+
+```go
+// IPersistentQueue is the root interface of persistent queue operations.
+type IPersistentQueue interface {
+    IQueue
+    IAcknowledgeable
+}
+
+// IAcknowledgeable is the root interface of acknowledgeable operations.
+type IAcknowledgeable interface {
+    // Returns true if the item was successfully acknowledged, false otherwise.
+    Acknowledge(ackID string) bool
+    // PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
+    // Returns an error if the operation fails
+    PrepareForFutureAck(ackID string, item any) error
+}
 ```
 
 ### Persistent Priority Queue
@@ -151,6 +222,70 @@ distributedQueue := myDistributedQueue // implements IDistributedQueue
 queue := voidWorker.WithDistributedQueue(distributedQueue)
 ```
 
+**Redis Adapter for Distributed Queue:**
+
+```go
+// Provider (adds jobs to queue)
+import (
+    "fmt"
+    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/redisq"
+)
+
+// Connect to Redis ensure the redis server is running
+redisQueue := redisq.New("redis://localhost:6379")
+rq := redisQueue.NewDistributedQueue("jobs_queue")
+
+// Create a distributed queue
+distQueue := gocmq.NewDistributedQueue[string, string](rq)
+
+// Add jobs from anywhere
+for i := 0; i < 1000; i++ {
+    distQueue.Add(fmt.Sprintf("Job %d", i))
+}
+```
+
+```go
+// Consumer (processes jobs)
+import (
+    "fmt"
+    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/redisq"
+)
+
+// Connect to the same Redis server
+redisQueue := redisq.New("redis://localhost:6379")
+rq := redisQueue.NewDistributedQueue("jobs_queue")
+
+// Create a worker
+worker := gocmq.NewVoidWorker(func(data string) {
+    fmt.Println("Processing:", data)
+}, 10) // 10 concurrent workers
+
+// Bind to distributed queue
+queue := worker.WithDistributedQueue(rq)
+
+// Start listening for jobs
+rq.Listen()
+```
+
+**Creating Your Own Distributed Queue Adapter:**
+
+You can create your own distributed queue adapter by implementing the `IDistributedQueue` interface:
+
+```go
+// IDistributedQueue is the root interface of distributed queue operations.
+type IDistributedQueue interface {
+    IPersistentQueue
+    ISubscribable
+}
+
+// ISubscribable is the root interface of subscribable operations.
+type ISubscribable interface {
+    Subscribe(func(action string))
+}
+```
+
 ### Distributed Priority Queue
 
 Combines distributed processing with priority-based ordering.
@@ -170,20 +305,53 @@ queue := voidWorker.WithDistributedPriorityQueue(distributedPriorityQueue)
 job := queue.Add(data)
 
 // Add multiple jobs
-jobs := queue.AddAll([]gocq.Item{
+groupJob := queue.AddAll([]gocmq.Item{
     {ID: "job1", Value: data1},
     {ID: "job2", Value: data2},
 })
+
+// If you don't need the results, use Drain to free the result channel resources
+job.Drain()
+
+> For group jobs, call `groupJob.Drain()` to free the shared result channel
+> Note: Individual jobs in a group job are not accessible - you can only drain the entire group
 ```
 
-### Waiting for Jobs
-
 ```go
-// Wait for a single job result
-result, err := job.Result()
+// Create a worker that processes strings and returns their length
+worker := gocmq.NewWorker(func(data string) (int, error) {
+    return len(data), nil
+}, 4) // 4 concurrent workers
 
-// Wait for multiple job results
-results, errs := jobs.Results()
+// Bind a queue
+queue := worker.BindQueue()
+
+// Create a batch of items to process
+items := []gocmq.Item[string]{
+    {ID: "job1", Value: "hello"},
+    {ID: "job2", Value: "world"},
+    {ID: "job3", Value: "concurrent"},
+}
+
+// Add all items to the queue at once
+groupJob := queue.AddAll(items)
+
+// Stream all results through a non-blocking channel
+resultsChan, err := groupJob.Results()
+if err != nil {
+    fmt.Printf("Error getting results channel: %v\n", err)
+    return
+}
+
+// Process results as they arrive even though they are processed concurrently
+for result := range resultsChan {
+    // Each result contains JobId, Data, and Err fields
+    if result.Err != nil {
+        fmt.Printf("Job %s failed with error: %v\n", result.JobId, result.Err)
+    } else {
+        fmt.Printf("Job %s result: %v\n", result.JobId, result.Data)
+    }
+}
 ```
 
 ### Shutdown Operations
@@ -210,11 +378,65 @@ worker.Resume()
 
 // Stop worker (terminates all processing)
 worker.Stop()
+
+// Restart worker (reinitializes go routines)
+worker.Restart()
+```
+
+## Adapters
+
+GoCMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
+
+### Available Adapters
+
+- **Redis:** [redisq](https://github.com/fahimfaisaal/redisq) - Redis-based adapter for persistent and distributed queues
+
+### Planned Adapters
+
+- **SQLite** - For lightweight persistent queues
+- **PostgreSQL** - For robust persistent and distributed queues
+- **DiceDB** - Future adapter implementation
+
+### Creating Custom Adapters
+
+You can create your own adapters by implementing the appropriate interfaces:
+
+- For persistent queues: `IPersistentQueue`
+- For persistent priority queues: `IPersistentPriorityQueue`
+- For distributed queues: `IDistributedQueue`
+- For distributed priority queues: `IDistributedPriorityQueue`
+
+Example skeleton of a custom adapter:
+
+```go
+type MyPersistentQueue struct {
+    // Your implementation details
+}
+
+// Implement IQueue methods
+func (q *MyPersistentQueue) Enqueue(item any) bool {
+    // Store the item in your backend
+}
+
+func (q *MyPersistentQueue) Dequeue() (any, bool) {
+    // Get the next item from your backend
+}
+
+// ... implement other required methods
+
+// Implement IAcknowledgeable methods
+func (q *MyPersistentQueue) Acknowledge(ackID string) bool {
+    // Mark the item as acknowledged in your backend
+}
+
+func (q *MyPersistentQueue) PrepareForFutureAck(ackID string, item any) error {
+    // Store the item for future acknowledgment
+}
 ```
 
 ## Interface Hierarchy
 
-**Click to Open [GoCQ Interface Hierarchy Diagram](../interface.drawio.png)**
+**Click to Open [GoCMQ Interface Hierarchy Diagram](../interface.drawio.png)**
 
 ## Job Management
 
@@ -222,7 +444,7 @@ worker.Stop()
 
 Represents a job that can be enqueued and processed, returned by invoking `Add` and `AddAll` method
 
-**Methods**
+#### Methods
 
 - `Status() string`
 
@@ -248,5 +470,5 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 
   - Returns a channel that will receive the errors of the void group job.
 
-- `Results() chan Result[T]`
-  - Returns a channel that will receive the results of the group job.
+- `Results() (<-chan Result[R], error)`
+  - Returns a receive-only channel that will receive the results of the group job and an error if one occurred during channel creation.

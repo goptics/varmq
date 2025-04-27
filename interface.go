@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 // IBaseQueue is the root interface of queue operations. workers queue needs to implement this interface.
 type IBaseQueue interface {

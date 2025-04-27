@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 func selectError(errs ...error) error {
 	for _, err := range errs {

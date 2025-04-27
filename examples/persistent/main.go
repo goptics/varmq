@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3"
-	"github.com/fahimfaisaal/redisq"
+	"github.com/fahimfaisaal/gocmq"
+	"github.com/fahimfaisaal/redisq" // Redis adapter (just one of many possible adapters)
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	defer pq.Close()
 
 	// bind with persistent queue
-	w := gocq.NewWorker(func(data int) (int, error) {
+	w := gocmq.NewWorker(func(data int) (int, error) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(3 * time.Second)
 		r := data * 3
@@ -38,15 +38,16 @@ func main() {
 		return r, nil
 	}, 2)
 
+	// Using redisq adapter (you can use any adapter that implements IPersistentQueue)
 	q := w.WithPersistentQueue(pq)
 	defer q.WaitAndClose()
 	defer fmt.Println("pending jobs:", q.PendingCount())
 
 	// terminate the program to see the persistent pending jobs in the queue
 	// before that comment out the following lines to see the results
-	items := make([]gocq.Item[int], 10)
+	items := make([]gocmq.Item[int], 10)
 	for i := range items {
-		items[i] = gocq.Item[int]{Value: i, ID: fmt.Sprintf("%d", i)}
+		items[i] = gocmq.Item[int]{Value: i, ID: fmt.Sprintf("%d", i)}
 	}
 
 	q.AddAll(items)

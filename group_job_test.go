@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"strings"
@@ -58,7 +58,7 @@ func TestGroupJob(t *testing.T) {
 		// Create a group job with small buffer to avoid wait group blocking
 		bufferSize := uint32(1)
 		gj := newGroupJob[string, int](bufferSize)
-		
+
 		// Manually reduce the wait group count to match our single Close() call
 		// This prevents the wait group from blocking indefinitely
 		gj.wg.Add(-int(bufferSize) + 1)
@@ -81,10 +81,10 @@ func TestGroupJob(t *testing.T) {
 		// Create a new group job
 		bufferSize := uint32(1)
 		gj := newGroupJob[string, int](bufferSize)
-		
+
 		// Reduce wait group count to prevent deadlock when testing
 		gj.wg.Add(-int(bufferSize))
-		
+
 		assert := assert.New(t)
 
 		// Initial status should be created (the job.status.Load() is defaulted to 0)
@@ -102,7 +102,7 @@ func TestGroupJob(t *testing.T) {
 		err := gj.Close()
 		assert.NotNil(err, "closing a processing job should fail")
 		assert.Contains(err.Error(), "processing", "error message should indicate job is processing")
-		
+
 		// Transition to finished
 		gj.ChangeStatus(finished)
 		assert.Equal("Finished", gj.Status(), "status should be 'Finished' after change")

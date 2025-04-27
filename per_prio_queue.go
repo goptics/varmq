@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type PersistentPriorityQueue[T, R any] interface {
 	PriorityQueue[T, R]

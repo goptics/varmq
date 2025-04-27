@@ -1,8 +1,8 @@
-module github.com/fahimfaiaal/gocq/examples/distributed
+module github.com/fahimfaiaal/gocmq/examples/distributed
 
 go 1.24.1
 
-require github.com/fahimfaisaal/gocq/v3 v3.0.0
+require github.com/fahimfaisaal/gocmq v1.0.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -13,4 +13,4 @@ require (
 
 // Replace the remote module with your local path
 // Assuming your project structure has examples/distributed at the same level as your main module
-replace github.com/fahimfaisaal/gocq/v3 => ../../
+replace github.com/fahimfaisaal/gocmq => ../../

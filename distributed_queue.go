@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type DistributedQueue[T, R any] interface {
 	IExternalBaseQueue

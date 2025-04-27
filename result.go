@@ -1,9 +1,10 @@
-package gocq
+package gocmq
 
 // Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {
-	Data T
-	Err  error
+	JobId string
+	Data  T
+	Err   error
 }
 
 // EnqueuedJob represents a job that has been enqueued and can wait for a result.

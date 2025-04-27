@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"sync/atomic"

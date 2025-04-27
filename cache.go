@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type ICache interface {
 	Load(key any) (any, bool)

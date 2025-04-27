@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3/utils"
+	"github.com/fahimfaisaal/gocmq/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.
