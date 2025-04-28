@@ -1,4 +1,4 @@
-#GoCMQ API Reference
+# GoCMQ API Reference
 
 Comprehensive API documentation for theGoCMQ (Go Concurrent Queue) library.
 
@@ -67,8 +67,12 @@ worker := gocmq.NewVoidWorker(func(data int) {
     fmt.Printf("Processing: %d\n", data)
 })
 
-queue := worker.BindQueue()
-queue.Add(42).Drain() // Fire and forget
+q1 := worker.BindQueue()
+q1.Add(42).Drain() // Fire and forget
+
+q2 := worker.BindPriorityQueue() // ❌ one worker can't be bound with multiple queues. it will panic
+
+q2 := worker.Copy().BindPriorityQueue() // ✅ using Copy, you can bind multiple queues but each queue will have its own worker
 ```
 
 ### Worker Configuration

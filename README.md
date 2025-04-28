@@ -167,45 +167,9 @@ job.Drain()
 jsonData, _ := job.Json()
 ```
 
-## WhyGoCMQ?
+## The Architecture
 
-- **Simple API**: Clean, intuitive interface that doesn't get in your way
-- **Minimal Dependencies**: Core library has no external dependencies
-- **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
-  - Currently supports Redis via redisq adapter
-  - Future plans include SQLite, PostgreSQL, DiceDB and more
-  - Build your own adapters for any persistent storage system
-
-## API Reference
-
-For detailed API documentation, see our [API Reference](./docs/API_REFERENCE.md).
-
-### Table of Contents
-
-- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
-  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
-  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
-  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
-  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
-- [Queue Types](./docs/API_REFERENCE.md#queue-types)
-  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
-  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
-  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
-  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
-  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
-  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
-- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
-  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
-  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
-- [Worker Control](./docs/API_REFERENCE.md#worker-control)
-- [Adapters](./docs/API_REFERENCE.md#adapters)
-  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
-  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
-  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
-- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
-- [Job Management](./docs/API_REFERENCE.md#job-management)
-  - [`Job`](./docs/API_REFERENCE.md#job)
+![gomcq architecture](./gocmq.excalidraw.png)
 
 ## Sequence Diagram
 
@@ -318,6 +282,46 @@ sequenceDiagram
     Queue-->>Client: Return
     deactivate Queue
 ```
+
+## WhyGoCMQ?
+
+- **Simple API**: Clean, intuitive interface that doesn't get in your way
+- **Minimal Dependencies**: Core library has no external dependencies
+- **Production Ready**: Built for real-world scenarios and high-load applications
+- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
+  - Currently supports Redis via redisq adapter
+  - Future plans include SQLite, PostgreSQL, DiceDB and more
+  - Build your own adapters for any persistent storage system
+
+## API Reference
+
+For detailed API documentation, see our [API Reference](./docs/API_REFERENCE.md).
+
+### Table of Contents
+
+- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
+  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
+  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
+  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
+  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
+- [Queue Types](./docs/API_REFERENCE.md#queue-types)
+  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
+  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
+  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
+  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
+  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
+  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
+- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
+  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
+  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
+- [Worker Control](./docs/API_REFERENCE.md#worker-control)
+- [Adapters](./docs/API_REFERENCE.md#adapters)
+  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
+  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
+  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
+- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
+- [Job Management](./docs/API_REFERENCE.md#job-management)
+  - [`Job`](./docs/API_REFERENCE.md#job)
 
 ## Contributing
 
