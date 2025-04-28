@@ -295,7 +295,7 @@ sequenceDiagram
 
 ## API Reference
 
-For detailed API documentation, see our [API Reference](./docs/API_REFERENCE.md).
+For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
 
 ### Table of Contents
 
