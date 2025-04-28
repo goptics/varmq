@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3"
+	"github.com/fahimfaisaal/gocmq"
 	"github.com/fahimfaisaal/redisq"
 )
 
@@ -28,13 +28,13 @@ func main() {
 	redisQueue := redisq.New("redis://localhost:6375")
 	defer redisQueue.Close()
 	rq := redisQueue.NewDistributedQueue("scraping_queue")
-	pq := gocq.NewDistributedQueue[[]string, string](rq)
+	pq := gocmq.NewDistributedQueue[[]string, string](rq)
 	defer pq.Close()
 
 	for i := range 1000 {
 		id := generateJobID()
 		data := []string{fmt.Sprintf("https://example.com/%s", strconv.Itoa(i)), id}
-		pq.Add(data, gocq.WithJobId(id))
+		pq.Add(data, gocmq.WithJobId(id))
 	}
 
 	fmt.Println("added jobs")

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3"
+	"github.com/fahimfaisaal/gocmq"
 	"github.com/fahimfaisaal/redisq"
 )
 
@@ -20,14 +20,15 @@ func main() {
 	defer rq.Close()
 	defer rq.Listen()
 
-	w := gocq.NewVoidWorker(func(data []string) {
+	w := gocmq.NewVoidWorker(func(data []string) {
 		url, id := data[0], data[1]
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
-	})
+	}, 5)
 
-	q := w.BindWithDistributedQueue(rq)
+	// Using redisq adapter (you can use any adapter that implements IDistributedQueue)
+	q := w.WithDistributedQueue(rq)
 
 	fmt.Println("pending jobs:", q.PendingCount())
 	fmt.Println("listening...")

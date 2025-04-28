@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type priorityQueue[T, R any] struct {
 	*externalQueue[T, R]

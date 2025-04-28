@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"fmt"
@@ -10,9 +10,20 @@ type externalQueue[T, R any] struct {
 	*worker[T, R]
 }
 
+type IExternalBaseQueue interface {
+	// PendingCount returns the number of Jobs pending in the queue.
+	PendingCount() int
+	// Purge removes all pending Jobs from the queue.
+	// Time complexity: O(n) where n is the number of pending Jobs
+	Purge()
+	// Close closes the queue and resets all internal states.
+	// Time complexity: O(n) where n is the number of channels
+	Close() error
+}
+
 // IExternalQueue is the root interface of concurrent queue operations.
 type IExternalQueue[T, R any] interface {
-	IBaseQueue
+	IExternalBaseQueue
 
 	// Worker returns the worker.
 	Worker() Worker[T, R]
@@ -34,25 +45,25 @@ func newExternalQueue[T, R any](worker *worker[T, R]) *externalQueue[T, R] {
 	}
 }
 
-func (wbq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
-	defer wbq.notifyToPullNextJobs()
+func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
+	defer eq.notifyToPullNextJobs()
 	j.ChangeStatus(queued)
 
 	if id := j.ID(); id != "" {
-		wbq.Cache.Store(id, j)
+		eq.Cache.Store(id, j)
 	}
 }
 
-func (wbq *externalQueue[T, R]) PendingCount() int {
-	return wbq.Queue.Len()
+func (eq *externalQueue[T, R]) PendingCount() int {
+	return eq.Queue.Len()
 }
 
-func (wbq *externalQueue[T, R]) Worker() Worker[T, R] {
-	return wbq.worker
+func (eq *externalQueue[T, R]) Worker() Worker[T, R] {
+	return eq.worker
 }
 
-func (wbq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
-	val, ok := wbq.Cache.Load(id)
+func (eq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
+	val, ok := eq.Cache.Load(id)
 	if !ok {
 		return nil, fmt.Errorf("job not found for id: %s", id)
 	}
@@ -60,12 +71,12 @@ func (wbq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
 	return val.(EnqueuedJob[R]), nil
 }
 
-func (wbq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
+func (eq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
 	if !strings.HasPrefix(id, groupIdPrefixed) {
 		id = generateGroupId(id)
 	}
 
-	val, ok := wbq.Cache.Load(id)
+	val, ok := eq.Cache.Load(id)
 
 	if !ok {
 		return nil, fmt.Errorf("groups job not found for id: %s", id)
@@ -74,23 +85,23 @@ func (wbq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob
 	return val.(EnqueuedSingleGroupJob[R]), nil
 }
 
-func (wbq *externalQueue[T, R]) WaitUntilFinished() {
+func (eq *externalQueue[T, R]) WaitUntilFinished() {
 	// to ignore deadlock error if the queue is paused
-	if wbq.IsPaused() {
-		wbq.Resume()
+	if eq.IsPaused() {
+		eq.Resume()
 	}
 
-	wbq.sync.wg.Wait()
+	eq.sync.wg.Wait()
 
 	// wait until all ongoing processes are done if still pending
-	for wbq.PendingCount() > 0 || wbq.CurrentProcessingCount() > 0 {
+	for eq.PendingCount() > 0 || eq.CurrentProcessingCount() > 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func (wbq *externalQueue[T, R]) Purge() {
-	prevValues := wbq.Queue.Values()
-	wbq.Queue.Purge()
+func (eq *externalQueue[T, R]) Purge() {
+	prevValues := eq.Queue.Values()
+	eq.Queue.Purge()
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {

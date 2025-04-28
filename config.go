@@ -1,9 +1,9 @@
-package gocq
+package gocmq
 
 import (
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3/utils"
+	"github.com/fahimfaisaal/gocmq/utils"
 )
 
 type ConfigFunc func(*configs)

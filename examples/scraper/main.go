@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3"
+	gocmq "github.com/fahimfaisaal/gocmq"
 )
 
 func main() {
@@ -13,7 +13,7 @@ func main() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
 
-	w := gocq.NewVoidWorker(func(data int) {
+	w := gocmq.NewVoidWorker(func(data int) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Processed: %d\n", data)

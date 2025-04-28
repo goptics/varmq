@@ -1,6 +1,6 @@
 # Concurrent Queue Example Server
 
-This example demonstrates how to use the `gocq` library to create a concurrent queue for scraping URLs. The server provides two endpoints:
+This example demonstrates how to use the `gocmq` library to create a concurrent queue for scraping URLs. The server provides two endpoints:
 
 1. `/scrape/{url}` - This endpoint enqueues a job to scrape the specified URL and returns a job ID.
 2. `/scrape/status/{job_id}` - This endpoint returns the status of the job with the given job ID.
@@ -82,7 +82,7 @@ Response:
 
 ## Implementation Details
 
-The server uses the `gocq` library to create a concurrent queue with a concurrency level of 10. The `scrapeWorker` function simulates the scraping work by sleeping for a few seconds and then returning the scraped content.
+The server uses the `gocmq` library to create a concurrent queue with a concurrency level of 10. The `scrapeWorker` function simulates the scraping work by sleeping for a few seconds and then returning the scraped content.
 
 The job results are stored in a `sync.Map` to allow concurrent access. The `generateJobID` function generates a random job ID for each enqueued job.
 

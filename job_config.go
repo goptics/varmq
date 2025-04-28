@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type JobConfigFunc func(*jobConfigs)
 
@@ -25,4 +25,12 @@ func WithJobId(id string) JobConfigFunc {
 		}
 		c.Id = id
 	}
+}
+
+func withRequiredJobId(c jobConfigs) jobConfigs {
+	if c.Id == "" {
+		panic("job id is required for persistent queue")
+	}
+
+	return c
 }

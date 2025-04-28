@@ -1,6 +1,4 @@
-package gocq
-
-var errJobIdRequired = "job id is required for persistent queue"
+package gocmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 // where jobs can be recovered even after application restarts. All jobs must have unique IDs.
@@ -14,7 +12,7 @@ type persistentQueue[T, R any] struct {
 
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
-func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) PersistentQueue[T, R] {
+func newPersistentQueue[T, R any](w *worker[T, R], pq IPersistentQueue) PersistentQueue[T, R] {
 	w.setQueue(pq)
 	return &persistentQueue[T, R]{queue: &queue[T, R]{
 		externalQueue: newExternalQueue(w),
@@ -27,11 +25,7 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq IQueue) PersistentQueue[T,
 // It will panic if no job ID is provided
 // Returns an EnqueuedJob that can be used to track the job's status and result
 func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
-	jobConfig := loadJobConfigs(q.configs, configs...)
-
-	if jobConfig.Id == "" {
-		panic(errJobIdRequired)
-	}
+	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
@@ -50,10 +44,7 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	groupJob := newGroupJob[T, R](uint32(len(items)))
 
 	for _, item := range items {
-		jConfigs := loadJobConfigs(q.configs, WithJobId(item.ID))
-		if jConfigs.Id == "" {
-			panic(errJobIdRequired)
-		}
+		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
@@ -73,6 +64,17 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 // Purge removes all jobs from the queue
 func (q *persistentQueue[T, R]) Purge() {
 	q.queue.Purge()
+
+	// close all pending jobs
+	q.worker.Cache.Range(func(_, value any) bool {
+		v, _ := value.(EnqueuedJob[R])
+
+		if v.Status() == "Queued" {
+			v.Close()
+		}
+
+		return true
+	})
 }
 
 // Close stops the worker and closes the underlying queue

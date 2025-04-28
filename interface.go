@@ -1,7 +1,7 @@
-package gocq
+package gocmq
 
-// IWorkerQueue is the root interface of queue operations. workers queue needs to implement this interface.
-type IWorkerQueue interface {
+// IBaseQueue is the root interface of queue operations. workers queue needs to implement this interface.
+type IBaseQueue interface {
 	Len() int
 	Dequeue() (any, bool)
 	Values() []any
@@ -11,39 +11,49 @@ type IWorkerQueue interface {
 
 // IQueue is the root interface of queue operations.
 type IQueue interface {
-	IWorkerQueue
+	IBaseQueue
 	Enqueue(item any) bool
 }
 
 // IPriorityQueue is the root interface of priority queue operations.
 type IPriorityQueue interface {
-	IWorkerQueue
+	IBaseQueue
 	Enqueue(item any, priority int) bool
 }
 
-// ISubscribable is the root interface of notifiable operations.
+// IAcknowledgeable is the root interface of acknowledgeable operations.
+type IAcknowledgeable interface {
+	// Returns true if the item was successfully acknowledged, false otherwise.
+	Acknowledge(ackID string) bool
+	// PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
+	// Returns an error if the operation fails
+	PrepareForFutureAck(ackID string, item any) error
+}
+
+type IPersistentQueue interface {
+	IQueue
+	IAcknowledgeable
+}
+
+// IPersistentPriorityQueue is the root interface of persistent priority queue operations.
+type IPersistentPriorityQueue interface {
+	IPriorityQueue
+	IAcknowledgeable
+}
+
+// ISubscribable is the root interface of subscribable operations.
 type ISubscribable interface {
-	Subscribe(func(action string, data []byte))
+	Subscribe(func(action string))
 }
 
 // IDistributedQueue is the root interface of distributed queue operations.
 type IDistributedQueue interface {
-	IQueue
+	IPersistentQueue
 	ISubscribable
 }
 
+// IDistributedPriorityQueue is the root interface of distributed priority queue operations.
 type IDistributedPriorityQueue interface {
-	IPriorityQueue
+	IPersistentPriorityQueue
 	ISubscribable
-}
-
-type IBaseQueue interface {
-	// PendingCount returns the number of Jobs pending in the queue.
-	PendingCount() int
-	// Purge removes all pending Jobs from the queue.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	Purge()
-	// Close closes the queue and resets all internal states.
-	// Time complexity: O(n) where n is the number of channels
-	Close() error
 }

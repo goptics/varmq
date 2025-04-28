@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/gocq/v3/utils"
+	"github.com/fahimfaisaal/gocmq/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.
@@ -43,7 +43,7 @@ type worker[T, R any] struct {
 	Concurrency     atomic.Uint32
 	ChannelsStack   []chan iJob[T, R]
 	CurProcessing   atomic.Uint32
-	Queue           IWorkerQueue
+	Queue           IBaseQueue
 	Cache           ICache
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
@@ -106,7 +106,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	return w
 }
 
-func (w *worker[T, R]) setQueue(q IWorkerQueue) {
+func (w *worker[T, R]) setQueue(q IBaseQueue) {
 	w.Queue = q
 }
 
@@ -139,11 +139,18 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 			defer w.freeChannel(channel)
+			defer w.ack(j.ID())
 			defer j.Close()
 			defer j.ChangeStatus(finished)
 
 			w.processSingleJob(j)
 		}()
+	}
+}
+
+func (w *worker[T, R]) ack(ackId string) {
+	if q, ok := w.Queue.(IAcknowledgeable); ok {
+		q.Acknowledge(ackId)
 	}
 }
 
@@ -204,8 +211,8 @@ func (w *worker[T, R]) processNextJob() {
 	if !ok {
 		return
 	}
-	w.sync.wg.Add(1)
 
+	w.sync.wg.Add(1)
 	var j iJob[T, R]
 
 	// check the type of the value
@@ -239,6 +246,10 @@ func (w *worker[T, R]) processNextJob() {
 
 	w.CurProcessing.Add(1)
 	j.ChangeStatus(processing)
+
+	if q, ok := w.Queue.(IAcknowledgeable); ok {
+		q.PrepareForFutureAck(j.ID(), v)
+	}
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.pickNextChannel() <- j

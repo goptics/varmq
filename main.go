@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 // NewWorker creates a worker that can be bound to standard, priority, and persistent queue types.
 // It accepts a worker function that processes items of type T and returns results of type R.
@@ -35,7 +35,7 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 //	    log.Printf("Processing: %d", data)
 //	    return nil
 //	})
-//	queue := worker.BindQueue()
+//	queue := worker.BindQueue() // Bind to standard queue
 func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any] {
 	return newQueues(newWorker[T, any](wf, config...))
 }
@@ -56,8 +56,8 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 //	worker := NewVoidWorker(func(data int) {
 //	    fmt.Printf("Processing: %d\n", data)
 //	})
-//	queue := worker.BindQueue()
-//	distQueue := worker.BindWithDistributedQueue(myDistributedQueue)
+//	queue := worker.BindQueue() // Bind to standard queue
+//	distQueue := worker.Copy().WithDistributedQueue(myDistributedQueue) // Bind to provided distributed queue
 func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T] {
 	return newVoidQueues(newWorker[T, any](wf, config...))
 }

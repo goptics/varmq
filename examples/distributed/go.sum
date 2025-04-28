@@ -6,5 +6,9 @@ github.com/fahimfaisaal/redisq v0.1.1 h1:rJWrrElsYxd40AYfonwM7M78cIqC3W7wMxk0ovn
 github.com/fahimfaisaal/redisq v0.1.1/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
 github.com/fahimfaisaal/redisq v1.0.0 h1:bBv5yWASKXuO1cy8lGiJNMTOqGNbdI3oFoLCxHveNmg=
 github.com/fahimfaisaal/redisq v1.0.0/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
+github.com/fahimfaisaal/redisq v1.1.0 h1:7UiIyL+CuBrrTHr3gqDc5hdNB6LmKmlzhiFQPdv4ymg=
+github.com/fahimfaisaal/redisq v1.1.0/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
+github.com/fahimfaisaal/redisq v1.2.0 h1:0XySXypwbFLaMmlJQUFgJMCZcSzeOX35xEHq1NV10IM=
+github.com/fahimfaisaal/redisq v1.2.0/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
 github.com/redis/go-redis/v9 v9.7.3 h1:YpPyAayJV+XErNsatSElgRZZVCwXX9QzkKYNvO7x0wM=
 github.com/redis/go-redis/v9 v9.7.3/go.mod h1:bGUrSggJ9X9GUmZpZNEOQKaANxSGgOEBRltRTZHSvrA=

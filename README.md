@@ -1,36 +1,42 @@
-# GoCQ: High-Performance Concurrent Queue for Gophers
+# GoCMQ - Go Concurrent Message Queue
 
-Package gocq offers a concurrent queue system using channels and goroutines, supporting both FIFO and priority operations, with options for result-returning and void (non-returning) queues.
-Zero dependency just install, import and use any where in your go program.
-
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocq/v2)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocq)
+[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocmq)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocmq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocmq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/gocq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocq/v2/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/gocq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocq/)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/gocmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocmq/)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-## 🌟 Features
+GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The library helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
 
-- Generic type support for both data and results
-- Result returning and void (non-returning) queue variants
-- Configurable concurrency limits with auto-scaling based on CPU cores
-- FIFO queue with O(1) operations
-- Priority queue support with O(log n) operations
-- Non-blocking job submission
-- Control job after submission
-- Thread-safe operations
-- Pause/Resume functionality
-- Clean and graceful shutdown mechanisms
+## Features
 
-## 🔧 Installation
+- **💪 Type-safe**: Fully leverages Go generics for compile-time type safety
+- **⚡ High performance**: Optimized for throughput with minimal overhead
+- **🛠️ Flexible queue types**:
+  - Standard queues for in-memory processing
+  - Priority queues for importance-based ordering
+  - Persistent queues for durability across restarts
+  - Distributed queues for processing across multiple systems
+- **🧩 Worker abstractions**:
+  - `WorkerFunc` - Returns result and error
+  - `WorkerErrFunc` - Returns only error (when result isn't needed)
+  - `VoidWorkerFunc` - Fire-and-forget operations (most performant)
+- **🚦 Concurrency control**: Fine-grained control over worker pool size
+- **💾 Persistence**: Support for durable storage through adapter interfaces
+- **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
+- **🧩 Extensible**: Build your own storage adapters by implementing simple interfaces
+
+## Quick Start
+
+### Installation
 
 ```bash
-go get github.com/fahimfaisaal/gocq/v2
+go get github.com/fahimfaisaal/gocmq
 ```
 
-## 🚀 Quick Start
+### Basic Usage
 
 ```go
 package main
@@ -38,124 +44,289 @@ package main
 import (
     "fmt"
     "time"
-    "github.com/fahimfaisaal/gocq/v2"
+
+    "github.com/fahimfaisaal/gocmq"
 )
 
 func main() {
-    // Create a queue with 2 concurrent workers
-    queue := gocq.NewQueue(2, func(data int) (int, error) {
-        time.Sleep(500 * time.Millisecond)
-        return data * 2, nil
-    })
-    defer queue.Close()
+    // Create a worker that processes strings and returns their length
+    worker := gocmq.NewWorker(func(data string) (int, error) {
+        fmt.Println("Processing:", data)
+        time.Sleep(500 * time.Millisecond) // Simulate work
+        return len(data), nil
+    }, 4) // 4 concurrent workers
 
-    // Add a single job
-    result, err := queue.Add(5).Result()
-    fmt.Println(result, err) // Output: 10 nil
+    // Bind to a standard queue
+    queue := worker.BindQueue()
+    defer queue.WaitAndClose() // Wait for all jobs to complete
 
-    // Add multiple jobs
-    for result := range queue.AddAll([]int{1, 2, 3, 4, 5}).Results() {
+    // Add jobs to the queue
+    job1 := queue.Add("Hello")
+    job2 := queue.Add("World")
+
+    // Get results (Result() returns both value and error)
+    result1, err1 := job1.Result()
+    if err1 != nil {
+        fmt.Println("Error processing job1:", err1)
+    } else {
+        fmt.Println("Result 1:", result1)
+    }
+
+    result2, err2 := job2.Result()
+    if err2 != nil {
+        fmt.Println("Error processing job2:", err2)
+    } else {
+        fmt.Println("Result 2:", result2)
+    }
+
+    // Add multiple jobs at once
+    items := []gocmq.Item[string]{
+        {Value: "Concurrent"},
+        {Value: "Queue"},
+    }
+
+    groupJob := queue.AddAll(items)
+
+    resultChan, err := groupJob.Results()
+    if err != nil {
+        fmt.Println("Error getting results channel:", err)
+        return
+    }
+
+    // Get results as they complete in real-time
+    for result := range resultChan {
         if result.Err != nil {
-            fmt.Printf("Error: %v\n", result.Err)
-            continue
+            fmt.Printf("Error processing job %s: %v\n", result.JobId, result.Err)
+        } else {
+            fmt.Printf("Result for job %s: %v\n", result.JobId, result.Data)
         }
-        fmt.Println(result.Data) // Output: 2, 4, 6, 8, 10 (unordered)
     }
 }
 ```
 
-## 💡 Examples
+## Persistent and Distributed Queues
 
-### Priority Queue
+GoCMQ supports both persistent and distributed queue processing through adapter interfaces:
 
-```go
-queue := gocq.NewPriorityQueue(1, func(data int) (int, error) {
-    time.Sleep(500 * time.Millisecond)
-    return data * 2, nil
-})
-defer queue.WaitAndClose()
+- **Persistent Queues**: Store jobs durably so they survive program restarts
+- **Distributed Queues**: Process jobs across multiple systems
 
-// import "github.com/fahimfaisaal/gocq/v2/shared/types"
-items := []types.PQItem[int]{
-    {Value: 1, Priority: 2}, // Lowest priority
-    {Value: 2, Priority: 1}, // Medium priority
-    {Value: 3}, // Highest priority
-}
-
-for result := range queue.AddAll(items).Results() {
-    fmt.Println(result.Data) // Output: 6, 4, 2 (processed by priority)
-}
-```
-
-### Void Queue
+Usage is simple:
 
 ```go
-queue := gocq.NewVoidQueue(2, func(data int) error {
-    fmt.Printf("Processing: %d\n", data)
-    time.Sleep(500 * time.Millisecond)
-    fmt.Printf("Processed: %d\n", data)
-    return nil
-})
-defer queue.WaitAndClose()
+// For persistent queues (with any IPersistentQueue adapter)
+queue := worker.WithPersistentQueue(persistentQueueAdapter)
 
-queue.Add(1).Drain()
-queue.AddAll([]int{2, 3, 4}).Drain()
+// For distributed queues (with any IDistributedQueue adapter)
+queue := worker.WithDistributedQueue(distributedQueueAdapter)
 ```
 
-## Documentation
+See complete working examples in the [examples directory](./examples):
 
-For detailed API documentation, please refer to the [API Reference](./docs/API_REFERENCE.md).
+- [Persistent Queue Example](./examples/persistent)
+- [Distributed Queue Example](./examples/distributed)
 
-## 🚀 Performance
+Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
-### Benchmark Results
+## Advanced Features
 
-```bash
-# Normal Queue
+### Priority Queues
 
-goos: linux
-goarch: amd64
-pkg: github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue
-cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkQueue_Operations/Add-24                         1113538              1467 ns/op             376 B/op          8 allocs/op
-BenchmarkQueue_Operations/AddAll-24                        15778            131428 ns/op           17353 B/op        510 allocs/op
-BenchmarkPriorityQueue_Operations/Add-24                 1382113             878.6 ns/op             352 B/op          8 allocs/op
-BenchmarkPriorityQueue_Operations/AddAll-24                10000            121044 ns/op           14951 B/op        510 allocs/op
+Process important jobs first:
+
+```go
+// Create a standard priority queue
+queue := worker.BindPriorityQueue()
+
+// Add jobs with priorities (lower number = higher priority)
+queue.Add("High priority", gocmq.WithPriority(1))
+queue.Add("Low priority", gocmq.WithPriority(10))
 ```
 
-```bash
-# Void Queue
+### Job Control
 
-goos: linux
-goarch: amd64
-pkg: github.com/fahimfaisaal/gocq/v2/internal/concurrent_queue/void_queue
-cpu: 13th Gen Intel(R) Core(TM) i7-13700
-BenchmarkVoidQueue_Operations/Add-24                     1987044              1001 ns/op             240 B/op          7 allocs/op
-BenchmarkVoidQueue_Operations/AddAll-24                    10000            134711 ns/op           16989 B/op        512 allocs/op
-BenchmarkVoidPriorityQueue_Operations/Add-24             1326402              1323 ns/op             240 B/op          7 allocs/op
-BenchmarkVoidPriorityQueue_Operations/AddAll-24            11812            108261 ns/op           16965 B/op        512 allocs/op
+```go
+// Add a job with custom ID
+job := queue.Add("Important task", gocmq.WithJobId("custom-id-123"))
+
+// Get job status
+status := job.Status()
+
+// Get job result (blocks until job completes)
+result, err := job.Result()
+if err != nil {
+    fmt.Println("Job failed:", err)
+} else {
+    fmt.Println("Result:", result)
+}
+
+// Drain the result (when you don't need it)
+job.Drain()
+
+// Get JSON representation of job
+jsonData, _ := job.Json()
 ```
 
-| Queue Type         | Operation | Variant | ns/op | B/op | allocs/op |
-| ------------------ | --------- | ------- | ----- | ---- | --------- |
-| Non-Priority Queue | Add       | Normal  | 1467  | 376  | 8         |
-| Non-Priority Queue | Add       | Void    | 1001  | 240  | 7         |
+## The Architecture
 
-> Note: Void queue is ~25% faster than the standard queue according to benchmarks. even the memory usage is also lower.
+![gomcq architecture](./gocmq.excalidraw.png)
 
-### Run Benchmarks
+## Sequence Diagram
 
-```bash
-go test -bench=. -benchmem ./internal/concurrent_queue/
-go test -bench=. -benchmem ./internal/concurrent_queue/void_queue/
+The following sequence diagram illustrates the main flow and interactions in the GoCMQ.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Worker as Worker
+    participant Queue as Queue
+    participant Job as Job
+    participant ResultChannel as ResultChannel
+
+    %% Worker Creation
+    Client->>Worker: NewWorker(WorkerFunc, config)
+    activate Worker
+    Note over Worker: Create worker with concurrency settings, channels stack
+
+    %% Queue Binding
+    Client->>Worker: BindQueue()
+    Worker->>Worker: start()
+    activate Worker
+    Worker->>Worker: Create channels stack
+    Worker->>Worker: spawnWorker for each channel
+    Worker->>Worker: startEventLoop()
+    Note over Worker: Event loop continuously checks for pending jobs and available worker capacity
+    deactivate Worker
+    Worker->>Queue: newQueue(worker, internalQueue)
+    Queue-->>Worker: Return queue instance
+    Queue-->>Client: Return queue
+
+    %% Adding a Job
+    Client->>Queue: Add(data, configs)
+    activate Queue
+    Queue->>Job: newJob(data, configs)
+    activate Job
+    Job-->>Queue: Return job
+    Queue->>Queue: internalQueue.Enqueue(job)
+    Queue->>Job: ChangeStatus(queued)
+    Queue->>Worker: notifyToPullNextJobs()
+    Note over Worker: Signal event loop to check for jobs
+    deactivate Queue
+
+    %% Job Processing
+    Worker->>Worker: processNextJob()
+    activate Worker
+    Worker->>Queue: Queue.Dequeue()
+    Queue-->>Worker: Return job
+    Worker->>Job: ChangeStatus(processing)
+    Worker->>Worker: pickNextChannel() <- job
+    deactivate Worker
+
+    Worker->>Worker: spawnWorker(channel)
+    activate Worker
+    Worker->>Worker: Execute worker function with job.Input
+    alt Success
+        Job->>ResultChannel: Send(result)
+    else Error
+        Worker->>Job: SaveAndSendError(err)
+        Job->>ResultChannel: Send(error)
+    end
+    Worker->>Worker: CurProcessing.Add(-1)
+    Worker->>Worker: notifyToPullNextJobs()
+    deactivate Worker
+
+    %% Job Completion
+    Worker->>Job: ChangeStatus(finished)
+    Worker->>Job: Close()
+    Job->>ResultChannel: Close()
+    deactivate Job
+
+    %% Result Handling
+    Client->>Job: Result()
+    activate Job
+    Job->>ResultChannel: <-ch
+    ResultChannel-->>Job: Return result
+    Job-->>Client: Return result, error
+    deactivate Job
+
+    %% Worker Control
+    Client->>Worker: Pause()
+    Client->>Worker: Resume()
+    Client->>Worker: Stop()
+    deactivate Worker
+
+    %% Queue Shutdown
+    Client->>Queue: WaitAndClose()
+    activate Queue
+    Queue->>Queue: Wait for all jobs to complete
+    Queue->>Worker: Wait for worker to finish
+    Queue->>Queue: Close()
+    Queue->>Worker: Stop()
+    Queue-->>Client: Return when complete
+    deactivate Queue
+
+    alt Direct Close
+        Client->>Queue: Close()
+        activate Queue
+        Queue->>Queue: Discard pending jobs
+        Queue->>Worker: Stop()
+        Queue-->>Client: Return
+        deactivate Queue
+    end
+
+    %% Queue Purge
+    Client->>Queue: Purge()
+    activate Queue
+    Queue->>Queue: internalQueue.Purge()
+    Note over Queue: All pending jobs are removed
+    Queue-->>Client: Return
+    deactivate Queue
 ```
 
-## 👤 Author
+## WhyGoCMQ?
 
-- GitHub: [@fahimfaisaal](https://github.com/fahimfaisaal)
-- LinkedIn: [in/fahimfaisaal](https://www.linkedin.com/in/fahimfaisaal/)
-- Twitter: [@FahimFaisaal](https://twitter.com/FahimFaisaal)
+- **Simple API**: Clean, intuitive interface that doesn't get in your way
+- **Minimal Dependencies**: Core library has no external dependencies
+- **Production Ready**: Built for real-world scenarios and high-load applications
+- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
+  - Currently supports Redis via redisq adapter
+  - Future plans include SQLite, PostgreSQL, DiceDB and more
+  - Build your own adapters for any persistent storage system
 
-## 📝 License
+## API Reference
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
+
+### Table of Contents
+
+- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
+  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
+  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
+  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
+  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
+- [Queue Types](./docs/API_REFERENCE.md#queue-types)
+  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
+  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
+  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
+  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
+  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
+  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
+- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
+  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
+  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
+- [Worker Control](./docs/API_REFERENCE.md#worker-control)
+- [Adapters](./docs/API_REFERENCE.md#adapters)
+  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
+  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
+  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
+- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
+- [Job Management](./docs/API_REFERENCE.md#job-management)
+  - [`Job`](./docs/API_REFERENCE.md#job)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,4 +1,4 @@
-package gocq
+package gocmq
 
 type PersistentPriorityQueue[T, R any] interface {
 	PriorityQueue[T, R]
@@ -8,7 +8,7 @@ type persistentPriorityQueue[T, R any] struct {
 	*priorityQueue[T, R]
 }
 
-func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPriorityQueue) PersistentPriorityQueue[T, R] {
+func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
 	worker.setQueue(pq)
 	return &persistentPriorityQueue[T, R]{
 		priorityQueue: newPriorityQueue(worker, pq),
@@ -16,11 +16,7 @@ func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPriorityQueu
 }
 
 func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) EnqueuedJob[R] {
-	jobConfig := loadJobConfigs(q.configs, configs...)
-
-	if jobConfig.Id == "" {
-		panic(errJobIdRequired)
-	}
+	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
@@ -35,10 +31,7 @@ func (q *persistentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJ
 	groupJob := newGroupJob[T, R](uint32(len(items)))
 
 	for _, item := range items {
-		jConfigs := loadJobConfigs(q.configs, WithJobId(item.ID))
-		if jConfigs.Id == "" {
-			panic(errJobIdRequired)
-		}
+		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
