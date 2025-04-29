@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/gocmq/utils"
+	"github.com/fahimfaisaal/varmq/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.

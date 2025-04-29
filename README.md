@@ -1,11 +1,11 @@
 # GoCMQ - Go Concurrent Message Queue
 
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocmq)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocmq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocmq)
+[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/varmq)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/varmq)](https://goreportcard.com/report/github.com/fahimfaisaal/varmq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/gocmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocmq/)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/varmq/)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/varmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
@@ -35,7 +35,7 @@ its not an another killer of rabbitMQ or kafka. its just a simple message queue 
 ### Installation
 
 ```bash
-go get github.com/fahimfaisaal/gocmq
+go get github.com/fahimfaisaal/varmq
 ```
 
 ### Basic Usage
@@ -47,12 +47,12 @@ import (
     "fmt"
     "time"
 
-    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/varmq"
 )
 
 func main() {
     // Create a worker that processes strings and returns their length
-    worker := gocmq.NewWorker(func(data string) (int, error) {
+    worker := varmq.NewWorker(func(data string) (int, error) {
         fmt.Println("Processing:", data)
         time.Sleep(500 * time.Millisecond) // Simulate work
         return len(data), nil
@@ -82,7 +82,7 @@ func main() {
     }
 
     // Add multiple jobs at once
-    groupJob := queue.AddAll([]gocmq.Item[string]{
+    groupJob := queue.AddAll([]varmq.Item[string]{
         {Value: "Hello"},
         {Value: "World"},
     })
@@ -147,7 +147,7 @@ queue.Add("Low priority", 10)
 
 ```go
 // Add a job with custom ID
-job := queue.Add("Important task", gocmq.WithJobId("custom-id-123"))
+job := queue.Add("Important task", varmq.WithJobId("custom-id-123"))
 
 // Get job status
 status := job.Status()
@@ -209,7 +209,7 @@ For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md)
 
 ## The Concurrency Architecture
 
-![gomcq architecture](./gocmq.excalidraw.png)
+![gomcq architecture](./varmq.excalidraw.png)
 
 ## Sequence Diagram
 
