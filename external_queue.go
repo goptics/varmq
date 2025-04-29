@@ -45,7 +45,7 @@ func newExternalQueue[T, R any](worker *worker[T, R]) *externalQueue[T, R] {
 	}
 }
 
-func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
+func (eq *externalQueue[T, R]) postEnqueue(j iJob) {
 	defer eq.notifyToPullNextJobs()
 	j.ChangeStatus(queued)
 
@@ -105,7 +105,7 @@ func (eq *externalQueue[T, R]) Purge() {
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
-		if j, ok := val.(iJob[T, R]); ok {
+		if j, ok := val.(*job[T, R]); ok {
 			j.CloseResultChannel()
 		}
 	}

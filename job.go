@@ -53,24 +53,9 @@ type Job interface {
 	Json() ([]byte, error)
 }
 
-type iJob[T, R any] interface {
-	Job
-	EnqueuedJob[R]
-	// Data returns the input data of the job.
-	Data() T
-	// SetAckId sets the acknowledgment ID for the job.
-	SetAckId(id string)
-	// Ack acknowledges the job.
-	Ack() error
-	SetAckQueue(q IAcknowledgeable)
-	// SaveAndSendResult saves the result and sends it to the job's result channel.
-	SaveAndSendResult(result R)
-	// SaveAndSendError saves the error and sends it to the job's error channel.
-	SaveAndSendError(err error)
-	// ChangeStatus changes the status of the job.
-	ChangeStatus(s status) iJob[T, R]
-	// CloseResultChannel closes the result channel.
-	CloseResultChannel()
+type iJob interface {
+	ID() string
+	ChangeStatus(s status)
 }
 
 // New creates a new job with the provided data.
@@ -133,12 +118,11 @@ func (j *job[T, R]) IsClosed() bool {
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *job[T, R]) ChangeStatus(s status) iJob[T, R] {
+func (j *job[T, R]) ChangeStatus(s status) {
 	j.status.Store(s)
-	return j
 }
 
-// SaveAndSendResult sends a result to the job's result channel.
+// SaveAndSendResult saves the result and sends it to the job's result channel.
 func (j *job[T, R]) SaveAndSendResult(result R) {
 	r := Result[R]{JobId: j.id, Data: result}
 	j.Output = &r
@@ -210,7 +194,7 @@ func (j *job[T, R]) Json() ([]byte, error) {
 	return json.Marshal(view)
 }
 
-func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
+func parseToJob[T, R any](data []byte) (*job[T, R], error) {
 	var view jobView[T, R]
 	if err := json.Unmarshal(data, &view); err != nil {
 		return nil, fmt.Errorf("failed to parse job: %w", err)
@@ -250,22 +234,16 @@ func (j *job[T, R]) Close() error {
 	}
 
 	j.resultChannel.Close()
+	j.Ack()
 	j.status.Store(closed)
-
-	if j.queue != nil {
-		j.Ack()
-		j.queue = nil
-	}
-
 	return nil
 }
 
 func (j *job[T, R]) Ack() error {
-	if j.ackId == "" {
+	if j.ackId == "" || j.IsClosed() {
 		return errors.New("job is not acknowledgeable")
 	}
 
 	j.queue.Acknowledge(j.ackId)
-
 	return nil
 }

@@ -90,6 +90,7 @@ func (gj *groupJob[T, R]) Close() error {
 	}
 
 	gj.wg.Done()
+	gj.Ack()
 	gj.ChangeStatus(closed)
 	return nil
 }
