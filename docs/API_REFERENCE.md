@@ -86,6 +86,7 @@ worker := gocmq.NewWorker(myWorkerFunc, gocmq.WithConcurrency(8))
 // Or simply pass an integer for concurrency (shorthand)
 worker := gocmq.NewWorker(myWorkerFunc, 8)
 
+
 // Multiple configurations can be combined
 worker := gocmq.NewWorker(myWorkerFunc,
     gocmq.WithConcurrency(8),
@@ -105,8 +106,8 @@ worker := gocmq.NewWorker(myWorkerFunc,
 
 ```go
 // Set concurrency to use all available CPU cores
-worker := gocmq.NewWorker(myFunc, gocmq.WithConcurrency(runtime.NumCPU()))
-
+worker := gocmq.NewWorker(myFunc, gocmq.WithConcurrency(0))
+// if the concurrency is set to less than 1, then its set the concurrency number of cpu using runtime.NumCPU() func
 // Use custom job ID generator
 worker := gocmq.NewWorker(myFunc, gocmq.WithJobIdGenerator(func() string {
     return uuid.New().String() // Using UUID for job IDs

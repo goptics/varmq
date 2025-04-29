@@ -8,7 +8,9 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The library helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+
+its not an another killer of rabbitMQ or kafka. its just a simple message queue with worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
 
 ## Features
 
@@ -80,12 +82,10 @@ func main() {
     }
 
     // Add multiple jobs at once
-    items := []gocmq.Item[string]{
-        {Value: "Concurrent"},
-        {Value: "Queue"},
-    }
-
-    groupJob := queue.AddAll(items)
+    groupJob := queue.AddAll([]gocmq.Item[string]{
+        {Value: "Hello"},
+        {Value: "World"},
+    })
 
     resultChan, err := groupJob.Results()
     if err != nil {
@@ -139,8 +139,8 @@ Process important jobs first:
 queue := worker.BindPriorityQueue()
 
 // Add jobs with priorities (lower number = higher priority)
-queue.Add("High priority", gocmq.WithPriority(1))
-queue.Add("Low priority", gocmq.WithPriority(10))
+queue.Add("High priority", 1)
+queue.Add("Low priority", 10)
 ```
 
 ### Job Control
@@ -167,7 +167,47 @@ job.Drain()
 jsonData, _ := job.Json()
 ```
 
-## The Architecture
+## WhyGoCMQ?
+
+- **Simple API**: Clean, intuitive interface that doesn't get in your way
+- **Minimal Dependencies**: Core library has no external dependencies
+- **Production Ready**: Built for real-world scenarios and high-load applications
+- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
+  - Currently supports Redis via redisq adapter
+  - Future plans include SQLite, PostgreSQL, DiceDB and more
+  - Build your own adapters for any persistent storage system
+
+## API Reference
+
+For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
+
+### Table of Contents
+
+- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
+  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
+  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
+  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
+  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
+- [Queue Types](./docs/API_REFERENCE.md#queue-types)
+  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
+  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
+  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
+  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
+  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
+  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
+- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
+  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
+  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
+- [Worker Control](./docs/API_REFERENCE.md#worker-control)
+- [Adapters](./docs/API_REFERENCE.md#adapters)
+  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
+  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
+  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
+- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
+- [Job Management](./docs/API_REFERENCE.md#job-management)
+  - [`Job`](./docs/API_REFERENCE.md#job)
+
+## The Concurrency Architecture
 
 ![gomcq architecture](./gocmq.excalidraw.png)
 
@@ -282,46 +322,6 @@ sequenceDiagram
     Queue-->>Client: Return
     deactivate Queue
 ```
-
-## WhyGoCMQ?
-
-- **Simple API**: Clean, intuitive interface that doesn't get in your way
-- **Minimal Dependencies**: Core library has no external dependencies
-- **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
-  - Currently supports Redis via redisq adapter
-  - Future plans include SQLite, PostgreSQL, DiceDB and more
-  - Build your own adapters for any persistent storage system
-
-## API Reference
-
-For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
-
-### Table of Contents
-
-- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
-  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
-  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
-  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
-  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
-- [Queue Types](./docs/API_REFERENCE.md#queue-types)
-  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
-  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
-  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
-  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
-  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
-  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
-- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
-  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
-  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
-- [Worker Control](./docs/API_REFERENCE.md#worker-control)
-- [Adapters](./docs/API_REFERENCE.md#adapters)
-  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
-  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
-  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
-- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
-- [Job Management](./docs/API_REFERENCE.md#job-management)
-  - [`Job`](./docs/API_REFERENCE.md#job)
 
 ## Contributing
 
