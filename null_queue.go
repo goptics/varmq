@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"sync/atomic"

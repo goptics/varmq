@@ -1,9 +1,9 @@
-module github.com/fahimfaiaal/gocmq/examples/persistent
+module github.com/fahimfaiaal/varmq/examples/persistent
 
 go 1.24.1
 
 require (
-	github.com/fahimfaisaal/gocmq v1.0.0
+	github.com/fahimfaisaal/varmq v1.0.0
 	github.com/fahimfaisaal/redisq v1.2.0
 )
 
@@ -15,4 +15,4 @@ require (
 
 // Replace the remote module with your local path
 // Assuming your project structure has examples/distributed at the same level as your main module
-replace github.com/fahimfaisaal/gocmq => ../../
+replace github.com/fahimfaisaal/varmq => ../../

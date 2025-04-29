@@ -80,7 +80,7 @@
 
 ### 🎉 Initial Release
 
-GoCMQ (Go Concurrent Queue) is a high-performance concurrent queue system for Go, featuring both FIFO and priority queue implementations.
+VarMQ (Go Concurrent Queue) is a high-performance concurrent queue system for Go, featuring both FIFO and priority queue implementations.
 
 ### ✨ Features
 

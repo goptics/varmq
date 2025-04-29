@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // queue is the base implementation of the Queue interface
 // It contains an externalQueue for worker management and an internalQueue for job storage

@@ -1,9 +1,9 @@
-package gocmq
+package varmq
 
 import (
 	"time"
 
-	"github.com/fahimfaisaal/gocmq/utils"
+	"github.com/fahimfaisaal/varmq/utils"
 )
 
 type ConfigFunc func(*configs)

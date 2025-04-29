@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 // where jobs can be recovered even after application restarts. All jobs must have unique IDs.

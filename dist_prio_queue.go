@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type DistributedPriorityQueue[T, R any] interface {
 	IExternalBaseQueue

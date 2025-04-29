@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	gocmq "github.com/fahimfaisaal/gocmq"
+	varmq "github.com/fahimfaisaal/varmq"
 )
 
 type ScrapeResult struct {
@@ -17,7 +17,7 @@ type ScrapeResult struct {
 }
 
 var (
-	queue = gocmq.NewWorker(scrapeWorker, gocmq.WithCache(new(sync.Map))).BindQueue()
+	queue = varmq.NewWorker(scrapeWorker, varmq.WithCache(new(sync.Map))).BindQueue()
 )
 
 func init() {
@@ -43,7 +43,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Path[len("/scrape/"):]
 	jobID := generateJobID()
 
-	queue.Add(url, gocmq.WithJobId(jobID))
+	queue.Add(url, varmq.WithJobId(jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobID})
 }

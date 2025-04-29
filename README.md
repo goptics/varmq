@@ -1,4 +1,4 @@
-# GoCMQ - Go Concurrent Message Queue
+# VarMQ
 
 [![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/varmq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/varmq)](https://goreportcard.com/report/github.com/fahimfaisaal/varmq)
@@ -8,7 +8,7 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/varmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+VarMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
 
 its not an another killer of rabbitMQ or kafka. its just a simple message queue with worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
 
@@ -16,7 +16,7 @@ its not an another killer of rabbitMQ or kafka. its just a simple message queue 
 
 - **💪 Type-safe**: Fully leverages Go generics for compile-time type safety
 - **⚡ High performance**: Optimized for throughput with minimal overhead
-- **🛠️ Flexible queue types**:
+- **🛠️ Variants of queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
   - Persistent queues for durability across restarts
@@ -106,7 +106,7 @@ func main() {
 
 ## Persistent and Distributed Queues
 
-GoCMQ supports both persistent and distributed queue processing through adapter interfaces:
+VarMQ supports both persistent and distributed queue processing through adapter interfaces:
 
 - **Persistent Queues**: Store jobs durably so they survive program restarts
 - **Distributed Queues**: Process jobs across multiple systems
@@ -167,12 +167,12 @@ job.Drain()
 jsonData, _ := job.Json()
 ```
 
-## WhyGoCMQ?
+## WhyVarMQ?
 
 - **Simple API**: Clean, intuitive interface that doesn't get in your way
 - **Minimal Dependencies**: Core library has no external dependencies
 - **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
+- **Highly Extensible**: Create your own storage adapters by implementingVarMQ's internal queue interfaces
   - Currently supports Redis via redisq adapter
   - Future plans include SQLite, PostgreSQL, DiceDB and more
   - Build your own adapters for any persistent storage system
@@ -213,7 +213,7 @@ For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md)
 
 ## Sequence Diagram
 
-The following sequence diagram illustrates the main flow and interactions in the GoCMQ.
+The following sequence diagram illustrates the main flow and interactions in the VarMQ.
 
 ```mermaid
 sequenceDiagram

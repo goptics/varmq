@@ -1,10 +1,10 @@
-# GoCMQ API Reference
+# VarMQ API Reference
 
-Comprehensive API documentation for theGoCMQ (Go Concurrent Queue) library.
+Comprehensive API documentation for theVarMQ (Go Concurrent Queue) library.
 
 ## Worker Creation
 
-GoCMQ provides three main worker creation functions, each designed for different use cases.
+VarMQ provides three main worker creation functions, each designed for different use cases.
 
 ### `NewWorker`
 
@@ -119,7 +119,7 @@ worker := varmq.NewWorker(myFunc, varmq.WithAutoCleanupCache(1 * time.Hour))
 
 ## Queue Types
 
-GoCMQ supports different queue types for various use cases.
+VarMQ supports different queue types for various use cases.
 
 ### Standard Queue
 
@@ -390,7 +390,7 @@ worker.Restart()
 
 ## Adapters
 
-GoCMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
+VarMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
 
 ### Available Adapters
 
@@ -441,7 +441,7 @@ func (q *MyPersistentQueue) PrepareForFutureAck(ackID string, item any) error {
 
 ## Interface Hierarchy
 
-**Click to Open [GoCMQ Interface Hierarchy Diagram](../interface.drawio.png)**
+**Click to Open [VarMQ Interface Hierarchy Diagram](../interface.drawio.png)**
 
 ## Job Management
 

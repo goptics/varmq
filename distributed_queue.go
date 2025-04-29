@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type DistributedQueue[T, R any] interface {
 	IExternalBaseQueue

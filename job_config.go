@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type JobConfigFunc func(*jobConfigs)
 

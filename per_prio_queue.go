@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type PersistentPriorityQueue[T, R any] interface {
 	PriorityQueue[T, R]
