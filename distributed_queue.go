@@ -29,7 +29,15 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 		return false
 	}
 
-	return q.internalQueue.Enqueue(jBytes)
+	ok := q.internalQueue.Enqueue(jBytes)
+
+	if !ok {
+		return false
+	}
+
+	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+
+	return true
 }
 
 func (q *distributedQueue[T, R]) Purge() {

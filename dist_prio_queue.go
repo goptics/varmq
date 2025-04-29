@@ -29,7 +29,15 @@ func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfi
 		return false
 	}
 
-	return q.internalQueue.Enqueue(jBytes, priority)
+	ok := q.internalQueue.Enqueue(jBytes, priority)
+
+	if !ok {
+		return false
+	}
+
+	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+
+	return true
 }
 
 func (q *distributedPriorityQueue[T, R]) Purge() {

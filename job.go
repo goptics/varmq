@@ -24,10 +24,12 @@ const (
 // current status, input data, and channels for receiving results.
 type job[T, R any] struct {
 	id            string
-	resultChannel *resultChannel[R]
 	Input         T
 	status        atomic.Uint32
 	Output        *Result[R]
+	resultChannel *resultChannel[R]
+	queue         IAcknowledgeable
+	ackId         string
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -56,6 +58,11 @@ type iJob[T, R any] interface {
 	EnqueuedJob[R]
 	// Data returns the input data of the job.
 	Data() T
+	// SetAckId sets the acknowledgment ID for the job.
+	SetAckId(id string)
+	// Ack acknowledges the job.
+	Ack() error
+	SetAckQueue(q IAcknowledgeable)
 	// SaveAndSendResult saves the result and sends it to the job's result channel.
 	SaveAndSendResult(result R)
 	// SaveAndSendError saves the error and sends it to the job's error channel.
@@ -84,6 +91,14 @@ func newVoidJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 		id:    configs.Id,
 		Input: data,
 	}
+}
+
+func (j *job[T, R]) SetAckId(id string) {
+	j.ackId = id
+}
+
+func (j *job[T, R]) SetAckQueue(q IAcknowledgeable) {
+	j.queue = q
 }
 
 func (j *job[T, R]) ID() string {
@@ -236,6 +251,21 @@ func (j *job[T, R]) Close() error {
 
 	j.resultChannel.Close()
 	j.status.Store(closed)
+
+	if j.queue != nil {
+		j.Ack()
+		j.queue = nil
+	}
+
+	return nil
+}
+
+func (j *job[T, R]) Ack() error {
+	if j.ackId == "" {
+		return errors.New("job is not acknowledgeable")
+	}
+
+	j.queue.Acknowledge(j.ackId)
 
 	return nil
 }
