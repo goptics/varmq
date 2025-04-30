@@ -47,10 +47,10 @@ type Job interface {
 	IsClosed() bool
 	// Status returns the current status of the job.
 	Status() string
-	// Close closes the job and its associated channels.
-	close() error
 	// Json returns the JSON representation of the job.
 	Json() ([]byte, error)
+	// close closes the job and its associated channels.
+	close() error
 }
 
 type iJob[T, R any] interface {
