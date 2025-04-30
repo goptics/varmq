@@ -24,18 +24,18 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 	j := newVoidJob[T, R](data, withRequiredJobId(loadJobConfigs(newConfig(), c...)))
 
 	jBytes, err := j.Json()
+	j.SetInternalQueue(q.internalQueue)
 
 	if err != nil {
+		j.close()
+
 		return false
 	}
 
-	ok := q.internalQueue.Enqueue(jBytes)
-
-	if !ok {
+	if ok := q.internalQueue.Enqueue(jBytes); !ok {
+		j.close()
 		return false
 	}
-
-	j.SetInternalQueue(q.internalQueue)
 
 	return true
 }

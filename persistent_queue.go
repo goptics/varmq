@@ -29,13 +29,13 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
+	j.SetInternalQueue(q.internalQueue)
 
 	if ok := q.internalQueue.Enqueue(val); !ok {
 		j.close()
 		return j
 	}
 
-	j.SetInternalQueue(q.internalQueue)
 	q.postEnqueue(j)
 
 	return j
@@ -53,13 +53,13 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
+		j.SetInternalQueue(q.internalQueue)
 
 		if ok := q.internalQueue.Enqueue(val); !ok {
 			j.close()
 			continue
 		}
 
-		j.SetInternalQueue(q.internalQueue)
 		q.postEnqueue(j)
 	}
 
