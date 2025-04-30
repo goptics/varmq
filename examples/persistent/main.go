@@ -22,7 +22,7 @@ func main() {
 	// bind with persistent queue
 	w := varmq.NewWorker(func(data int) (int, error) {
 		fmt.Printf("Processing: %d\n", data)
-		time.Sleep(3 * time.Second)
+		time.Sleep(2 * time.Second)
 		r := data * 3
 
 		// error on every 10th job
@@ -41,7 +41,9 @@ func main() {
 	// Using redisq adapter (you can use any adapter that implements IPersistentQueue)
 	q := w.WithPersistentQueue(pq)
 	defer q.WaitAndClose()
-	defer fmt.Println("pending jobs:", q.PendingCount())
+	defer func() {
+		fmt.Println("Pending jobs:", q.PendingCount())
+	}()
 
 	// terminate the program to see the persistent pending jobs in the queue
 	// before that comment out the following lines to see the results
