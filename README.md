@@ -172,7 +172,7 @@ jsonData, _ := job.Json()
 - **Minimal Dependencies**: Core library has no external dependencies
 - **Production Ready**: Built for real-world scenarios and high-load applications
 - **Highly Extensible**: Create your own storage adapters by implementingVarMQ's internal queue interfaces
-  - Currently supports Redis via redisq adapter
+  - Currently supports Redis using [redisq](https://github.com/goptics/redisq) adapter
   - Future plans include SQLite, PostgreSQL, DiceDB and more
   - Build your own adapters for any persistent storage system
 
