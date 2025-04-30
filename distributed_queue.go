@@ -35,7 +35,7 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 		return false
 	}
 
-	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+	j.SetInternalQueue(q.internalQueue)
 
 	return true
 }

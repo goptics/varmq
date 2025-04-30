@@ -30,8 +30,12 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
 
-	q.internalQueue.Enqueue(val)
-	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+	if ok := q.internalQueue.Enqueue(val); !ok {
+		j.close()
+		return nil
+	}
+
+	j.SetInternalQueue(q.internalQueue)
 	q.postEnqueue(j)
 
 	return j
@@ -50,13 +54,12 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
 
-		ok := q.internalQueue.Enqueue(val)
-
-		if !ok {
+		if ok := q.internalQueue.Enqueue(val); !ok {
+			j.close()
 			continue
 		}
 
-		j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+		j.SetInternalQueue(q.internalQueue)
 		q.postEnqueue(j)
 	}
 
@@ -72,7 +75,7 @@ func (q *persistentQueue[T, R]) Purge() {
 		v, _ := value.(EnqueuedJob[R])
 
 		if v.Status() == "Queued" {
-			v.Close()
+			v.close()
 		}
 
 		return true

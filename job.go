@@ -28,7 +28,7 @@ type job[T, R any] struct {
 	status        atomic.Uint32
 	Output        *Result[R]
 	resultChannel *resultChannel[R]
-	queue         IAcknowledgeable
+	queue         IBaseQueue
 	ackId         string
 }
 
@@ -48,7 +48,7 @@ type Job interface {
 	// Status returns the current status of the job.
 	Status() string
 	// Close closes the job and its associated channels.
-	Close() error
+	close() error
 	// Json returns the JSON representation of the job.
 	Json() ([]byte, error)
 }
@@ -82,7 +82,7 @@ func (j *job[T, R]) SetAckId(id string) {
 	j.ackId = id
 }
 
-func (j *job[T, R]) SetAckQueue(q IAcknowledgeable) {
+func (j *job[T, R]) SetInternalQueue(q IBaseQueue) {
 	j.queue = q
 }
 
@@ -226,9 +226,9 @@ func parseToJob[T, R any](data []byte) (*job[T, R], error) {
 	return j, nil
 }
 
-// Close closes the job and its associated channels.
+// close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
-func (j *job[T, R]) Close() error {
+func (j *job[T, R]) close() error {
 	if err := j.isCloseable(); err != nil {
 		return err
 	}
@@ -244,6 +244,11 @@ func (j *job[T, R]) Ack() error {
 		return errors.New("job is not acknowledgeable")
 	}
 
-	j.queue.Acknowledge(j.ackId)
+	if _, ok := j.queue.(IAcknowledgeable); !ok {
+		return errors.New("job is not acknowledgeable")
+	}
+
+	j.queue.(IAcknowledgeable).Acknowledge(j.ackId)
+
 	return nil
 }

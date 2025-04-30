@@ -21,8 +21,14 @@ func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...Job
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
 
-	q.internalQueue.Enqueue(val, priority)
-	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+	ok := q.internalQueue.Enqueue(val, priority)
+
+	if !ok {
+		j.close()
+		return j
+	}
+
+	j.SetInternalQueue(q.internalQueue)
 	q.postEnqueue(j)
 
 	return j
@@ -37,13 +43,12 @@ func (q *persistentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJ
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
 
-		ok := q.internalQueue.Enqueue(val, item.Priority)
-
-		if !ok {
+		if ok := q.internalQueue.Enqueue(val, item.Priority); !ok {
+			j.close()
 			continue
 		}
-		j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
 
+		j.SetInternalQueue(q.internalQueue)
 		q.postEnqueue(j)
 	}
 

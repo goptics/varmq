@@ -463,10 +463,6 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 
   - Discards the job's result and error values asynchronously.
 
-- `Close() error`
-
-  - Closes the job and its associated channels.
-
 - `Result() (R, error)`
 
   - Blocks until the job completes and returns the result and any error.

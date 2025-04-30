@@ -35,7 +35,7 @@ func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfi
 		return false
 	}
 
-	j.SetAckQueue(q.internalQueue.(IAcknowledgeable))
+	j.SetInternalQueue(q.internalQueue)
 
 	return true
 }

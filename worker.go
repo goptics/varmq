@@ -139,7 +139,7 @@ func (w *worker[T, R]) spawnWorker(channel chan *job[T, R]) {
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 			defer w.freeChannel(channel)
-			defer j.Close()
+			defer j.close()
 			defer j.ChangeStatus(finished)
 
 			w.processSingleJob(j)
@@ -233,7 +233,7 @@ func (w *worker[T, R]) processNextJob() {
 			j = cachedJob.(*job[T, R])
 		} else {
 			w.Cache.Store(j.ID(), j)
-			j.SetAckQueue(w.Queue.(IAcknowledgeable))
+			j.SetInternalQueue(w.Queue)
 		}
 	default:
 		return

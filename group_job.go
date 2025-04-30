@@ -84,7 +84,7 @@ func (gj *groupJob[T, R]) Drain() error {
 	return nil
 }
 
-func (gj *groupJob[T, R]) Close() error {
+func (gj *groupJob[T, R]) close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
