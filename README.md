@@ -209,7 +209,7 @@ For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md)
 
 ## The Concurrency Architecture
 
-![gomcq architecture](./varmq.excalidraw.png)
+![varmq architecture](./varmq.excalidraw.png)
 
 ## Sequence Diagram
 
@@ -277,8 +277,8 @@ sequenceDiagram
 
     %% Job Completion
     Worker->>Job: ChangeStatus(finished)
-    Worker->>Job: Close()
-    Job->>ResultChannel: Close()
+    Worker->>Job: close()
+    Job->>ResultChannel: close()
     deactivate Job
 
     %% Result Handling

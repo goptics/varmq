@@ -53,9 +53,16 @@ type Job interface {
 	Json() ([]byte, error)
 }
 
-type iJob interface {
-	ID() string
+type iJob[T, R any] interface {
+	Job
 	ChangeStatus(s status)
+	SetAckId(id string)
+	SetInternalQueue(q IBaseQueue)
+	Data() T
+	CloseResultChannel()
+	SaveAndSendResult(result R)
+	SaveAndSendError(err error)
+	Ack() error
 }
 
 // New creates a new job with the provided data.
@@ -194,7 +201,7 @@ func (j *job[T, R]) Json() ([]byte, error) {
 	return json.Marshal(view)
 }
 
-func parseToJob[T, R any](data []byte) (*job[T, R], error) {
+func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
 	var view jobView[T, R]
 	if err := json.Unmarshal(data, &view); err != nil {
 		return nil, fmt.Errorf("failed to parse job: %w", err)

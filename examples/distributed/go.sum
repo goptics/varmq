@@ -10,5 +10,9 @@ github.com/fahimfaisaal/redisq v1.1.0 h1:7UiIyL+CuBrrTHr3gqDc5hdNB6LmKmlzhiFQPdv
 github.com/fahimfaisaal/redisq v1.1.0/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
 github.com/fahimfaisaal/redisq v1.2.0 h1:0XySXypwbFLaMmlJQUFgJMCZcSzeOX35xEHq1NV10IM=
 github.com/fahimfaisaal/redisq v1.2.0/go.mod h1:6x0r8oqzx6ICbppIIVOmPZwpwcqryZKOIGGgOQDEMKQ=
+github.com/fahimfaisaal/redisq v1.3.0 h1:+1Gkm5WCfJzP1UQRA7lWdl9khSbvbOBZN2MWxf/G/Pk=
+github.com/fahimfaisaal/redisq v1.3.0/go.mod h1:R3dFl1S5f+tCQbL2cMMTiqm+GDXIVTmCvc7eav+7GBQ=
+github.com/lucsky/cuid v1.2.1 h1:MtJrL2OFhvYufUIn48d35QGXyeTC8tn0upumW9WwTHg=
+github.com/lucsky/cuid v1.2.1/go.mod h1:QaaJqckboimOmhRSJXSx/+IT+VTfxfPGSo/6mfgUfmE=
 github.com/redis/go-redis/v9 v9.7.3 h1:YpPyAayJV+XErNsatSElgRZZVCwXX9QzkKYNvO7x0wM=
 github.com/redis/go-redis/v9 v9.7.3/go.mod h1:bGUrSggJ9X9GUmZpZNEOQKaANxSGgOEBRltRTZHSvrA=

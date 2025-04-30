@@ -32,7 +32,7 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 
 	if ok := q.internalQueue.Enqueue(val); !ok {
 		j.close()
-		return nil
+		return j
 	}
 
 	j.SetInternalQueue(q.internalQueue)

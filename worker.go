@@ -41,7 +41,7 @@ var (
 type worker[T, R any] struct {
 	workerFunc      any
 	Concurrency     atomic.Uint32
-	ChannelsStack   []chan *job[T, R]
+	ChannelsStack   []chan iJob[T, R]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
 	Cache           ICache
@@ -92,7 +92,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	w := &worker[T, R]{
 		workerFunc:      wf,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan *job[T, R], c.Concurrency),
+		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
@@ -121,7 +121,7 @@ func (w *worker[T, R]) isNullCache() bool {
 // freeChannel returns a channel to the available channels stack so it can be reused
 // This is called after a job has been processed to recycle the channel
 // Time complexity: O(1)
-func (w *worker[T, R]) freeChannel(channel chan *job[T, R]) {
+func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
 	w.sync.mx.Lock()
 	defer w.sync.mx.Unlock()
 	// push the channel back to the stack, so it can be used for the next Job
@@ -132,7 +132,7 @@ func (w *worker[T, R]) freeChannel(channel chan *job[T, R]) {
 // It continuously reads jobs from the channel and processes each one
 // Each job processing is wrapped in its own function with proper cleanup
 // Time complexity: O(1) per job
-func (w *worker[T, R]) spawnWorker(channel chan *job[T, R]) {
+func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
 		func() {
 			defer w.sync.wg.Done()
@@ -151,7 +151,7 @@ func (w *worker[T, R]) spawnWorker(channel chan *job[T, R]) {
 // It handles all three worker function types (VoidWorkerFunc, WorkerErrFunc, WorkerFunc)
 // and safely captures any panics that might occur during processing
 // It also sends any errors or results back to the job's result channel
-func (w *worker[T, R]) processSingleJob(j *job[T, R]) {
+func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	var panicErr error
 	var err error
 
@@ -216,12 +216,12 @@ func (w *worker[T, R]) processNextJob() {
 	}
 
 	w.sync.wg.Add(1)
-	var j *job[T, R]
+	var j iJob[T, R]
 
 	// check the type of the value
 	// and cast it to the appropriate job type
 	switch value := v.(type) {
-	case *job[T, R]:
+	case iJob[T, R]:
 		j = value
 	case []byte:
 		var err error
@@ -230,7 +230,7 @@ func (w *worker[T, R]) processNextJob() {
 		}
 
 		if cachedJob, ok := w.Cache.Load(j.ID()); ok {
-			j = cachedJob.(*job[T, R])
+			j = cachedJob.(iJob[T, R])
 		} else {
 			w.Cache.Store(j.ID(), j)
 			j.SetInternalQueue(w.Queue)
@@ -257,7 +257,7 @@ func (w *worker[T, R]) processNextJob() {
 
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
-func (w *worker[T, R]) pickNextChannel() chan<- *job[T, R] {
+func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	w.sync.mx.Lock()
 	defer w.sync.mx.Unlock()
 	l := len(w.ChannelsStack)
@@ -279,7 +279,7 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 	newWorker := &worker[T, R]{
 		workerFunc:      w.workerFunc,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan *job[T, R], c.Concurrency),
+		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
@@ -309,7 +309,7 @@ func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
 
 	for range ticker.C {
 		w.Cache.Range(func(key, value any) bool {
-			if j, ok := value.(*job[T, R]); ok && j.Status() == "Closed" {
+			if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
 				w.Cache.Delete(key)
 			}
 			return true
@@ -360,7 +360,7 @@ func (w *worker[T, R]) start() error {
 		}
 
 		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
-		w.ChannelsStack[i] = make(chan *job[T, R], 1)
+		w.ChannelsStack[i] = make(chan iJob[T, R], 1)
 		go w.spawnWorker(w.ChannelsStack[i])
 	}
 
@@ -395,7 +395,7 @@ func (w *worker[T, R]) Stop() {
 
 	w.Cache.Clear()
 
-	w.ChannelsStack = make([]chan *job[T, R], w.Concurrency.Load())
+	w.ChannelsStack = make([]chan iJob[T, R], w.Concurrency.Load())
 }
 
 func (w *worker[T, R]) Restart() error {
