@@ -54,13 +54,13 @@ func main() {
     // Create a worker that processes strings and returns their length
     worker := varmq.NewWorker(func(data string) (int, error) {
         fmt.Println("Processing:", data)
-        time.Sleep(500 * time.Millisecond) // Simulate work
+        time.Sleep(1 * time.Second) // Simulate work
         return len(data), nil
-    }, 4) // 4 concurrent workers
+    })
 
     // Bind to a standard queue
     queue := worker.BindQueue()
-    defer queue.WaitAndClose() // Wait for all jobs to complete
+    defer queue.WaitAndClose() // Wait for all jobs to complete and close the queue
 
     // Add jobs to the queue
     job1 := queue.Add("Hello")
@@ -82,10 +82,12 @@ func main() {
     }
 
     // Add multiple jobs at once
-    groupJob := queue.AddAll([]varmq.Item[string]{
-        {Value: "Hello"},
-        {Value: "World"},
-    })
+    items := []varmq.Item[string]{
+        {Value: "Concurrent", ID: "1"},
+        {Value: "Queue", ID: "2"},
+    }
+
+    groupJob := queue.AddAll(items)
 
     resultChan, err := groupJob.Results()
     if err != nil {
