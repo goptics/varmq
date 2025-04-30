@@ -3,7 +3,7 @@ package varmq
 import (
 	"sync"
 
-	"github.com/fahimfaisaal/varmq/internal/queues"
+	"github.com/goptics/varmq/internal/queues"
 )
 
 // IWorkerBinder is the base interface for binding workers to different queue types.

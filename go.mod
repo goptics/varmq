@@ -1,4 +1,4 @@
-module github.com/fahimfaisaal/varmq
+module github.com/goptics/varmq
 
 go 1.24.0
 

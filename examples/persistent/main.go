@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/redisq" // Redis adapter (just one of many possible adapters)
-	"github.com/fahimfaisaal/varmq"
+	"github.com/goptics/redisq" // Redis adapter (just one of many possible adapters)
+	"github.com/goptics/varmq"
 )
 
 func main() {

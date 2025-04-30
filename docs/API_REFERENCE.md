@@ -165,8 +165,8 @@ queue := worker.WithPersistentQueue(persistentQueue)
 ```go
 // Using the redisq adapter (one of many possible adapters)
 import (
-    "github.com/fahimfaisaal/varmq"
-    "github.com/fahimfaisaal/redisq"
+    "github.com/goptics/varmq"
+    "github.com/goptics/redisq"
 )
 
 // Connect to Redis using the adapter
@@ -233,8 +233,8 @@ queue := voidWorker.WithDistributedQueue(distributedQueue)
 // Provider (adds jobs to queue)
 import (
     "fmt"
-    "github.com/fahimfaisaal/varmq"
-    "github.com/fahimfaisaal/redisq"
+    "github.com/goptics/varmq"
+    "github.com/goptics/redisq"
 )
 
 // Connect to Redis ensure the redis server is running
@@ -254,8 +254,8 @@ for i := 0; i < 1000; i++ {
 // Consumer (processes jobs)
 import (
     "fmt"
-    "github.com/fahimfaisaal/varmq"
-    "github.com/fahimfaisaal/redisq"
+    "github.com/goptics/varmq"
+    "github.com/goptics/redisq"
 )
 
 // Connect to the same Redis server
@@ -394,7 +394,7 @@ VarMQ supports multiple storage backends through adapters. An adapter is any imp
 
 ### Available Adapters
 
-- **Redis:** [redisq](https://github.com/fahimfaisaal/redisq) - Redis-based adapter for persistent and distributed queues
+- **Redis:** [redisq](https://github.com/goptics/redisq) - Redis-based adapter for persistent and distributed queues
 
 ### Planned Adapters
 

@@ -1,11 +1,11 @@
 # VarMQ
 
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/varmq)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/varmq)](https://goreportcard.com/report/github.com/fahimfaisaal/varmq)
+[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/goptics/varmq)
+[![Go Report Card](https://goreportcard.com/badge/github.com/goptics/varmq)](https://goreportcard.com/report/github.com/goptics/varmq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/varmq/)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/varmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/goptics/varmq/actions/workflows/go.yml/badge.svg)](https://github.com/goptics/varmq/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/goptics/varmq/)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/goptics/varmq?utm_source=oss&utm_medium=github&utm_campaign=goptics%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 VarMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
@@ -35,7 +35,7 @@ its not an another killer of rabbitMQ or kafka. its just a simple message queue 
 ### Installation
 
 ```bash
-go get github.com/fahimfaisaal/varmq
+go get github.com/goptics/varmq
 ```
 
 ### Basic Usage
@@ -47,7 +47,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/fahimfaisaal/varmq"
+    "github.com/goptics/varmq"
 )
 
 func main() {

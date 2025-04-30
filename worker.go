@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/varmq/utils"
+	"github.com/goptics/varmq/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.

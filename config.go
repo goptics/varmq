@@ -3,7 +3,7 @@ package varmq
 import (
 	"time"
 
-	"github.com/fahimfaisaal/varmq/utils"
+	"github.com/goptics/varmq/utils"
 )
 
 type ConfigFunc func(*configs)

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/redisq"
-	"github.com/fahimfaisaal/varmq"
+	"github.com/goptics/redisq"
+	"github.com/goptics/varmq"
 )
 
 func main() {

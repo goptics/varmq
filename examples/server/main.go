@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	varmq "github.com/fahimfaisaal/varmq"
+	varmq "github.com/goptics/varmq"
 )
 
 type ScrapeResult struct {

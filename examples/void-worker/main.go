@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/varmq"
+	"github.com/goptics/varmq"
 )
 
 func main() {
