@@ -16,7 +16,7 @@ const groupIdPrefixed = "g:"
 func newGroupJob[T, R any](bufferSize uint32) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
-			resultChannel: NewResultChannel[R](bufferSize),
+			resultChannel: newResultChannel[R](bufferSize),
 		},
 		wg: new(sync.WaitGroup),
 	}

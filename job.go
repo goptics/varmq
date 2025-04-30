@@ -70,7 +70,7 @@ func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 	return &job[T, R]{
 		id:            configs.Id,
 		Input:         data,
-		resultChannel: NewResultChannel[R](1),
+		resultChannel: newResultChannel[R](1),
 		status:        atomic.Uint32{},
 		Output:        new(Result[R]),
 	}
@@ -211,7 +211,7 @@ func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
 		id:            view.Id,
 		Input:         view.Input,
 		Output:        view.Output,
-		resultChannel: NewResultChannel[R](1),
+		resultChannel: newResultChannel[R](1),
 	}
 
 	// Set the status
