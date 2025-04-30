@@ -10,12 +10,11 @@
 
 VarMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
 
-its not an another killer of rabbitMQ or kafka. its just a simple message queue with worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
+its not an another killer of rabbitMQ or kafka. its just a simple message queue with high-level worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
 
 ## Features
 
-- **💪 Type-safe**: Fully leverages Go generics for compile-time type safety
-- **⚡ High performance**: Optimized for throughput with minimal overhead
+- **⚡ High performance**: Optimized for throughput control with minimal overhead
 - **🛠️ Variants of queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
@@ -82,12 +81,10 @@ func main() {
     }
 
     // Add multiple jobs at once
-    items := []varmq.Item[string]{
+    groupJob := queue.AddAll([]varmq.Item[string]{
         {Value: "Concurrent", ID: "1"},
         {Value: "Queue", ID: "2"},
-    }
-
-    groupJob := queue.AddAll(items)
+    })
 
     resultChan, err := groupJob.Results()
     if err != nil {
