@@ -1,10 +1,10 @@
-# GoCMQ API Reference
+# VarMQ API Reference
 
-Comprehensive API documentation for theGoCMQ (Go Concurrent Queue) library.
+Comprehensive API documentation for theVarMQ (Go Concurrent Queue) library.
 
 ## Worker Creation
 
-GoCMQ provides three main worker creation functions, each designed for different use cases.
+VarMQ provides three main worker creation functions, each designed for different use cases.
 
 ### `NewWorker`
 
@@ -17,7 +17,7 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 **Example:**
 
 ```go
-worker := gocmq.NewWorker(func(data string) (int, error) {
+worker := varmq.NewWorker(func(data string) (int, error) {
     return len(data), nil
 })
 
@@ -43,7 +43,7 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 **Example:**
 
 ```go
-worker := gocmq.NewErrWorker(func(data int) error {
+worker := varmq.NewErrWorker(func(data int) error {
     log.Printf("Processing: %d", data)
     return nil
 })
@@ -63,7 +63,7 @@ func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder
 **Example:**
 
 ```go
-worker := gocmq.NewVoidWorker(func(data int) {
+worker := varmq.NewVoidWorker(func(data int) {
     fmt.Printf("Processing: %d\n", data)
 })
 
@@ -81,15 +81,16 @@ All worker creation functions accept optional configuration parameters that cust
 
 ```go
 // Create a worker with 8 concurrent processors
-worker := gocmq.NewWorker(myWorkerFunc, gocmq.WithConcurrency(8))
+worker := varmq.NewWorker(myWorkerFunc, varmq.WithConcurrency(8))
 
 // Or simply pass an integer for concurrency (shorthand)
-worker := gocmq.NewWorker(myWorkerFunc, 8)
+worker := varmq.NewWorker(myWorkerFunc, 8)
+
 
 // Multiple configurations can be combined
-worker := gocmq.NewWorker(myWorkerFunc,
-    gocmq.WithConcurrency(8),
-    gocmq.WithJobIdGenerator(myIdGenerator))
+worker := varmq.NewWorker(myWorkerFunc,
+    varmq.WithConcurrency(8),
+    varmq.WithJobIdGenerator(myIdGenerator))
 ```
 
 #### Configuration Options
@@ -105,20 +106,20 @@ worker := gocmq.NewWorker(myWorkerFunc,
 
 ```go
 // Set concurrency to use all available CPU cores
-worker := gocmq.NewWorker(myFunc, gocmq.WithConcurrency(runtime.NumCPU()))
-
+worker := varmq.NewWorker(myFunc, varmq.WithConcurrency(0))
+// if the concurrency is set to less than 1, then its set the concurrency number of cpu using runtime.NumCPU() func
 // Use custom job ID generator
-worker := gocmq.NewWorker(myFunc, gocmq.WithJobIdGenerator(func() string {
+worker := varmq.NewWorker(myFunc, varmq.WithJobIdGenerator(func() string {
     return uuid.New().String() // Using UUID for job IDs
 }))
 
 // Configure cache to clean up every hour
-worker := gocmq.NewWorker(myFunc, gocmq.WithAutoCleanupCache(1 * time.Hour))
+worker := varmq.NewWorker(myFunc, varmq.WithAutoCleanupCache(1 * time.Hour))
 ```
 
 ## Queue Types
 
-GoCMQ supports different queue types for various use cases.
+VarMQ supports different queue types for various use cases.
 
 ### Standard Queue
 
@@ -164,7 +165,7 @@ queue := worker.WithPersistentQueue(persistentQueue)
 ```go
 // Using the redisq adapter (one of many possible adapters)
 import (
-    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/varmq"
     "github.com/fahimfaisaal/redisq"
 )
 
@@ -177,7 +178,7 @@ persistentQueue := redisQueue.NewQueue("my_jobs")
 defer persistentQueue.Close()
 
 // Create a worker and bind to the persistent queue
-worker := gocmq.NewWorker(func(data string) (string, error) {
+worker := varmq.NewWorker(func(data string) (string, error) {
     return "Processed: " + data, nil
 }, 5)
 
@@ -232,7 +233,7 @@ queue := voidWorker.WithDistributedQueue(distributedQueue)
 // Provider (adds jobs to queue)
 import (
     "fmt"
-    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/varmq"
     "github.com/fahimfaisaal/redisq"
 )
 
@@ -241,7 +242,7 @@ redisQueue := redisq.New("redis://localhost:6379")
 rq := redisQueue.NewDistributedQueue("jobs_queue")
 
 // Create a distributed queue
-distQueue := gocmq.NewDistributedQueue[string, string](rq)
+distQueue := varmq.NewDistributedQueue[string, string](rq)
 
 // Add jobs from anywhere
 for i := 0; i < 1000; i++ {
@@ -253,7 +254,7 @@ for i := 0; i < 1000; i++ {
 // Consumer (processes jobs)
 import (
     "fmt"
-    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/varmq"
     "github.com/fahimfaisaal/redisq"
 )
 
@@ -262,7 +263,7 @@ redisQueue := redisq.New("redis://localhost:6379")
 rq := redisQueue.NewDistributedQueue("jobs_queue")
 
 // Create a worker
-worker := gocmq.NewVoidWorker(func(data string) {
+worker := varmq.NewVoidWorker(func(data string) {
     fmt.Println("Processing:", data)
 }, 10) // 10 concurrent workers
 
@@ -309,7 +310,7 @@ queue := voidWorker.WithDistributedPriorityQueue(distributedPriorityQueue)
 job := queue.Add(data)
 
 // Add multiple jobs
-groupJob := queue.AddAll([]gocmq.Item{
+groupJob := queue.AddAll([]varmq.Item{
     {ID: "job1", Value: data1},
     {ID: "job2", Value: data2},
 })
@@ -323,7 +324,7 @@ job.Drain()
 
 ```go
 // Create a worker that processes strings and returns their length
-worker := gocmq.NewWorker(func(data string) (int, error) {
+worker := varmq.NewWorker(func(data string) (int, error) {
     return len(data), nil
 }, 4) // 4 concurrent workers
 
@@ -331,7 +332,7 @@ worker := gocmq.NewWorker(func(data string) (int, error) {
 queue := worker.BindQueue()
 
 // Create a batch of items to process
-items := []gocmq.Item[string]{
+items := []varmq.Item[string]{
     {ID: "job1", Value: "hello"},
     {ID: "job2", Value: "world"},
     {ID: "job3", Value: "concurrent"},
@@ -389,7 +390,7 @@ worker.Restart()
 
 ## Adapters
 
-GoCMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
+VarMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
 
 ### Available Adapters
 
@@ -440,7 +441,7 @@ func (q *MyPersistentQueue) PrepareForFutureAck(ackID string, item any) error {
 
 ## Interface Hierarchy
 
-**Click to Open [GoCMQ Interface Hierarchy Diagram](../interface.drawio.png)**
+**Click to Open [VarMQ Interface Hierarchy Diagram](../interface.drawio.png)**
 
 ## Job Management
 
@@ -461,10 +462,6 @@ Represents a job that can be enqueued and processed, returned by invoking `Add` 
 - `Drain()`
 
   - Discards the job's result and error values asynchronously.
-
-- `Close() error`
-
-  - Closes the job and its associated channels.
 
 - `Result() (R, error)`
 

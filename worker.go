@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fahimfaisaal/gocmq/utils"
+	"github.com/fahimfaisaal/varmq/utils"
 )
 
 // WorkerFunc represents a function that processes a Job and returns a result and an error.
@@ -139,18 +139,11 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 			defer w.freeChannel(channel)
-			defer w.ack(j.ID())
-			defer j.Close()
+			defer j.close()
 			defer j.ChangeStatus(finished)
 
 			w.processSingleJob(j)
 		}()
-	}
-}
-
-func (w *worker[T, R]) ack(ackId string) {
-	if q, ok := w.Queue.(IAcknowledgeable); ok {
-		q.Acknowledge(ackId)
 	}
 }
 
@@ -207,7 +200,17 @@ func (w *worker[T, R]) startEventLoop() {
 
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, R]) processNextJob() {
-	v, ok := w.Queue.Dequeue()
+	var v any
+	var ok bool
+	var ackId string
+
+	switch q := w.Queue.(type) {
+	case IAcknowledgeable:
+		v, ok, ackId = q.DequeueWithAckId()
+	default:
+		v, ok = q.Dequeue()
+	}
+
 	if !ok {
 		return
 	}
@@ -230,6 +233,7 @@ func (w *worker[T, R]) processNextJob() {
 			j = cachedJob.(iJob[T, R])
 		} else {
 			w.Cache.Store(j.ID(), j)
+			j.SetInternalQueue(w.Queue)
 		}
 	default:
 		return
@@ -238,7 +242,6 @@ func (w *worker[T, R]) processNextJob() {
 	if j.IsClosed() {
 		w.sync.wg.Done()
 		w.Cache.Delete(j.ID())
-
 		// process next Job recursively if the current one is closed
 		w.processNextJob()
 		return
@@ -246,10 +249,7 @@ func (w *worker[T, R]) processNextJob() {
 
 	w.CurProcessing.Add(1)
 	j.ChangeStatus(processing)
-
-	if q, ok := w.Queue.(IAcknowledgeable); ok {
-		q.PrepareForFutureAck(j.ID(), v)
-	}
+	j.SetAckId(ackId)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.pickNextChannel() <- j

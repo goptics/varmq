@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ const groupIdPrefixed = "g:"
 func newGroupJob[T, R any](bufferSize uint32) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
-			resultChannel: NewResultChannel[R](bufferSize),
+			resultChannel: newResultChannel[R](bufferSize),
 		},
 		wg: new(sync.WaitGroup),
 	}
@@ -84,12 +84,13 @@ func (gj *groupJob[T, R]) Drain() error {
 	return nil
 }
 
-func (gj *groupJob[T, R]) Close() error {
+func (gj *groupJob[T, R]) close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
 
 	gj.wg.Done()
+	gj.Ack()
 	gj.ChangeStatus(closed)
 	return nil
 }

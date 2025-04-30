@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"errors"
@@ -13,8 +13,8 @@ type resultChannel[R any] struct {
 	consumed atomic.Bool
 }
 
-// NewResultChannel creates a new resultChannel with the specified buffer size.
-func NewResultChannel[R any](cap uint32) *resultChannel[R] {
+// newResultChannel creates a new resultChannel with the specified buffer size.
+func newResultChannel[R any](cap uint32) *resultChannel[R] {
 	return &resultChannel[R]{
 		ch: make(chan Result[R], cap),
 	}

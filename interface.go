@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // IBaseQueue is the root interface of queue operations. workers queue needs to implement this interface.
 type IBaseQueue interface {
@@ -25,9 +25,9 @@ type IPriorityQueue interface {
 type IAcknowledgeable interface {
 	// Returns true if the item was successfully acknowledged, false otherwise.
 	Acknowledge(ackID string) bool
-	// PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
-	// Returns an error if the operation fails
-	PrepareForFutureAck(ackID string, item any) error
+	// DequeueWithAckId dequeues an item from the queue
+	// Returns the item, a boolean indicating if the operation was successful, and the acknowledgment ID.
+	DequeueWithAckId() (any, bool, string)
 }
 
 type IPersistentQueue interface {

@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {

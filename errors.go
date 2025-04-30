@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 func selectError(errs ...error) error {
 	for _, err := range errs {

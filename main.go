@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // NewWorker creates a worker that can be bound to standard, priority, and persistent queue types.
 // It accepts a worker function that processes items of type T and returns results of type R.

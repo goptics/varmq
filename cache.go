@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type ICache interface {
 	Load(key any) (any, bool)

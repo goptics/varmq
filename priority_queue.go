@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type priorityQueue[T, R any] struct {
 	*externalQueue[T, R]

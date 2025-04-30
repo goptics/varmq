@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 // where jobs can be recovered even after application restarts. All jobs must have unique IDs.
@@ -29,8 +29,13 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
+	j.SetInternalQueue(q.internalQueue)
 
-	q.internalQueue.Enqueue(val)
+	if ok := q.internalQueue.Enqueue(val); !ok {
+		j.close()
+		return j
+	}
+
 	q.postEnqueue(j)
 
 	return j
@@ -48,13 +53,13 @@ func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
+		j.SetInternalQueue(q.internalQueue)
 
-		ok := q.internalQueue.Enqueue(val)
-
-		if !ok {
-			groupJob.wg.Done()
+		if ok := q.internalQueue.Enqueue(val); !ok {
+			j.close()
 			continue
 		}
+
 		q.postEnqueue(j)
 	}
 
@@ -70,7 +75,7 @@ func (q *persistentQueue[T, R]) Purge() {
 		v, _ := value.(EnqueuedJob[R])
 
 		if v.Status() == "Queued" {
-			v.Close()
+			v.close()
 		}
 
 		return true

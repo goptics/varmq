@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"encoding/json"
@@ -24,10 +24,12 @@ const (
 // current status, input data, and channels for receiving results.
 type job[T, R any] struct {
 	id            string
-	resultChannel *resultChannel[R]
 	Input         T
 	status        atomic.Uint32
 	Output        *Result[R]
+	resultChannel *resultChannel[R]
+	queue         IBaseQueue
+	ackId         string
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -45,25 +47,22 @@ type Job interface {
 	IsClosed() bool
 	// Status returns the current status of the job.
 	Status() string
-	// Close closes the job and its associated channels.
-	Close() error
 	// Json returns the JSON representation of the job.
 	Json() ([]byte, error)
+	// close closes the job and its associated channels.
+	close() error
 }
 
 type iJob[T, R any] interface {
 	Job
-	EnqueuedJob[R]
-	// Data returns the input data of the job.
+	ChangeStatus(s status)
+	SetAckId(id string)
+	SetInternalQueue(q IBaseQueue)
 	Data() T
-	// SaveAndSendResult saves the result and sends it to the job's result channel.
-	SaveAndSendResult(result R)
-	// SaveAndSendError saves the error and sends it to the job's error channel.
-	SaveAndSendError(err error)
-	// ChangeStatus changes the status of the job.
-	ChangeStatus(s status) iJob[T, R]
-	// CloseResultChannel closes the result channel.
 	CloseResultChannel()
+	SaveAndSendResult(result R)
+	SaveAndSendError(err error)
+	Ack() error
 }
 
 // New creates a new job with the provided data.
@@ -71,7 +70,7 @@ func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 	return &job[T, R]{
 		id:            configs.Id,
 		Input:         data,
-		resultChannel: NewResultChannel[R](1),
+		resultChannel: newResultChannel[R](1),
 		status:        atomic.Uint32{},
 		Output:        new(Result[R]),
 	}
@@ -84,6 +83,14 @@ func newVoidJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 		id:    configs.Id,
 		Input: data,
 	}
+}
+
+func (j *job[T, R]) SetAckId(id string) {
+	j.ackId = id
+}
+
+func (j *job[T, R]) SetInternalQueue(q IBaseQueue) {
+	j.queue = q
 }
 
 func (j *job[T, R]) ID() string {
@@ -118,12 +125,11 @@ func (j *job[T, R]) IsClosed() bool {
 }
 
 // ChangeStatus updates the job's status to the provided value.
-func (j *job[T, R]) ChangeStatus(s status) iJob[T, R] {
+func (j *job[T, R]) ChangeStatus(s status) {
 	j.status.Store(s)
-	return j
 }
 
-// SaveAndSendResult sends a result to the job's result channel.
+// SaveAndSendResult saves the result and sends it to the job's result channel.
 func (j *job[T, R]) SaveAndSendResult(result R) {
 	r := Result[R]{JobId: j.id, Data: result}
 	j.Output = &r
@@ -205,7 +211,7 @@ func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
 		id:            view.Id,
 		Input:         view.Input,
 		Output:        view.Output,
-		resultChannel: NewResultChannel[R](1),
+		resultChannel: newResultChannel[R](1),
 	}
 
 	// Set the status
@@ -227,15 +233,31 @@ func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
 	return j, nil
 }
 
-// Close closes the job and its associated channels.
+// close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
-func (j *job[T, R]) Close() error {
+func (j *job[T, R]) close() error {
 	if err := j.isCloseable(); err != nil {
 		return err
 	}
 
 	j.resultChannel.Close()
+	j.Ack()
 	j.status.Store(closed)
+	return nil
+}
+
+func (j *job[T, R]) Ack() error {
+	if j.ackId == "" || j.IsClosed() {
+		return errors.New("job is not acknowledgeable")
+	}
+
+	if _, ok := j.queue.(IAcknowledgeable); !ok {
+		return errors.New("job is not acknowledgeable")
+	}
+
+	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
+		return fmt.Errorf("queue failed to acknowledge job %s (ackId=%s)", j.id, j.ackId)
+	}
 
 	return nil
 }

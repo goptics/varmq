@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fahimfaisaal/gocmq"
 	"github.com/fahimfaisaal/redisq"
+	"github.com/fahimfaisaal/varmq"
 )
 
 func generateJobID() string {
@@ -28,13 +28,13 @@ func main() {
 	redisQueue := redisq.New("redis://localhost:6375")
 	defer redisQueue.Close()
 	rq := redisQueue.NewDistributedQueue("scraping_queue")
-	pq := gocmq.NewDistributedQueue[[]string, string](rq)
+	pq := varmq.NewDistributedQueue[[]string, string](rq)
 	defer pq.Close()
 
 	for i := range 1000 {
 		id := generateJobID()
 		data := []string{fmt.Sprintf("https://example.com/%s", strconv.Itoa(i)), id}
-		pq.Add(data, gocmq.WithJobId(id))
+		pq.Add(data, varmq.WithJobId(id))
 	}
 
 	fmt.Println("added jobs")

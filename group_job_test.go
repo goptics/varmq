@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"strings"
@@ -66,13 +66,13 @@ func TestGroupJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Close the job
-		err := gj.Close()
+		err := gj.close()
 		assert.Nil(err, "closing group job should not fail")
 		assert.Equal("Closed", gj.Status(), "job status should be 'Closed' after close")
 		assert.True(gj.IsClosed(), "job should be marked as closed")
 
 		// Attempting to close again should fail
-		err = gj.Close()
+		err = gj.close()
 		assert.NotNil(err, "closing an already closed job should fail")
 		assert.Contains(err.Error(), "already closed", "error message should indicate job is already closed")
 	})
@@ -99,7 +99,7 @@ func TestGroupJob(t *testing.T) {
 		assert.Equal("Processing", gj.Status(), "status should be 'Processing' after change")
 
 		// Attempting to close a processing job should fail
-		err := gj.Close()
+		err := gj.close()
 		assert.NotNil(err, "closing a processing job should fail")
 		assert.Contains(err.Error(), "processing", "error message should indicate job is processing")
 

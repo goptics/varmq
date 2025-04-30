@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 import (
 	"errors"
@@ -117,13 +117,13 @@ func TestJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Close the job
-		err := j.Close()
+		err := j.close()
 		assert.Nil(err, "closing job should not fail")
 		assert.Equal("Closed", j.Status(), "job status should be 'Closed' after close")
 		assert.True(j.IsClosed(), "job should be marked as closed")
 
 		// Attempting to close again should fail
-		err = j.Close()
+		err = j.close()
 		assert.NotNil(err, "closing an already closed job should fail")
 		assert.Contains(err.Error(), "already closed", "error message should indicate job is already closed")
 	})

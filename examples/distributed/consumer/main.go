@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fahimfaisaal/gocmq"
 	"github.com/fahimfaisaal/redisq"
+	"github.com/fahimfaisaal/varmq"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	defer rq.Close()
 	defer rq.Listen()
 
-	w := gocmq.NewVoidWorker(func(data []string) {
+	w := varmq.NewVoidWorker(func(data []string) {
 		url, id := data[0], data[1]
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
 		time.Sleep(2 * time.Second)

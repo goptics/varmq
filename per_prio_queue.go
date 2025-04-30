@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type PersistentPriorityQueue[T, R any] interface {
 	PriorityQueue[T, R]
@@ -20,8 +20,13 @@ func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...Job
 
 	j := newJob[T, R](data, jobConfig)
 	val, _ := j.Json()
+	j.SetInternalQueue(q.internalQueue)
 
-	q.internalQueue.Enqueue(val, priority)
+	if ok := q.internalQueue.Enqueue(val, priority); !ok {
+		j.close()
+		return j
+	}
+
 	q.postEnqueue(j)
 
 	return j
@@ -35,10 +40,10 @@ func (q *persistentPriorityQueue[T, R]) AddAll(items []PQItem[T]) EnqueuedGroupJ
 
 		j := groupJob.NewJob(item.Value, jConfigs)
 		val, _ := j.Json()
+		j.SetInternalQueue(q.internalQueue)
 
-		ok := q.internalQueue.Enqueue(val, item.Priority)
-
-		if !ok {
+		if ok := q.internalQueue.Enqueue(val, item.Priority); !ok {
+			j.close()
 			continue
 		}
 

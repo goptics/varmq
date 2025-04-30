@@ -1,9 +1,9 @@
-package gocmq
+package varmq
 
 import (
 	"sync"
 
-	"github.com/fahimfaisaal/gocmq/internal/queues"
+	"github.com/fahimfaisaal/varmq/internal/queues"
 )
 
 // IWorkerBinder is the base interface for binding workers to different queue types.

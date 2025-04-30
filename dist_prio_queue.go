@@ -1,4 +1,4 @@
-package gocmq
+package varmq
 
 type DistributedPriorityQueue[T, R any] interface {
 	IExternalBaseQueue
@@ -24,12 +24,19 @@ func (q *distributedPriorityQueue[T, R]) Add(data T, priority int, c ...JobConfi
 	j := newVoidJob[T, R](data, withRequiredJobId(loadJobConfigs(newConfig(), c...)))
 
 	jBytes, err := j.Json()
+	j.SetInternalQueue(q.internalQueue)
 
 	if err != nil {
+		j.close()
 		return false
 	}
 
-	return q.internalQueue.Enqueue(jBytes, priority)
+	if ok := q.internalQueue.Enqueue(jBytes, priority); !ok {
+		j.close()
+		return false
+	}
+
+	return true
 }
 
 func (q *distributedPriorityQueue[T, R]) Purge() {

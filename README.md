@@ -1,20 +1,22 @@
-# GoCMQ - Go Concurrent Message Queue
+# VarMQ
 
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/gocmq)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/gocmq)](https://goreportcard.com/report/github.com/fahimfaisaal/gocmq)
+[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/fahimfaisaal/varmq)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fahimfaisaal/varmq)](https://goreportcard.com/report/github.com/fahimfaisaal/varmq)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![CI](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/gocmq/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/fahimfaisaal/gocmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/gocmq/)
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/gocmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fgocmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+[![CI](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml/badge.svg)](https://github.com/fahimfaisaal/varmq/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/fahimfaisaal/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/fahimfaisaal/varmq/)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fahimfaisaal/varmq?utm_source=oss&utm_medium=github&utm_campaign=fahimfaisaal%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-GoCMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The library helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+VarMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+
+its not an another killer of rabbitMQ or kafka. its just a simple message queue with worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
 
 ## Features
 
 - **💪 Type-safe**: Fully leverages Go generics for compile-time type safety
 - **⚡ High performance**: Optimized for throughput with minimal overhead
-- **🛠️ Flexible queue types**:
+- **🛠️ Variants of queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
   - Persistent queues for durability across restarts
@@ -33,7 +35,7 @@ GoCMQ is a high-performance message queue for Go that handles concurrency well. 
 ### Installation
 
 ```bash
-go get github.com/fahimfaisaal/gocmq
+go get github.com/fahimfaisaal/varmq
 ```
 
 ### Basic Usage
@@ -45,20 +47,20 @@ import (
     "fmt"
     "time"
 
-    "github.com/fahimfaisaal/gocmq"
+    "github.com/fahimfaisaal/varmq"
 )
 
 func main() {
     // Create a worker that processes strings and returns their length
-    worker := gocmq.NewWorker(func(data string) (int, error) {
+    worker := varmq.NewWorker(func(data string) (int, error) {
         fmt.Println("Processing:", data)
-        time.Sleep(500 * time.Millisecond) // Simulate work
+        time.Sleep(1 * time.Second) // Simulate work
         return len(data), nil
-    }, 4) // 4 concurrent workers
+    })
 
     // Bind to a standard queue
     queue := worker.BindQueue()
-    defer queue.WaitAndClose() // Wait for all jobs to complete
+    defer queue.WaitAndClose() // Wait for all jobs to complete and close the queue
 
     // Add jobs to the queue
     job1 := queue.Add("Hello")
@@ -80,9 +82,9 @@ func main() {
     }
 
     // Add multiple jobs at once
-    items := []gocmq.Item[string]{
-        {Value: "Concurrent"},
-        {Value: "Queue"},
+    items := []varmq.Item[string]{
+        {Value: "Concurrent", ID: "1"},
+        {Value: "Queue", ID: "2"},
     }
 
     groupJob := queue.AddAll(items)
@@ -106,7 +108,7 @@ func main() {
 
 ## Persistent and Distributed Queues
 
-GoCMQ supports both persistent and distributed queue processing through adapter interfaces:
+VarMQ supports both persistent and distributed queue processing through adapter interfaces:
 
 - **Persistent Queues**: Store jobs durably so they survive program restarts
 - **Distributed Queues**: Process jobs across multiple systems
@@ -139,15 +141,15 @@ Process important jobs first:
 queue := worker.BindPriorityQueue()
 
 // Add jobs with priorities (lower number = higher priority)
-queue.Add("High priority", gocmq.WithPriority(1))
-queue.Add("Low priority", gocmq.WithPriority(10))
+queue.Add("High priority", 1)
+queue.Add("Low priority", 10)
 ```
 
 ### Job Control
 
 ```go
 // Add a job with custom ID
-job := queue.Add("Important task", gocmq.WithJobId("custom-id-123"))
+job := queue.Add("Important task", varmq.WithJobId("custom-id-123"))
 
 // Get job status
 status := job.Status()
@@ -167,13 +169,53 @@ job.Drain()
 jsonData, _ := job.Json()
 ```
 
-## The Architecture
+## WhyVarMQ?
 
-![gomcq architecture](./gocmq.excalidraw.png)
+- **Simple API**: Clean, intuitive interface that doesn't get in your way
+- **Minimal Dependencies**: Core library has no external dependencies
+- **Production Ready**: Built for real-world scenarios and high-load applications
+- **Highly Extensible**: Create your own storage adapters by implementingVarMQ's internal queue interfaces
+  - Currently supports Redis via redisq adapter
+  - Future plans include SQLite, PostgreSQL, DiceDB and more
+  - Build your own adapters for any persistent storage system
+
+## API Reference
+
+For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
+
+### Table of Contents
+
+- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
+  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
+  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
+  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
+  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
+- [Queue Types](./docs/API_REFERENCE.md#queue-types)
+  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
+  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
+  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
+  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
+  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
+  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
+- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
+  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
+  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
+- [Worker Control](./docs/API_REFERENCE.md#worker-control)
+- [Adapters](./docs/API_REFERENCE.md#adapters)
+  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
+  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
+  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
+- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
+- [Job Management](./docs/API_REFERENCE.md#job-management)
+  - [`Job`](./docs/API_REFERENCE.md#job)
+
+## The Concurrency Architecture
+
+![varmq architecture](./varmq.excalidraw.png)
 
 ## Sequence Diagram
 
-The following sequence diagram illustrates the main flow and interactions in the GoCMQ.
+The following sequence diagram illustrates the main flow and interactions in the VarMQ.
 
 ```mermaid
 sequenceDiagram
@@ -237,8 +279,8 @@ sequenceDiagram
 
     %% Job Completion
     Worker->>Job: ChangeStatus(finished)
-    Worker->>Job: Close()
-    Job->>ResultChannel: Close()
+    Worker->>Job: close()
+    Job->>ResultChannel: close()
     deactivate Job
 
     %% Result Handling
@@ -282,46 +324,6 @@ sequenceDiagram
     Queue-->>Client: Return
     deactivate Queue
 ```
-
-## WhyGoCMQ?
-
-- **Simple API**: Clean, intuitive interface that doesn't get in your way
-- **Minimal Dependencies**: Core library has no external dependencies
-- **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementingGoCMQ's internal queue interfaces
-  - Currently supports Redis via redisq adapter
-  - Future plans include SQLite, PostgreSQL, DiceDB and more
-  - Build your own adapters for any persistent storage system
-
-## API Reference
-
-For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
-
-### Table of Contents
-
-- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
-  - [`NewWorker`](./docs/API_REFERENCE.md#newworker)
-  - [`NewErrWorker`](./docs/API_REFERENCE.md#newerrworker)
-  - [`NewVoidWorker`](./docs/API_REFERENCE.md#newvoidworker)
-  - [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
-- [Queue Types](./docs/API_REFERENCE.md#queue-types)
-  - [Standard Queue](./docs/API_REFERENCE.md#standard-queue)
-  - [Priority Queue](./docs/API_REFERENCE.md#priority-queue)
-  - [Persistent Queue](./docs/API_REFERENCE.md#persistent-queue)
-  - [Persistent Priority Queue](./docs/API_REFERENCE.md#persistent-priority-queue)
-  - [Distributed Queue](./docs/API_REFERENCE.md#distributed-queue)
-  - [Distributed Priority Queue](./docs/API_REFERENCE.md#distributed-priority-queue)
-- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
-  - [Adding Jobs](./docs/API_REFERENCE.md#adding-jobs)
-  - [Shutdown Operations](./docs/API_REFERENCE.md#shutdown-operations)
-- [Worker Control](./docs/API_REFERENCE.md#worker-control)
-- [Adapters](./docs/API_REFERENCE.md#adapters)
-  - [Available Adapters](./docs/API_REFERENCE.md#available-adapters)
-  - [Planned Adapters](./docs/API_REFERENCE.md#planned-adapters)
-  - [Creating Custom Adapters](./docs/API_REFERENCE.md#creating-custom-adapters)
-- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
-- [Job Management](./docs/API_REFERENCE.md#job-management)
-  - [`Job`](./docs/API_REFERENCE.md#job)
 
 ## Contributing
 
