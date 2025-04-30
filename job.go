@@ -255,7 +255,9 @@ func (j *job[T, R]) Ack() error {
 		return errors.New("job is not acknowledgeable")
 	}
 
-	j.queue.(IAcknowledgeable).Acknowledge(j.ackId)
+	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
+		return fmt.Errorf("queue failed to acknowledge job %s (ackId=%s)", j.id, j.ackId)
+	}
 
 	return nil
 }
