@@ -129,6 +129,8 @@ See complete working examples in the [examples directory](./examples):
 
 Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
+> Note: Before testing examples, make sure to start the Redis server using `docker compose up -d`.
+
 ## Advanced Features
 
 ### Priority Queues
