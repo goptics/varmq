@@ -8,9 +8,11 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/goptics/varmq?utm_source=oss&utm_medium=github&utm_campaign=goptics%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-VarMQ is a high-performance message queue for Go that handles concurrency well. It combines a message queue with worker pool management in a type-safe way using Go generics. The package helps you process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. It does all this with a clean API that's easy to work with.
+**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing. It combines a message queue with worker pool management using Go generics, providing type safety without sacrificing performance.
 
-its not an another killer of rabbitMQ or kafka. its just a simple message queue with high-level worker pool management system. which provides you a real persistent and distributed queue abstraction layer using [adapters](./docs/API_REFERENCE.md#available-adapters).
+With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
+
+This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](./docs/API_REFERENCE.md#available-adapters) that extends its capabilities beyond simple in-memory queues.
 
 ## Features
 
@@ -326,6 +328,8 @@ sequenceDiagram
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License
+## 👤 Author
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- GitHub: [@fahimfaisaal](https://github.com/fahimfaisaal)
+- LinkedIn: [in/fahimfaisaal](https://www.linkedin.com/in/fahimfaisaal/)
+- Twitter: [@FahimFaisaal](https://twitter.com/FahimFaisaal)

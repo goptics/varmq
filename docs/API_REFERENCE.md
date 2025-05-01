@@ -201,9 +201,9 @@ type IPersistentQueue interface {
 type IAcknowledgeable interface {
     // Returns true if the item was successfully acknowledged, false otherwise.
     Acknowledge(ackID string) bool
-    // PrepareForFutureAck adds an item to the pending list for acknowledgment tracking
-    // Returns an error if the operation fails
-    PrepareForFutureAck(ackID string, item any) error
+    // DequeueWithAckId dequeues an item from the queue
+    // Returns the item, a boolean indicating if the operation was successful, and the acknowledgment ID.
+    DequeueWithAckId() (any, bool, string)
 }
 ```
 
@@ -423,10 +423,6 @@ func (q *MyPersistentQueue) Enqueue(item any) bool {
     // Store the item in your backend
 }
 
-func (q *MyPersistentQueue) Dequeue() (any, bool) {
-    // Get the next item from your backend
-}
-
 // ... implement other required methods
 
 // Implement IAcknowledgeable methods
@@ -434,7 +430,7 @@ func (q *MyPersistentQueue) Acknowledge(ackID string) bool {
     // Mark the item as acknowledged in your backend
 }
 
-func (q *MyPersistentQueue) PrepareForFutureAck(ackID string, item any) error {
+func (q *MyPersistentQueue) DequeueWithAckId() (any, bool, string) {
     // Store the item for future acknowledgment
 }
 ```
