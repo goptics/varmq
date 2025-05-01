@@ -1,6 +1,6 @@
 # Changelog
 
-## [v3.0.0] (2025-05-01)
+## [v1.0.0] (2025-05-01)
 
 ### 🔄 Project Evolution: GoCQ → VarMQ
 
@@ -58,6 +58,8 @@
 - **Type Safety**:
   - Strengthened generic constraints
   - Better error and panic propagation and handling
+
+## Gocq - end release
 
 ## [v2.0.0] (2025-03-14)
 
