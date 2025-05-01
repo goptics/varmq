@@ -324,6 +324,11 @@ sequenceDiagram
     deactivate Queue
 ```
 
+## Older Versions
+
+- [v2](https://pkg.go.dev/github.com/fahimfaisaal/gocq/v2)
+- [v1](https://pkg.go.dev/github.com/fahimfaisaal/gocq)
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
