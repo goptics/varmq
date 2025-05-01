@@ -8,7 +8,7 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/goptics/varmq?utm_source=oss&utm_medium=github&utm_campaign=goptics%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing. It combines a message queue with worker pool management using Go generics, providing type safety without sacrificing performance.
+**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing. It combines a message queue with worker pool management. Using Go generics, it provides type safety without sacrificing performance.
 
 With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
 
