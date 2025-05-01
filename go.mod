@@ -10,8 +10,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-retract (
-    // Old versions from github.com/fahimfaisaal/gocq
-    v2.0.0 // Moving to github.com/goptics/varmq
-    v1.0.0 // Moving to github.com/goptics/varmq
-)
