@@ -1,5 +1,64 @@
 # Changelog
 
+## [v3.0.0] (2025-05-01)
+
+### 🔄 Project Evolution: GoCQ → VarMQ
+
+- **Project Rebranding**: Renamed from GoCQ to VarMQ
+- **Organization Move**: Moved from personal repository `github.com/fahimfaisaal/gocq` to organization `github.com/goptics/varmq`
+- **Architectural Redesign**: Shifted from a simple concurrent queue to a full message queue system with adaptable backends
+
+### ✨ Expanded Capabilities
+
+- **Advanced Queue Variants**:
+  - Added Persistent Queue support for data durability across restarts
+  - Added Distributed Queue support for scaling across multiple systems
+  - Maintained Priority Queue functionality with improvements
+- **Worker Abstraction Layer**:
+  - Introduced explicit worker types and interfaces (`NewWorker`, `NewErrWorker`, `NewVoidWorker`)
+  - Added support for different worker patterns (result-returning, error-only, void)
+  - Simplified worker creation with dedicated factory methods
+
+### 🔧 API Improvements
+
+- **Worker-Centric Design**:
+
+  - New approach: Create worker first, then bind to desired queue type
+  - Old: `queue := NewQueue(concurrency, workerFunc)`
+  - New: `worker := NewWorker(workerFunc)` followed by `queue := worker.BindQueue()`
+
+- **Enhanced Job Control**:
+
+  - Replaced simple channel returns with comprehensive Job interface
+  - Added job status tracking, explicit result methods, and error handling
+  - New job management methods like `Status()`, `IsClosed()`, `Result()`, and `Drain()`
+
+- **Batch Processing**:
+  - Improved batch job handling with dedicated group job interfaces
+  - Enhanced result collection mechanisms for batch operations
+
+### 🚀 Production Readiness
+
+- **Extensibility**:
+  - Added adapter interfaces for creating custom queue backends
+  - Support for external storage systems like Redis (via optional adapters)
+- **Documentation**:
+  - Comprehensive API reference with detailed examples
+  - Visual architecture diagrams and sequence flows
+  - Clearer usage patterns and best practices
+
+### 🛠️ Technical Improvements
+
+- **Performance Optimizations**:
+
+  - Reduced goroutine overhead in batch operations
+  - Improved memory efficiency and resource management
+  - Enhanced concurrency control mechanisms
+
+- **Type Safety**:
+  - Strengthened generic constraints
+  - Better error and panic propagation and handling
+
 ## [v2.0.0] (2025-03-14)
 
 ### 🔄 Breaking Changes
