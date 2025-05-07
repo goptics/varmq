@@ -1,4 +1,4 @@
-module github.com/goptics/varmq/examples/persistent
+module github.com/goptics/varmq/examples/redis-persistent
 
 go 1.24.1
 
