@@ -9,7 +9,7 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/goptics/varmq?utm_source=oss&utm_medium=github&utm_campaign=goptics%2Fvarmq&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing. It combines a message queue with worker pool management. Using Go generics, it provides type safety without sacrificing performance.
+**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Using Go generics, it provides type safety without sacrificing performance.
 
 With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
 
@@ -85,8 +85,8 @@ func main() {
 
     // Add multiple jobs at once
     groupJob := queue.AddAll([]varmq.Item[string]{
-        {Value: "Concurrent", ID: "1"},
-        {Value: "Queue", ID: "2"},
+        {Value: "Hello", ID: "1"},
+        {Value: "World", ID: "2"},
     })
 
     resultChan, err := groupJob.Results()
@@ -125,8 +125,9 @@ queue := worker.WithDistributedQueue(distributedQueueAdapter)
 
 See complete working examples in the [examples directory](./examples):
 
-- [Persistent Queue Example](./examples/persistent)
-- [Distributed Queue Example](./examples/distributed)
+- [Persistent Queue Example (SQLite)](./examples/sqlite-persistent)
+- [Persistent Queue Example (Redis)](./examples/redis-persistent)
+- [Distributed Queue Example (Redis)](./examples/redis-distributed)
 
 Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
@@ -176,10 +177,11 @@ jsonData, _ := job.Json()
 - **Simple API**: Clean, intuitive interface that doesn't get in your way
 - **Minimal Dependencies**: Core library has no external dependencies
 - **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementingVarMQ's internal queue interfaces
-  - Currently supports Redis using [redisq](https://github.com/goptics/redisq) adapter
-  - Future plans include SQLite, PostgreSQL, DiceDB and more
-  - Build your own adapters for any persistent storage system
+- **Highly Extensible**: Create your own storage adapters by implementing VarMQ's internal queue interfaces
+- **Built-in adapters**:
+  - 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
+  - ⚡ Redis: [redisq](https://github.com/goptics/redisq)
+  - 🐘 PostgreSQL: 🔄 Upcoming
 
 ## API Reference
 

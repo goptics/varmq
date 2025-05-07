@@ -1,4 +1,4 @@
-module github.com/goptics/varmq/examples/distributed
+module github.com/goptics/varmq/examples/redis-distributed
 
 go 1.24.1
 
