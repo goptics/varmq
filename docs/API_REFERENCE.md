@@ -433,10 +433,10 @@ VarMQ supports multiple storage backends through adapters. An adapter is any imp
 ### Available Adapters
 
 - **Redis:** [redisq](https://github.com/goptics/redisq) - Redis-based adapter for persistent and distributed queues
+- **SQLite:** [sqliteq](https://github.com/goptics/sqliteq) - SQLite-based adapter for persistent queues
 
 ### Planned Adapters
 
-- **SQLite** - For lightweight persistent queues
 - **PostgreSQL** - For robust persistent and distributed queues
 - **DiceDB** - Future adapter implementation
 
