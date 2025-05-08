@@ -24,9 +24,9 @@ This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose
   - Persistent queues for durability across restarts
   - Distributed queues for processing across multiple systems
 - **🧩 Worker abstractions**:
-  - `WorkerFunc` - Returns result and error
-  - `WorkerErrFunc` - Returns only error (when result isn't needed)
-  - `VoidWorkerFunc` - Fire-and-forget operations (most performant)
+  - `WorkerFunc[T, R any] func(T) (R, error)` - Returns result and error
+  - `WorkerErrFunc[T any] func(T) error` - Returns only error (when result isn't needed)
+  - `VoidWorkerFunc[T any] func(T)` - Fire-and-forget operations (most performant)
 - **🚦 Concurrency control**: Fine-grained control over worker pool size
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
@@ -179,8 +179,9 @@ jsonData, _ := job.Json()
 - **Production Ready**: Built for real-world scenarios and high-load applications
 - **Highly Extensible**: Create your own storage adapters by implementing VarMQ's internal queue interfaces
 - **Built-in adapters**:
-  - 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
   - ⚡ Redis: [redisq](https://github.com/goptics/redisq)
+  - 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
+  - 🦆 DuckDB: [duckdbq](https://github.com/goptics/duckdbq)
   - 🐘 PostgreSQL: 🔄 Upcoming
 
 ## API Reference
