@@ -181,7 +181,7 @@ jsonData, _ := job.Json()
 - **Built-in adapters**:
   - ⚡ Redis: [redisq](https://github.com/goptics/redisq)
   - 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
-  - 🦆 DuckDB: [duckdbq](https://github.com/goptics/duckdbq)
+  - 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
   - 🐘 PostgreSQL: 🔄 Upcoming
 
 ## API Reference
