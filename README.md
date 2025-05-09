@@ -216,7 +216,7 @@ For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md)
 
 ## The Concurrency Architecture
 
-![varmq architecture](./varmq.excalidraw.png)
+![varmq architecture](./diagrams/varmq.excalidraw.png)
 
 ## Sequence Diagram
 

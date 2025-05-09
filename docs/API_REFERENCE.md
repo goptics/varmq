@@ -476,7 +476,7 @@ func (q *MyPersistentQueue) DequeueWithAckId() (any, bool, string) {
 
 ## Interface Hierarchy
 
-**Click to Open [VarMQ Interface Hierarchy Diagram](../interface.drawio.png)**
+**Click to Open [VarMQ Interface Hierarchy Diagram](../diagrams/interface.drawio.png)**
 
 ## Job Management
 
