@@ -1,4 +1,4 @@
-package queues
+package collections
 
 import (
 	"testing"
@@ -36,7 +36,7 @@ func TestQueue(t *testing.T) {
 	t.Run("Empty Queue", func(t *testing.T) {
 		assert := assert.New(t)
 		q := NewQueue[int]()
-		
+
 		val, ok := q.Dequeue()
 		assert.False(ok, "dequeue should return false for empty queue")
 		assert.Equal(0, val, "dequeue should return zero value for empty queue")
@@ -86,5 +86,83 @@ func TestQueue(t *testing.T) {
 		// Verify the queue is still usable after close
 		q.Enqueue(3)
 		assert.Equal(1, q.Len(), "queue should have length 1 after adding to closed queue")
+	})
+
+	t.Run("Resizing Behavior", func(t *testing.T) {
+		assert := assert.New(t)
+		q := NewQueue[int]()
+
+		// Add enough elements to force resize (initial capacity is 10)
+		for i := 1; i <= 12; i++ {
+			q.Enqueue(i)
+		}
+
+		// Check length is correct after resize
+		assert.Equal(12, q.Len(), "queue should have all 12 elements after resize")
+
+		// Check values are all preserved in correct order
+		for i := 1; i <= 12; i++ {
+			val, ok := q.Dequeue()
+			assert.True(ok)
+			assert.Equal(i, val, "elements should be dequeued in FIFO order")
+		}
+	})
+
+	t.Run("Circular Buffer Behavior", func(t *testing.T) {
+		assert := assert.New(t)
+		q := NewQueue[int]()
+
+		// Add and remove elements to advance the front index
+		for i := 1; i <= 5; i++ {
+			q.Enqueue(i)
+		}
+
+		// Remove 3 elements
+		for i := 0; i < 3; i++ {
+			q.Dequeue()
+		}
+
+		// Add more elements, which should wrap around in the circular buffer
+		for i := 6; i <= 12; i++ {
+			q.Enqueue(i)
+		}
+
+		// Check total queue length
+		assert.Equal(9, q.Len(), "queue should have 9 elements (2 remaining + 7 new)")
+
+		// Check the values are in the correct order
+		expected := []int{4, 5, 6, 7, 8, 9, 10, 11, 12}
+		for _, exp := range expected {
+			val, ok := q.Dequeue()
+			assert.True(ok)
+			assert.Equal(exp, val, "elements should maintain FIFO order after wrap-around")
+		}
+	})
+
+	t.Run("Shrinking Behavior", func(t *testing.T) {
+		assert := assert.New(t)
+		q := NewQueue[int]()
+
+		// Add many elements to force multiple resizes
+		for i := 1; i <= 100; i++ {
+			q.Enqueue(i)
+		}
+
+		// Remove most elements to trigger shrinking
+		for i := 1; i <= 80; i++ {
+			val, ok := q.Dequeue()
+			assert.True(ok)
+			assert.Equal(i, val)
+		}
+
+		// Queue should still contain the remaining elements
+		assert.Equal(20, q.Len(), "queue should have 20 elements remaining")
+
+		// Check the remaining elements are in correct order
+		for i := 81; i <= 100; i++ {
+			val, ok := q.Dequeue()
+			assert.True(ok)
+			assert.Equal(i, val, "remaining elements should be in order after shrinking")
+		}
 	})
 }

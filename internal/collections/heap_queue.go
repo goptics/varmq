@@ -1,4 +1,4 @@
-package queues
+package collections
 
 // heapQueue implements heap.Interface for a slice of *EnqItem[T].
 type heapQueue[T any] struct {
