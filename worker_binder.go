@@ -3,7 +3,7 @@ package varmq
 import (
 	"sync"
 
-	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/internal/collections"
 )
 
 // IWorkerBinder is the base interface for binding workers to different queue types.
@@ -187,7 +187,7 @@ func (qs *workerBinder[T, R]) handleQueueSubscription(action string) {
 // BindQueue creates and binds a new standard queue to the worker
 // It returns a Queue interface that can be used to add jobs to the queue
 func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
-	return qs.WithQueue(queues.NewQueue[iJob[T, R]]())
+	return qs.WithQueue(collections.NewQueue[iJob[T, R]]())
 }
 
 // WithQueue binds an existing queue implementation to the worker
@@ -199,7 +199,7 @@ func (qs *workerBinder[T, R]) WithQueue(q IQueue) Queue[T, R] {
 }
 
 func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
-	return q.WithPriorityQueue(queues.NewPriorityQueue[iJob[T, R]]())
+	return q.WithPriorityQueue(collections.NewPriorityQueue[iJob[T, R]]())
 }
 
 func (q *workerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T, R] {

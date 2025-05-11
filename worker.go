@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/goptics/varmq/internal/collections"
 	"github.com/goptics/varmq/utils"
 )
 
@@ -19,11 +20,6 @@ type WorkerErrFunc[T any] func(T) error
 type VoidWorkerFunc[T any] func(T)
 
 type status = uint32
-
-type syncGroup struct {
-	wg sync.WaitGroup
-	mx sync.Mutex
-}
 
 const (
 	initiated status = iota
@@ -41,13 +37,13 @@ var (
 type worker[T, R any] struct {
 	workerFunc      any
 	Concurrency     atomic.Uint32
-	ChannelsStack   []chan iJob[T, R]
+	channelStack    *collections.Stack[chan iJob[T, R]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
 	Cache           ICache
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
-	sync            syncGroup
+	wg              sync.WaitGroup
 	tickers         *sync.Map
 	configs
 }
@@ -60,6 +56,8 @@ type Worker[T, R any] interface {
 	IsStopped() bool
 	// IsRunning returns whether the worker is running.
 	IsRunning() bool
+	// TuneConcurrency tunes (increase or decrease) the pool size of the worker.
+	TuneConcurrency(concurrency int)
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// Copy returns a copy of the worker.
@@ -92,12 +90,12 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	w := &worker[T, R]{
 		workerFunc:      wf,
 		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
+		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
 		configs:         c,
-		sync:            syncGroup{},
+		wg:              sync.WaitGroup{},
 		tickers:         new(sync.Map),
 	}
 
@@ -118,16 +116,6 @@ func (w *worker[T, R]) isNullCache() bool {
 	return w.Cache == getCache()
 }
 
-// freeChannel returns a channel to the available channels stack so it can be reused
-// This is called after a job has been processed to recycle the channel
-// Time complexity: O(1)
-func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
-	w.sync.mx.Lock()
-	defer w.sync.mx.Unlock()
-	// push the channel back to the stack, so it can be used for the next Job
-	w.ChannelsStack = append(w.ChannelsStack, channel)
-}
-
 // spawnWorker starts a worker goroutine to process jobs from the specified channel
 // It continuously reads jobs from the channel and processes each one
 // Each job processing is wrapped in its own function with proper cleanup
@@ -135,10 +123,10 @@ func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
 func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
 		func() {
-			defer w.sync.wg.Done()
+			defer w.wg.Done()
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
-			defer w.freeChannel(channel)
+			defer w.channelStack.Push(channel)    // push back the free channel to the stack to be used for the next job
 			defer j.close()
 			defer j.ChangeStatus(finished)
 
@@ -215,7 +203,7 @@ func (w *worker[T, R]) processNextJob() {
 		return
 	}
 
-	w.sync.wg.Add(1)
+	w.wg.Add(1)
 	var j iJob[T, R]
 
 	// check the type of the value
@@ -240,7 +228,7 @@ func (w *worker[T, R]) processNextJob() {
 	}
 
 	if j.IsClosed() {
-		w.sync.wg.Done()
+		w.wg.Done()
 		w.Cache.Delete(j.ID())
 		// process next Job recursively if the current one is closed
 		w.processNextJob()
@@ -258,39 +246,19 @@ func (w *worker[T, R]) processNextJob() {
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
 func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
-	w.sync.mx.Lock()
-	defer w.sync.mx.Unlock()
-	l := len(w.ChannelsStack)
-
 	// pop the last free channel
-	channel := w.ChannelsStack[l-1]
-	w.ChannelsStack = w.ChannelsStack[:l-1]
+	channel, ok := w.channelStack.Pop()
+
+	if !ok {
+		return nil
+	}
+
 	return channel
 }
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, R]) notifyToPullNextJobs() {
 	w.jobPullNotifier.Send()
-}
-
-func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
-	c := mergeConfigs(w.configs, config...)
-
-	newWorker := &worker[T, R]{
-		workerFunc:      w.workerFunc,
-		Concurrency:     atomic.Uint32{},
-		ChannelsStack:   make([]chan iJob[T, R], c.Concurrency),
-		Queue:           getNullQueue(),
-		Cache:           c.Cache,
-		jobPullNotifier: utils.NewNotifier(1),
-		sync:            syncGroup{},
-		configs:         c,
-		tickers:         w.tickers,
-	}
-
-	newWorker.Concurrency.Store(c.Concurrency)
-
-	return newQueues(newWorker)
 }
 
 // cleanupCacheInterval starts a background process that periodically cleans up finished jobs from the cache
@@ -335,6 +303,16 @@ func (w *worker[T, R]) waitUnitCurrentProcessing() {
 	}
 }
 
+func (w *worker[T, R]) initChannelsAndWorkers(concurrency uint32) {
+	for range concurrency {
+		channel := make(chan iJob[T, R], 1)
+		w.channelStack.Push(channel)
+
+		// Start a worker goroutine to process jobs from this channel
+		go w.spawnWorker(channel)
+	}
+}
+
 func (w *worker[T, R]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
@@ -352,18 +330,7 @@ func (w *worker[T, R]) start() error {
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
-	// restart the queue with new channels and start the worker goroutines
-	for i := range w.ChannelsStack {
-		// close old channels to avoid routine leaks
-		if w.ChannelsStack[i] != nil {
-			close(w.ChannelsStack[i])
-		}
-
-		// This channel stack is used to pick the next available channel for processing a Job inside a worker goroutine.
-		w.ChannelsStack[i] = make(chan iJob[T, R], 1)
-		go w.spawnWorker(w.ChannelsStack[i])
-	}
-
+	w.initChannelsAndWorkers(w.Concurrency.Load())
 	go w.startEventLoop()
 
 	if w.configs.CleanupCacheInterval > 0 {
@@ -371,6 +338,49 @@ func (w *worker[T, R]) start() error {
 	}
 
 	return nil
+}
+
+func (w *worker[T, R]) TuneConcurrency(concurrency int) {
+	safeConcurrency := withSafeConcurrency(concurrency)
+
+	// if current concurrency is less than the safe concurrency, extend the pool size
+	if safeConcurrency > w.Concurrency.Load() {
+		extendPoolSize := safeConcurrency - w.Concurrency.Load()
+
+		w.initChannelsAndWorkers(extendPoolSize)
+
+		w.Concurrency.Store(safeConcurrency)
+		return
+	}
+
+	w.Concurrency.Store(safeConcurrency)
+
+	// if current concurrency is greater than the safe concurrency, shrink the pool size
+	shrinkPoolSize := w.Concurrency.Load() - safeConcurrency
+	for range shrinkPoolSize {
+		channel, _ := w.channelStack.Pop()
+		close(channel)
+	}
+}
+
+func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
+	c := mergeConfigs(w.configs, config...)
+
+	newWorker := &worker[T, R]{
+		workerFunc:      w.workerFunc,
+		Concurrency:     atomic.Uint32{},
+		Queue:           getNullQueue(),
+		Cache:           c.Cache,
+		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
+		jobPullNotifier: utils.NewNotifier(1),
+		wg:              sync.WaitGroup{},
+		configs:         c,
+		tickers:         w.tickers,
+	}
+
+	newWorker.Concurrency.Store(c.Concurrency)
+
+	return newQueues(newWorker)
 }
 
 func (w *worker[T, R]) Pause() Worker[T, R] {
@@ -385,17 +395,14 @@ func (w *worker[T, R]) Stop() {
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.jobPullNotifier.Close()
 	w.PauseAndWait()
-	for _, channel := range w.ChannelsStack {
-		if channel == nil {
-			continue
-		}
 
+	// Close all channels in the stack
+	w.channelStack.Range(func(channel chan iJob[T, R]) {
 		close(channel)
-	}
+	})
 
+	w.channelStack.Clear()
 	w.Cache.Clear()
-
-	w.ChannelsStack = make([]chan iJob[T, R], w.Concurrency.Load())
 }
 
 func (w *worker[T, R]) Restart() error {
