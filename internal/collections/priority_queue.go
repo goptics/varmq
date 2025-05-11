@@ -1,4 +1,4 @@
-package queues
+package collections
 
 import (
 	"container/heap"
@@ -15,7 +15,7 @@ type enqItem[T any] struct {
 type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
 	insertionCount int
-	mx             sync.Mutex
+	mx             sync.RWMutex
 }
 
 // newPriorityQueue initializes an empty priority queue.
@@ -29,15 +29,15 @@ func NewPriorityQueue[T any]() *PriorityQueue[T] {
 
 // Len returns the number of items in the priority queue.
 func (q *PriorityQueue[T]) Len() int {
-	q.mx.Lock()
-	defer q.mx.Unlock()
+	q.mx.RLock()
+	defer q.mx.RUnlock()
 	return q.internal.Len()
 }
 
 // Values returns a slice of all values in the priority queue.
 func (q *PriorityQueue[T]) Values() []any {
-	q.mx.Lock()
-	defer q.mx.Unlock()
+	q.mx.RLock()
+	defer q.mx.RUnlock()
 	values := make([]any, 0)
 	for _, item := range q.internal.items {
 		values = append(values, item.Value)
