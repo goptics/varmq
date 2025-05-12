@@ -247,13 +247,11 @@ func (w *worker[T, R]) processNextJob() {
 // Time complexity: O(1)
 func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	// pop the last free channel
-	channel, ok := w.channelStack.Pop()
-
-	if !ok {
-		return nil
+	if channel, ok := w.channelStack.Pop(); ok {
+		return channel
 	}
 
-	return channel
+	return nil
 }
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
@@ -357,16 +355,11 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) {
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
 	for shrinkPoolSize := w.Concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
-		channel, ok := w.channelStack.Pop()
-
-		// if the channel is not found, decrement the shrink pool size and continue to retry
-		// since the channel might be busy processing a job
-		if !ok {
-			continue
+		// since the channel might be busy processing a job, we need to retry until we get the channels
+		if channel, ok := w.channelStack.Pop(); ok {
+			close(channel)
+			shrinkPoolSize--
 		}
-
-		close(channel)
-		shrinkPoolSize--
 	}
 }
 
