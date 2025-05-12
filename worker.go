@@ -356,10 +356,17 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) {
 	w.Concurrency.Store(safeConcurrency)
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	shrinkPoolSize := w.Concurrency.Load() - safeConcurrency
-	for range shrinkPoolSize {
-		channel, _ := w.channelStack.Pop()
+	for shrinkPoolSize := w.Concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
+		channel, ok := w.channelStack.Pop()
+
+		// if the channel is not found, decrement the shrink pool size and continue to retry
+		// since the channel might be busy processing a job
+		if !ok {
+			continue
+		}
+
 		close(channel)
+		shrinkPoolSize--
 	}
 }
 
