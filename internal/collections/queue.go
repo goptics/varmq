@@ -1,11 +1,7 @@
 package collections
 
-import (
-	"sync"
-)
+import "sync"
 
-// Queue is a thread-safe slice-based FIFO queue implementation
-// It provides efficient enqueue and dequeue operations for high-throughput scenarios
 type Queue[T any] struct {
 	elements []T // Slice to store queue elements
 	front    int // Index of the front element
