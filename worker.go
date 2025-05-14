@@ -32,6 +32,7 @@ var (
 	errWorkerAlreadyBound = errors.New("the worker is already bound to a queue")
 	errInvalidWorkerType  = errors.New("invalid worker type passed to worker")
 	errRunningWorker      = errors.New("worker is already running")
+	errNotRunningWorker   = errors.New("worker is not running")
 )
 
 type worker[T, R any] struct {
@@ -57,7 +58,7 @@ type Worker[T, R any] interface {
 	// IsRunning returns whether the worker is running.
 	IsRunning() bool
 	// TuneConcurrency tunes (increase or decrease) the pool size of the worker.
-	TuneConcurrency(concurrency int)
+	TuneConcurrency(concurrency int) error
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// Copy returns a copy of the worker.
@@ -338,7 +339,11 @@ func (w *worker[T, R]) start() error {
 	return nil
 }
 
-func (w *worker[T, R]) TuneConcurrency(concurrency int) {
+func (w *worker[T, R]) TuneConcurrency(concurrency int) error {
+	if w.status.Load() != running {
+		return errNotRunningWorker
+	}
+
 	safeConcurrency := withSafeConcurrency(concurrency)
 
 	// if current concurrency is less than the safe concurrency, extend the pool size
@@ -348,7 +353,7 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) {
 		w.initChannelsAndWorkers(extendPoolSize)
 
 		w.Concurrency.Store(safeConcurrency)
-		return
+		return nil
 	}
 
 	w.Concurrency.Store(safeConcurrency)
@@ -361,6 +366,8 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) {
 			shrinkPoolSize--
 		}
 	}
+
+	return nil
 }
 
 func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
