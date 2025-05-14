@@ -28,8 +28,7 @@ func TestNewWorker(t *testing.T) {
 		assert.NotNil(w.workerFunc, "worker function should not be nil")
 
 		// Check concurrency (should default to 1)
-		expectedConcurrency := withSafeConcurrency(1)
-		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should match expected value")
+		assert.Equal(withSafeConcurrency(1), w.Concurrency.Load(), "concurrency should match expected value")
 
 		// Check default status is 'initiated'
 		assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
@@ -213,8 +212,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency equals CPU count
-		expectedConcurrency := withSafeConcurrency(0) // This will use CPU count
-		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should default to CPU count")
+		assert.Equal(withSafeConcurrency(0), w.Concurrency.Load(), "concurrency should default to CPU count")
 	})
 
 	t.Run("with negative concurrency (should use CPU count)", func(t *testing.T) {
@@ -229,8 +227,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency equals CPU count
-		expectedConcurrency := withSafeConcurrency(0) // This will use CPU count
-		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should default to CPU count with negative value")
+		assert.Equal(withSafeConcurrency(0), w.Concurrency.Load(), "concurrency should default to CPU count with negative value")
 	})
 
 	t.Run("verify initial status is 'initiated'", func(t *testing.T) {
@@ -402,8 +399,7 @@ func TestTuneConcurrency(t *testing.T) {
 		w.TuneConcurrency(0)
 
 		// Verify minimum safe concurrency is used instead of 0
-		expectedMinConcurrency := uint32(withSafeConcurrency(0)) // Should use minimum safe value
-		assert.Equal(t, expectedMinConcurrency, w.Concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
+		assert.Equal(t, withSafeConcurrency(0), w.Concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
 	})
 
 	t.Run("set concurrency to negative value", func(t *testing.T) {
@@ -420,8 +416,7 @@ func TestTuneConcurrency(t *testing.T) {
 		w.TuneConcurrency(-5)
 
 		// Verify minimum safe concurrency is used instead of negative value
-		expectedMinConcurrency := uint32(withSafeConcurrency(-5)) // Should use minimum safe value
-		assert.Equal(t, expectedMinConcurrency, w.Concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
+		assert.Equal(t, withSafeConcurrency(-5), w.Concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
 	})
 
 	t.Run("same concurrency value", func(t *testing.T) {
