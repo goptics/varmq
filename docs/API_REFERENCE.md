@@ -412,18 +412,75 @@ queue.Purge()
 
 ## Worker Control
 
+VarMQ provides several methods to control worker behavior at runtime. Most control methods affect the worker's status which can be checked using `worker.Status()`.
+
+### `Pause()`
+
+Temporarily suspends worker processing. Jobs will remain in the queue but won't be processed until resumed.
+
+- Sets worker status to `"Paused"`
+- All currently running jobs will complete, but no new jobs will be processed
+
 ```go
-// Pause worker processing
 worker.Pause()
+fmt.Println(worker.Status()) // Outputs: "Paused"
+```
 
-// Resume worker processing
-worker.Resume()
+### `Resume()`
 
-// Stop worker (terminates all processing)
+Resumes processing of jobs after the worker has been paused.
+
+- Sets worker status to `"Running"`
+- Begins processing jobs from the queue again
+- Returns an error if the worker is already running
+
+```go
+err := worker.Resume()
+fmt.Println(worker.Status()) // Outputs: "Running"
+```
+
+### `Stop()`
+
+Shuts down the worker pool by removing all running goroutines. The worker can be restarted later using the `Restart()` method.
+
+- Sets worker status to `"Stopped"`
+- Stops all background processes (timers, tickers)
+- Closes job channels and clears the channel stack
+- Clears the worker cache
+
+```go
 worker.Stop()
+fmt.Println(worker.Status()) // Outputs: "Stopped"
+```
 
-// Restart worker (reinitializes go routines)
-worker.Restart()
+### `Restart()`
+
+Reinitializes worker goroutines. Useful after configuration changes or to recover from errors.
+
+- First pauses and waits for ongoing jobs to complete
+- Reinitializes the worker's internal notifier system
+- Sets worker status to `"Running"`
+- Returns any error that occurs during restart
+
+```go
+err := worker.Restart()
+fmt.Println(worker.Status()) // Outputs: "Running"
+```
+
+### `TuneConcurrency(concurrency int) error`
+
+Dynamically adjusts the number of concurrent worker goroutines at runtime.
+
+- Returns an error if the worker is not in the running state
+- Does not affect the worker's status
+- Only changes the number of concurrent worker goroutines
+
+```go
+// Later, scale up concurrency based on load
+worker.TuneConcurrency(8)  // Scale up to 8 workers
+
+// Later, scale down when load decreases
+worker.TuneConcurrency(2)  // Scale down to 2 workers
 ```
 
 ## Adapters
