@@ -9,20 +9,16 @@ import (
 )
 
 func main() {
-	start := time.Now()
-	defer func() {
-		fmt.Println("Time taken:", time.Since(start))
-	}()
+	rdb := redisq.New("redis://localhost:6375")
+	defer rdb.Close()
 
-	redisQueue := redisq.New("redis://localhost:6375")
-	defer redisQueue.Close()
-	pq := redisQueue.NewQueue("scraping_queue")
+	pq := rdb.NewQueue("scraping_queue")
 	defer pq.Close()
 
 	// bind with persistent queue
 	w := varmq.NewWorker(func(data int) (int, error) {
 		fmt.Printf("Processing: %d\n", data)
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		r := data * 3
 
 		// error on every 10th job
@@ -36,11 +32,15 @@ func main() {
 		}
 
 		return r, nil
-	}, 2)
+	})
 
 	// Using redisq adapter (you can use any adapter that implements IPersistentQueue)
 	q := w.WithPersistentQueue(pq)
-	defer q.WaitAndClose()
+	start := time.Now()
+	defer func() {
+		fmt.Println("Time taken:", time.Since(start).Microseconds(), "ms")
+	}()
+	defer q.WaitUntilFinished()
 	defer func() {
 		fmt.Println("Pending jobs:", q.PendingCount())
 	}()
