@@ -330,6 +330,18 @@ func TestTuneConcurrency(t *testing.T) {
 		return len(data), nil
 	}
 
+	t.Run("worker not running error", func(t *testing.T) {
+		// Create worker but don't start it
+		w := newWorker[string, int](wf, WithConcurrency(2))
+
+		// Try to tune concurrency on non-running worker
+		err := w.TuneConcurrency(4)
+
+		// Verify error is returned
+		assert.Error(t, err, "TuneConcurrency should return error when worker is not running")
+		assert.Equal(t, errNotRunningWorker, err, "Should return specific 'worker not running' error")
+	})
+
 	t.Run("increase concurrency", func(t *testing.T) {
 		// Create worker with initial concurrency of 2
 		initialConcurrency := 2
@@ -345,7 +357,8 @@ func TestTuneConcurrency(t *testing.T) {
 
 		// Tune concurrency up to 5
 		newConcurrency := 5
-		w.TuneConcurrency(newConcurrency)
+		err = w.TuneConcurrency(newConcurrency)
+		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify updated concurrency
 		assert.Equal(t, uint32(newConcurrency), w.Concurrency.Load(), "Concurrency should be updated to new value")
@@ -373,7 +386,8 @@ func TestTuneConcurrency(t *testing.T) {
 
 		// Tune concurrency down to 2
 		newConcurrency := 2
-		w.TuneConcurrency(newConcurrency)
+		err = w.TuneConcurrency(newConcurrency)
+		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify updated concurrency
 		assert.Equal(t, uint32(newConcurrency), w.Concurrency.Load(), "Concurrency should be updated to new lower value")
@@ -396,7 +410,8 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Try to tune concurrency to 0 (should result in safe minimum concurrency)
-		w.TuneConcurrency(0)
+		err = w.TuneConcurrency(0)
+		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of 0
 		assert.Equal(t, withSafeConcurrency(0), w.Concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
@@ -413,7 +428,8 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Try to tune concurrency to -5 (should result in safe minimum concurrency)
-		w.TuneConcurrency(-5)
+		err = w.TuneConcurrency(-5)
+		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of negative value
 		assert.Equal(t, withSafeConcurrency(-5), w.Concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
@@ -433,7 +449,8 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Initial concurrency should be set correctly")
 
 		// "Tune" to the same concurrency value
-		w.TuneConcurrency(initialConcurrency)
+		err = w.TuneConcurrency(initialConcurrency)
+		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify concurrency remains unchanged
 		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Concurrency should remain unchanged when set to same value")
