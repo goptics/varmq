@@ -187,16 +187,16 @@ jsonData, _ := job.Json()
 
 ## Performance Benchmarks
 
-Below are the performance benchmarks for different queue types and operations (tested on Intel i7-13700):
+Below are the performance benchmarks for different queue types and operations (tested on AMD EPYC 7763):
 
-| Queue Type    | Operation           | Operations/sec | Memory/op | Allocations/op |
-| ------------- | ------------------- | -------------- | --------- | -------------- |
-| Queue         | Add                 | 266,524        | 432 B     | 9              |
-| Queue         | AddAll (1000 items) | 708            | 283.6 KB  | 8,007          |
-| PriorityQueue | Add                 | 441,502        | 416 B     | 9              |
-| PriorityQueue | AddAll (1000 items) | 357            | 267.7 KB  | 8,008          |
-| VoidWorker    | Add                 | 247,647        | 384 B     | 8              |
-| VoidWorker    | AddAll (1000 items) | 537            | 243.7 KB  | 7,007          |
+| Queue Type    | Operation           | Operations/sec | ns/op     | Memory/op | Allocations/op |
+| ------------- | ------------------- | -------------- | --------- | --------- | -------------- |
+| Queue         | Add                 | 837,141        | 1,334     | 384 B     | 8              |
+| Queue         | AddAll (1000 items) | 1,210          | 978,928   | 235.3 KB  | 7,007          |
+| PriorityQueue | Add                 | 781,210        | 1,410     | 416 B     | 9              |
+| PriorityQueue | AddAll (1000 items) | 922            | 1,285,014 | 267.3 KB  | 8,007          |
+| VoidWorker    | Add                 | 844,554        | 1,263     | 336 B     | 7              |
+| VoidWorker    | AddAll (1000 items) | 1,466          | 825,702   | 195.5 KB  | 6,007          |
 
 ## API Reference
 
