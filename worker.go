@@ -248,11 +248,9 @@ func (w *worker[T, R]) processNextJob() {
 // Time complexity: O(1)
 func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	// pop the last free channel
-	if channel, ok := w.channelStack.Pop(); ok {
-		return channel
-	}
+	channel, _ := w.channelStack.Pop()
 
-	return nil
+	return channel
 }
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
