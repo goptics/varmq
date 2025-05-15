@@ -63,12 +63,11 @@ func (eq *externalQueue[T, R]) Worker() Worker[T, R] {
 }
 
 func (eq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
-	val, ok := eq.Cache.Load(id)
-	if !ok {
-		return nil, fmt.Errorf("job not found for id: %s", id)
+	if val, ok := eq.Cache.Load(id); ok {
+		return val.(EnqueuedJob[R]), nil
 	}
 
-	return val.(EnqueuedJob[R]), nil
+	return nil, fmt.Errorf("job not found for id: %s", id)
 }
 
 func (eq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
@@ -76,13 +75,11 @@ func (eq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[
 		id = generateGroupId(id)
 	}
 
-	val, ok := eq.Cache.Load(id)
-
-	if !ok {
-		return nil, fmt.Errorf("groups job not found for id: %s", id)
+	if val, ok := eq.Cache.Load(id); ok {
+		return val.(EnqueuedSingleGroupJob[R]), nil
 	}
 
-	return val.(EnqueuedSingleGroupJob[R]), nil
+	return nil, fmt.Errorf("groups job not found for id: %s", id)
 }
 
 func (eq *externalQueue[T, R]) WaitUntilFinished() {
@@ -91,7 +88,7 @@ func (eq *externalQueue[T, R]) WaitUntilFinished() {
 		eq.Resume()
 	}
 
-	eq.sync.wg.Wait()
+	eq.wg.Wait()
 
 	// wait until all ongoing processes are done if still pending
 	for eq.PendingCount() > 0 || eq.CurrentProcessingCount() > 0 {

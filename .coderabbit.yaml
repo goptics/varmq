@@ -3,6 +3,7 @@ early_access: false
 
 reviews:
   profile: "chill"
+  poem: true
   request_changes_workflow: false
   high_level_summary: true
   review_status: true

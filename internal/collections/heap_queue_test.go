@@ -1,4 +1,4 @@
-package queues
+package collections
 
 import (
 	"container/heap"
@@ -101,7 +101,7 @@ func TestHeapQueueWithContainerHeap(t *testing.T) {
 		priority int
 		index    int
 	}
-	
+
 	items := []testItem{
 		{"task1", 5, 0},
 		{"task2", 2, 1},
@@ -155,7 +155,7 @@ func TestHeapQueueConcurrentOperations(t *testing.T) {
 	assert.Equal(2, min.Value, "Second pop should return new minimum priority item")
 
 	heap.Push(hq, &enqItem[int]{Value: 1, Priority: 1, Index: 5})
-	
+
 	// Verify the heap property by popping in expected order
 	expected := []int{1, 7, 10, 15}
 	for i, exp := range expected {
@@ -175,11 +175,11 @@ func TestHeapQueuePriorityTiebreaker(t *testing.T) {
 	// Add items with same priority but different indices
 	heap.Push(hq, &enqItem[string]{Value: "first", Priority: 1, Index: 1})
 	heap.Push(hq, &enqItem[string]{Value: "second", Priority: 1, Index: 0})
-	
+
 	// The item with lower index should be popped first
 	first := heap.Pop(hq).(*enqItem[string])
 	assert.Equal("second", first.Value, "Item with lower index should be popped first")
-	
+
 	second := heap.Pop(hq).(*enqItem[string])
 	assert.Equal("first", second.Value, "Item with higher index should be popped second")
 }

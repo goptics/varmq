@@ -12,44 +12,34 @@ import (
 
 func main() {
 	// Connect to SQLite database using the adapter
-	sqliteQueue := sqliteq.New("test.db")
+	sdb := sqliteq.New("test.db")
 
 	// Create a persistent queue with optional configuration
-	persistentQueue, err := sqliteQueue.NewQueue("test", sqliteq.WithRemoveOnComplete(false))
+	persistentQueue, err := sdb.NewQueue("test")
+
 	if err != nil {
-		// Handle error
-		return
+		panic(err)
 	}
 
 	// Create a worker
-	worker := varmq.NewWorker(func(data string) (string, error) {
+	worker := varmq.NewVoidWorker(func(data string) {
+		fmt.Printf("Processing: %s\n", data)
 		time.Sleep(1 * time.Second)
-		return fmt.Sprintf("Processed: %s", data), nil
-	}, 2) // 2 concurrent workers
+		fmt.Printf("Processed: %s\n", data)
+	})
 
 	// Bind the worker to the persistent queue
 	queue := worker.WithPersistentQueue(persistentQueue)
 	defer queue.WaitUntilFinished()
 
-	items := make([]varmq.Item[string], 50)
+	items := make([]varmq.Item[string], 10)
 	for i := range items {
 		items[i] = varmq.Item[string]{
-			Value: fmt.Sprintf("Hello %d", i),
+			Value: fmt.Sprintf("Task %d", i),
 			ID:    cuid.New(),
 		}
 	}
 
 	// Add multiple jobs at once using AddAll
-	results, err := queue.AddAll(items).Results()
-	if err != nil {
-		return
-	}
-	// Or get results for specific jobs
-	for result := range results {
-		if result.Err != nil {
-			fmt.Printf("Job %s failed: %v\n", result.JobId, result.Err)
-			continue
-		}
-		fmt.Printf("Job %s processed with result: %v\n", result.JobId, result.Data)
-	}
+	queue.AddAll(items)
 }

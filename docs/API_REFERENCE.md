@@ -412,18 +412,144 @@ queue.Purge()
 
 ## Worker Control
 
+VarMQ provides several methods to control worker behavior at runtime. Most control methods affect the worker's status which can be checked using `worker.Status()`.
+
+### `Pause()`
+
+Temporarily suspends worker processing. Jobs will remain in the queue but won't be processed until resumed.
+
+- Sets worker status to `"Paused"`
+- All currently running jobs will complete, but no new jobs will be processed
+
 ```go
-// Pause worker processing
 worker.Pause()
+fmt.Println(worker.Status()) // Outputs: "Paused"
+```
 
-// Resume worker processing
-worker.Resume()
+### `Resume()`
 
-// Stop worker (terminates all processing)
+Resumes processing of jobs after the worker has been paused.
+
+- Sets worker status to `"Running"`
+- Begins processing jobs from the queue again
+- Returns an error if the worker is already running
+
+```go
+err := worker.Resume()
+fmt.Println(worker.Status()) // Outputs: "Running"
+```
+
+### `Stop()`
+
+Shuts down the worker pool by removing all running goroutines. The worker can be restarted later using the `Restart()` method.
+
+- Sets worker status to `"Stopped"`
+- Stops all background processes (timers, tickers)
+- Closes job channels and clears the channel stack
+- Clears the worker cache
+
+```go
 worker.Stop()
+fmt.Println(worker.Status()) // Outputs: "Stopped"
+```
 
-// Restart worker (reinitializes go routines)
-worker.Restart()
+### `Restart()`
+
+Reinitializes worker goroutines. Useful after configuration changes or to recover from errors.
+
+- First pauses and waits for ongoing jobs to complete
+- Reinitializes the worker's internal notifier system
+- Sets worker status to `"Running"`
+- Returns any error that occurs during restart
+
+```go
+err := worker.Restart()
+fmt.Println(worker.Status()) // Outputs: "Running"
+```
+
+### `TuneConcurrency(concurrency int) error`
+
+Dynamically adjusts the number of concurrent worker goroutines at runtime.
+
+- Returns an error if the worker is not in the running state
+- Does not affect the worker's status
+- Only changes the number of concurrent worker goroutines
+
+```go
+// Later, scale up concurrency based on load
+worker.TuneConcurrency(8)  // Scale up to 8 workers
+
+// Later, scale down when load decreases
+worker.TuneConcurrency(2)  // Scale down to 2 workers
+```
+
+## Worker Status Methods
+
+VarMQ provides methods to query the current status and state of workers. These methods are useful for monitoring, logging, and implementing adaptive behavior based on the worker's current state.
+
+### `IsPaused() bool`
+
+Checks if the worker is currently in the paused state.
+
+```go
+if worker.IsPaused() {
+    fmt.Println("Worker is paused")
+}
+```
+
+### `IsStopped() bool`
+
+Checks if the worker is currently in the stopped state.
+
+```go
+if worker.IsStopped() {
+    fmt.Println("Worker is stopped")
+}
+```
+
+### `IsRunning() bool`
+
+Checks if the worker is currently in the running state and processing jobs.
+
+```go
+if worker.IsRunning() {
+    fmt.Println("Worker is actively processing jobs")
+}
+```
+
+### `Status() string`
+
+Returns the current status of the worker as a string. Possible values are "Initiated", "Running", "Paused", and "Stopped".
+
+```go
+status := worker.Status()
+fmt.Println("Current worker status:", status)  // e.g., "Current worker status: Running"
+```
+
+### `CurrentProcessingCount() int`
+
+Returns the number of jobs currently being processed by the worker. This can be useful for monitoring workload and implementing adaptive behavior.
+
+```go
+processingCount := worker.CurrentProcessingCount()
+fmt.Printf("Currently processing %d jobs\n", processingCount)
+```
+
+#### `CurrentConcurrency() int`
+
+Returns the current concurrency or pool size of the worker. This indicates how many jobs the worker can process simultaneously.
+
+```go
+concurrency := worker.CurrentConcurrency()
+fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
+
+// Example of adaptive scaling based on load
+if queue.Len() > worker.CurrentConcurrency()*5 {
+    // If queue has 5x more jobs than workers, scale up
+    newConcurrency := worker.CurrentConcurrency() * 2
+    worker.TuneConcurrency(newConcurrency)
+    fmt.Printf("Scaled up to %d workers due to large queue\n", newConcurrency)
+}
 ```
 
 ## Adapters
