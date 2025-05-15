@@ -187,14 +187,16 @@ jsonData, _ := job.Json()
 
 ## Performance Benchmarks
 
-| Queue Type    | Operation | Iterations | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ------------- | --------- | ---------- | ------------ | ------------- | ----------------------- |
-| Queue         | Add       | 857,791    | 1,319        | 384           | 8                       |
-| Queue         | AddAll    | 1,251      | 957,792      | 235,328       | 7,007                   |
-| PriorityQueue | Add       | 762,418    | 1,392        | 416           | 9                       |
-| PriorityQueue | AddAll    | 937        | 1,267,200    | 267,325       | 8,007                   |
-| VoidWorker    | Add       | 861,940    | 1,266        | 336           | 7                       |
-| VoidWorker    | AddAll    | 1,452      | 824,115      | 195,494       | 6,007                   |
+Below are the performance benchmarks for different queue types and operations (tested on Intel i7-13700):
+
+| Queue Type    | Operation           | Operations/sec | Memory/op | Allocations/op |
+| ------------- | ------------------- | -------------- | --------- | -------------- |
+| Queue         | Add                 | 266,524        | 432 B     | 9              |
+| Queue         | AddAll (1000 items) | 708            | 283.6 KB  | 8,007          |
+| PriorityQueue | Add                 | 441,502        | 416 B     | 9              |
+| PriorityQueue | AddAll (1000 items) | 357            | 267.7 KB  | 8,008          |
+| VoidWorker    | Add                 | 247,647        | 384 B     | 8              |
+| VoidWorker    | AddAll (1000 items) | 537            | 243.7 KB  | 7,007          |
 
 ## API Reference
 
