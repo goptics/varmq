@@ -37,7 +37,7 @@ var (
 
 type worker[T, R any] struct {
 	workerFunc      any
-	Concurrency     atomic.Uint32
+	concurrency     atomic.Uint32
 	channelStack    *collections.Stack[chan iJob[T, R]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
@@ -57,29 +57,29 @@ type Worker[T, R any] interface {
 	IsStopped() bool
 	// IsRunning returns whether the worker is running.
 	IsRunning() bool
+	// Status returns the current status of the worker.
+	Status() string
+	// CurrentProcessingCount returns the number of Jobs currently being processed by the worker.
+	CurrentProcessingCount() int
+	// CurrentConcurrency returns the current concurrency or pool size of the worker.
+	CurrentConcurrency() int
+	// Copy returns a copy of the worker.
+	Copy(config ...any) IWorkerBinder[T, R]
 	// TuneConcurrency tunes (increase or decrease) the pool size of the worker.
 	TuneConcurrency(concurrency int) error
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
-	// Copy returns a copy of the worker.
-	Copy(config ...any) IWorkerBinder[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait()
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	// Time complexity: O(n) where n is the number of channels
 	Stop()
-	// Status returns the current status of the worker.
-	// Time complexity: O(1)
-	Status() string
 	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
 	// Time complexity: O(n) where n is the concurrency
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	// Time complexity: O(n) where n is the concurrency
 	Resume() error
-	// CurrentProcessingCount returns the number of Jobs currently being processed by the worker.
-	// Time complexity: O(1)
-	CurrentProcessingCount() uint32
 }
 
 // newWorker creates a new worker with the given worker function and configurations
@@ -90,7 +90,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 
 	w := &worker[T, R]{
 		workerFunc:      wf,
-		Concurrency:     atomic.Uint32{},
+		concurrency:     atomic.Uint32{},
 		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
@@ -100,7 +100,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		tickers:         new(sync.Map),
 	}
 
-	w.Concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.Concurrency)
 
 	return w
 }
@@ -181,7 +181,7 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 // Time complexity: O(1) per notification
 func (w *worker[T, R]) startEventLoop() {
 	w.jobPullNotifier.Receive(func() {
-		for w.IsRunning() && w.CurProcessing.Load() < w.Concurrency.Load() && w.Queue.Len() > 0 {
+		for w.IsRunning() && w.CurProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
 	})
@@ -329,7 +329,7 @@ func (w *worker[T, R]) start() error {
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
-	w.initChannelsAndWorkers(w.Concurrency.Load())
+	w.initChannelsAndWorkers(w.concurrency.Load())
 	go w.startEventLoop()
 
 	if w.configs.CleanupCacheInterval > 0 {
@@ -347,19 +347,19 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) error {
 	safeConcurrency := withSafeConcurrency(concurrency)
 
 	// if current concurrency is less than the safe concurrency, extend the pool size
-	if safeConcurrency > w.Concurrency.Load() {
-		extendPoolSize := safeConcurrency - w.Concurrency.Load()
+	if safeConcurrency > w.concurrency.Load() {
+		extendPoolSize := safeConcurrency - w.concurrency.Load()
 
 		w.initChannelsAndWorkers(extendPoolSize)
 
-		w.Concurrency.Store(safeConcurrency)
+		w.concurrency.Store(safeConcurrency)
 		return nil
 	}
 
-	w.Concurrency.Store(safeConcurrency)
+	w.concurrency.Store(safeConcurrency)
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	for shrinkPoolSize := w.Concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
+	for shrinkPoolSize := w.concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
 		// since the channel might be busy processing a job, we need to retry until we get the channels
 		if channel, ok := w.channelStack.Pop(); ok {
 			close(channel)
@@ -375,7 +375,7 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 
 	newWorker := &worker[T, R]{
 		workerFunc:      w.workerFunc,
-		Concurrency:     atomic.Uint32{},
+		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
@@ -385,9 +385,13 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 		tickers:         w.tickers,
 	}
 
-	newWorker.Concurrency.Store(c.Concurrency)
+	newWorker.concurrency.Store(c.Concurrency)
 
 	return newQueues(newWorker)
+}
+
+func (w *worker[T, R]) CurrentConcurrency() int {
+	return int(w.concurrency.Load())
 }
 
 func (w *worker[T, R]) Pause() Worker[T, R] {
@@ -456,8 +460,8 @@ func (w *worker[T, R]) Status() string {
 	}
 }
 
-func (w *worker[T, R]) CurrentProcessingCount() uint32 {
-	return w.CurProcessing.Load()
+func (w *worker[T, R]) CurrentProcessingCount() int {
+	return int(w.CurProcessing.Load())
 }
 
 func (w *worker[T, R]) Resume() error {

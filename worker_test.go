@@ -28,7 +28,7 @@ func TestNewWorker(t *testing.T) {
 		assert.NotNil(w.workerFunc, "worker function should not be nil")
 
 		// Check concurrency (should default to 1)
-		assert.Equal(withSafeConcurrency(1), w.Concurrency.Load(), "concurrency should match expected value")
+		assert.Equal(withSafeConcurrency(1), w.concurrency.Load(), "concurrency should match expected value")
 
 		// Check default status is 'initiated'
 		assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
@@ -61,7 +61,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency is set correctly
-		assert.Equal(customConcurrency, w.Concurrency.Load(), "concurrency should be set to custom value")
+		assert.Equal(customConcurrency, w.concurrency.Load(), "concurrency should be set to custom value")
 	})
 
 	t.Run("with WorkerFunc and custom cache", func(t *testing.T) {
@@ -104,7 +104,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency is set correctly
-		assert.Equal(customConcurrency, w.Concurrency.Load(), "concurrency should be set to custom value")
+		assert.Equal(customConcurrency, w.concurrency.Load(), "concurrency should be set to custom value")
 
 		// Check cache is set correctly
 		assert.Equal(customCache, w.Cache, "cache should be set to custom cache")
@@ -175,7 +175,7 @@ func TestNewWorker(t *testing.T) {
 
 		// Check concurrency is set correctly
 		expectedConcurrency := uint32(concurrencyValue)
-		assert.Equal(expectedConcurrency, w.Concurrency.Load(), "concurrency should be set to direct value")
+		assert.Equal(expectedConcurrency, w.concurrency.Load(), "concurrency should be set to direct value")
 	})
 
 	t.Run("with custom job ID generator", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency equals CPU count
-		assert.Equal(withSafeConcurrency(0), w.Concurrency.Load(), "concurrency should default to CPU count")
+		assert.Equal(withSafeConcurrency(0), w.concurrency.Load(), "concurrency should default to CPU count")
 	})
 
 	t.Run("with negative concurrency (should use CPU count)", func(t *testing.T) {
@@ -227,7 +227,7 @@ func TestNewWorker(t *testing.T) {
 		assert := assert.New(t)
 
 		// Check concurrency equals CPU count
-		assert.Equal(withSafeConcurrency(0), w.Concurrency.Load(), "concurrency should default to CPU count with negative value")
+		assert.Equal(withSafeConcurrency(0), w.concurrency.Load(), "concurrency should default to CPU count with negative value")
 	})
 
 	t.Run("verify initial status is 'initiated'", func(t *testing.T) {
@@ -353,7 +353,7 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Confirm initial state
-		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Initial concurrency should be set correctly")
+		assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Initial concurrency should be set correctly")
 
 		// Tune concurrency up to 5
 		newConcurrency := 5
@@ -361,14 +361,14 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify updated concurrency
-		assert.Equal(t, uint32(newConcurrency), w.Concurrency.Load(), "Concurrency should be updated to new value")
+		assert.Equal(t, uint32(newConcurrency), w.concurrency.Load(), "Concurrency should be updated to new value")
 
 		// Allow time for channels to be created and added to stack
 		time.Sleep(100 * time.Millisecond)
 
 		// Check that new worker goroutines were started (channel stack will have more capacity)
 		// We can't directly check stack size as channels are consumed in testing
-		assert.Equal(t, uint32(newConcurrency), w.Concurrency.Load(), "Stack should reflect the new concurrency")
+		assert.Equal(t, uint32(newConcurrency), w.concurrency.Load(), "Stack should reflect the new concurrency")
 	})
 
 	t.Run("decrease concurrency", func(t *testing.T) {
@@ -382,7 +382,7 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Confirm initial state
-		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Initial concurrency should be set correctly")
+		assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Initial concurrency should be set correctly")
 
 		// Tune concurrency down to 2
 		newConcurrency := 2
@@ -390,7 +390,7 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify updated concurrency
-		assert.Equal(t, uint32(newConcurrency), w.Concurrency.Load(), "Concurrency should be updated to new lower value")
+		assert.Equal(t, uint32(newConcurrency), w.concurrency.Load(), "Concurrency should be updated to new lower value")
 
 		// Allow time for channels to be closed
 		time.Sleep(100 * time.Millisecond)
@@ -414,7 +414,7 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of 0
-		assert.Equal(t, withSafeConcurrency(0), w.Concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
+		assert.Equal(t, withSafeConcurrency(0), w.concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
 	})
 
 	t.Run("set concurrency to negative value", func(t *testing.T) {
@@ -432,7 +432,7 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of negative value
-		assert.Equal(t, withSafeConcurrency(-5), w.Concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
+		assert.Equal(t, withSafeConcurrency(-5), w.concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
 	})
 
 	t.Run("same concurrency value", func(t *testing.T) {
@@ -446,13 +446,13 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Confirm initial state
-		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Initial concurrency should be set correctly")
+		assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Initial concurrency should be set correctly")
 
 		// "Tune" to the same concurrency value
 		err = w.TuneConcurrency(initialConcurrency)
 		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
 
 		// Verify concurrency remains unchanged
-		assert.Equal(t, uint32(initialConcurrency), w.Concurrency.Load(), "Concurrency should remain unchanged when set to same value")
+		assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Concurrency should remain unchanged when set to same value")
 	})
 }
