@@ -17,6 +17,9 @@ type EnqueuedJob[R any] interface {
 }
 
 type EnqueuedGroupJob[T any] interface {
+	// Len returns the number of jobs in the group.
+	Len() int
+
 	// Drain discards the job's result and error values asynchronously.
 	Drain() error
 	// Results returns a channel that will receive the results of the group
@@ -25,7 +28,5 @@ type EnqueuedGroupJob[T any] interface {
 
 type EnqueuedSingleGroupJob[R any] interface {
 	Job
-	// Len returns the number of jobs in the group.
-	Len() int
 	EnqueuedGroupJob[R]
 }
