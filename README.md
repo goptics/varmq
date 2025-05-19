@@ -185,19 +185,6 @@ jsonData, _ := job.Json()
   - 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
   - 🐘 PostgreSQL: 🔄 Upcoming
 
-## Performance Benchmarks
-
-Below are the performance benchmarks for different queue types and operations (tested on Intel i7-13700):
-
-| Queue Type    | Operation           | Operations/sec | Memory/op | Allocations/op |
-| ------------- | ------------------- | -------------- | --------- | -------------- |
-| Queue         | Add                 | 266,524        | 432 B     | 9              |
-| Queue         | AddAll (1000 items) | 708            | 283.6 KB  | 8,007          |
-| PriorityQueue | Add                 | 441,502        | 416 B     | 9              |
-| PriorityQueue | AddAll (1000 items) | 357            | 267.7 KB  | 8,008          |
-| VoidWorker    | Add                 | 247,647        | 384 B     | 8              |
-| VoidWorker    | AddAll (1000 items) | 537            | 243.7 KB  | 7,007          |
-
 ## API Reference
 
 For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
