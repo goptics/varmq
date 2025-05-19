@@ -24,7 +24,9 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			q.Add(j).Result()
+			if job, ok := q.Add(j); ok {
+				job.Result()
+			}
 		}
 	})
 
@@ -62,7 +64,9 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1).Result()
+				if job, ok := q.Add(1); ok {
+					job.Result()
+				}
 			}
 		})
 	})
@@ -102,7 +106,9 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			q.Add(i, i%10).Result()
+			if job, ok := q.Add(i, i%10); ok {
+				job.Result()
+			}
 		}
 	})
 
@@ -113,9 +119,9 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		q := worker.BindPriorityQueue()
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], 1000) // Using a constant size of 1000 for testing
+		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = Item[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -140,7 +146,9 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1, 0).Result()
+				if job, ok := q.Add(1, 0); ok {
+					job.Result()
+				}
 			}
 		})
 	})
@@ -152,17 +160,18 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		q := worker.BindPriorityQueue()
 		defer q.WaitAndClose()
 
-		data := make([]PQItem[int], 1000) // Using a constant size of 1000 for testing
+		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = PQItem[int]{Value: i, Priority: i % 10}
+			data[i] = Item[int]{Value: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				results, _ := q.AddAll(data).Results()
-				for range results {
-					// drain the channel
+				if results, err := q.AddAll(data).Results(); err == nil {
+					for range results {
+						// drain the channel
+					}
 				}
 			}
 		})
@@ -180,7 +189,9 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			q.Add(j).Result()
+			if job, ok := q.Add(j); ok {
+				job.Result()
+			}
 		}
 	})
 
@@ -198,9 +209,10 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			results, _ := q.AddAll(data).Results()
-			for range results {
-				// drain the channel
+			if results, err := q.AddAll(data).Results(); err == nil {
+				for range results {
+					// drain the channel
+				}
 			}
 		}
 	})
@@ -218,7 +230,9 @@ func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				q.Add(1).Result()
+				if job, ok := q.Add(1); ok {
+					job.Result()
+				}
 			}
 		})
 	})

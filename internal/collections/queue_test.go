@@ -165,4 +165,117 @@ func TestQueue(t *testing.T) {
 			assert.Equal(i, val, "remaining elements should be in order after shrinking")
 		}
 	})
+
+	// TestQueueResize explicitly tests the resize method
+	t.Run("ExplicitResizeMethod", func(t *testing.T) {
+		t.Run("Empty Queue", func(t *testing.T) {
+			assert := assert.New(t)
+			q := NewQueue[int]()
+			
+			// Explicitly call resize
+			q.resize(50)
+			
+			// Verify the queue after resize
+			assert.Equal(50, len(q.elements), "Capacity should be 50 after resize")
+			assert.Equal(0, q.size, "Size should remain 0")
+			assert.Equal(0, q.front, "Front should be reset to 0")
+		})
+		
+		t.Run("Queue With Elements", func(t *testing.T) {
+			assert := assert.New(t)
+			q := NewQueue[int]()
+			
+			// Add some elements
+			for i := 1; i <= 5; i++ {
+				q.Enqueue(i)
+			}
+			
+			// Explicitly call resize
+			q.resize(200)
+			
+			// Verify the queue after resize
+			assert.Equal(200, len(q.elements), "Capacity should be 200 after resize")
+			assert.Equal(5, q.size, "Size should remain 5")
+			assert.Equal(0, q.front, "Front should be reset to 0")
+			
+			// Check that elements are preserved in order
+			for i := 1; i <= 5; i++ {
+				val, ok := q.Dequeue()
+				assert.True(ok)
+				assert.Equal(i, val, "Elements should be preserved in order after resize")
+			}
+		})
+		
+		t.Run("Circular Buffer Wrap-Around", func(t *testing.T) {
+			assert := assert.New(t)
+			q := NewQueue[int]()
+			
+			// Add some elements
+			for i := 1; i <= 5; i++ {
+				q.Enqueue(i)
+			}
+			
+			// Remove a few to advance the front index
+			for i := 1; i <= 3; i++ {
+				val, _ := q.Dequeue()
+				assert.Equal(i, val)
+			}
+			
+			// Add more elements to cause wrap-around
+			for i := 6; i <= 8; i++ {
+				q.Enqueue(i)
+			}
+			
+			// At this point, elements should be [4,5,6,7,8] with front at some index > 0
+			frontBeforeResize := q.front
+			assert.Equal(5, q.size)
+			assert.Greater(frontBeforeResize, 0, "Front should be advanced")
+			
+			// Now explicitly call resize
+			q.resize(10)
+			
+			// Verify the queue after resize
+			assert.Equal(10, len(q.elements), "Capacity should be 10 after resize")
+			assert.Equal(5, q.size, "Size should remain 5")
+			assert.Equal(0, q.front, "Front should be reset to 0")
+			
+			// The elements should now be in contiguous order at the beginning of the slice
+			expected := []int{4, 5, 6, 7, 8}
+			for i, exp := range expected {
+				assert.Equal(exp, q.elements[i], "Element at index %d should be %d", i, exp)
+			}
+			
+			// Verify FIFO behavior is maintained
+			for _, exp := range expected {
+				val, ok := q.Dequeue()
+				assert.True(ok)
+				assert.Equal(exp, val, "Elements should be dequeued in correct order after resize")
+			}
+		})
+		
+		t.Run("Resize To Size Equal To Element Count", func(t *testing.T) {
+			assert := assert.New(t)
+			q := NewQueue[int]()
+			
+			// Add some elements
+			for i := 1; i <= 5; i++ {
+				q.Enqueue(i)
+			}
+			
+			// Resize to exactly the size of the queue
+			q.resize(5)
+			
+			// Verify the queue after resize
+			assert.Equal(5, len(q.elements), "Capacity should equal size after resize")
+			assert.Equal(5, q.size, "Size should remain 5")
+			assert.Equal(0, q.front, "Front should be reset to 0")
+			
+			// Verify elements are still correct
+			for i := 1; i <= 5; i++ {
+				val, ok := q.Dequeue()
+				assert.True(ok)
+				assert.Equal(i, val, "Elements should be dequeued in correct order after tight resize")
+			}
+		})
+	})
 }

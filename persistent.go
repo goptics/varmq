@@ -24,21 +24,24 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq IPersistentQueue) Persiste
 // It requires a job ID to be provided in the job config for persistence
 // It will panic if no job ID is provided
 // Returns an EnqueuedJob that can be used to track the job's status and result
-func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
+func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
 	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
 
 	j := newJob[T, R](data, jobConfig)
-	val, _ := j.Json()
+	val, err := j.Json()
+	if err != nil {
+		return nil, false
+	}
 	j.SetInternalQueue(q.internalQueue)
 
 	if ok := q.internalQueue.Enqueue(val); !ok {
 		j.close()
-		return j
+		return nil, false
 	}
 
 	q.postEnqueue(j)
 
-	return j
+	return j, true
 }
 
 // AddAll adds multiple jobs to the persistent queue at once
@@ -46,13 +49,18 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJo
 // Returns an EnqueuedGroupJob that can be used to track all jobs' statuses and results
 // Will panic if any job is missing an ID
 func (q *persistentQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
-	groupJob := newGroupJob[T, R](uint32(len(items)))
+	l := len(items)
+	groupJob := newGroupJob[T, R](l)
 
 	for _, item := range items {
 		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
 
 		j := groupJob.NewJob(item.Value, jConfigs)
-		val, _ := j.Json()
+		val, err := j.Json()
+		if err != nil {
+			j.close()
+			continue
+		}
 		j.SetInternalQueue(q.internalQueue)
 
 		if ok := q.internalQueue.Enqueue(val); !ok {

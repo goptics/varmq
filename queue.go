@@ -11,7 +11,7 @@ type Queue[T, R any] interface {
 	IExternalQueue[T, R]
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
 	// Time complexity: O(1)
-	Add(data T, configs ...JobConfigFunc) EnqueuedJob[R]
+	Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], bool)
 	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedGroupJob[R]
@@ -20,8 +20,9 @@ type Queue[T, R any] interface {
 // Item represents a data item to be processed by a worker
 // It combines a unique identifier with a value of any generic type
 type Item[T any] struct {
-	ID    string
-	Value T
+	ID       string
+	Value    T
+	Priority int
 }
 
 // newQueue creates a new queue with the given worker and internal queue implementation
@@ -35,22 +36,30 @@ func newQueue[T, R any](worker *worker[T, R], q IQueue) *queue[T, R] {
 	}
 }
 
-func (q *queue[T, R]) Add(data T, configs ...JobConfigFunc) EnqueuedJob[R] {
+func (q *queue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
 	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
 
-	q.internalQueue.Enqueue(j)
+	if ok := q.internalQueue.Enqueue(j); !ok {
+		j.close()
+		return nil, false
+	}
+
 	q.postEnqueue(j)
 
-	return j
+	return j, true
 }
 
 func (q *queue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
 	l := len(items)
-	groupJob := newGroupJob[T, R](uint32(l))
+	groupJob := newGroupJob[T, R](l)
 
 	for _, item := range items {
 		j := groupJob.NewJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))
-		q.internalQueue.Enqueue(j)
+		if ok := q.internalQueue.Enqueue(j); !ok {
+			j.close()
+			continue
+		}
+
 		q.postEnqueue(j)
 	}
 
