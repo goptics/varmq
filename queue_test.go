@@ -82,7 +82,7 @@ func TestQueue(t *testing.T) {
 
 		results, _ := groupJob.Results()
 		_, err = groupJob.Results()
-		assert.NotNil(t, err, "Results should not be nil")
+		assert.NotNil(t, err, "Results channel should not be accessible more than once")
 
 		count := 0
 		for range results {
