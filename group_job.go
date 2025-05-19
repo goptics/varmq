@@ -9,8 +9,24 @@ import (
 // groupJob represents a job that can be used in a group.
 type groupJob[T, R any] struct {
 	*job[T, R]
-	jobCount atomic.Uint32
-	wg       *sync.WaitGroup
+	wg  *sync.WaitGroup
+	len *groupLen
+}
+
+type groupLen struct {
+	len atomic.Uint32
+}
+
+func (gl *groupLen) Add() {
+	gl.len.Add(1)
+}
+
+func (gl *groupLen) Sub() {
+	gl.len.Add(1)
+}
+
+func (gl *groupLen) Get() int {
+	return int(gl.len.Load())
 }
 
 const groupIdPrefixed = "g:"
@@ -20,11 +36,11 @@ func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 		job: &job[T, R]{
 			resultChannel: newResultChannel[R](bufferSize),
 		},
-		wg: new(sync.WaitGroup),
+		wg:  new(sync.WaitGroup),
+		len: new(groupLen),
 	}
 
 	gj.wg.Add(bufferSize)
-	gj.jobCount.Store(uint32(bufferSize))
 	return gj
 }
 
@@ -33,13 +49,15 @@ func generateGroupId(id string) string {
 }
 
 func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
+	gj.len.Add()
 	return &groupJob[T, R]{
 		job: &job[T, R]{
 			id:            generateGroupId(config.Id),
 			Input:         data,
 			resultChannel: gj.resultChannel,
 		},
-		wg: gj.wg,
+		wg:  gj.wg,
+		len: gj.len,
 	}
 }
 
@@ -62,8 +80,8 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 	return ch, nil
 }
 
-func (gj *groupJob[T, R]) JobCount() int {
-	return int(gj.jobCount.Load())
+func (gj *groupJob[T, R]) Len() int {
+	return gj.len.Get()
 }
 
 // Drain discards the job's result and error values asynchronously.
@@ -98,6 +116,6 @@ func (gj *groupJob[T, R]) close() error {
 	gj.wg.Done()
 	gj.Ack()
 	gj.ChangeStatus(closed)
-	gj.jobCount.Add(^uint32(0))
+	gj.len.Sub()
 	return nil
 }
