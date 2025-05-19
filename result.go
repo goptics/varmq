@@ -25,5 +25,7 @@ type EnqueuedGroupJob[T any] interface {
 
 type EnqueuedSingleGroupJob[R any] interface {
 	Job
+	// JobCount returns the number of jobs in the group.
+	JobCount() int
 	EnqueuedGroupJob[R]
 }

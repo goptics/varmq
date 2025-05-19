@@ -10,7 +10,7 @@ import (
 func TestGroupJob(t *testing.T) {
 	t.Run("group job creation with newGroupJob", func(t *testing.T) {
 		// Create a new group job with buffer size 3
-		bufferSize := uint32(3)
+		bufferSize := 3
 		gj := newGroupJob[string, int](bufferSize)
 
 		assert := assert.New(t)
@@ -36,7 +36,7 @@ func TestGroupJob(t *testing.T) {
 
 	t.Run("creating new job in a group", func(t *testing.T) {
 		// Create a new group job
-		bufferSize := uint32(3)
+		bufferSize := 3
 		gj := newGroupJob[string, int](bufferSize)
 
 		// Create a job within the group
@@ -56,12 +56,12 @@ func TestGroupJob(t *testing.T) {
 
 	t.Run("closing a group job", func(t *testing.T) {
 		// Create a group job with small buffer to avoid wait group blocking
-		bufferSize := uint32(1)
+		bufferSize := 1
 		gj := newGroupJob[string, int](bufferSize)
 
 		// Manually reduce the wait group count to match our single Close() call
 		// This prevents the wait group from blocking indefinitely
-		gj.wg.Add(-int(bufferSize) + 1)
+		gj.wg.Add(-bufferSize + 1)
 
 		assert := assert.New(t)
 
@@ -79,7 +79,7 @@ func TestGroupJob(t *testing.T) {
 
 	t.Run("job status transitions in a group job", func(t *testing.T) {
 		// Create a new group job
-		bufferSize := uint32(1)
+		bufferSize := 1
 		gj := newGroupJob[string, int](bufferSize)
 
 		// Reduce wait group count to prevent deadlock when testing

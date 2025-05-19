@@ -3,17 +3,19 @@ package varmq
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // groupJob represents a job that can be used in a group.
 type groupJob[T, R any] struct {
 	*job[T, R]
-	wg *sync.WaitGroup
+	jobCount atomic.Uint32
+	wg       *sync.WaitGroup
 }
 
 const groupIdPrefixed = "g:"
 
-func newGroupJob[T, R any](bufferSize uint32) *groupJob[T, R] {
+func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
 			resultChannel: newResultChannel[R](bufferSize),
@@ -21,8 +23,8 @@ func newGroupJob[T, R any](bufferSize uint32) *groupJob[T, R] {
 		wg: new(sync.WaitGroup),
 	}
 
-	gj.wg.Add(int(bufferSize))
-
+	gj.wg.Add(bufferSize)
+	gj.jobCount.Store(uint32(bufferSize))
 	return gj
 }
 
@@ -60,6 +62,10 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 	return ch, nil
 }
 
+func (gj *groupJob[T, R]) JobCount() int {
+	return int(gj.jobCount.Load())
+}
+
 // Drain discards the job's result and error values asynchronously.
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
@@ -92,5 +98,6 @@ func (gj *groupJob[T, R]) close() error {
 	gj.wg.Done()
 	gj.Ack()
 	gj.ChangeStatus(closed)
+	gj.jobCount.Add(^uint32(0))
 	return nil
 }
