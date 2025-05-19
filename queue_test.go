@@ -73,9 +73,10 @@ func TestQueue(t *testing.T) {
 		queue, worker, internalQueue := initQueue()
 
 		groupJob := queue.AddAll(jobs)
-		assert.Equal(t, 5, queue.PendingCount(), "Queue should have five pending jobs")
-		assert.Equal(t, 5, internalQueue.Len(), "Internal Queue should have five items")
-		assert.Equal(t, 5, groupJob.Len(), "Internal Queue should have five items")
+		pending := queue.PendingCount()
+		assert.Equal(t, 5, pending, "Queue should have five pending jobs")
+		assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have five items")
+		assert.Equal(t, pending, groupJob.Len(), "Internal Queue should have five items")
 
 		err := worker.start()
 		assert.Nil(t, err, "Worker should start successfully")
@@ -84,12 +85,25 @@ func TestQueue(t *testing.T) {
 		_, err = groupJob.Results()
 		assert.NotNil(t, err, "Results channel should not be accessible more than once")
 
-		count := 0
-		for range results {
-			count++
+		// Collect all results
+		var got []int
+		for r := range results {
+			got = append(got, r.Data)
+		}
+		// Expect one result per job
+		assert.Len(t, got, len(jobs))
+		// Build expected set of doubled values
+		expected := make(map[int]struct{}, len(jobs))
+		for _, j := range jobs {
+			v, _ := strconv.Atoi(j.Value)
+			expected[v*2] = struct{}{}
+		}
+		// Verify each output is one of the expected doubles
+		for _, val := range got {
+			_, ok := expected[val]
+			assert.True(t, ok, "unexpected result value: %d", val)
 		}
 
-		assert.Equal(t, 5, count, "Results should have five items")
 		assert.Equal(t, 0, queue.PendingCount(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 		assert.Equal(t, 0, groupJob.Len(), "Group job should have no pending jobs")
