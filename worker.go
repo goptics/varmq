@@ -127,7 +127,7 @@ func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 			defer w.wg.Done()
 			defer w.jobPullNotifier.Send()
 			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
-			defer w.channelStack.Push(channel)    // push back the free channel to the stack to be used for the next job
+			defer w.freeChannel(channel)          // push back the free channel to the stack to be used for the next job
 			defer j.close()
 			defer j.ChangeStatus(finished)
 
@@ -244,11 +244,29 @@ func (w *worker[T, R]) processNextJob() {
 	w.pickNextChannel() <- j
 }
 
+func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
+	// if the queue length is greater than or equal to the concurrency
+	// then push the channel to the stack
+	if w.Queue.Len() >= w.CurrentConcurrency() {
+		w.channelStack.Push(channel)
+		return
+	}
+
+	// else close the channel to remove idle workers
+	close(channel)
+}
+
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
 func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	// pop the last free channel
-	channel, _ := w.channelStack.Pop()
+	if channel, ok := w.channelStack.Pop(); ok {
+		return channel
+	}
+
+	// if the channel stack is empty, create a new channel and spawn a worker
+	channel := make(chan iJob[T, R], 1)
+	go w.spawnWorker(channel)
 
 	return channel
 }
@@ -300,16 +318,6 @@ func (w *worker[T, R]) waitUnitCurrentProcessing() {
 	}
 }
 
-func (w *worker[T, R]) initChannelsAndWorkers(concurrency uint32) {
-	for range concurrency {
-		channel := make(chan iJob[T, R], 1)
-		w.channelStack.Push(channel)
-
-		// Start a worker goroutine to process jobs from this channel
-		go w.spawnWorker(channel)
-	}
-}
-
 func (w *worker[T, R]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
@@ -327,7 +335,6 @@ func (w *worker[T, R]) start() error {
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
-	w.initChannelsAndWorkers(w.concurrency.Load())
 	go w.startEventLoop()
 
 	if w.configs.CleanupCacheInterval > 0 {
@@ -342,28 +349,7 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) error {
 		return errNotRunningWorker
 	}
 
-	safeConcurrency := withSafeConcurrency(concurrency)
-
-	// if current concurrency is less than the safe concurrency, extend the pool size
-	if safeConcurrency > w.concurrency.Load() {
-		extendPoolSize := safeConcurrency - w.concurrency.Load()
-
-		w.initChannelsAndWorkers(extendPoolSize)
-
-		w.concurrency.Store(safeConcurrency)
-		return nil
-	}
-
-	w.concurrency.Store(safeConcurrency)
-
-	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	for shrinkPoolSize := w.concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
-		// since the channel might be busy processing a job, we need to retry until we get the channels
-		if channel, ok := w.channelStack.Pop(); ok {
-			close(channel)
-			shrinkPoolSize--
-		}
-	}
+	w.concurrency.Store(withSafeConcurrency(concurrency))
 
 	return nil
 }
