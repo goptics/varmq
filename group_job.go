@@ -40,6 +40,7 @@ func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 		len: new(groupLen),
 	}
 
+	gj.wg.Add(bufferSize)
 	return gj
 }
 
@@ -49,7 +50,6 @@ func generateGroupId(id string) string {
 
 func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
 	gj.len.Add()
-	gj.wg.Add(1)
 	return &groupJob[T, R]{
 		job: &job[T, R]{
 			id:            generateGroupId(config.Id),
