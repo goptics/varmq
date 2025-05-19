@@ -22,7 +22,7 @@ func (gl *groupLen) Add() {
 }
 
 func (gl *groupLen) Sub() {
-	gl.len.Add(1)
+	gl.len.Add(^uint32(0))
 }
 
 func (gl *groupLen) Get() int {
