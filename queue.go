@@ -39,10 +39,12 @@ func newQueue[T, R any](worker *worker[T, R], q IQueue) *queue[T, R] {
 func (q *queue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
 	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
 
-	if ok := q.internalQueue.Enqueue(j); ok {
-		q.postEnqueue(j)
+	if ok := q.internalQueue.Enqueue(j); !ok {
+		j.close()
 		return nil, false
 	}
+
+	q.postEnqueue(j)
 
 	return j, true
 }
