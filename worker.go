@@ -66,8 +66,8 @@ type Worker[T, R any] interface {
 	NumIdleWorkers() int
 	// Copy returns a copy of the worker.
 	Copy(config ...any) IWorkerBinder[T, R]
-	// TuneConcurrency tunes (increase or decrease) the pool size of the worker.
-	TuneConcurrency(concurrency int) error
+	// TuneWorkerPool tunes (increase or decrease) the pool size of the worker.
+	TuneWorkerPool(concurrency int) error
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
@@ -128,7 +128,7 @@ func (w *worker[T, R]) spawnWorker(node *collections.Node[poolNode[T, R]]) {
 
 		j.ChangeStatus(finished)
 		j.close()
-		w.freepoolNode(node)            // push back the free channel to the stack to be used for the next job
+		w.freePoolNode(node)            // push back the free channel to the stack to be used for the next job
 		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 		w.notifyToPullNextJobs()
 		w.wg.Done()
@@ -243,14 +243,16 @@ func (w *worker[T, R]) processNextJob() {
 	w.pickNextChannel() <- j
 }
 
-func (w *worker[T, R]) freepoolNode(node *collections.Node[poolNode[T, R]]) {
+func (w *worker[T, R]) freePoolNode(node *collections.Node[poolNode[T, R]]) {
 	// If worker timeout is enabled, update the last used time
-	if w.configs.IdleWorkerTimeout > 0 {
+	enabledIdleWorkersRemover := w.configs.IdleWorkerExpiryDuration > 0
+
+	if enabledIdleWorkersRemover {
 		node.Value.UpdateLastUsed()
 	}
 
 	// If queue length is high or we're under our idle worker target, keep this worker
-	if w.Queue.Len() >= w.NumConcurrency() || w.pool.Len() <= w.calculateIdleWorkers() {
+	if w.Queue.Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}
@@ -316,23 +318,16 @@ func (w *worker[T, R]) goCleanupCache() {
 	}()
 }
 
-// calculateIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
-func (w *worker[T, R]) calculateIdleWorkers() int {
-	percentage := w.configs.KeepIdleWorkers
+// numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
+func (w *worker[T, R]) numMinIdleWorkers() int {
+	percentage := w.configs.MinIdleWorkerRatio
 	concurrency := w.concurrency.Load()
 
-	// Calculate idle workers: concurrency * percentage / 100
-	// Ensure at least 1 idle worker is kept
-	idle := (concurrency * uint32(percentage)) / 100
-	if idle < 1 {
-		idle = 1
-	}
-
-	return int(idle)
+	return int(max((concurrency*uint32(percentage))/100, 1))
 }
 
 func (w *worker[T, R]) goRemoveIdleWorkers() {
-	interval := w.configs.IdleWorkerTimeout
+	interval := w.configs.IdleWorkerExpiryDuration
 
 	if interval == 0 {
 		return
@@ -351,7 +346,7 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 	go func() {
 		for range ticker.C {
 			// Calculate the target number of idle workers
-			targetIdleWorkers := w.calculateIdleWorkers()
+			targetIdleWorkers := w.numMinIdleWorkers()
 
 			// if the number of idle workers is less than or equal to the target, continue
 			if w.pool.Len() <= targetIdleWorkers {
@@ -359,16 +354,14 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 			}
 
 			nodes := w.pool.NodeSlice()
-
-			w.pool.Lock()
 			// If we have more nodes than our target, close the excess ones
 			for _, node := range nodes[targetIdleWorkers:] {
-				if node.Value.lastUsed.Add(interval).Before(time.Now()) {
+				if node.Value.lastUsed.Add(interval).Before(time.Now()) &&
+					!(node.Next() == nil || node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
 					node.Value.Close()
 					w.pool.Remove(node)
 				}
 			}
-			w.pool.Unlock()
 		}
 	}()
 }
@@ -415,27 +408,35 @@ func (w *worker[T, R]) start() error {
 	return nil
 }
 
-func (w *worker[T, R]) TuneConcurrency(concurrency int) error {
+func (w *worker[T, R]) TuneWorkerPool(concurrency int) error {
 	if w.status.Load() != running {
 		return errNotRunningWorker
 	}
 
+	oldConcurrency := w.concurrency.Load()
 	safeConcurrency := withSafeConcurrency(concurrency)
 	w.concurrency.Store(safeConcurrency)
 
 	// if current concurrency is less than the safe concurrency, then now need to extend the pool size
 	// cause it will be extended by the event loop when it needs
-	if safeConcurrency > w.concurrency.Load() {
+	if safeConcurrency > oldConcurrency {
+		defer w.notifyToPullNextJobs()
 		return nil
 	}
 
-	w.concurrency.Store(safeConcurrency)
+	// if idle worker expiry duration is set, then no need to shrink the pool size
+	if w.configs.IdleWorkerExpiryDuration != 0 {
+		return nil
+	}
+
+	shrinkPoolSize, minIdleWorkers := oldConcurrency-safeConcurrency, w.numMinIdleWorkers()
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	for shrinkPoolSize := w.concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
+	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
 		// since the channel might be busy processing a job, we need to retry until we get the channels
 		if node := w.pool.PopBack(); node != nil {
 			node.Value.Close()
+			w.pool.Remove(node)
 			shrinkPoolSize--
 		}
 	}

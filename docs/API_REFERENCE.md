@@ -467,7 +467,7 @@ err := worker.Restart()
 fmt.Println(worker.Status()) // Outputs: "Running"
 ```
 
-### `TuneConcurrency(concurrency int) error`
+### `TuneWorkerPool(concurrency int) error`
 
 Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
@@ -477,10 +477,10 @@ Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
 ```go
 // Later, scale up concurrency based on load
-worker.TuneConcurrency(8)  // Scale up to 8 workers
+worker.TuneWorkerPool(8)  // Scale up to 8 workers
 
 // Later, scale down when load decreases
-worker.TuneConcurrency(2)  // Scale down to 2 workers
+worker.TuneWorkerPool(2)  // Scale down to 2 workers
 ```
 
 ## Worker Status Methods
@@ -547,7 +547,7 @@ fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
 if queue.Len() > worker.CurrentConcurrency()*5 {
     // If queue has 5x more jobs than workers, scale up
     newConcurrency := worker.CurrentConcurrency() * 2
-    worker.TuneConcurrency(newConcurrency)
+    worker.TuneWorkerPool(newConcurrency)
     fmt.Printf("Scaled up to %d workers due to large queue\n", newConcurrency)
 }
 ```

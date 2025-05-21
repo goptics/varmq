@@ -363,8 +363,8 @@ func TestCurrentConcurrency(t *testing.T) {
 
 		// Tune concurrency
 		newConcurrency := 5
-		err = w.TuneConcurrency(newConcurrency)
-		assert.NoError(t, err, "TuneConcurrency should not return error")
+		err = w.TuneWorkerPool(newConcurrency)
+		assert.NoError(t, err, "TuneWorkerPool should not return error")
 
 		// Verify concurrency was updated
 		assert.Equal(t, newConcurrency, w.NumConcurrency(), "CurrentConcurrency should return updated value after tuning")
@@ -390,7 +390,7 @@ func TestCurrentConcurrency(t *testing.T) {
 	})
 }
 
-func TestTuneConcurrency(t *testing.T) {
+func TestTuneWorkerPool(t *testing.T) {
 	// Create a simple worker function that we'll use across tests
 	wf := func(data string) (int, error) {
 		return len(data), nil
@@ -401,10 +401,10 @@ func TestTuneConcurrency(t *testing.T) {
 		w := newWorker[string, int](wf, WithConcurrency(2))
 
 		// Try to tune concurrency on non-running worker
-		err := w.TuneConcurrency(4)
+		err := w.TuneWorkerPool(4)
 
 		// Verify error is returned
-		assert.Error(t, err, "TuneConcurrency should return error when worker is not running")
+		assert.Error(t, err, "TuneWorkerPool should return error when worker is not running")
 		assert.Equal(t, errNotRunningWorker, err, "Should return specific 'worker not running' error")
 	})
 
@@ -423,8 +423,8 @@ func TestTuneConcurrency(t *testing.T) {
 
 		// Tune concurrency up to 5
 		newConcurrency := 5
-		err = w.TuneConcurrency(newConcurrency)
-		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
+		err = w.TuneWorkerPool(newConcurrency)
+		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
 
 		// Verify updated concurrency
 		assert.Equal(t, newConcurrency, w.NumConcurrency(), "Concurrency should be updated to new value")
@@ -452,8 +452,8 @@ func TestTuneConcurrency(t *testing.T) {
 
 		// Tune concurrency down to 2
 		newConcurrency := 2
-		err = w.TuneConcurrency(newConcurrency)
-		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
+		err = w.TuneWorkerPool(newConcurrency)
+		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
 
 		// Verify updated concurrency
 		assert.Equal(t, newConcurrency, w.NumConcurrency(), "Concurrency should be updated to new lower value")
@@ -476,8 +476,8 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Try to tune concurrency to 0 (should result in safe minimum concurrency)
-		err = w.TuneConcurrency(0)
-		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
+		err = w.TuneWorkerPool(0)
+		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of 0
 		assert.Equal(t, withSafeConcurrency(0), w.concurrency.Load(), "Should use minimum safe concurrency when 0 is provided")
@@ -494,8 +494,8 @@ func TestTuneConcurrency(t *testing.T) {
 		defer w.Stop() // Clean up
 
 		// Try to tune concurrency to -5 (should result in safe minimum concurrency)
-		err = w.TuneConcurrency(-5)
-		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
+		err = w.TuneWorkerPool(-5)
+		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
 
 		// Verify minimum safe concurrency is used instead of negative value
 		assert.Equal(t, withSafeConcurrency(-5), w.concurrency.Load(), "Should use minimum safe concurrency when negative value is provided")
@@ -515,8 +515,8 @@ func TestTuneConcurrency(t *testing.T) {
 		assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Initial concurrency should be set correctly")
 
 		// "Tune" to the same concurrency value
-		err = w.TuneConcurrency(initialConcurrency)
-		assert.NoError(t, err, "TuneConcurrency should not return error on running worker")
+		err = w.TuneWorkerPool(initialConcurrency)
+		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
 
 		// Verify concurrency remains unchanged
 		assert.Equal(t, initialConcurrency, w.NumConcurrency(), "Concurrency should remain unchanged when set to same value")

@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	initialConcurrency := 100
+	initialConcurrency := 10
+	tuneType := "expand"
 
 	w := varmq.NewVoidWorker(func(data int) {
 		// fmt.Printf("Processing: %d\n", data)
@@ -18,26 +19,41 @@ func main() {
 		time.Sleep(randomDuration)
 	}, initialConcurrency)
 
-	ticker := time.NewTicker(1 * time.Second)
 	q := w.BindQueue()
-	defer ticker.Stop()
-	defer time.Sleep(50 * time.Second)
-	start := time.Now()
-	defer func() {
-		fmt.Println("Time taken:", time.Since(start))
-	}()
-	defer q.WaitUntilFinished()
-	defer fmt.Println("Added jobs")
+	ticker := time.NewTicker(1 * time.Second)
 
 	// use tuner to tune concurrency
 	go func() {
 		for range ticker.C {
-			fmt.Println("Total Goroutines:", runtime.NumGoroutine())
+
+			if tuneType == "expand" {
+				initialConcurrency += 10
+			} else {
+				initialConcurrency -= 10
+			}
+			w.TuneWorkerPool(initialConcurrency)
+
+			fmt.Printf("Total Goroutines: %d, Idle Workers: %d\nConcurrency: %d, Processing: %d\nPending Jobs: %d Type: %s\n\n", runtime.NumGoroutine(), w.NumIdleWorkers(), initialConcurrency, w.NumProcessing(), q.PendingCount(), tuneType)
+
+			if initialConcurrency >= 100 {
+				tuneType = "shrink"
+			}
+
+			if initialConcurrency <= 10 {
+				tuneType = "expand"
+			}
+
 		}
 	}()
+	time.Sleep(3 * time.Second)
 
+retry:
 	for i := range 1000 {
 		q.Add(i)
 	}
 
+	fmt.Println("Added jobs")
+	q.WaitUntilFinished()
+	time.Sleep(5 * time.Second)
+	goto retry
 }

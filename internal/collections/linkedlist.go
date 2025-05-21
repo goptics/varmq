@@ -9,6 +9,7 @@ type Node[T any] struct {
 	Value T
 	next  *Node[T]
 	prev  *Node[T]
+	mx    sync.RWMutex
 }
 
 // NewNode creates a new Node with the given value
@@ -22,6 +23,9 @@ func NewNode[T any](value T) *Node[T] {
 
 // Next returns the next node in the list
 func (n *Node[T]) Next() *Node[T] {
+	n.mx.RLock()
+	defer n.mx.RUnlock()
+
 	if n.next != nil {
 		return n.next
 	}
@@ -30,6 +34,9 @@ func (n *Node[T]) Next() *Node[T] {
 
 // Prev returns the previous node in the list
 func (n *Node[T]) Prev() *Node[T] {
+	n.mx.RLock()
+	defer n.mx.RUnlock()
+
 	if n.prev != nil {
 		return n.prev
 	}
@@ -41,14 +48,6 @@ type List[T any] struct {
 	root Node[T]      // sentinel node, only &root, root.prev, and root.next are used
 	len  int          // current list length excluding sentinel node
 	mx   sync.RWMutex // protects the list structure
-}
-
-func (l *List[T]) Lock() {
-	l.mx.Lock()
-}
-
-func (l *List[T]) Unlock() {
-	l.mx.Unlock()
 }
 
 // Init initializes or clears list l
