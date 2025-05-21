@@ -123,16 +123,14 @@ func (w *worker[T, R]) isNullCache() bool {
 // Time complexity: O(1) per job
 func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
 	for j := range channel {
-		func() {
-			defer w.wg.Done()
-			defer w.jobPullNotifier.Send()
-			defer w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
-			defer w.freeChannel(channel)          // push back the free channel to the stack to be used for the next job
-			defer j.close()
-			defer j.ChangeStatus(finished)
+		w.processSingleJob(j)
 
-			w.processSingleJob(j)
-		}()
+		j.ChangeStatus(finished)
+		j.close()
+		w.freeChannel(channel)          // push back the free channel to the stack to be used for the next job
+		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
+		w.jobPullNotifier.Send()
+		w.wg.Done()
 	}
 }
 
