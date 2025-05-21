@@ -91,7 +91,7 @@ func (eq *externalQueue[T, R]) WaitUntilFinished() {
 	eq.wg.Wait()
 
 	// wait until all ongoing processes are done if still pending
-	for eq.PendingCount() > 0 || eq.CurrentProcessingCount() > 0 {
+	for eq.PendingCount() > 0 || eq.NumProcessing() > 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 }

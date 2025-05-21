@@ -29,16 +29,15 @@ const (
 )
 
 var (
-	errWorkerAlreadyBound = errors.New("the worker is already bound to a queue")
-	errInvalidWorkerType  = errors.New("invalid worker type passed to worker")
-	errRunningWorker      = errors.New("worker is already running")
-	errNotRunningWorker   = errors.New("worker is not running")
+	errInvalidWorkerType = errors.New("invalid worker type passed to worker")
+	errRunningWorker     = errors.New("worker is already running")
+	errNotRunningWorker  = errors.New("worker is not running")
 )
 
 type worker[T, R any] struct {
 	workerFunc      any
 	concurrency     atomic.Uint32
-	channelStack    *collections.Stack[chan iJob[T, R]]
+	pool            *collections.List[poolNode[T, R]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
 	Cache           ICache
@@ -59,10 +58,12 @@ type Worker[T, R any] interface {
 	IsRunning() bool
 	// Status returns the current status of the worker.
 	Status() string
-	// CurrentProcessingCount returns the number of Jobs currently being processed by the worker.
-	CurrentProcessingCount() int
-	// CurrentConcurrency returns the current concurrency or pool size of the worker.
-	CurrentConcurrency() int
+	// NumProcessing returns the number of Jobs currently being processed by the worker.
+	NumProcessing() int
+	// NumConcurrency returns the current concurrency or pool size of the worker.
+	NumConcurrency() int
+	// NumIdleWorkers returns the number of idle workers in the pool.
+	NumIdleWorkers() int
 	// Copy returns a copy of the worker.
 	Copy(config ...any) IWorkerBinder[T, R]
 	// TuneConcurrency tunes (increase or decrease) the pool size of the worker.
@@ -91,7 +92,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	w := &worker[T, R]{
 		workerFunc:      wf,
 		concurrency:     atomic.Uint32{},
-		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
+		pool:            collections.NewList[poolNode[T, R]](),
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
@@ -121,15 +122,15 @@ func (w *worker[T, R]) isNullCache() bool {
 // It continuously reads jobs from the channel and processes each one
 // Each job processing is wrapped in its own function with proper cleanup
 // Time complexity: O(1) per job
-func (w *worker[T, R]) spawnWorker(channel chan iJob[T, R]) {
-	for j := range channel {
+func (w *worker[T, R]) spawnWorker(node *collections.Node[poolNode[T, R]]) {
+	for j := range node.Value.ch {
 		w.processSingleJob(j)
 
 		j.ChangeStatus(finished)
 		j.close()
-		w.freeChannel(channel)          // push back the free channel to the stack to be used for the next job
+		w.freepoolNode(node)            // push back the free channel to the stack to be used for the next job
 		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
-		w.jobPullNotifier.Send()
+		w.notifyToPullNextJobs()
 		w.wg.Done()
 	}
 }
@@ -242,31 +243,41 @@ func (w *worker[T, R]) processNextJob() {
 	w.pickNextChannel() <- j
 }
 
-func (w *worker[T, R]) freeChannel(channel chan iJob[T, R]) {
-	// if the queue length is greater than or equal to the concurrency
-	// then push the channel to the stack
-	if w.Queue.Len() >= w.CurrentConcurrency() {
-		w.channelStack.Push(channel)
+func (w *worker[T, R]) freepoolNode(node *collections.Node[poolNode[T, R]]) {
+	// If worker timeout is enabled, update the last used time
+	if w.configs.IdleWorkerTimeout > 0 {
+		node.Value.UpdateLastUsed()
+	}
+
+	// If queue length is high or we're under our idle worker target, keep this worker
+	if w.Queue.Len() >= w.NumConcurrency() || w.pool.Len() <= w.calculateIdleWorkers() {
+		w.pool.PushNode(node)
 		return
 	}
 
-	// else close the channel to remove idle workers
-	close(channel)
+	// Otherwise close this channel to reduce idle workers
+	node.Value.Close()
 }
 
 // pickNextChannel picks the next available channel for processing a Job.
 // Time complexity: O(1)
 func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 	// pop the last free channel
-	if channel, ok := w.channelStack.Pop(); ok {
-		return channel
+	if node := w.pool.PopBack(); node != nil {
+		return node.Value.ch
 	}
 
 	// if the channel stack is empty, create a new channel and spawn a worker
-	channel := make(chan iJob[T, R], 1)
-	go w.spawnWorker(channel)
+	return w.initPoolNode().Value.ch
+}
 
-	return channel
+func (w *worker[T, R]) initPoolNode() *collections.Node[poolNode[T, R]] {
+	node := collections.NewNode(poolNode[T, R]{
+		ch: make(chan iJob[T, R], 1),
+	})
+	// Start a worker goroutine to process jobs from this nodes channel
+	go w.spawnWorker(node)
+	return node
 }
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
@@ -274,10 +285,15 @@ func (w *worker[T, R]) notifyToPullNextJobs() {
 	w.jobPullNotifier.Send()
 }
 
-// cleanupCacheInterval starts a background process that periodically cleans up finished jobs from the cache
+// goCleanupCache starts a background process that periodically cleans up finished jobs from the cache
 // It checks if a ticker is already running for this cache, and if so, returns without creating another one
 // If the interval is > 0, it will create a ticker that triggers cleanup at the specified interval
-func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
+func (w *worker[T, R]) goCleanupCache() {
+	interval := w.configs.CleanupCacheInterval
+
+	if interval == 0 {
+		return
+	}
 	_, ok := w.tickers.Load(w.Cache)
 
 	// if the ticker is already running for the same cache, return
@@ -288,14 +304,73 @@ func (w *worker[T, R]) cleanupCacheInterval(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	w.tickers.Store(w.Cache, ticker)
 
-	for range ticker.C {
-		w.Cache.Range(func(key, value any) bool {
-			if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
-				w.Cache.Delete(key)
-			}
-			return true
-		})
+	go func() {
+		for range ticker.C {
+			w.Cache.Range(func(key, value any) bool {
+				if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
+					w.Cache.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+}
+
+// calculateIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
+func (w *worker[T, R]) calculateIdleWorkers() int {
+	percentage := w.configs.KeepIdleWorkers
+	concurrency := w.concurrency.Load()
+
+	// Calculate idle workers: concurrency * percentage / 100
+	// Ensure at least 1 idle worker is kept
+	idle := (concurrency * uint32(percentage)) / 100
+	if idle < 1 {
+		idle = 1
 	}
+
+	return int(idle)
+}
+
+func (w *worker[T, R]) goRemoveIdleWorkers() {
+	interval := w.configs.IdleWorkerTimeout
+
+	if interval == 0 {
+		return
+	}
+
+	_, ok := w.tickers.Load(w.pool)
+
+	// if the ticker is already running, return
+	if ok {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	w.tickers.Store(w.pool, ticker)
+
+	go func() {
+		for range ticker.C {
+			// Calculate the target number of idle workers
+			targetIdleWorkers := w.calculateIdleWorkers()
+
+			// if the number of idle workers is less than or equal to the target, continue
+			if w.pool.Len() <= targetIdleWorkers {
+				continue
+			}
+
+			nodes := w.pool.NodeSlice()
+
+			w.pool.Lock()
+			// If we have more nodes than our target, close the excess ones
+			for _, node := range nodes[targetIdleWorkers:] {
+				if node.Value.lastUsed.Add(interval).Before(time.Now()) {
+					node.Value.Close()
+					w.pool.Remove(node)
+				}
+			}
+			w.pool.Unlock()
+		}
+	}()
 }
 
 func (w *worker[T, R]) stopTickers() {
@@ -311,7 +386,7 @@ func (w *worker[T, R]) stopTickers() {
 }
 
 func (w *worker[T, R]) waitUnitCurrentProcessing() {
-	for w.CurrentProcessingCount() != 0 {
+	for w.NumProcessing() != 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -331,9 +406,11 @@ func (w *worker[T, R]) start() error {
 
 	go w.startEventLoop()
 
-	if w.configs.CleanupCacheInterval > 0 {
-		go w.cleanupCacheInterval(w.configs.CleanupCacheInterval)
-	}
+	w.goCleanupCache()
+	w.goRemoveIdleWorkers()
+
+	// init the first worker by default
+	w.pool.PushNode(w.initPoolNode())
 
 	return nil
 }
@@ -343,7 +420,25 @@ func (w *worker[T, R]) TuneConcurrency(concurrency int) error {
 		return errNotRunningWorker
 	}
 
-	w.concurrency.Store(withSafeConcurrency(concurrency))
+	safeConcurrency := withSafeConcurrency(concurrency)
+	w.concurrency.Store(safeConcurrency)
+
+	// if current concurrency is less than the safe concurrency, then now need to extend the pool size
+	// cause it will be extended by the event loop when it needs
+	if safeConcurrency > w.concurrency.Load() {
+		return nil
+	}
+
+	w.concurrency.Store(safeConcurrency)
+
+	// if current concurrency is greater than the safe concurrency, shrink the pool size
+	for shrinkPoolSize := w.concurrency.Load() - safeConcurrency; shrinkPoolSize > 0; {
+		// since the channel might be busy processing a job, we need to retry until we get the channels
+		if node := w.pool.PopBack(); node != nil {
+			node.Value.Close()
+			shrinkPoolSize--
+		}
+	}
 
 	return nil
 }
@@ -356,7 +451,7 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		Cache:           c.Cache,
-		channelStack:    collections.NewStack[chan iJob[T, R]](c.Concurrency),
+		pool:            collections.NewList[poolNode[T, R]](),
 		jobPullNotifier: utils.NewNotifier(1),
 		wg:              sync.WaitGroup{},
 		configs:         c,
@@ -368,8 +463,12 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 	return newQueues(newWorker)
 }
 
-func (w *worker[T, R]) CurrentConcurrency() int {
+func (w *worker[T, R]) NumConcurrency() int {
 	return int(w.concurrency.Load())
+}
+
+func (w *worker[T, R]) NumIdleWorkers() int {
+	return w.pool.Len()
 }
 
 func (w *worker[T, R]) Pause() Worker[T, R] {
@@ -385,12 +484,9 @@ func (w *worker[T, R]) Stop() {
 	w.jobPullNotifier.Close()
 	w.PauseAndWait()
 
-	// Close all channels in the stack
-	w.channelStack.Range(func(channel chan iJob[T, R]) {
-		close(channel)
-	})
-
-	w.channelStack.Clear()
+	// We just init the stack instead of closing each channel
+	// This prevents attempting to close already closed channels
+	w.pool.Init()
 	w.Cache.Clear()
 }
 
@@ -438,7 +534,7 @@ func (w *worker[T, R]) Status() string {
 	}
 }
 
-func (w *worker[T, R]) CurrentProcessingCount() int {
+func (w *worker[T, R]) NumProcessing() int {
 	return int(w.CurProcessing.Load())
 }
 
