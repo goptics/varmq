@@ -178,7 +178,6 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 // startEventLoop starts the event loop that processes pending jobs when workers become available
 // It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
 // When all conditions are met, it processes the next job in the queue
-// Time complexity: O(1) per notification
 func (w *worker[T, R]) startEventLoop() {
 	w.jobPullNotifier.Receive(func() {
 		for w.IsRunning() && w.CurProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
