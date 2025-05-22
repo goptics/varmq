@@ -45,7 +45,7 @@ type worker[T, R any] struct {
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	wg              sync.WaitGroup
-	tickers         *sync.Map
+	tickers         []*time.Ticker
 	configs
 }
 
@@ -99,7 +99,7 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		configs:         c,
 		wg:              sync.WaitGroup{},
-		tickers:         new(sync.Map),
+		tickers:         make([]*time.Ticker, 0),
 	}
 
 	w.concurrency.Store(c.Concurrency)
@@ -294,15 +294,9 @@ func (w *worker[T, R]) goCleanupCache() {
 	if interval == 0 {
 		return
 	}
-	_, ok := w.tickers.Load(w.Cache)
-
-	// if the ticker is already running for the same cache, return
-	if ok {
-		return
-	}
 
 	ticker := time.NewTicker(interval)
-	w.tickers.Store(w.Cache, ticker)
+	w.tickers = append(w.tickers, ticker)
 
 	go func() {
 		for range ticker.C {
@@ -331,15 +325,8 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 		return
 	}
 
-	_, ok := w.tickers.Load(w.pool)
-
-	// if the ticker is already running, return
-	if ok {
-		return
-	}
-
 	ticker := time.NewTicker(interval)
-	w.tickers.Store(w.pool, ticker)
+	w.tickers = append(w.tickers, ticker)
 
 	go func() {
 		for range ticker.C {
@@ -365,15 +352,11 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 }
 
 func (w *worker[T, R]) stopTickers() {
-	defer w.tickers.Clear()
+	for _, ticker := range w.tickers {
+		ticker.Stop()
+	}
 
-	w.tickers.Range(func(key, value any) bool {
-		if ticker, ok := value.(*time.Ticker); ok {
-			ticker.Stop()
-		}
-
-		return true
-	})
+	w.tickers = make([]*time.Ticker, 0)
 }
 
 func (w *worker[T, R]) waitUnitCurrentProcessing() {
@@ -460,7 +443,7 @@ func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
 		jobPullNotifier: utils.NewNotifier(1),
 		wg:              sync.WaitGroup{},
 		configs:         c,
-		tickers:         w.tickers,
+		tickers:         make([]*time.Ticker, 0),
 	}
 
 	newWorker.concurrency.Store(c.Concurrency)
