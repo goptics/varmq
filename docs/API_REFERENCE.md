@@ -467,7 +467,7 @@ err := worker.Restart()
 fmt.Println(worker.Status()) // Outputs: "Running"
 ```
 
-### `TuneWorkerPool(concurrency int) error`
+### `TunePool(concurrency int) error`
 
 Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
@@ -477,10 +477,10 @@ Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
 ```go
 // Later, scale up concurrency based on load
-worker.TuneWorkerPool(8)  // Scale up to 8 workers
+worker.TunePool(8)  // Scale up to 8 workers
 
 // Later, scale down when load decreases
-worker.TuneWorkerPool(2)  // Scale down to 2 workers
+worker.TunePool(2)  // Scale down to 2 workers
 ```
 
 ## Worker Status Methods
@@ -526,30 +526,22 @@ status := worker.Status()
 fmt.Println("Current worker status:", status)  // e.g., "Current worker status: Running"
 ```
 
-### `CurrentProcessingCount() int`
+### `NumProcessing() int`
 
 Returns the number of jobs currently being processed by the worker. This can be useful for monitoring workload and implementing adaptive behavior.
 
 ```go
-processingCount := worker.CurrentProcessingCount()
+processingCount := worker.NumProcessing()
 fmt.Printf("Currently processing %d jobs\n", processingCount)
 ```
 
-#### `CurrentConcurrency() int`
+#### `NumConcurrency() int`
 
-Returns the current concurrency or pool size of the worker. This indicates how many jobs the worker can process simultaneously.
+Returns the current max concurrency. This indicates how many jobs the worker can process simultaneously.
 
 ```go
-concurrency := worker.CurrentConcurrency()
+concurrency := worker.NumConcurrency()
 fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
-
-// Example of adaptive scaling based on load
-if queue.Len() > worker.CurrentConcurrency()*5 {
-    // If queue has 5x more jobs than workers, scale up
-    newConcurrency := worker.CurrentConcurrency() * 2
-    worker.TuneWorkerPool(newConcurrency)
-    fmt.Printf("Scaled up to %d workers due to large queue\n", newConcurrency)
-}
 ```
 
 ## Adapters
