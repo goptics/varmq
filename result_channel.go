@@ -14,8 +14,8 @@ type resultChannel[R any] struct {
 }
 
 // newResultChannel creates a new resultChannel with the specified buffer size.
-func newResultChannel[R any](cap int) *resultChannel[R] {
-	return &resultChannel[R]{
+func newResultChannel[R any](cap int) resultChannel[R] {
+	return resultChannel[R]{
 		ch: make(chan Result[R], cap),
 	}
 }

@@ -27,7 +27,7 @@ type job[T, R any] struct {
 	Input         T
 	status        atomic.Uint32
 	Output        *Result[R]
-	resultChannel *resultChannel[R]
+	resultChannel resultChannel[R]
 	queue         IBaseQueue
 	ackId         string
 }

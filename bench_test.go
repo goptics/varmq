@@ -19,7 +19,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		// Create a worker with the double function
 		worker := NewWorker(func(data int) (int, error) {
 			return data * 2, nil
-		}, 4)
+		})
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
