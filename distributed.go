@@ -16,7 +16,7 @@ func NewDistributedQueue[T, R any](internalQueue IDistributedQueue) DistributedQ
 	}
 }
 
-func (q *distributedQueue[T, R]) PendingCount() int {
+func (q *distributedQueue[T, R]) NumPending() int {
 	return q.internalQueue.Len()
 }
 
@@ -24,7 +24,6 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 	j := newVoidJob[T, R](data, withRequiredJobId(loadJobConfigs(newConfig(), c...)))
 
 	jBytes, err := j.Json()
-	j.SetInternalQueue(q.internalQueue)
 
 	if err != nil {
 		j.close()
@@ -36,6 +35,8 @@ func (q *distributedQueue[T, R]) Add(data T, c ...JobConfigFunc) bool {
 		j.close()
 		return false
 	}
+
+	j.SetInternalQueue(q.internalQueue)
 
 	return true
 }

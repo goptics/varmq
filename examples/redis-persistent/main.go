@@ -42,7 +42,7 @@ func main() {
 	}()
 	defer q.WaitUntilFinished()
 	defer func() {
-		fmt.Println("Pending jobs:", q.PendingCount())
+		fmt.Println("Pending jobs:", q.NumPending())
 	}()
 
 	// terminate the program to see the persistent pending jobs in the queue

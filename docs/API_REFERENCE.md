@@ -95,19 +95,29 @@ worker := varmq.NewWorker(myWorkerFunc,
 
 #### Configuration Options
 
-| Configuration                    | Description                            | Default                       |
-| -------------------------------- | -------------------------------------- | ----------------------------- |
-| `WithConcurrency(n)`             | Sets the number of concurrent workers  | `1`                           |
-| `WithCache(cache)`               | Provides a custom cache implementation | In-memory cache               |
-| `WithAutoCleanupCache(duration)` | Sets the cache cleanup interval        | No auto-cleanup               |
-| `WithJobIdGenerator(func)`       | Custom job ID generation function      | Empty string (auto-generated) |
+| Configuration                            | Description                                                         | Default                       |
+| ---------------------------------------- | ------------------------------------------------------------------- | ----------------------------- |
+| `WithConcurrency(n)`                     | Sets the number of concurrent workers                               | `1`                           |
+| `WithCache(cache)`                       | Provides a custom cache implementation                              | In-memory cache               |
+| `WithAutoCleanupCache(duration)`         | Sets the cache cleanup interval                                     | No auto-cleanup               |
+| `WithJobIdGenerator(func)`               | Custom job ID generation function                                   | Empty string (auto-generated) |
+| `WithIdleWorkerExpiryDuration(duration)` | Sets how long idle workers will be kept before expiry               | `0` (no expiry)               |
+| `WithMinIdleWorkerRatio(percentage)`     | Sets the percentage of idle workers to keep relative to concurrency | `0` (no minimum)              |
 
 **Examples:**
 
 ```go
 // Set concurrency to use all available CPU cores
-worker := varmq.NewWorker(myFunc, varmq.WithConcurrency(0))
 // if the concurrency is set to less than 1, then its set the concurrency number of cpu using runtime.NumCPU() func
+worker := varmq.NewWorker(myFunc, varmq.WithConcurrency(0))
+
+// Combine idle worker management options with other configuration
+worker := varmq.NewWorker(myFunc,
+    varmq.WithConcurrency(50), // Setting the max concurrency to 50
+    varmq.WithIdleWorkerExpiryDuration(5 * time.Minute), // Set idle worker expiry duration to 5 minutes
+    varmq.WithMinIdleWorkerRatio(20), // This will keep 10 idle workers (20% of 50) and expire others (40) after 5 minutes of inactivity
+    )
+
 // Use custom job ID generator
 worker := varmq.NewWorker(myFunc, varmq.WithJobIdGenerator(func() string {
     return uuid.New().String() // Using UUID for job IDs
@@ -467,7 +477,7 @@ err := worker.Restart()
 fmt.Println(worker.Status()) // Outputs: "Running"
 ```
 
-### `TuneConcurrency(concurrency int) error`
+### `TunePool(concurrency int) error`
 
 Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
@@ -477,10 +487,10 @@ Dynamically adjusts the number of concurrent worker goroutines at runtime.
 
 ```go
 // Later, scale up concurrency based on load
-worker.TuneConcurrency(8)  // Scale up to 8 workers
+worker.TunePool(8)  // Scale up to 8 workers
 
 // Later, scale down when load decreases
-worker.TuneConcurrency(2)  // Scale down to 2 workers
+worker.TunePool(2)  // Scale down to 2 workers
 ```
 
 ## Worker Status Methods
@@ -526,30 +536,31 @@ status := worker.Status()
 fmt.Println("Current worker status:", status)  // e.g., "Current worker status: Running"
 ```
 
-### `CurrentProcessingCount() int`
+### `NumProcessing() int`
 
 Returns the number of jobs currently being processed by the worker. This can be useful for monitoring workload and implementing adaptive behavior.
 
 ```go
-processingCount := worker.CurrentProcessingCount()
+processingCount := worker.NumProcessing()
 fmt.Printf("Currently processing %d jobs\n", processingCount)
 ```
 
-#### `CurrentConcurrency() int`
+#### `NumConcurrency() int`
 
-Returns the current concurrency or pool size of the worker. This indicates how many jobs the worker can process simultaneously.
+Returns the current max concurrency. This indicates how many jobs the worker can process simultaneously.
 
 ```go
-concurrency := worker.CurrentConcurrency()
+concurrency := worker.NumConcurrency()
 fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
+```
 
-// Example of adaptive scaling based on load
-if queue.Len() > worker.CurrentConcurrency()*5 {
-    // If queue has 5x more jobs than workers, scale up
-    newConcurrency := worker.CurrentConcurrency() * 2
-    worker.TuneConcurrency(newConcurrency)
-    fmt.Printf("Scaled up to %d workers due to large queue\n", newConcurrency)
-}
+#### `NumIdleWorkers() int`
+
+Returns the number of idle workers currently in the pool. This can be useful for monitoring resource usage and understanding the effects of your idle worker configuration.
+
+```go
+idleWorkers := worker.NumIdleWorkers()
+fmt.Printf("Worker has %d idle workers ready to process jobs\n", idleWorkers)
 ```
 
 ## Adapters

@@ -11,8 +11,8 @@ type externalQueue[T, R any] struct {
 }
 
 type IExternalBaseQueue interface {
-	// PendingCount returns the number of Jobs pending in the queue.
-	PendingCount() int
+	// NumPending returns the number of Jobs pending in the queue.
+	NumPending() int
 	// Purge removes all pending Jobs from the queue.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	Purge()
@@ -54,7 +54,7 @@ func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
 	}
 }
 
-func (eq *externalQueue[T, R]) PendingCount() int {
+func (eq *externalQueue[T, R]) NumPending() int {
 	return eq.Queue.Len()
 }
 
@@ -91,7 +91,7 @@ func (eq *externalQueue[T, R]) WaitUntilFinished() {
 	eq.wg.Wait()
 
 	// wait until all ongoing processes are done if still pending
-	for eq.PendingCount() > 0 || eq.CurrentProcessingCount() > 0 {
+	for eq.NumPending() > 0 || eq.NumProcessing() > 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
