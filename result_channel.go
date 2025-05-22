@@ -21,7 +21,7 @@ func newResultChannel[R any](cap int) resultChannel[R] {
 }
 
 func (rc *resultChannel[R]) Read() (<-chan Result[R], error) {
-	if rc.consumed.Load().(bool) {
+	if rc.consumed.Load() != nil {
 		return nil, errors.New("result channel has already been consumed")
 	}
 
