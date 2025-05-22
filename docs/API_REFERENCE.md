@@ -554,6 +554,15 @@ concurrency := worker.NumConcurrency()
 fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
 ```
 
+#### `NumIdleWorkers() int`
+
+Returns the number of idle workers currently in the pool. This can be useful for monitoring resource usage and understanding the effects of your idle worker configuration.
+
+```go
+idleWorkers := worker.NumIdleWorkers()
+fmt.Printf("Worker has %d idle workers ready to process jobs\n", idleWorkers)
+```
+
 ## Adapters
 
 VarMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
