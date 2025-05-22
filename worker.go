@@ -32,6 +32,7 @@ var (
 	errInvalidWorkerType = errors.New("invalid worker type passed to worker")
 	errRunningWorker     = errors.New("worker is already running")
 	errNotRunningWorker  = errors.New("worker is not running")
+	errSameConcurrency   = errors.New("worker already has the same concurrency")
 )
 
 type worker[T, R any] struct {
@@ -415,9 +416,14 @@ func (w *worker[T, R]) TuneWorkerPool(concurrency int) error {
 
 	oldConcurrency := w.concurrency.Load()
 	safeConcurrency := withSafeConcurrency(concurrency)
+
+	if oldConcurrency == safeConcurrency {
+		return errSameConcurrency
+	}
+
 	w.concurrency.Store(safeConcurrency)
 
-	// if current concurrency is less than the safe concurrency, then now need to extend the pool size
+	// if new concurrency is greater than the old concurrency, then notify to pull next jobs
 	// cause it will be extended by the event loop when it needs
 	if safeConcurrency > oldConcurrency {
 		defer w.notifyToPullNextJobs()
@@ -425,6 +431,7 @@ func (w *worker[T, R]) TuneWorkerPool(concurrency int) error {
 	}
 
 	// if idle worker expiry duration is set, then no need to shrink the pool size
+	// cause it will be removed by the idle worker remover
 	if w.configs.IdleWorkerExpiryDuration != 0 {
 		return nil
 	}
