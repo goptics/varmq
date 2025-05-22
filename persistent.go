@@ -80,9 +80,7 @@ func (q *persistentQueue[T, R]) Purge() {
 
 	// close all pending jobs
 	q.worker.Cache.Range(func(_, value any) bool {
-		v, _ := value.(EnqueuedJob[R])
-
-		if v.Status() == "Queued" {
+		if v, ok := value.(EnqueuedJob[R]); ok && v.Status() == "Queued" {
 			v.close()
 		}
 
