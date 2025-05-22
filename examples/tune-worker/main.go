@@ -31,7 +31,8 @@ func main() {
 			} else {
 				initialConcurrency -= 10
 			}
-			w.TuneWorkerPool(initialConcurrency)
+
+			w.TunePool(initialConcurrency)
 
 			fmt.Printf("Total Goroutines: %d, Idle Workers: %d\nConcurrency: %d, Processing: %d\nPending Jobs: %d Type: %s\n\n", runtime.NumGoroutine(), w.NumIdleWorkers(), initialConcurrency, w.NumProcessing(), q.PendingCount(), tuneType)
 

@@ -67,8 +67,8 @@ type Worker[T, R any] interface {
 	NumIdleWorkers() int
 	// Copy returns a copy of the worker.
 	Copy(config ...any) IWorkerBinder[T, R]
-	// TuneWorkerPool tunes (increase or decrease) the pool size of the worker.
-	TuneWorkerPool(concurrency int) error
+	// TunePool tunes (increase or decrease) the pool size of the worker.
+	TunePool(concurrency int) error
 	// Pause pauses the worker.
 	Pause() Worker[T, R]
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
@@ -409,7 +409,7 @@ func (w *worker[T, R]) start() error {
 	return nil
 }
 
-func (w *worker[T, R]) TuneWorkerPool(concurrency int) error {
+func (w *worker[T, R]) TunePool(concurrency int) error {
 	if w.status.Load() != running {
 		return errNotRunningWorker
 	}
