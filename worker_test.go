@@ -516,7 +516,7 @@ func TestTuneWorkerPool(t *testing.T) {
 
 		// "Tune" to the same concurrency value
 		err = w.TuneWorkerPool(initialConcurrency)
-		assert.NoError(t, err, "TuneWorkerPool should not return error on running worker")
+		assert.ErrorIs(t, err, errSameConcurrency, "TuneWorkerPool should return error when concurrency is the same")
 
 		// Verify concurrency remains unchanged
 		assert.Equal(t, initialConcurrency, w.NumConcurrency(), "Concurrency should remain unchanged when set to same value")

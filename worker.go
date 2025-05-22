@@ -492,9 +492,12 @@ func (w *worker[T, R]) Stop() {
 	w.jobPullNotifier.Close()
 	w.PauseAndWait()
 
-	// We just init the stack instead of closing each channel
-	// This prevents attempting to close already closed channels
-	w.pool.Init()
+	// remove all nodes from the list and close the channels
+	for _, node := range w.pool.NodeSlice() {
+		node.Value.Close()
+		w.pool.Remove(node)
+	}
+
 	w.Cache.Clear()
 }
 
