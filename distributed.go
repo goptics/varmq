@@ -16,7 +16,7 @@ func NewDistributedQueue[T, R any](internalQueue IDistributedQueue) DistributedQ
 	}
 }
 
-func (q *distributedQueue[T, R]) PendingCount() int {
+func (q *distributedQueue[T, R]) NumPending() int {
 	return q.internalQueue.Len()
 }
 

@@ -34,7 +34,7 @@ func main() {
 
 			w.TunePool(initialConcurrency)
 
-			fmt.Printf("Total Goroutines: %d, Idle Workers: %d\nConcurrency: %d, Processing: %d\nPending Jobs: %d Type: %s\n\n", runtime.NumGoroutine(), w.NumIdleWorkers(), initialConcurrency, w.NumProcessing(), q.PendingCount(), tuneType)
+			fmt.Printf("Total Goroutines: %d, Idle Workers: %d\nConcurrency: %d, Processing: %d\nPending Jobs: %d Type: %s\n\n", runtime.NumGoroutine(), w.NumIdleWorkers(), initialConcurrency, w.NumProcessing(), q.NumPending(), tuneType)
 
 			if initialConcurrency >= 100 {
 				tuneType = "shrink"

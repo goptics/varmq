@@ -45,7 +45,7 @@ func TestQueue(t *testing.T) {
 		job, ok := queue.Add("42")
 		assert.True(t, ok, "Job should be added successfully")
 		assert.NotNil(t, job, "Job should not be nil")
-		assert.Equal(t, 1, queue.PendingCount(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
 		assert.Equal(t, 1, internalQueue.Len(), "Internal Queue should have one item")
 	})
 
@@ -57,7 +57,7 @@ func TestQueue(t *testing.T) {
 
 		job, _ := queue.Add("42")
 		job.Result()
-		assert.Equal(t, 0, queue.PendingCount(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 	})
 
@@ -73,7 +73,7 @@ func TestQueue(t *testing.T) {
 		queue, worker, internalQueue := initQueue()
 
 		groupJob := queue.AddAll(jobs)
-		pending := queue.PendingCount()
+		pending := queue.NumPending()
 		assert.Equal(t, 5, pending, "Queue should have five pending jobs")
 		assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have five items")
 		assert.Equal(t, pending, groupJob.Len(), "Internal Queue should have five items")
@@ -104,7 +104,7 @@ func TestQueue(t *testing.T) {
 			assert.True(t, ok, "unexpected result value: %d", val)
 		}
 
-		assert.Equal(t, 0, queue.PendingCount(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 		assert.Equal(t, 0, groupJob.Len(), "Group job should have no pending jobs")
 	})

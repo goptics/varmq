@@ -16,7 +16,7 @@ func NewDistributedPriorityQueue[T, R any](internalQueue IDistributedPriorityQue
 	}
 }
 
-func (q *distributedPriorityQueue[T, R]) PendingCount() int {
+func (q *distributedPriorityQueue[T, R]) NumPending() int {
 	return q.internalQueue.Len()
 }
 

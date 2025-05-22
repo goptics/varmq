@@ -38,7 +38,7 @@ func main() {
 	}
 
 	fmt.Println("added jobs")
-	fmt.Println("pending jobs:", pq.PendingCount())
+	fmt.Println("pending jobs:", pq.NumPending())
 
 	time.Sleep(5 * time.Second)
 	pq.Purge()
