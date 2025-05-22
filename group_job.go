@@ -6,42 +6,52 @@ import (
 	"sync/atomic"
 )
 
+// groupControl combines synchronization and counting for a group job.
+type groupControl struct {
+	wg  sync.WaitGroup
+	len atomic.Uint32
+}
+
 // groupJob represents a job that can be used in a group.
 type groupJob[T, R any] struct {
 	*job[T, R]
-	wg  *sync.WaitGroup
-	len *groupLen
-}
-
-type groupLen struct {
-	len atomic.Uint32
+	ctrl *groupControl
 }
 
 const groupIdPrefixed = "g:"
 
-func (gl *groupLen) Add() {
-	gl.len.Add(1)
+func (gc *groupControl) SubJob() uint32 {
+	return gc.len.Add(^uint32(0))
 }
 
-func (gl *groupLen) Sub() uint32 {
-	return gl.len.Add(^uint32(0))
+func (gc *groupControl) JobCount() int {
+	return int(gc.len.Load())
 }
 
-func (gl *groupLen) Get() int {
-	return int(gl.len.Load())
+func (gc *groupControl) AddWait(delta int) {
+	gc.wg.Add(delta)
+}
+
+func (gc *groupControl) Done() {
+	gc.wg.Done()
+}
+
+func (gc *groupControl) Wait() {
+	gc.wg.Wait()
 }
 
 func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
+	ctrl := new(groupControl)
+	ctrl.AddWait(bufferSize)
+	ctrl.len.Store(uint32(bufferSize))
+
 	gj := &groupJob[T, R]{
 		job: &job[T, R]{
 			resultChannel: newResultChannel[R](bufferSize),
 		},
-		wg:  new(sync.WaitGroup),
-		len: new(groupLen),
+		ctrl: ctrl,
 	}
 
-	gj.wg.Add(bufferSize)
-	gj.len.len.Store(uint32(bufferSize))
 	return gj
 }
 
@@ -56,8 +66,7 @@ func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
 			Input:         data,
 			resultChannel: gj.resultChannel,
 		},
-		wg:  gj.wg,
-		len: gj.len,
+		ctrl: gj.ctrl,
 	}
 }
 
@@ -74,11 +83,11 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 }
 
 func (gj *groupJob[T, R]) Wait() {
-	gj.wg.Wait()
+	gj.ctrl.Wait()
 }
 
 func (gj *groupJob[T, R]) Len() int {
-	return gj.len.Get()
+	return gj.ctrl.JobCount()
 }
 
 // Drain discards the job's result and error values asynchronously.
@@ -105,12 +114,12 @@ func (gj *groupJob[T, R]) close() error {
 		return err
 	}
 
-	gj.wg.Done()
+	gj.ctrl.Done()
 	gj.Ack()
 	gj.ChangeStatus(closed)
 
 	// Close the result channel if all jobs are done
-	if gj.len.Sub() == 0 {
+	if gj.ctrl.SubJob() == 0 {
 		gj.CloseResultChannel()
 	}
 	return nil

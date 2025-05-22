@@ -18,7 +18,7 @@ func TestGroupJob(t *testing.T) {
 		// Validate group job structure
 		assert.NotNil(gj, "group job should not be nil")
 		assert.NotNil(gj.job, "underlying job should not be nil")
-		assert.NotNil(gj.wg, "wait group should not be nil")
+		assert.NotNil(gj.ctrl, "group control should not be nil")
 		assert.NotNil(gj.resultChannel, "result channel should be initialized")
 	})
 
@@ -51,7 +51,7 @@ func TestGroupJob(t *testing.T) {
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
 		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(gj.resultChannel, newJob.resultChannel, "result channel should be shared with the group")
-		assert.Equal(gj.wg, newJob.wg, "wait group should be shared with the group")
+		assert.Equal(gj.ctrl, newJob.ctrl, "group control should be shared with the group")
 	})
 
 	t.Run("closing a group job", func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestGroupJob(t *testing.T) {
 
 		// Manually reduce the wait group count to match our single Close() call
 		// This prevents the wait group from blocking indefinitely
-		gj.wg.Add(-bufferSize + 1)
+		gj.ctrl.AddWait(-bufferSize + 1)
 
 		assert := assert.New(t)
 
@@ -83,7 +83,7 @@ func TestGroupJob(t *testing.T) {
 		gj := newGroupJob[string, int](bufferSize)
 
 		// Reduce wait group count to prevent deadlock when testing
-		gj.wg.Add(-int(bufferSize))
+		gj.ctrl.AddWait(-int(bufferSize))
 
 		assert := assert.New(t)
 
