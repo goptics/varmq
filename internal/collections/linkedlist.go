@@ -96,16 +96,6 @@ func (l *List[T]) Back() *Node[T] {
 	return l.root.prev
 }
 
-// lazyInit lazily initializes a zero List value
-// Assumes the caller holds appropriate lock
-func (l *List[T]) lazyInit() {
-	if l.root.next == nil {
-		l.root.next = &l.root
-		l.root.prev = &l.root
-		l.len = 0
-	}
-}
-
 // insertValue is a helper function that creates a new Node with value v and inserts it after at
 func (l *List[T]) insertValue(v T, at *Node[T]) *Node[T] {
 	return l.insert(NewNode(v), at)
@@ -139,7 +129,6 @@ func (l *List[T]) PushFront(v T) *Node[T] {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	l.lazyInit()
 	return l.insertValue(v, &l.root)
 }
 
@@ -148,7 +137,6 @@ func (l *List[T]) PushBack(v T) *Node[T] {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	l.lazyInit()
 	return l.insertValue(v, l.root.prev)
 }
 
@@ -158,7 +146,6 @@ func (l *List[T]) PushNode(n *Node[T]) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	l.lazyInit()
 	n.next = &l.root
 	n.prev = l.root.prev
 	l.root.prev.next = n
@@ -169,20 +156,22 @@ func (l *List[T]) PushNode(n *Node[T]) {
 // Remove removes node from its list, decrements l.len, and returns the node
 // The node can be reinserted into a list using PushNode
 // Note: With the list field removed, we can't verify the node belongs to this list
-func (l *List[T]) Remove(node *Node[T]) *Node[T] {
+func (l *List[T]) Remove(node *Node[T]) bool {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	// We no longer check if the node belongs to this list
-	// This means the caller must ensure the node is from this list
-	if node.prev != nil && node.next != nil {
-		node.prev.next = node.next
-		node.next.prev = node.prev
-		node.next = nil // avoid memory leaks
-		node.prev = nil // avoid memory leaks
-		l.len--
+	// Skip this operation if the node is the sentinel node or not properly connected
+	if node == &l.root || node.prev == nil || node.next == nil {
+		return false
 	}
-	return node
+
+	// Perform removal (this works for any node in the list)
+	node.prev.next = node.next
+	node.next.prev = node.prev
+	node.next = nil // avoid memory leaks
+	node.prev = nil // avoid memory leaks
+	l.len--
+	return true
 }
 
 // PopBack removes and returns the last element of list l
