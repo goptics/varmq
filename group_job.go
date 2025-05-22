@@ -17,19 +17,19 @@ type groupLen struct {
 	len atomic.Uint32
 }
 
+const groupIdPrefixed = "g:"
+
 func (gl *groupLen) Add() {
 	gl.len.Add(1)
 }
 
-func (gl *groupLen) Sub() {
-	gl.len.Add(^uint32(0))
+func (gl *groupLen) Sub() uint32 {
+	return gl.len.Add(^uint32(0))
 }
 
 func (gl *groupLen) Get() int {
 	return int(gl.len.Load())
 }
-
-const groupIdPrefixed = "g:"
 
 func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
@@ -41,6 +41,7 @@ func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 	}
 
 	gj.wg.Add(bufferSize)
+	gj.len.len.Store(uint32(bufferSize))
 	return gj
 }
 
@@ -49,7 +50,6 @@ func generateGroupId(id string) string {
 }
 
 func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
-	gj.len.Add()
 	return &groupJob[T, R]{
 		job: &job[T, R]{
 			id:            generateGroupId(config.Id),
@@ -70,14 +70,11 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 		return tempCh, err
 	}
 
-	// Start a goroutine to close the channel when all jobs are done
-	go func() {
-		gj.wg.Wait()
-		gj.CloseResultChannel()
-	}()
-
-	// return a closed channel
 	return ch, nil
+}
+
+func (gj *groupJob[T, R]) Wait() {
+	gj.wg.Wait()
 }
 
 func (gj *groupJob[T, R]) Len() int {
@@ -100,11 +97,6 @@ func (gj *groupJob[T, R]) Drain() error {
 		}
 	}()
 
-	go func() {
-		gj.wg.Wait()
-		gj.CloseResultChannel()
-	}()
-
 	return nil
 }
 
@@ -116,6 +108,10 @@ func (gj *groupJob[T, R]) close() error {
 	gj.wg.Done()
 	gj.Ack()
 	gj.ChangeStatus(closed)
-	gj.len.Sub()
+
+	// Close the result channel if all jobs are done
+	if gj.len.Sub() == 0 {
+		gj.CloseResultChannel()
+	}
 	return nil
 }
