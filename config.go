@@ -14,7 +14,7 @@ type configs struct {
 	CleanupCacheInterval     time.Duration
 	JobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
-	MinIdleWorkerRatio       uint16
+	MinIdleWorkerRatio       uint8
 }
 
 func newConfig() configs {
@@ -58,7 +58,7 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 // Example: 20 means keep 20% of the concurrency level as idle workers.
 // The actual number of idle workers will be calculated as: concurrency * percentage / 100.
 // The percentage must be between 1 and 100. Values outside this range will be clamped.
-func WithMinIdleWorkerRatio(percentage uint16) ConfigFunc {
+func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 	// Clamp percentage between 1 and 100
 	if percentage == 0 {
 		percentage = 1
