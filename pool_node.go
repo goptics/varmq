@@ -13,11 +13,8 @@ type poolNode[T, R any] struct {
 // newPoolNode creates a new pool node with initialized lastUsed field
 func newPoolNode[T, R any](bufferSize int) poolNode[T, R] {
 	node := poolNode[T, R]{
-		ch:       make(chan iJob[T, R], bufferSize),
-		lastUsed: atomic.Value{},
+		ch: make(chan iJob[T, R], bufferSize),
 	}
-	// Initialize lastUsed with zero time
-	node.lastUsed.Store(time.Time{})
 	return node
 }
 
