@@ -274,9 +274,7 @@ func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
 }
 
 func (w *worker[T, R]) initPoolNode() *collections.Node[poolNode[T, R]] {
-	node := collections.NewNode(poolNode[T, R]{
-		ch: make(chan iJob[T, R], 1),
-	})
+	node := collections.NewNode(newPoolNode[T, R](1))
 	// Start a worker goroutine to process jobs from this nodes channel
 	go w.spawnWorker(node)
 	return node
@@ -356,8 +354,8 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 			nodes := w.pool.NodeSlice()
 			// If we have more nodes than our target, close the excess ones
 			for _, node := range nodes[targetIdleWorkers:] {
-				if node.Value.lastUsed.Add(interval).Before(time.Now()) &&
-					!(node.Next() == nil || node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
+				if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
+					!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
 					node.Value.Close()
 					w.pool.Remove(node)
 				}

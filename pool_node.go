@@ -1,10 +1,24 @@
 package varmq
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 type poolNode[T, R any] struct {
 	ch       chan iJob[T, R]
-	lastUsed time.Time
+	lastUsed atomic.Value
+}
+
+// newPoolNode creates a new pool node with initialized lastUsed field
+func newPoolNode[T, R any](bufferSize int) poolNode[T, R] {
+	node := poolNode[T, R]{
+		ch:       make(chan iJob[T, R], bufferSize),
+		lastUsed: atomic.Value{},
+	}
+	// Initialize lastUsed with zero time
+	node.lastUsed.Store(time.Time{})
+	return node
 }
 
 func (wc *poolNode[T, R]) Close() {
@@ -12,5 +26,14 @@ func (wc *poolNode[T, R]) Close() {
 }
 
 func (wc *poolNode[T, R]) UpdateLastUsed() {
-	wc.lastUsed = time.Now()
+	wc.lastUsed.Store(time.Now())
+}
+
+// GetLastUsed safely retrieves the lastUsed time
+func (wc *poolNode[T, R]) GetLastUsed() time.Time {
+	if val := wc.lastUsed.Load(); val != nil {
+		return val.(time.Time)
+	}
+	// Return zero time if the value hasn't been initialized
+	return time.Time{}
 }
