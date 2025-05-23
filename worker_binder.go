@@ -10,7 +10,7 @@ import (
 // It provides methods to connect workers with various queue implementations, enabling
 // flexible worker-queue configurations. This interface extends the Worker interface
 // with queue binding capabilities for handling tasks of type T and producing results of type R.
-type IWorkerBinder[T, R any] interface {
+type IResultWorkerBinder[T, R any] interface {
 	Worker[T, R]
 
 	// BindQueue binds the worker to a standard Queue implementation.
@@ -78,7 +78,7 @@ type IWorkerBinder[T, R any] interface {
 	//   - pq IQueue: A queue implementation that provides persistence capabilities.
 	//
 	// Returns:
-	//   - PersistentQueue[T, R]: A persistent queue that ensures jobs are not lost and processes them with the worker.
+	//   - PersistentQueue[T, any]: A persistent queue that ensures jobs are not lost and processes them with the worker.
 	//
 	// Example usage:
 	//   persistentQueue := worker.WithPersistentQueue(redisQueue)
@@ -92,7 +92,7 @@ type IWorkerBinder[T, R any] interface {
 	//   - pq IPersistentPriorityQueue: A priority queue implementation that provides persistence capabilities.
 	//
 	// Returns:
-	//   - PersistentPriorityQueue[T, R]: A persistent priority queue that processes jobs based on priority
+	//   - PersistentPriorityQueue[T, any]: A persistent priority queue that processes jobs based on priority
 	//     while ensuring they are not lost, using this worker for processing.
 	//
 	// Example usage:
@@ -107,8 +107,8 @@ type IWorkerBinder[T, R any] interface {
 //
 // The void worker pattern is ideal for fire-and-forget operations like sending notifications,
 // updating external systems, or logging events where no response is required.
-type IVoidWorkerBinder[T any] interface {
-	IWorkerBinder[T, any]
+type IWorkerBinder[T any] interface {
+	IResultWorkerBinder[T, any]
 
 	// WithDistributedQueue binds the void worker to a DistributedQueue implementation.
 	// Distributed queues allow job processing to be spread across multiple instances or processes,
@@ -155,9 +155,9 @@ type workerBinder[T, R any] struct {
 	*worker[T, R]
 }
 
-// newQueues creates a standard worker binder that implements the IWorkerBinder interface
+// newResultQueues creates a standard worker binder that implements the IWorkerBinder interface
 // It wraps a worker instance and provides methods to bind it to various queue implementations
-func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
+func newResultQueues[T, R any](worker *worker[T, R]) IResultWorkerBinder[T, R] {
 	return &workerBinder[T, R]{
 		worker: worker,
 	}
@@ -166,7 +166,7 @@ func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
 // newVoidQueues creates a void worker binder that implements the IVoidWorkerBinder interface
 // It is specifically for workers that don't return results (void workers)
 // This binder adds support for distributed queue types in addition to standard queue types
-func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
+func newQueues[T any](worker *worker[T, any]) IWorkerBinder[T] {
 	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
 	// This works because workerBinder implements all methods of IVoidWorkerBinder
 	return &workerBinder[T, any]{

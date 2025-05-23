@@ -19,7 +19,7 @@ func TestGroupJob(t *testing.T) {
 
 		// Validate group job structure
 		assert.NotNil(gj, "group job should not be nil")
-		assert.NotNil(gj.resultChannel, "result channel should be initialized")
+		assert.NotNil(gj.resultController, "result channel should be initialized")
 		assert.NotNil(gj.done, "done channel should be initialized")
 		assert.NotNil(gj.len, "atomic counter should be initialized")
 		assert.Equal(bufferSize, gj.Len(), "initial length should match buffer size")
@@ -53,7 +53,7 @@ func TestGroupJob(t *testing.T) {
 		assert.NotNil(newJob, "new job in group should not be nil")
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
 		assert.Equal(jobData, newJob.Data(), "job data should match")
-		assert.Equal(gj.resultChannel, newJob.resultChannel, "result channel should be shared with the group")
+		assert.Equal(gj.resultController, newJob.resultController, "result channel should be shared with the group")
 		assert.Equal(gj.done, newJob.done, "done channel should be shared with the group")
 		assert.Equal(gj.len, newJob.len, "length counter should be shared with the group")
 	})
@@ -67,7 +67,7 @@ func TestGroupJob(t *testing.T) {
 
 		// Add a result to the channel
 		result := Result[int]{Data: 42, Err: nil}
-		gj.resultChannel.Send(result)
+		gj.resultController.Send(result)
 
 		// Get results
 		ch, err := gj.Results()
@@ -142,8 +142,8 @@ func TestGroupJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Add results to drain
-		gj.resultChannel.Send(Result[int]{Data: 1, Err: nil})
-		gj.resultChannel.Send(Result[int]{Data: 2, Err: nil})
+		gj.resultController.Send(Result[int]{Data: 1, Err: nil})
+		gj.resultController.Send(Result[int]{Data: 2, Err: nil})
 
 		// Drain the results
 		err := gj.Drain()
@@ -151,7 +151,7 @@ func TestGroupJob(t *testing.T) {
 
 		// After draining, we should be able to add more results
 		// (This verifies the drain is working and not blocking)
-		gj.resultChannel.Send(Result[int]{Data: 3, Err: nil})
+		gj.resultController.Send(Result[int]{Data: 3, Err: nil})
 	})
 
 	t.Run("closing a group job", func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestGroupJob(t *testing.T) {
 					didPanic = true
 				}
 			}()
-			gj.resultChannel.Send(Result[int]{Data: 1, Err: nil})
+			gj.resultController.Send(Result[int]{Data: 1, Err: nil})
 		}()
 		assert.True(didPanic, "adding to a closed channel should panic")
 	})

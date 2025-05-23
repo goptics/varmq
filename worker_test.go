@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewWorker(t *testing.T) {
-	t.Run("with WorkerFunc and default configuration", func(t *testing.T) {
+	t.Run("with WorkerResultFunc and default configuration", func(t *testing.T) {
 		// Create a simple worker function
 		wf := func(data string) (int, error) {
 			return len(data), nil
@@ -46,7 +46,7 @@ func TestNewWorker(t *testing.T) {
 		assert.NotNil(w.tickers, "tickers map should be initialized")
 	})
 
-	t.Run("with WorkerFunc and custom concurrency", func(t *testing.T) {
+	t.Run("with WorkerResultFunc and custom concurrency", func(t *testing.T) {
 		// Create a worker function
 		wf := func(data string) (int, error) {
 			return len(data), nil
@@ -136,7 +136,7 @@ func TestNewWorker(t *testing.T) {
 		assert.Equal(expectedFuncType, functionType, "function type should match WorkerErrFunc")
 	})
 
-	t.Run("with VoidWorkerFunc", func(t *testing.T) {
+	t.Run("with WorkerFunc", func(t *testing.T) {
 		// Create a void worker function
 		wf := func(data string) {
 			// do nothing
@@ -153,10 +153,10 @@ func TestNewWorker(t *testing.T) {
 		// Check worker function
 		assert.NotNil(w.workerFunc, "worker function should not be nil")
 
-		// Check function type matches VoidWorkerFunc
+		// Check function type matches WorkerFunc
 		functionType := reflect.TypeOf(w.workerFunc)
 		expectedFuncType := reflect.TypeOf(wf)
-		assert.Equal(expectedFuncType, functionType, "function type should match VoidWorkerFunc")
+		assert.Equal(expectedFuncType, functionType, "function type should match WorkerFunc")
 	})
 
 	t.Run("with direct concurrency value instead of ConfigFunc", func(t *testing.T) {
@@ -247,81 +247,6 @@ func TestNewWorker(t *testing.T) {
 		// Check the string representation of status
 		assert.Equal("Initiated", w.Status(), "Worker status string should be 'Initiated'")
 	})
-
-	t.Run("Copy method with default configuration", func(t *testing.T) {
-		// Create a simple worker function
-		wf := func(data string) (int, error) {
-			return len(data), nil
-		}
-
-		// Set custom configurations
-		customConcurrency := 4
-		customCache := new(sync.Map)
-		cleanupInterval := 5 * time.Minute
-
-		// Create original worker with configurations
-		originalWorker := newWorker[string, int](
-			wf,
-			WithConcurrency(customConcurrency),
-			WithCache(customCache),
-			WithAutoCleanupCache(cleanupInterval),
-		)
-
-		// Copy the worker
-		workerBinder := originalWorker.Copy()
-
-		// Check that copied worker has the same configuration by using the Worker interface methods
-		// Since we can't directly access the worker struct fields, we'll test what we can through the interface
-		assert := assert.New(t)
-
-		// Check status is initiated
-		assert.Equal("Initiated", workerBinder.Status(), "Worker status should be 'Initiated'")
-
-		// Test the functionality of the copied worker
-		assert.False(workerBinder.IsRunning(), "Worker should not be running yet")
-		assert.False(workerBinder.IsPaused(), "Worker should not be paused")
-		assert.False(workerBinder.IsStopped(), "Worker should not be stopped")
-		assert.Equal(0, workerBinder.NumProcessing(), "Current processing count should be 0")
-	})
-
-	t.Run("Copy method with updated configuration", func(t *testing.T) {
-		// Create a simple worker function
-		wf := func(data string) (int, error) {
-			return len(data), nil
-		}
-
-		// Set original configurations
-		originalConcurrency := 4
-		originalCache := new(sync.Map)
-
-		// Create original worker
-		originalWorker := newWorker[string, int](
-			wf,
-			WithConcurrency(originalConcurrency),
-			WithCache(originalCache),
-		)
-
-		// Set new configurations for copy
-		newConcurrency := 8
-		newCache := new(sync.Map)
-
-		// Copy the worker with new configurations
-		workerBinder := originalWorker.Copy(
-			WithConcurrency(newConcurrency),
-			WithCache(newCache),
-		)
-
-		// Test the functionality of the copied worker with updated configuration
-		assert := assert.New(t)
-
-		// Verify worker state
-		assert.Equal("Initiated", workerBinder.Status(), "Worker status should be 'Initiated'")
-		assert.False(workerBinder.IsRunning(), "Worker should not be running yet")
-		assert.False(workerBinder.IsPaused(), "Worker should not be paused")
-		assert.False(workerBinder.IsStopped(), "Worker should not be stopped")
-		assert.Equal(0, workerBinder.NumProcessing(), "Current processing count should be 0")
-	})
-
 }
 
 func TestCurrentConcurrency(t *testing.T) {
@@ -368,25 +293,6 @@ func TestCurrentConcurrency(t *testing.T) {
 
 		// Verify concurrency was updated
 		assert.Equal(t, newConcurrency, w.NumConcurrency(), "CurrentConcurrency should return updated value after tuning")
-	})
-
-	t.Run("concurrency updated in copied worker", func(t *testing.T) {
-		// Create original worker
-		originalConcurrency := 3
-		originalWorker := newWorker[string, int](wf, WithConcurrency(originalConcurrency))
-
-		// Verify original concurrency
-		assert.Equal(t, originalConcurrency, originalWorker.NumConcurrency(), "Original worker should have expected concurrency")
-
-		// Copy with different concurrency
-		newConcurrency := 6
-		copiedWorker := originalWorker.Copy(WithConcurrency(newConcurrency))
-
-		// Verify copied worker has the new concurrency
-		assert.Equal(t, newConcurrency, copiedWorker.NumConcurrency(), "Copied worker should have the new concurrency value")
-
-		// Verify original worker still has its original concurrency
-		assert.Equal(t, originalConcurrency, originalWorker.NumConcurrency(), "Original worker should maintain its concurrency value after copy")
 	})
 }
 

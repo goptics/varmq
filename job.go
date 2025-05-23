@@ -23,13 +23,12 @@ const (
 // job represents a task to be executed by a worker. It maintains the task's
 // current status, input data, and channels for receiving results.
 type job[T, R any] struct {
-	id            string
-	Input         T
-	status        atomic.Uint32
-	Output        Result[R]
-	resultChannel resultChannel[R]
-	queue         IBaseQueue
-	ackId         string
+	id               string
+	Input            T
+	status           atomic.Uint32
+	resultController *ResultController[R]
+	queue            IBaseQueue
+	ackId            string
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -38,19 +37,6 @@ type jobView[T, R any] struct {
 	Status string    `json:"status"`
 	Input  T         `json:"input"`
 	Output Result[R] `json:"output,omitempty"`
-}
-
-type Job interface {
-	// ID returns the unique identifier of the job.
-	ID() string
-	// IsClosed returns whether the job is closed.
-	IsClosed() bool
-	// Status returns the current status of the job.
-	Status() string
-	// Json returns the JSON representation of the job.
-	Json() ([]byte, error)
-	// close closes the job and its associated channels.
-	close() error
 }
 
 type iJob[T, R any] interface {
@@ -68,11 +54,9 @@ type iJob[T, R any] interface {
 // New creates a new job with the provided data.
 func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 	return &job[T, R]{
-		id:            configs.Id,
-		Input:         data,
-		resultChannel: newResultChannel[R](1),
-		status:        atomic.Uint32{},
-		Output:        Result[R]{},
+		id:     configs.Id,
+		Input:  data,
+		status: atomic.Uint32{},
 	}
 }
 
@@ -83,6 +67,10 @@ func newVoidJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 		id:    configs.Id,
 		Input: data,
 	}
+}
+
+func (j *job[T, R]) withResult(len int) {
+	j.resultController = newResultController[R](len)
 }
 
 func (j *job[T, R]) SetAckId(id string) {
@@ -132,35 +120,41 @@ func (j *job[T, R]) ChangeStatus(s status) {
 // SaveAndSendResult saves the result and sends it to the job's result channel.
 func (j *job[T, R]) SaveAndSendResult(result R) {
 	r := Result[R]{JobId: j.id, Data: result}
-	j.Output = r
-	j.resultChannel.Send(r)
+	j.resultController.Send(r)
 }
 
 // SaveAndSendError sends an error to the job's result channel.
 func (j *job[T, R]) SaveAndSendError(err error) {
 	r := Result[R]{JobId: j.id, Err: err}
-	j.Output = r
-	j.resultChannel.Send(r)
+	j.resultController.Send(r)
 }
 
 // Result blocks until the job completes and returns the result and any error.
 // If the job's result channel is closed without a value, it returns the zero value
 // and any error from the error channel.
 func (j *job[T, R]) Result() (R, error) {
-	result, ok := <-j.resultChannel.ch
+	if j.resultController == nil {
+		return *new(R), nil
+	}
+
+	result, ok := <-j.resultController.ch
 
 	if ok {
 		return result.Data, result.Err
 	}
 
-	return j.Output.Data, j.Output.Err
+	return j.resultController.Output.Data, j.resultController.Output.Err
 }
 
 // Drain discards the job's result and error values asynchronously.
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
 func (j *job[T, R]) Drain() error {
-	ch, err := j.resultChannel.Read()
+	if j.resultController == nil {
+		return nil
+	}
+
+	ch, err := j.resultController.Read()
 
 	if ch != nil {
 		return err
@@ -176,7 +170,11 @@ func (j *job[T, R]) Drain() error {
 }
 
 func (j *job[T, R]) CloseResultChannel() {
-	j.resultChannel.Close()
+	if j.resultController == nil {
+		return
+	}
+
+	j.resultController.Close()
 }
 
 func (j *job[T, R]) isCloseable() error {
@@ -195,7 +193,7 @@ func (j *job[T, R]) Json() ([]byte, error) {
 		Id:     j.ID(),
 		Status: j.Status(),
 		Input:  j.Input,
-		Output: j.Output,
+		Output: j.resultController.Output,
 	}
 
 	return json.Marshal(view)
@@ -208,10 +206,8 @@ func parseToJob[T, R any](data []byte) (iJob[T, R], error) {
 	}
 
 	j := &job[T, R]{
-		id:            view.Id,
-		Input:         view.Input,
-		Output:        view.Output,
-		resultChannel: newResultChannel[R](1),
+		id:    view.Id,
+		Input: view.Input,
 	}
 
 	// Set the status
@@ -240,7 +236,7 @@ func (j *job[T, R]) close() error {
 		return err
 	}
 
-	j.resultChannel.Close()
+	j.CloseResultChannel()
 	j.Ack()
 	j.status.Store(closed)
 	return nil

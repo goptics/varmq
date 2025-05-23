@@ -13,7 +13,7 @@ func main() {
 	initialConcurrency := 10
 	tuneType := "expand"
 
-	w := varmq.NewVoidWorker(func(data int) {
+	w := varmq.NewWorker(func(data int) {
 		// fmt.Printf("Processing: %d\n", data)
 		randomDuration := time.Duration(rand.Intn(1001)+500) * time.Millisecond // Random between 500-1500ms
 		time.Sleep(randomDuration)

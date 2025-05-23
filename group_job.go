@@ -17,7 +17,7 @@ const groupIdPrefixed = "g:"
 func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
 		job: job[T, R]{
-			resultChannel: newResultChannel[R](bufferSize),
+			resultController: newResultController[R](bufferSize),
 		},
 		done: make(chan struct{}),
 		len:  new(atomic.Uint32),
@@ -35,9 +35,9 @@ func generateGroupId(id string) string {
 func (gj *groupJob[T, R]) newJob(data T, config jobConfigs) *groupJob[T, R] {
 	return &groupJob[T, R]{
 		job: job[T, R]{
-			id:            generateGroupId(config.Id),
-			Input:         data,
-			resultChannel: gj.resultChannel,
+			id:               generateGroupId(config.Id),
+			Input:            data,
+			resultController: gj.resultController,
 		},
 		done: gj.done,
 		len:  gj.len,
@@ -45,7 +45,7 @@ func (gj *groupJob[T, R]) newJob(data T, config jobConfigs) *groupJob[T, R] {
 }
 
 func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch, err := gj.resultChannel.Read()
+	ch, err := gj.resultController.Read()
 
 	if err != nil {
 		tempCh := make(chan Result[R], 1)
@@ -68,7 +68,7 @@ func (gj *groupJob[T, R]) Len() int {
 // This is useful when you no longer need the results but want to ensure
 // the channels are emptied.
 func (gj *groupJob[T, R]) Drain() error {
-	ch, err := gj.resultChannel.Read()
+	ch, err := gj.resultController.Read()
 
 	if ch != nil {
 		return err

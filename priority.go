@@ -26,7 +26,7 @@ func newPriorityQueue[T, R any](worker *worker[T, R], pq IPriorityQueue) *priori
 }
 
 func (q *priorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
-	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
+	j := q.newJob(data, loadJobConfigs(q.configs, configs...))
 
 	if ok := q.internalQueue.Enqueue(j, priority); !ok {
 		j.close()
@@ -39,8 +39,7 @@ func (q *priorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc
 }
 
 func (q *priorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
-	l := len(items)
-	groupJob := newGroupJob[T, R](l)
+	groupJob := q.newGroupJob(len(items))
 
 	for _, item := range items {
 		j := groupJob.newJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))

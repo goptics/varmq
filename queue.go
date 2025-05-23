@@ -37,7 +37,7 @@ func newQueue[T, R any](worker *worker[T, R], q IQueue) *queue[T, R] {
 }
 
 func (q *queue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
-	j := newJob[T, R](data, loadJobConfigs(q.configs, configs...))
+	j := q.newJob(data, loadJobConfigs(q.configs, configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
 		j.close()
@@ -50,8 +50,7 @@ func (q *queue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob[R], boo
 }
 
 func (q *queue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
-	l := len(items)
-	groupJob := newGroupJob[T, R](l)
+	groupJob := q.newGroupJob(len(items))
 
 	for _, item := range items {
 		j := groupJob.newJob(item.Value, loadJobConfigs(q.configs, WithJobId(item.ID)))

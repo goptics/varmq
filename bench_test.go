@@ -4,11 +4,11 @@ import (
 	"testing"
 )
 
-func task(data int) (int, error) {
+func resultTask(data int) (int, error) {
 	return data * 2, nil
 }
 
-func voidTask(data int) {
+func task(data int) {
 	// do nothing
 	_ = data * 2
 }
@@ -17,9 +17,7 @@ func voidTask(data int) {
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a worker with the double function
-		worker := NewWorker(func(data int) (int, error) {
-			return data * 2, nil
-		})
+		worker := NewWorker(task)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -171,7 +169,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 func BenchmarkVoidWorker_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -186,7 +184,7 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -207,7 +205,7 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -224,7 +222,7 @@ func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()

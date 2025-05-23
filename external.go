@@ -27,10 +27,6 @@ type IExternalQueue[T, R any] interface {
 
 	// Worker returns the worker.
 	Worker() Worker[T, R]
-	// JobById returns the job with the given id.
-	JobById(id string) (EnqueuedJob[R], error)
-	// GroupsJobById returns the groups job with the given id.
-	GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error)
 	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	WaitUntilFinished()
@@ -52,6 +48,26 @@ func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
 	if id := j.ID(); id != "" {
 		eq.Cache.Store(id, j)
 	}
+}
+
+func (eq *externalQueue[T, R]) newJob(data T, configs jobConfigs) *job[T, R] {
+	j := newJob[T, R](data, configs)
+
+	if !eq.isNormalWorker() {
+		j.withResult(1)
+	}
+
+	return j
+}
+
+func (eq *externalQueue[T, R]) newGroupJob(len int) *groupJob[T, R] {
+	j := newGroupJob[T, R](len)
+
+	if !eq.isNormalWorker() {
+		j.withResult(len)
+	}
+
+	return j
 }
 
 func (eq *externalQueue[T, R]) NumPending() int {

@@ -10,14 +10,14 @@ import (
 	"github.com/goptics/varmq/utils"
 )
 
-// WorkerFunc represents a function that processes a Job and returns a result and an error.
-type WorkerFunc[T, R any] func(T) (R, error)
+// WorkerResultFunc represents a function that processes a Job and returns a result and an error.
+type WorkerResultFunc[T, R any] func(T) (R, error)
 
 // WorkerErrFunc represents a function that processes a Job and returns an error.
 type WorkerErrFunc[T any] func(T) error
 
-// VoidWorkerFunc represents a function that processes a Job and returns nothing.
-type VoidWorkerFunc[T any] func(T)
+// WorkerFunc represents a function that processes a Job and returns nothing.
+type WorkerFunc[T any] func(T)
 
 type status = uint32
 
@@ -65,8 +65,6 @@ type Worker[T, R any] interface {
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
 	NumIdleWorkers() int
-	// Copy returns a copy of the worker.
-	Copy(config ...any) IWorkerBinder[T, R]
 	// TunePool tunes (increase or decrease) the pool size of the worker.
 	TunePool(concurrency int) error
 	// Pause pauses the worker.
@@ -85,7 +83,7 @@ type Worker[T, R any] interface {
 }
 
 // newWorker creates a new worker with the given worker function and configurations
-// The worker function can be any of WorkerFunc, WorkerErrFunc, or VoidWorkerFunc
+// The worker function can be any of WorkerResultFunc, WorkerErrFunc, or WorkerFunc
 // It initializes the worker with the configured concurrency, cache, and other settings
 func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	c := loadConfigs(configs...)
@@ -118,6 +116,10 @@ func (w *worker[T, R]) setCache(c ICache) {
 func (w *worker[T, R]) isNullCache() bool {
 	return w.Cache == getCache()
 }
+func (w *worker[T, R]) isNormalWorker() bool {
+	_, ok := w.workerFunc.(WorkerFunc[T])
+	return ok
+}
 
 // spawnWorker starts a worker goroutine to process jobs from the specified channel
 // It continuously reads jobs from the channel and processes each one
@@ -137,7 +139,7 @@ func (w *worker[T, R]) spawnWorker(node *collections.Node[poolNode[T, R]]) {
 }
 
 // processSingleJob processes a single job using the appropriate worker function type
-// It handles all three worker function types (VoidWorkerFunc, WorkerErrFunc, WorkerFunc)
+// It handles all three worker function types (WorkerFunc, WorkerErrFunc, WorkerResultFunc)
 // and safely captures any panics that might occur during processing
 // It also sends any errors or results back to the job's result channel
 func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
@@ -145,8 +147,8 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 	var err error
 
 	switch worker := w.workerFunc.(type) {
-	case VoidWorkerFunc[T]:
-		panicErr = utils.WithSafe("void worker", func() {
+	case WorkerFunc[T]:
+		utils.WithSafe("void worker", func() {
 			worker(j.Data())
 		})
 
@@ -155,7 +157,7 @@ func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
 			err = worker(j.Data())
 		})
 
-	case WorkerFunc[T, R]:
+	case WorkerResultFunc[T, R]:
 		panicErr = utils.WithSafe("worker", func() {
 			result, e := worker(j.Data())
 			if e != nil {
@@ -429,26 +431,6 @@ func (w *worker[T, R]) TunePool(concurrency int) error {
 	}
 
 	return nil
-}
-
-func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
-	c := mergeConfigs(w.configs, config...)
-
-	newWorker := &worker[T, R]{
-		workerFunc:      w.workerFunc,
-		concurrency:     atomic.Uint32{},
-		Queue:           getNullQueue(),
-		Cache:           c.Cache,
-		pool:            collections.NewList[poolNode[T, R]](),
-		jobPullNotifier: utils.NewNotifier(1),
-		wg:              sync.WaitGroup{},
-		configs:         c,
-		tickers:         make([]*time.Ticker, 0),
-	}
-
-	newWorker.concurrency.Store(c.Concurrency)
-
-	return newQueues(newWorker)
 }
 
 func (w *worker[T, R]) NumConcurrency() int {

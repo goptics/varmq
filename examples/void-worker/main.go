@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	w := varmq.NewVoidWorker(func(data int) {
+	w := varmq.NewWorker(func(data int) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
 	}, 100)

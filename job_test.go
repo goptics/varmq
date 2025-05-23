@@ -22,7 +22,6 @@ func TestJob(t *testing.T) {
 		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 		assert.False(j.IsClosed(), "job should not be closed initially")
-		assert.NotNil(j.resultChannel, "result channel should be initialized")
 	})
 
 	t.Run("job status transitions", func(t *testing.T) {
@@ -54,6 +53,8 @@ func TestJob(t *testing.T) {
 	t.Run("saving and sending results", func(t *testing.T) {
 		// Create a new job
 		j := newJob[string, int]("test data", jobConfigs{Id: "job-result"})
+		// Initialize the result controller (this is now needed since it's not done in newJob)
+		j.withResult(1)
 		assert := assert.New(t)
 
 		// Save and send a result
@@ -61,8 +62,8 @@ func TestJob(t *testing.T) {
 		j.SaveAndSendResult(expectedResult)
 
 		// Check if result was saved correctly
-		assert.Equal(expectedResult, j.Output.Data, "result should be saved in output")
-		assert.Nil(j.Output.Err, "error should be nil")
+		assert.Equal(expectedResult, j.resultController.Output.Data, "result should be saved in output")
+		assert.Nil(j.resultController.Output.Err, "error should be nil")
 
 		// Get the result
 		result, err := j.Result()
@@ -73,6 +74,8 @@ func TestJob(t *testing.T) {
 	t.Run("saving and sending errors", func(t *testing.T) {
 		// Create a new job
 		j := newJob[string, int]("test data", jobConfigs{Id: "job-error"})
+		// Initialize the result controller (this is now needed since it's not done in newJob)
+		j.withResult(1)
 		assert := assert.New(t)
 
 		// Save and send an error
@@ -81,8 +84,8 @@ func TestJob(t *testing.T) {
 
 		// Check if error was saved correctly
 		var zeroValue int
-		assert.Equal(zeroValue, j.Output.Data, "data should be zero value")
-		assert.Equal(expectedErr, j.Output.Err, "error should be saved in output")
+		assert.Equal(zeroValue, j.resultController.Output.Data, "data should be zero value")
+		assert.Equal(expectedErr, j.resultController.Output.Err, "error should be saved in output")
 
 		// Get the result
 		result, err := j.Result()
@@ -93,6 +96,8 @@ func TestJob(t *testing.T) {
 	t.Run("job JSON serialization", func(t *testing.T) {
 		// Create a new job with a result
 		j := newJob[string, int]("test data", jobConfigs{Id: "job-json"})
+		// Initialize the result controller
+		j.withResult(1)
 		j.SaveAndSendResult(42)
 
 		assert := assert.New(t)

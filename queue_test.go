@@ -11,7 +11,7 @@ import (
 
 func initQueue() (*queue[string, int], *worker[string, int], *collections.Queue[any]) {
 	// Create a worker with a simple process function that doubles an integer
-	var workerFunc WorkerFunc[string, int]
+	var workerFunc WorkerResultFunc[string, int]
 
 	workerFunc = func(data string) (int, error) {
 		// Simple processor that converts string to int and doubles it

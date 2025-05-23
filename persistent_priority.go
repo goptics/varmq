@@ -16,9 +16,7 @@ func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPersistentPr
 }
 
 func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
-	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
-
-	j := newJob[T, R](data, jobConfig)
+	j := q.newJob(data, withRequiredJobId(loadJobConfigs(q.configs, configs...)))
 	val, err := j.Json()
 	if err != nil {
 		return nil, false
@@ -36,12 +34,10 @@ func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...Job
 }
 
 func (q *persistentPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
-	groupJob := newGroupJob[T, R](len(items))
+	groupJob := q.newGroupJob(len(items))
 
 	for _, item := range items {
-		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
-
-		j := groupJob.newJob(item.Value, jConfigs)
+		j := groupJob.newJob(item.Value, withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID))))
 		val, err := j.Json()
 		if err != nil {
 			j.close()
@@ -58,10 +54,6 @@ func (q *persistentPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob
 	}
 
 	return groupJob
-}
-
-func (q *persistentPriorityQueue[T, R]) Purge() {
-	q.Queue.Purge()
 }
 
 func (q *persistentPriorityQueue[T, R]) Close() error {
