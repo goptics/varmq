@@ -2,45 +2,29 @@ package varmq
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 )
 
 // groupJob represents a job that can be used in a group.
 type groupJob[T, R any] struct {
-	*job[T, R]
-	wg  *sync.WaitGroup
-	len *groupLen
-}
-
-type groupLen struct {
-	len atomic.Uint32
-}
-
-func (gl *groupLen) Add() {
-	gl.len.Add(1)
-}
-
-func (gl *groupLen) Sub() {
-	gl.len.Add(^uint32(0))
-}
-
-func (gl *groupLen) Get() int {
-	return int(gl.len.Load())
+	job[T, R]
+	done chan struct{}
+	len  *atomic.Uint32
 }
 
 const groupIdPrefixed = "g:"
 
 func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
 	gj := &groupJob[T, R]{
-		job: &job[T, R]{
+		job: job[T, R]{
 			resultChannel: newResultChannel[R](bufferSize),
 		},
-		wg:  new(sync.WaitGroup),
-		len: new(groupLen),
+		done: make(chan struct{}),
+		len:  new(atomic.Uint32),
 	}
 
-	gj.wg.Add(bufferSize)
+	gj.len.Add(uint32(bufferSize))
+
 	return gj
 }
 
@@ -49,15 +33,14 @@ func generateGroupId(id string) string {
 }
 
 func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
-	gj.len.Add()
 	return &groupJob[T, R]{
-		job: &job[T, R]{
+		job: job[T, R]{
 			id:            generateGroupId(config.Id),
 			Input:         data,
 			resultChannel: gj.resultChannel,
 		},
-		wg:  gj.wg,
-		len: gj.len,
+		done: gj.done,
+		len:  gj.len,
 	}
 }
 
@@ -70,18 +53,15 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 		return tempCh, err
 	}
 
-	// Start a goroutine to close the channel when all jobs are done
-	go func() {
-		gj.wg.Wait()
-		gj.CloseResultChannel()
-	}()
-
-	// return a closed channel
 	return ch, nil
 }
 
+func (gj *groupJob[T, R]) Wait() {
+	<-gj.done
+}
+
 func (gj *groupJob[T, R]) Len() int {
-	return gj.len.Get()
+	return int(gj.len.Load())
 }
 
 // Drain discards the job's result and error values asynchronously.
@@ -100,11 +80,6 @@ func (gj *groupJob[T, R]) Drain() error {
 		}
 	}()
 
-	go func() {
-		gj.wg.Wait()
-		gj.CloseResultChannel()
-	}()
-
 	return nil
 }
 
@@ -113,9 +88,13 @@ func (gj *groupJob[T, R]) close() error {
 		return err
 	}
 
-	gj.wg.Done()
 	gj.Ack()
 	gj.ChangeStatus(closed)
-	gj.len.Sub()
+
+	// Close the result channel if all jobs are done
+	if gj.len.Add(^uint32(0)) == 0 {
+		close(gj.done)
+		gj.CloseResultChannel()
+	}
 	return nil
 }

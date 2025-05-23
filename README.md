@@ -65,8 +65,8 @@ func main() {
     queue := worker.BindQueue()
 
     // Add jobs to the queue
-    job1 := queue.Add("Hello")
-    job2 := queue.Add("World")
+    job1, _ := queue.Add("Hello")
+    job2, _ := queue.Add("World")
 
     // Get results (Result() returns both value and error)
     result1, err1 := job1.Result()

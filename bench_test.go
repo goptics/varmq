@@ -19,7 +19,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		// Create a worker with the double function
 		worker := NewWorker(func(data int) (int, error) {
 			return data * 2, nil
-		}, 4)
+		})
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -46,10 +46,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			results, _ := q.AddAll(data).Results()
-			for range results {
-				// drain the channel
-			}
+			q.AddAll(data).Wait()
 		}
 	})
 }
@@ -88,10 +85,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				results, _ := q.AddAll(data).Results()
-				for range results {
-					// drain the channel
-				}
+				q.AddAll(data).Wait()
 			}
 		})
 	})
@@ -128,10 +122,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			results, _ := q.AddAll(data).Results()
-			for range results {
-				// drain the channel
-			}
+			q.AddAll(data).Wait()
 		}
 	})
 }
@@ -170,11 +161,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				if results, err := q.AddAll(data).Results(); err == nil {
-					for range results {
-						// drain the channel
-					}
-				}
+				q.AddAll(data).Wait()
 			}
 		})
 	})
@@ -211,11 +198,7 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if results, err := q.AddAll(data).Results(); err == nil {
-				for range results {
-					// drain the channel
-				}
-			}
+			q.AddAll(data).Wait()
 		}
 	})
 }
@@ -254,10 +237,7 @@ func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				results, _ := q.AddAll(data).Results()
-				for range results {
-					// drain the channel
-				}
+				q.AddAll(data).Wait()
 			}
 		})
 	})

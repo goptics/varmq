@@ -76,7 +76,7 @@ func TestQueue(t *testing.T) {
 		pending := queue.NumPending()
 		assert.Equal(t, 5, pending, "Queue should have five pending jobs")
 		assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have five items")
-		assert.Equal(t, pending, groupJob.Len(), "Internal Queue should have five items")
+		assert.Equal(t, pending, groupJob.Len(), "Group job should have five items")
 
 		err := worker.start()
 		assert.Nil(t, err, "Worker should start successfully")

@@ -10,22 +10,23 @@ import (
 // for concurrent job processing.
 type resultChannel[R any] struct {
 	ch       chan Result[R]
-	consumed atomic.Bool
+	consumed atomic.Value
 }
 
 // newResultChannel creates a new resultChannel with the specified buffer size.
-func newResultChannel[R any](cap int) *resultChannel[R] {
-	return &resultChannel[R]{
+func newResultChannel[R any](cap int) resultChannel[R] {
+	return resultChannel[R]{
 		ch: make(chan Result[R], cap),
 	}
 }
 
 func (rc *resultChannel[R]) Read() (<-chan Result[R], error) {
-	if rc.consumed.CompareAndSwap(false, true) {
-		return rc.ch, nil
+	if rc.consumed.Load() != nil {
+		return nil, errors.New("result channel has already been consumed")
 	}
 
-	return nil, errors.New("result channel has already been consumed")
+	rc.consumed.Store(true)
+	return rc.ch, nil
 }
 
 func (c *resultChannel[R]) Send(result Result[R]) {

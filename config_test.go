@@ -107,9 +107,9 @@ func TestConfig(t *testing.T) {
 
 		t.Run("WithMinIdleWorkerRatio", func(t *testing.T) {
 			tests := []struct {
-				name         string
-				percentage   uint16
-				expectedRatio uint16
+				name          string
+				percentage    uint8
+				expectedRatio uint8
 			}{
 				{"Zero percentage should be clamped to 1", 0, 1},
 				{"Value above 100 should be clamped to 100", 150, 100},

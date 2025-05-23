@@ -26,18 +26,18 @@ type job[T, R any] struct {
 	id            string
 	Input         T
 	status        atomic.Uint32
-	Output        *Result[R]
-	resultChannel *resultChannel[R]
+	Output        Result[R]
+	resultChannel resultChannel[R]
 	queue         IBaseQueue
 	ackId         string
 }
 
 // jobView represents a view of a job's state for serialization.
 type jobView[T, R any] struct {
-	Id     string     `json:"id"`
-	Status string     `json:"status"`
-	Input  T          `json:"input"`
-	Output *Result[R] `json:"output,omitempty"`
+	Id     string    `json:"id"`
+	Status string    `json:"status"`
+	Input  T         `json:"input"`
+	Output Result[R] `json:"output,omitempty"`
 }
 
 type Job interface {
@@ -72,7 +72,7 @@ func newJob[T, R any](data T, configs jobConfigs) *job[T, R] {
 		Input:         data,
 		resultChannel: newResultChannel[R](1),
 		status:        atomic.Uint32{},
-		Output:        new(Result[R]),
+		Output:        Result[R]{},
 	}
 }
 
@@ -132,14 +132,14 @@ func (j *job[T, R]) ChangeStatus(s status) {
 // SaveAndSendResult saves the result and sends it to the job's result channel.
 func (j *job[T, R]) SaveAndSendResult(result R) {
 	r := Result[R]{JobId: j.id, Data: result}
-	j.Output = &r
+	j.Output = r
 	j.resultChannel.Send(r)
 }
 
 // SaveAndSendError sends an error to the job's result channel.
 func (j *job[T, R]) SaveAndSendError(err error) {
 	r := Result[R]{JobId: j.id, Err: err}
-	j.Output = &r
+	j.Output = r
 	j.resultChannel.Send(r)
 }
 
