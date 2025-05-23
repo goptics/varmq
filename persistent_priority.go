@@ -41,7 +41,7 @@ func (q *persistentPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob
 	for _, item := range items {
 		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
 
-		j := groupJob.NewJob(item.Value, jConfigs)
+		j := groupJob.newJob(item.Value, jConfigs)
 		val, err := j.Json()
 		if err != nil {
 			j.close()

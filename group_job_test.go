@@ -45,7 +45,7 @@ func TestGroupJob(t *testing.T) {
 		// Create a job within the group
 		jobData := "test group data"
 		jobId := "group-job-123"
-		newJob := gj.NewJob(jobData, jobConfigs{Id: jobId})
+		newJob := gj.newJob(jobData, jobConfigs{Id: jobId})
 
 		assert := assert.New(t)
 
@@ -171,7 +171,7 @@ func TestGroupJob(t *testing.T) {
 		// Close another job from the group
 		jobData := "test data"
 		jobId := "test-job"
-		newJob := gj.NewJob(jobData, jobConfigs{Id: jobId})
+		newJob := gj.newJob(jobData, jobConfigs{Id: jobId})
 		err = newJob.close()
 		assert.Nil(err, "closing second job should not fail")
 		assert.Equal(bufferSize-2, gj.Len(), "length should be decremented again")
@@ -188,7 +188,7 @@ func TestGroupJob(t *testing.T) {
 		gj := newGroupJob[string, int](bufferSize)
 
 		// Create a second job in the group
-		job2 := gj.NewJob("test data", jobConfigs{Id: "test-job"})
+		job2 := gj.newJob("test data", jobConfigs{Id: "test-job"})
 
 		assert := assert.New(t)
 

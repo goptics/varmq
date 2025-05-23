@@ -32,7 +32,7 @@ func generateGroupId(id string) string {
 	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
+func (gj *groupJob[T, R]) newJob(data T, config jobConfigs) *groupJob[T, R] {
 	return &groupJob[T, R]{
 		job: job[T, R]{
 			id:            generateGroupId(config.Id),
