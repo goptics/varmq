@@ -57,10 +57,7 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 }
 
 func (gj *groupJob[T, R]) Wait() {
-	for range gj.done {
-		close(gj.done)
-		return
-	}
+	<-gj.done
 }
 
 func (gj *groupJob[T, R]) Len() int {
