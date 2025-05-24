@@ -39,8 +39,8 @@ type ResultController[R any] struct {
 }
 
 // newResultController creates a new ResultController with the specified buffer size.
-func newResultController[R any](cap int) *ResultController[R] {
-	return &ResultController[R]{
+func newResultController[R any](cap int) ResultController[R] {
+	return ResultController[R]{
 		ch:       make(chan Result[R], cap),
 		consumed: atomic.Bool{},
 		result:   Result[R]{},
