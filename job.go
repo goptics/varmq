@@ -45,7 +45,7 @@ type EnqueuedResultJob[R any] interface {
 
 type resultJob[T, R any] struct {
 	job[T]
-	*ResultController[R]
+	ResultController[R]
 }
 
 // jobView represents a view of a job's state for serialization.
