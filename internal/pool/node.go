@@ -1,33 +1,42 @@
-package varmq
+package pool
 
 import (
 	"sync/atomic"
 	"time"
 )
 
-type poolNode[T any] struct {
+type Node[T any] struct {
 	ch       chan T
 	lastUsed atomic.Value
 }
 
-// newPoolNode creates a new pool node with initialized lastUsed field
-func newPoolNode[T any](bufferSize int) poolNode[T] {
-	node := poolNode[T]{
+// NewNode creates a new pool node with initialized lastUsed field
+func NewNode[T any](bufferSize int) Node[T] {
+	node := Node[T]{
 		ch: make(chan T, bufferSize),
 	}
+
 	return node
 }
 
-func (wc *poolNode[T]) Close() {
+func (wc *Node[T]) Read() <-chan T {
+	return wc.ch
+}
+
+func (wc *Node[T]) Send(j T) {
+	wc.ch <- j
+}
+
+func (wc *Node[T]) Close() {
 	close(wc.ch)
 }
 
-func (wc *poolNode[T]) UpdateLastUsed() {
+func (wc *Node[T]) UpdateLastUsed() {
 	wc.lastUsed.Store(time.Now())
 }
 
 // GetLastUsed safely retrieves the lastUsed time
-func (wc *poolNode[T]) GetLastUsed() time.Time {
+func (wc *Node[T]) GetLastUsed() time.Time {
 	if val := wc.lastUsed.Load(); val != nil {
 		return val.(time.Time)
 	}

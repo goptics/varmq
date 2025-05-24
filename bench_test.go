@@ -234,44 +234,6 @@ func BenchmarkResultWorker_Operations(b *testing.B) {
 		}
 	})
 }
-func BenchmarkResultPond_Operations(b *testing.B) {
-	b.Run("Pond_Result", func(b *testing.B) {
-		// Create a void worker (no return value)
-		pool := pond.NewResultPool[int](1)
-		defer pool.Stop()
-
-		b.ResetTimer()
-		for j := 0; j < b.N; j++ {
-			task := pool.Submit(func() int {
-				return j * 2
-			})
-
-			task.Wait()
-		}
-	})
-
-	b.Run("Pond_Result_AddAll", func(b *testing.B) {
-		// Create a void worker (no return value)
-		pool := pond.NewResultPool[int](1)
-		g := pool.NewGroup()
-		defer pool.Stop()
-
-		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
-		for i := range data {
-			data[i] = Item[int]{Value: i}
-		}
-
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			for j := range data {
-				g.Submit(func() int {
-					return j * 2
-				})
-			}
-			g.Wait()
-		}
-	})
-}
 
 // BenchmarkResultWorker_ParallelOperations benchmarks parallel operations with a VoidWorker.
 func BenchmarkResultWorker_ParallelOperations(b *testing.B) {

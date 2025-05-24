@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -26,7 +27,7 @@ type job[T any] struct {
 	id      string
 	payload T
 	status  atomic.Uint32
-	done    chan struct{}
+	wg      sync.WaitGroup
 	queue   IBaseQueue
 	ackId   string
 }
@@ -45,7 +46,7 @@ type EnqueuedResultJob[R any] interface {
 
 type resultJob[T, R any] struct {
 	job[T]
-	ResultController[R]
+	*ResultController[R]
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -78,12 +79,16 @@ type iResultJob[T, R any] interface {
 
 // New creates a new job with the provided data.
 func newJob[T any](data T, configs jobConfigs) *job[T] {
-	return &job[T]{
+	j := &job[T]{
 		id:      configs.Id,
 		payload: data,
 		status:  atomic.Uint32{},
-		done:    make(chan struct{}),
+		wg:      sync.WaitGroup{},
 	}
+
+	j.wg.Add(1)
+
+	return j
 }
 
 func (j *job[T]) setAckId(id string) {
@@ -131,7 +136,7 @@ func (j *job[T]) changeStatus(s status) {
 }
 
 func (j *job[T]) Wait() {
-	<-j.done
+	j.wg.Wait()
 }
 
 func (j *job[T]) Json() ([]byte, error) {
@@ -194,7 +199,7 @@ func (j *job[T]) close() error {
 
 	j.ack()
 	j.status.Store(closed)
-	close(j.done)
+	j.wg.Done()
 	return nil
 }
 
@@ -215,15 +220,17 @@ func (j *job[T]) ack() error {
 }
 
 func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
-	return &resultJob[T, R]{
+	r := &resultJob[T, R]{
 		job: job[T]{
 			id:      configs.Id,
 			payload: payload,
 			status:  atomic.Uint32{},
-			done:    make(chan struct{}),
+			wg:      sync.WaitGroup{},
 		},
 		ResultController: newResultController[R](1),
 	}
+	r.wg.Add(1)
+	return r
 }
 
 // saveAndSendResult saves the result and sends it to the job's result channel.

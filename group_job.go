@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -9,6 +10,7 @@ import (
 type groupJob[T any] struct {
 	job[T]
 	pending *atomic.Uint32
+	done    chan struct{}
 }
 
 type PendingTracker interface {
@@ -24,10 +26,9 @@ const groupIdPrefixed = "g:"
 
 func newGroupJob[T any](bufferSize int) *groupJob[T] {
 	gj := &groupJob[T]{
-		job: job[T]{
-			done: make(chan struct{}),
-		},
+		job:     job[T]{},
 		pending: new(atomic.Uint32),
+		done:    make(chan struct{}),
 	}
 
 	gj.pending.Add(uint32(bufferSize))
@@ -44,9 +45,9 @@ func (gj *groupJob[T]) newJob(payload T, config jobConfigs) *groupJob[T] {
 		job: job[T]{
 			id:      generateGroupId(config.Id),
 			payload: payload,
-			done:    gj.done,
 		},
 		pending: gj.pending,
+		done:    gj.done,
 	}
 }
 
@@ -62,7 +63,6 @@ func (gj *groupJob[T]) close() error {
 	gj.ack()
 	gj.changeStatus(closed)
 
-	// Close the result channel if all jobs are done
 	if gj.pending.Add(^uint32(0)) == 0 {
 		close(gj.done)
 	}
@@ -73,17 +73,19 @@ func (gj *groupJob[T]) close() error {
 type resultGroupJob[T, R any] struct {
 	resultJob[T, R]
 	pending *atomic.Uint32
+	done    chan struct{}
 }
 
 func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	gj := &resultGroupJob[T, R]{
 		resultJob: resultJob[T, R]{
 			job: job[T]{
-				done: make(chan struct{}),
+				wg: sync.WaitGroup{},
 			},
 			ResultController: newResultController[R](bufferSize),
 		},
 		pending: new(atomic.Uint32),
+		done:    make(chan struct{}),
 	}
 
 	gj.pending.Add(uint32(bufferSize))
@@ -104,11 +106,11 @@ func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGrou
 			job: job[T]{
 				id:      generateGroupId(config.Id),
 				payload: payload,
-				done:    gj.done,
 			},
 			ResultController: gj.ResultController,
 		},
 		pending: gj.pending,
+		done:    gj.done,
 	}
 }
 

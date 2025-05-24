@@ -1,4 +1,4 @@
-package varmq
+package pool
 
 // import (
 // 	"testing"
