@@ -2,6 +2,8 @@ package varmq
 
 import (
 	"testing"
+
+	"github.com/alitto/pond/v2"
 )
 
 func resultTask(data int) (int, error) {
@@ -24,9 +26,8 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			if job, ok := q.Add(j); ok {
-				job.Wait()
-			}
+			job, _ := q.Add(j)
+			job.Wait()
 		}
 	})
 
@@ -45,6 +46,20 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			q.AddAll(data).Wait()
+		}
+	})
+}
+func BenchmarkPond_Operations(b *testing.B) {
+	b.Run("Pond_Submit", func(b *testing.B) {
+		// Create a worker with the double function
+		pool := pond.NewPool(1)
+
+		b.ResetTimer()
+		for j := 0; j < b.N; j++ {
+			task := pool.Submit(func() {
+				task(j)
+			})
+			task.Wait()
 		}
 	})
 }
