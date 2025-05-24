@@ -2,21 +2,21 @@ package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 // where jobs can be recovered even after application restarts. All jobs must have unique IDs.
-type PersistentQueue[T, R any] interface {
-	IExternalQueue[T, R]
+type PersistentQueue[T any] interface {
+	IExternalQueue
 
 	Add(data T, configs ...JobConfigFunc) bool
 }
 
-type persistentQueue[T, R any] struct {
-	*queue[T, R]
+type persistentQueue[T any] struct {
+	*queue[T]
 }
 
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
-func newPersistentQueue[T, R any](w *worker[T, R], pq IPersistentQueue) PersistentQueue[T, R] {
+func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue) PersistentQueue[T] {
 	w.setQueue(pq)
-	return &persistentQueue[T, R]{queue: &queue[T, R]{
+	return &persistentQueue[T]{queue: &queue[T]{
 		externalQueue: newExternalQueue(w),
 		internalQueue: pq,
 	}}
@@ -24,8 +24,8 @@ func newPersistentQueue[T, R any](w *worker[T, R], pq IPersistentQueue) Persiste
 
 // Add adds a job with the given data to the persistent queue
 // It requires a job ID to be provided in the job config for persistence
-func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) bool {
-	j := q.newJob(data, loadJobConfigs(q.configs, configs...))
+func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
+	j := newJob[T](data, loadJobConfigs(q.w.configs(), configs...))
 	val, err := j.Json()
 
 	if err != nil {
@@ -37,18 +37,18 @@ func (q *persistentQueue[T, R]) Add(data T, configs ...JobConfigFunc) bool {
 		return false
 	}
 
-	q.notifyToPullNextJobs()
+	q.w.notifyToPullNextJobs()
 
 	return true
 }
 
 // Purge removes all jobs from the queue
-func (q *persistentQueue[T, R]) Purge() {
+func (q *persistentQueue[T]) Purge() {
 	q.queue.Purge()
 }
 
 // Close stops the worker and closes the underlying queue
-func (q *persistentQueue[T, R]) Close() error {
-	defer q.Stop()
-	return q.Queue.Close()
+func (q *persistentQueue[T]) Close() error {
+	defer q.w.Stop()
+	return q.internalQueue.Close()
 }

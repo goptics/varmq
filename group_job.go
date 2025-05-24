@@ -6,24 +6,31 @@ import (
 )
 
 // groupJob represents a job that can be used in a group.
-type groupJob[T, R any] struct {
-	job[T, R]
-	done chan struct{}
-	len  *atomic.Uint32
+type groupJob[T any] struct {
+	job[T]
+	pending *atomic.Uint32
+}
+
+type PendingTracker interface {
+	NumPending() int
+}
+
+type EnqueuedGroupJob interface {
+	PendingTracker
+	Awaitable
 }
 
 const groupIdPrefixed = "g:"
 
-func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
-	gj := &groupJob[T, R]{
-		job: job[T, R]{
-			resultController: newResultController[R](bufferSize),
+func newGroupJob[T any](bufferSize int) *groupJob[T] {
+	gj := &groupJob[T]{
+		job: job[T]{
+			done: make(chan struct{}),
 		},
-		done: make(chan struct{}),
-		len:  new(atomic.Uint32),
+		pending: new(atomic.Uint32),
 	}
 
-	gj.len.Add(uint32(bufferSize))
+	gj.pending.Add(uint32(bufferSize))
 
 	return gj
 }
@@ -32,20 +39,85 @@ func generateGroupId(id string) string {
 	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T, R]) newJob(data T, config jobConfigs) *groupJob[T, R] {
-	return &groupJob[T, R]{
-		job: job[T, R]{
-			id:               generateGroupId(config.Id),
-			Input:            data,
-			resultController: gj.resultController,
+func (gj *groupJob[T]) newJob(payload T, config jobConfigs) *groupJob[T] {
+	return &groupJob[T]{
+		job: job[T]{
+			id:      generateGroupId(config.Id),
+			payload: payload,
+			done:    gj.done,
 		},
-		done: gj.done,
-		len:  gj.len,
+		pending: gj.pending,
 	}
 }
 
-func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch, err := gj.resultController.Read()
+func (gj *groupJob[T]) NumPending() int {
+	return int(gj.pending.Load())
+}
+
+func (gj *groupJob[T]) close() error {
+	if err := gj.isCloseable(); err != nil {
+		return err
+	}
+
+	gj.ack()
+	gj.changeStatus(closed)
+
+	// Close the result channel if all jobs are done
+	if gj.pending.Add(^uint32(0)) == 0 {
+		close(gj.done)
+	}
+
+	return nil
+}
+
+type resultGroupJob[T, R any] struct {
+	resultJob[T, R]
+	pending *atomic.Uint32
+}
+
+func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
+	gj := &resultGroupJob[T, R]{
+		resultJob: resultJob[T, R]{
+			job: job[T]{
+				done: make(chan struct{}),
+			},
+			ResultController: newResultController[R](bufferSize),
+		},
+		pending: new(atomic.Uint32),
+	}
+
+	gj.pending.Add(uint32(bufferSize))
+
+	return gj
+}
+
+type EnqueuedResultGroupJob[R any] interface {
+	Results() (<-chan Result[R], error)
+	PendingTracker
+	Awaitable
+	Drainer
+}
+
+func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGroupJob[T, R] {
+	return &resultGroupJob[T, R]{
+		resultJob: resultJob[T, R]{
+			job: job[T]{
+				id:      generateGroupId(config.Id),
+				payload: payload,
+				done:    gj.done,
+			},
+			ResultController: gj.ResultController,
+		},
+		pending: gj.pending,
+	}
+}
+
+func (gj *resultGroupJob[T, R]) NumPending() int {
+	return int(gj.pending.Load())
+}
+
+func (gj *resultGroupJob[T, R]) Results() (<-chan Result[R], error) {
+	ch, err := gj.ResultController.Read()
 
 	if err != nil {
 		tempCh := make(chan Result[R], 1)
@@ -56,45 +128,19 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 	return ch, nil
 }
 
-func (gj *groupJob[T, R]) Wait() {
-	<-gj.done
-}
-
-func (gj *groupJob[T, R]) Len() int {
-	return int(gj.len.Load())
-}
-
-// Drain discards the job's result and error values asynchronously.
-// This is useful when you no longer need the results but want to ensure
-// the channels are emptied.
-func (gj *groupJob[T, R]) Drain() error {
-	ch, err := gj.resultController.Read()
-
-	if ch != nil {
-		return err
-	}
-
-	go func() {
-		for range ch {
-			// drain
-		}
-	}()
-
-	return nil
-}
-
-func (gj *groupJob[T, R]) close() error {
+func (gj *resultGroupJob[T, R]) close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
 
-	gj.Ack()
-	gj.ChangeStatus(closed)
+	gj.ack()
+	gj.changeStatus(closed)
 
 	// Close the result channel if all jobs are done
-	if gj.len.Add(^uint32(0)) == 0 {
+	if gj.pending.Add(^uint32(0)) == 0 {
 		close(gj.done)
-		gj.CloseResultChannel()
+		gj.ResultController.Close()
 	}
+
 	return nil
 }

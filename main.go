@@ -16,7 +16,7 @@ package varmq
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
 func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
-	return newQueues(newWorker[T, any](wf, config...))
+	return newQueues(newWorker[T](wf, config...))
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
@@ -36,9 +36,9 @@ func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
 //	    return nil
 //	})
 //	queue := worker.BindQueue() // Bind to standard queue
-func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IResultWorkerBinder[T, any] {
-	return newResultQueues(newWorker[T, any](wf, config...))
-}
+// func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IResultWorkerBinder[T, any] {
+// 	return newResultQueues(newResultWorker[T, any](wf, config...))
+// }
 
 // NewResultWorker creates a worker for operations that don't return any value (void functions).
 // This is the most performant worker type as it doesn't use result channels except for panic handling.
@@ -59,5 +59,5 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IResultWorkerBinder
 //	queue := worker.BindQueue() // Bind to standard queue
 //	distQueue := worker.Copy().WithDistributedQueue(myDistributedQueue) // Bind to provided distributed queue
 func NewResultWorker[T, R any](wf WorkerResultFunc[T, R], config ...any) IResultWorkerBinder[T, R] {
-	return newResultQueues(newWorker[T, R](wf, config...))
+	return newResultQueues(newResultWorker[T, R](wf, config...))
 }

@@ -25,7 +25,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
 			if job, ok := q.Add(j); ok {
-				job.Result()
+				job.Wait()
 			}
 		}
 	})
@@ -62,7 +62,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				if job, ok := q.Add(1); ok {
-					job.Result()
+					job.Wait()
 				}
 			}
 		})
@@ -101,7 +101,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			if job, ok := q.Add(i, i%10); ok {
-				job.Result()
+				job.Wait()
 			}
 		}
 	})
@@ -138,7 +138,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				if job, ok := q.Add(1, 0); ok {
-					job.Result()
+					job.Wait()
 				}
 			}
 		})
@@ -165,8 +165,8 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 }
 
-// BenchmarkVoidWorker_Operations benchmarks operations with a VoidWorker.
-func BenchmarkVoidWorker_Operations(b *testing.B) {
+// BenchmarkResultWorker_Operations benchmarks operations with a VoidWorker.
+func BenchmarkResultWorker_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
 		worker := NewResultWorker(resultTask)
@@ -201,8 +201,8 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 	})
 }
 
-// BenchmarkVoidWorker_ParallelOperations benchmarks parallel operations with a VoidWorker.
-func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
+// BenchmarkResultWorker_ParallelOperations benchmarks parallel operations with a VoidWorker.
+func BenchmarkResultWorker_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
 		worker := NewResultWorker(resultTask)

@@ -5,29 +5,29 @@ import (
 	"time"
 )
 
-type poolNode[T, R any] struct {
-	ch       chan iJob[T, R]
+type poolNode[T any] struct {
+	ch       chan T
 	lastUsed atomic.Value
 }
 
 // newPoolNode creates a new pool node with initialized lastUsed field
-func newPoolNode[T, R any](bufferSize int) poolNode[T, R] {
-	node := poolNode[T, R]{
-		ch: make(chan iJob[T, R], bufferSize),
+func newPoolNode[T any](bufferSize int) poolNode[T] {
+	node := poolNode[T]{
+		ch: make(chan T, bufferSize),
 	}
 	return node
 }
 
-func (wc *poolNode[T, R]) Close() {
+func (wc *poolNode[T]) Close() {
 	close(wc.ch)
 }
 
-func (wc *poolNode[T, R]) UpdateLastUsed() {
+func (wc *poolNode[T]) UpdateLastUsed() {
 	wc.lastUsed.Store(time.Now())
 }
 
 // GetLastUsed safely retrieves the lastUsed time
-func (wc *poolNode[T, R]) GetLastUsed() time.Time {
+func (wc *poolNode[T]) GetLastUsed() time.Time {
 	if val := wc.lastUsed.Load(); val != nil {
 		return val.(time.Time)
 	}
