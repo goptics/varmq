@@ -41,7 +41,6 @@ type worker[T, R any] struct {
 	pool            *collections.List[poolNode[T, R]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
-	Cache           ICache
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	wg              sync.WaitGroup
@@ -93,7 +92,6 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 		concurrency:     atomic.Uint32{},
 		pool:            collections.NewList[poolNode[T, R]](),
 		Queue:           getNullQueue(),
-		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
 		configs:         c,
 		wg:              sync.WaitGroup{},
@@ -109,13 +107,6 @@ func (w *worker[T, R]) setQueue(q IBaseQueue) {
 	w.Queue = q
 }
 
-func (w *worker[T, R]) setCache(c ICache) {
-	w.Cache = c
-}
-
-func (w *worker[T, R]) isNullCache() bool {
-	return w.Cache == getCache()
-}
 func (w *worker[T, R]) isNormalWorker() bool {
 	_, ok := w.workerFunc.(WorkerFunc[T])
 	return ok
@@ -219,19 +210,13 @@ func (w *worker[T, R]) processNextJob() {
 			return
 		}
 
-		if cachedJob, ok := w.Cache.Load(j.ID()); ok {
-			j = cachedJob.(iJob[T, R])
-		} else {
-			w.Cache.Store(j.ID(), j)
-			j.SetInternalQueue(w.Queue)
-		}
+		j.SetInternalQueue(w.Queue)
 	default:
 		return
 	}
 
 	if j.IsClosed() {
 		w.wg.Done()
-		w.Cache.Delete(j.ID())
 		// process next Job recursively if the current one is closed
 		w.processNextJob()
 		return
@@ -285,31 +270,6 @@ func (w *worker[T, R]) initPoolNode() *collections.Node[poolNode[T, R]] {
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, R]) notifyToPullNextJobs() {
 	w.jobPullNotifier.Send()
-}
-
-// goCleanupCache starts a background process that periodically cleans up finished jobs from the cache
-// It checks if a ticker is already running for this cache, and if so, returns without creating another one
-// If the interval is > 0, it will create a ticker that triggers cleanup at the specified interval
-func (w *worker[T, R]) goCleanupCache() {
-	interval := w.configs.CleanupCacheInterval
-
-	if interval == 0 {
-		return
-	}
-
-	ticker := time.NewTicker(interval)
-	w.tickers = append(w.tickers, ticker)
-
-	go func() {
-		for range ticker.C {
-			w.Cache.Range(func(key, value any) bool {
-				if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
-					w.Cache.Delete(key)
-				}
-				return true
-			})
-		}
-	}()
 }
 
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
@@ -372,17 +332,11 @@ func (w *worker[T, R]) start() error {
 		return errRunningWorker
 	}
 
-	// if cache is been set and cleanup interval is not set, use default cleanup interval for 10 minutes
-	if !w.isNullCache() && w.configs.CleanupCacheInterval == 0 {
-		w.configs.CleanupCacheInterval = 10 * time.Minute
-	}
-
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
 	go w.startEventLoop()
 
-	w.goCleanupCache()
 	w.goRemoveIdleWorkers()
 
 	// init the first worker by default
@@ -459,8 +413,6 @@ func (w *worker[T, R]) Stop() {
 		node.Value.Close()
 		w.pool.Remove(node)
 	}
-
-	w.Cache.Clear()
 }
 
 func (w *worker[T, R]) Restart() error {

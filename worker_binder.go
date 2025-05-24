@@ -1,8 +1,6 @@
 package varmq
 
 import (
-	"sync"
-
 	"github.com/goptics/varmq/internal/collections"
 )
 
@@ -210,20 +208,12 @@ func (q *workerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[
 
 func (q *workerBinder[T, R]) WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T, R] {
 	q.worker.start()
-	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
-	if q.worker.isNullCache() {
-		q.setCache(new(sync.Map))
-	}
 
 	return newPersistentQueue(q.worker, pq)
 }
 
 func (q *workerBinder[T, R]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
 	q.worker.start()
-	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
-	if q.worker.isNullCache() {
-		q.setCache(new(sync.Map))
-	}
 
 	return newPersistentPriorityQueue(q.worker, pq)
 }

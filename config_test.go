@@ -14,23 +14,12 @@ func TestConfig(t *testing.T) {
 
 		// Test default values
 		assert.Equal(t, uint32(1), c.Concurrency)
-		assert.NotNil(t, c.Cache)
 		assert.Equal(t, time.Duration(0), c.CleanupCacheInterval)
 		assert.NotNil(t, c.JobIdGenerator)
 		assert.Equal(t, "", c.JobIdGenerator())
 	})
 
 	t.Run("ConfigOptions", func(t *testing.T) {
-		t.Run("WithCache", func(t *testing.T) {
-			mockCache := getCache()
-			configFunc := WithCache(mockCache)
-
-			c := newConfig()
-			configFunc(&c)
-
-			assert.Equal(t, mockCache, c.Cache)
-		})
-
 		t.Run("WithConcurrency", func(t *testing.T) {
 			tests := []struct {
 				name        string
@@ -141,36 +130,30 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, uint32(5), c.Concurrency)
 
 			// Test with multiple config funcs
-			mockCache := getCache()
 			duration := 10 * time.Minute
 			expectedId := "custom-id"
 
 			c = loadConfigs(
 				WithConcurrency(3),
-				WithCache(mockCache),
 				WithAutoCleanupCache(duration),
 				WithJobIdGenerator(func() string { return expectedId }),
 			)
 
 			assert.Equal(t, uint32(3), c.Concurrency)
-			assert.Equal(t, mockCache, c.Cache)
 			assert.Equal(t, duration, c.CleanupCacheInterval)
 			assert.Equal(t, expectedId, c.JobIdGenerator())
 
 			// Test with a mixture of int and config funcs
 			c = loadConfigs(
 				4,
-				WithCache(mockCache),
 			)
 
 			assert.Equal(t, uint32(4), c.Concurrency)
-			assert.Equal(t, mockCache, c.Cache)
 		})
 
 		t.Run("MergeConfigs", func(t *testing.T) {
 			baseConfig := configs{
 				Concurrency:          1,
-				Cache:                getCache(),
 				CleanupCacheInterval: 0,
 				JobIdGenerator:       func() string { return "" },
 			}
@@ -184,15 +167,12 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, uint32(5), c.Concurrency)
 
 			// Test with config funcs
-			newCache := getCache()
 			c = mergeConfigs(
 				baseConfig,
-				WithCache(newCache),
 				WithConcurrency(3),
 			)
 
 			assert.Equal(t, uint32(3), c.Concurrency)
-			assert.Equal(t, newCache, c.Cache)
 		})
 	})
 }

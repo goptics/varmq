@@ -2,7 +2,6 @@ package varmq
 
 import (
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -64,24 +63,6 @@ func TestNewWorker(t *testing.T) {
 		assert.Equal(customConcurrency, w.NumConcurrency(), "concurrency should be set to custom value")
 	})
 
-	t.Run("with WorkerFunc and custom cache", func(t *testing.T) {
-		// Create a worker function
-		wf := func(data string) (int, error) {
-			return len(data), nil
-		}
-
-		// Create custom cache
-		customCache := new(sync.Map)
-
-		// Create worker with custom cache
-		w := newWorker[string, int](wf, WithCache(customCache))
-
-		assert := assert.New(t)
-
-		// Check cache is set correctly
-		assert.Equal(customCache, w.Cache, "cache should be set to custom cache")
-	})
-
 	t.Run("with WorkerFunc and multiple configurations", func(t *testing.T) {
 		// Create a worker function
 		wf := func(data string) (int, error) {
@@ -90,14 +71,12 @@ func TestNewWorker(t *testing.T) {
 
 		// Set custom configurations
 		customConcurrency := 8
-		customCache := new(sync.Map)
 		cleanupInterval := 5 * time.Minute
 
 		// Create worker with multiple configurations
 		w := newWorker[string, int](
 			wf,
 			WithConcurrency(customConcurrency),
-			WithCache(customCache),
 			WithAutoCleanupCache(cleanupInterval),
 		)
 
@@ -105,9 +84,6 @@ func TestNewWorker(t *testing.T) {
 
 		// Check concurrency is set correctly
 		assert.Equal(customConcurrency, w.NumConcurrency(), "concurrency should be set to custom value")
-
-		// Check cache is set correctly
-		assert.Equal(customCache, w.Cache, "cache should be set to custom cache")
 
 		// Check cleanup interval is set correctly
 		assert.Equal(cleanupInterval, w.CleanupCacheInterval, "cleanup interval should be set correctly")

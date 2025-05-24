@@ -1,8 +1,6 @@
 package varmq
 
 import (
-	"fmt"
-	"strings"
 	"time"
 )
 
@@ -42,12 +40,8 @@ func newExternalQueue[T, R any](worker *worker[T, R]) *externalQueue[T, R] {
 }
 
 func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
-	defer eq.notifyToPullNextJobs()
 	j.ChangeStatus(queued)
-
-	if id := j.ID(); id != "" {
-		eq.Cache.Store(id, j)
-	}
+	eq.notifyToPullNextJobs()
 }
 
 func (eq *externalQueue[T, R]) newJob(data T, configs jobConfigs) *job[T, R] {
@@ -76,26 +70,6 @@ func (eq *externalQueue[T, R]) NumPending() int {
 
 func (eq *externalQueue[T, R]) Worker() Worker[T, R] {
 	return eq.worker
-}
-
-func (eq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
-	if val, ok := eq.Cache.Load(id); ok {
-		return val.(EnqueuedJob[R]), nil
-	}
-
-	return nil, fmt.Errorf("job not found for id: %s", id)
-}
-
-func (eq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
-	if !strings.HasPrefix(id, groupIdPrefixed) {
-		id = generateGroupId(id)
-	}
-
-	if val, ok := eq.Cache.Load(id); ok {
-		return val.(EnqueuedSingleGroupJob[R]), nil
-	}
-
-	return nil, fmt.Errorf("groups job not found for id: %s", id)
 }
 
 func (eq *externalQueue[T, R]) WaitUntilFinished() {
