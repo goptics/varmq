@@ -26,13 +26,13 @@ func (q *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
 	jBytes, err := j.Json()
 
 	if err != nil {
-		j.close()
+		j.Close()
 
 		return false
 	}
 
 	if ok := q.internalQueue.Enqueue(jBytes); !ok {
-		j.close()
+		j.Close()
 		return false
 	}
 

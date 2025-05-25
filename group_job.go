@@ -54,7 +54,7 @@ func (gj *groupJob[T]) Wait() {
 	gj.wgc.Wait()
 }
 
-func (gj *groupJob[T]) close() error {
+func (gj *groupJob[T]) Close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (gj *resultGroupJob[T, R]) Results() (<-chan Result[R], error) {
 	return ch, nil
 }
 
-func (gj *resultGroupJob[T, R]) close() error {
+func (gj *resultGroupJob[T, R]) Close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (gj *errorGroupJob[T]) Errs() (<-chan error, error) {
 	return ch, nil
 }
 
-func (gj *errorGroupJob[T]) close() error {
+func (gj *errorGroupJob[T]) Close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}

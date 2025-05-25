@@ -94,6 +94,7 @@ func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 
 	w := &worker[T, iJob[T]]{
 		workerFunc: func(j iJob[T]) {
+			// TODO: The panic error will be passed through inside logger in future
 			utils.WithSafe("worker", func() {
 				wf(j.Payload())
 			})
@@ -204,7 +205,7 @@ func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType
 		w.workerFunc(j)
 
 		j.changeStatus(finished)
-		j.close()
+		j.Close()
 		w.freePoolNode(node)            // push back the free channel to the stack to be used for the next job
 		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 		w.notifyToPullNextJobs()

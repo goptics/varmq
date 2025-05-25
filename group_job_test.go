@@ -162,7 +162,7 @@ package varmq
 // 		assert := assert.New(t)
 
 // 		// Close the job - this should decrement the counter but not close channels yet
-// 		err := gj.close()
+// 		err := gj.Close()
 // 		assert.Nil(err, "closing group job should not fail")
 // 		assert.Equal("Closed", gj.Status(), "job status should be 'Closed' after close")
 // 		assert.True(gj.IsClosed(), "job should be marked as closed")
@@ -172,12 +172,12 @@ package varmq
 // 		jobData := "test data"
 // 		jobId := "test-job"
 // 		newJob := gj.newJob(jobData, jobConfigs{Id: jobId})
-// 		err = newJob.close()
+// 		err = newJob.Close()
 // 		assert.Nil(err, "closing second job should not fail")
 // 		assert.Equal(bufferSize-2, gj.Len(), "length should be decremented again")
 
 // 		// Attempting to close again should fail
-// 		err = gj.close()
+// 		err = gj.Close()
 // 		assert.NotNil(err, "closing an already closed job should fail")
 // 		assert.Contains(err.Error(), "already closed", "error message should indicate job is already closed")
 // 	})
@@ -193,8 +193,8 @@ package varmq
 // 		assert := assert.New(t)
 
 // 		// Close both jobs, which should close the group
-// 		_ = gj.close()
-// 		_ = job2.close()
+// 		_ = gj.Close()
+// 		_ = job2.Close()
 
 // 		// Length should be 0 now
 // 		assert.Equal(0, gj.Len(), "length should be 0 after all jobs are closed")
@@ -232,7 +232,7 @@ package varmq
 // 		assert.Equal("Processing", gj.Status(), "status should be 'Processing' after change")
 
 // 		// Attempting to close a processing job should fail
-// 		err := gj.close()
+// 		err := gj.Close()
 // 		assert.NotNil(err, "closing a processing job should fail")
 // 		assert.Contains(err.Error(), "processing", "error message should indicate job is processing")
 

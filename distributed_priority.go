@@ -26,12 +26,12 @@ func (q *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFu
 	jBytes, err := j.Json()
 
 	if err != nil {
-		j.close()
+		j.Close()
 		return false
 	}
 
 	if ok := q.internalQueue.Enqueue(jBytes, priority); !ok {
-		j.close()
+		j.Close()
 		return false
 	}
 

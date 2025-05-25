@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -77,7 +78,7 @@ type iJob[T any] interface {
 	setAckId(id string)
 	setInternalQueue(q IBaseQueue)
 	ack() error
-	close() error
+	io.Closer
 }
 
 type EnqueuedJob interface {
@@ -201,7 +202,7 @@ func (j *job[T]) isCloseable() error {
 
 // close closes the job and its associated channels.
 // the job regardless of its current state, except when locked.
-func (j *job[T]) close() error {
+func (j *job[T]) Close() error {
 	if err := j.isCloseable(); err != nil {
 		return err
 	}
@@ -279,8 +280,8 @@ func (rj *resultJob[T, R]) saveAndSendError(err error) {
 	rj.Response.Send(Result[R]{JobId: rj.id, Err: err})
 }
 
-func (rj *resultJob[T, R]) close() error {
-	if err := rj.job.close(); err != nil {
+func (rj *resultJob[T, R]) Close() error {
+	if err := rj.job.Close(); err != nil {
 		return err
 	}
 
@@ -332,8 +333,8 @@ func (ej *errorJob[T]) sendError(err error) {
 	ej.Response.Send(err)
 }
 
-func (ej *errorJob[T]) close() error {
-	if err := ej.job.close(); err != nil {
+func (ej *errorJob[T]) Close() error {
+	if err := ej.job.Close(); err != nil {
 		return err
 	}
 
