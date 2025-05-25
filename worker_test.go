@@ -505,8 +505,8 @@ func TestWorkerLifecycle(t *testing.T) {
 		var jobsProcessed atomic.Uint32
 
 		// Create a worker function that increments counter
-		voidFn := func(data string) {
-			time.Sleep(30 * time.Millisecond) // Simulate work
+		voidFn := func(data int) {
+			time.Sleep(10 * time.Millisecond) // Simulate work
 			jobsProcessed.Add(1)
 		}
 
@@ -515,12 +515,12 @@ func TestWorkerLifecycle(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a queue for testing using internal implementation
-		q := queues.NewQueue[iJob[string]]()
+		q := queues.NewQueue[iJob[int]]()
 		w.setQueue(q)
 
 		// Submit some jobs
 		for i := range 10 {
-			q.Enqueue(newJob(string(rune('0'+i)), loadJobConfigs(w.configs())))
+			q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
 		}
 
 		// Start worker
@@ -542,11 +542,14 @@ func TestWorkerLifecycle(t *testing.T) {
 		err = w.Resume()
 		assert.NoError(err, "Resuming worker should not error")
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		// Check more jobs were processed after resume
 		assert.Greater(jobsProcessed.Load(), processedBeforeResume, "More jobs should be processed after resume")
+		time.Sleep(100 * time.Millisecond)
 
-		// Clean up
+		// should process all jobs
+		assert.Equal(jobsProcessed.Load(), uint32(10), "All jobs should be processed after resume")
+
 		w.Stop()
 	})
 }
@@ -596,6 +599,7 @@ func TestWorkerPoolManagement(t *testing.T) {
 			WithIdleWorkerExpiryDuration(expirySetting),
 			WithMinIdleWorkerRatio(minIdleRatio),
 		)
+		defer w.Stop()
 
 		assert := assert.New(t)
 
@@ -623,6 +627,5 @@ func TestWorkerPoolManagement(t *testing.T) {
 			"Number of idle workers should be reduced to target or less")
 
 		// Clean up
-		w.Stop()
 	})
 }
