@@ -175,4 +175,55 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, uint32(3), c.Concurrency)
 		})
 	})
+
+	t.Run("JobConfigs", func(t *testing.T) {
+		t.Run("loadJobConfigs", func(t *testing.T) {
+			// Test with default job ID generator
+			qConfig := configs{
+				JobIdGenerator: func() string { return "default-id" },
+			}
+
+			// Test with no custom configs
+			jc := loadJobConfigs(qConfig)
+			assert.Equal(t, "default-id", jc.Id)
+
+			// Test with custom job ID
+			jc = loadJobConfigs(qConfig, WithJobId("custom-id"))
+			assert.Equal(t, "custom-id", jc.Id)
+
+			// Test with multiple configs (should apply in order)
+			jc = loadJobConfigs(qConfig, 
+				WithJobId("first-id"),
+				WithJobId("second-id"),
+			)
+			assert.Equal(t, "second-id", jc.Id)
+		})
+
+		t.Run("WithJobId", func(t *testing.T) {
+			// Test with non-empty ID
+			configFunc := WithJobId("test-id")
+			jc := jobConfigs{Id: "original-id"}
+			configFunc(&jc)
+			assert.Equal(t, "test-id", jc.Id)
+
+			// Test with empty ID (should not change the original ID)
+			configFunc = WithJobId("")
+			jc = jobConfigs{Id: "original-id"}
+			configFunc(&jc)
+			assert.Equal(t, "original-id", jc.Id)
+		})
+
+		t.Run("withRequiredJobId", func(t *testing.T) {
+			// Test with non-empty ID (should not panic)
+			jc := jobConfigs{Id: "valid-id"}
+			result := withRequiredJobId(jc)
+			assert.Equal(t, jc, result)
+
+			// Test with empty ID (should panic)
+			jc = jobConfigs{Id: ""}
+			assert.Panics(t, func() {
+				withRequiredJobId(jc)
+			}, "withRequiredJobId should panic when ID is empty")
+		})
+	})
 }
