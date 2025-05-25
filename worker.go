@@ -50,11 +50,6 @@ type worker[T any, JobType iJob[T]] struct {
 
 // Worker represents a worker that processes Jobs.
 type Worker interface {
-	queue() IBaseQueue
-	configs() configs
-	notifyToPullNextJobs()
-	wait()
-
 	// IsPaused returns whether the worker is paused.
 	IsPaused() bool
 	// IsStopped returns whether the worker is stopped.
@@ -84,6 +79,14 @@ type Worker interface {
 	// Resume continues processing jobs those are pending in the queue.
 	// Time complexity: O(n) where n is the concurrency
 	Resume() error
+
+	queue() IBaseQueue
+
+	configs() configs
+
+	notifyToPullNextJobs()
+
+	wait()
 }
 
 // newWorker creates a new worker with the given worker function and configurations
@@ -135,6 +138,37 @@ func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worke
 			}
 		},
 		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
+		concurrency:     atomic.Uint32{},
+		Queue:           getNullQueue(),
+		jobPullNotifier: utils.NewNotifier(1),
+		Configs:         c,
+		wg:              sync.WaitGroup{},
+		tickers:         make([]*time.Ticker, 0),
+	}
+
+	w.concurrency.Store(c.Concurrency)
+
+	return w
+}
+
+func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJob[T]] {
+	c := loadConfigs(configs...)
+
+	w := &worker[T, iErrorJob[T]]{
+		workerFunc: func(j iErrorJob[T]) {
+			var panicErr error
+			var err error
+
+			panicErr = utils.WithSafe("worker", func() {
+				err = wf(j.Payload())
+			})
+
+			// send error if any
+			if err := selectError(panicErr, err); err != nil {
+				j.sendError(err)
+			}
+		},
+		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		jobPullNotifier: utils.NewNotifier(1),

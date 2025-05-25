@@ -112,3 +112,59 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 
 	return groupJob
 }
+
+type errorPriorityQueue[T any] struct {
+	*externalQueue
+	internalQueue IPriorityQueue
+}
+
+type ErrPriorityQueue[T any] interface {
+	IExternalQueue
+	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Time complexity: O(log n)
+	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
+	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
+	// Time complexity: O(n log n) where n is the number of Jobs added
+	AddAll(data []Item[T]) EnqueuedErrGroupJob
+}
+
+func newErrorPriorityQueue[T any](worker *worker[T, iErrorJob[T]], pq IPriorityQueue) *errorPriorityQueue[T] {
+	worker.setQueue(pq)
+
+	return &errorPriorityQueue[T]{
+		externalQueue: newExternalQueue(worker),
+		internalQueue: pq,
+	}
+}
+
+func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
+	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
+
+	if ok := q.internalQueue.Enqueue(j, priority); !ok {
+		j.close()
+		return nil, false
+	}
+
+	j.changeStatus(queued)
+	q.w.notifyToPullNextJobs()
+
+	return j, true
+}
+
+func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
+	groupJob := newErrorGroupJob[T](len(items))
+
+	for _, item := range items {
+		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+
+		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
+			j.close()
+			continue
+		}
+
+		j.changeStatus(queued)
+		q.w.notifyToPullNextJobs()
+	}
+
+	return groupJob
+}

@@ -121,3 +121,58 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 
 	return groupJob
 }
+
+type errorQueue[T any] struct {
+	*externalQueue
+	internalQueue IQueue
+}
+
+type ErrQueue[T any] interface {
+	IExternalQueue
+	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Time complexity: O(1)
+	Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// Time complexity: O(n) where n is the number of Jobs added
+	AddAll(data []Item[T]) EnqueuedErrGroupJob
+}
+
+func newErrorQueue[T any](worker *worker[T, iErrorJob[T]], q IQueue) *errorQueue[T] {
+	worker.setQueue(q)
+
+	return &errorQueue[T]{
+		externalQueue: newExternalQueue(worker),
+		internalQueue: q,
+	}
+}
+
+func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
+	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
+
+	if ok := q.internalQueue.Enqueue(j); !ok {
+		j.close()
+		return nil, false
+	}
+
+	j.changeStatus(queued)
+	q.w.notifyToPullNextJobs()
+
+	return j, true
+}
+
+func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
+	groupJob := newErrorGroupJob[T](len(items))
+
+	for _, item := range items {
+		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		if ok := q.internalQueue.Enqueue(j); !ok {
+			j.close()
+			continue
+		}
+
+		j.changeStatus(queued)
+		q.w.notifyToPullNextJobs()
+	}
+
+	return groupJob
+}

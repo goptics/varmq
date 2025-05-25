@@ -4,6 +4,41 @@ import (
 	"github.com/goptics/varmq/internal/queues"
 )
 
+type IErrWorkerBinder[T any] interface {
+	Worker
+
+	// BindQueue binds the worker to a standard Queue implementation.
+	// It creates a new Queue with default settings and connects the worker to it.
+	// This is the simplest way to get a standard FIFO queue working with this worker.
+	//
+	// Returns:
+	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   queue := worker.BindQueue()
+	//   queue.Add(data) // Enqueues a job that will be processed by the worker
+	BindQueue() ErrQueue[T]
+	// WithQueue binds the worker to a custom Queue implementation.
+	// This method allows you to use your own queue implementation as long as it
+	// satisfies the IQueue interface. This is useful when you need specialized
+	// queueing behavior beyond what the standard queue provides.
+	//
+	// Parameters:
+	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//
+	// Returns:
+	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customQueue := NewCustomQueue()
+	//   queue := worker.WithQueue(customQueue)
+	WithQueue(q IQueue) ErrQueue[T]
+
+	BindPriorityQueue() ErrPriorityQueue[T]
+
+	WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T]
+}
+
 // IWorkerBinder is the base interface for binding workers to different queue types.
 // It provides methods to connect workers with various queue implementations, enabling
 // flexible worker-queue configurations. This interface extends the Worker interface
@@ -291,7 +326,7 @@ func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
 
 func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
 	rwb.worker.start()
-	return newResultQueue[T, R](rwb.worker, q)
+	return newResultQueue(rwb.worker, q)
 }
 
 func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
@@ -300,5 +335,33 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, 
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
 	rwb.worker.start()
-	return newResultPriorityQueue[T, R](rwb.worker, pq)
+	return newResultPriorityQueue(rwb.worker, pq)
+}
+
+type errWorkerBinder[T any] struct {
+	*worker[T, iErrorJob[T]]
+}
+
+func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
+	return &errWorkerBinder[T]{
+		worker: worker,
+	}
+}
+
+func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
+	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
+	ewb.worker.start()
+	return newErrorQueue(ewb.worker, q)
+}
+
+func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
+	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
+	ewb.worker.start()
+	return newErrorPriorityQueue(ewb.worker, pq)
 }

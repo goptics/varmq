@@ -36,9 +36,9 @@ func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
 //	    return nil
 //	})
 //	queue := worker.BindQueue() // Bind to standard queue
-// func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IResultWorkerBinder[T, any] {
-// 	return newResultQueues(newResultWorker[T, any](wf, config...))
-// }
+func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IErrWorkerBinder[T] {
+	return newErrQueues(newErrWorker[T](wf, config...))
+}
 
 // NewResultWorker creates a worker for operations that don't return any value (void functions).
 // This is the most performant worker type as it doesn't use result channels except for panic handling.

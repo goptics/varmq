@@ -60,8 +60,8 @@ package varmq
 // 		j.saveAndSendResult(expectedResult)
 
 // 		// Check if result was saved correctly
-// 		assert.Equal(expectedResult, j.resultController.result.Data, "result should be saved in Result")
-// 		assert.Nil(j.resultController.result.Err, "error should be nil")
+// 		assert.Equal(expectedResult, j.ResponseController.result.Data, "result should be saved in Result")
+// 		assert.Nil(j.ResponseController.result.Err, "error should be nil")
 
 // 		// Get the result
 // 		result, err := j.Result()
@@ -72,7 +72,7 @@ package varmq
 // 	t.Run("saving and sending errors", func(t *testing.T) {
 // 		// Create a new job
 // 		j := newJob[string, int]("test data", jobConfigs{Id: "job-error"})
-// 		// Initialize the result controller (this is now needed since it's not done in newJob)
+// 		// Initialize the result helpers (this is now needed since it's not done in newJob)
 // 		j.withResult(1)
 // 		assert := assert.New(t)
 
@@ -82,8 +82,8 @@ package varmq
 
 // 		// Check if error was saved correctly
 // 		var zeroValue int
-// 		assert.Equal(zeroValue, j.resultController.result.Data, "data should be zero value")
-// 		assert.Equal(expectedErr, j.resultController.result.Err, "error should be saved in Result")
+// 		assert.Equal(zeroValue, j.ResponseController.result.Data, "data should be zero value")
+// 		assert.Equal(expectedErr, j.ResponseController.result.Err, "error should be saved in Result")
 
 // 		// Get the result
 // 		result, err := j.Result()
@@ -94,7 +94,7 @@ package varmq
 // 	t.Run("job JSON serialization", func(t *testing.T) {
 // 		// Create a new job with a result
 // 		j := newJob[string, int]("test data", jobConfigs{Id: "job-json"})
-// 		// Initialize the result controller
+// 		// Initialize the result helpers
 // 		j.withResult(1)
 // 		j.saveAndSendResult(42)
 

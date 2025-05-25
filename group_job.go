@@ -3,14 +3,14 @@ package varmq
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
+
+	"github.com/goptics/varmq/internal/helpers"
 )
 
 // groupJob represents a job that can be used in a group.
 type groupJob[T any] struct {
 	job[T]
-	pending *atomic.Uint32
-	done    chan struct{}
+	wgc *helpers.WgCounter
 }
 
 type PendingTracker interface {
@@ -26,13 +26,9 @@ const groupIdPrefixed = "g:"
 
 func newGroupJob[T any](bufferSize int) *groupJob[T] {
 	gj := &groupJob[T]{
-		job:     job[T]{},
-		pending: new(atomic.Uint32),
-		done:    make(chan struct{}),
+		job: job[T]{},
+		wgc: helpers.NewWgCounter(bufferSize),
 	}
-
-	gj.pending.Add(uint32(bufferSize))
-
 	return gj
 }
 
@@ -46,13 +42,16 @@ func (gj *groupJob[T]) newJob(payload T, config jobConfigs) *groupJob[T] {
 			id:      generateGroupId(config.Id),
 			payload: payload,
 		},
-		pending: gj.pending,
-		done:    gj.done,
+		wgc: gj.wgc,
 	}
 }
 
 func (gj *groupJob[T]) NumPending() int {
-	return int(gj.pending.Load())
+	return gj.wgc.Count()
+}
+
+func (gj *groupJob[T]) Wait() {
+	gj.wgc.Wait()
 }
 
 func (gj *groupJob[T]) close() error {
@@ -62,33 +61,23 @@ func (gj *groupJob[T]) close() error {
 
 	gj.ack()
 	gj.changeStatus(closed)
-
-	if gj.pending.Add(^uint32(0)) == 0 {
-		close(gj.done)
-	}
+	gj.wgc.Done()
 
 	return nil
 }
 
 type resultGroupJob[T, R any] struct {
 	resultJob[T, R]
-	pending *atomic.Uint32
-	done    chan struct{}
+	wgc *helpers.WgCounter
 }
 
 func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	gj := &resultGroupJob[T, R]{
 		resultJob: resultJob[T, R]{
-			job: job[T]{
-				wg: sync.WaitGroup{},
-			},
-			ResultController: newResultController[R](bufferSize),
+			Response: helpers.NewResponse[Result[R]](bufferSize),
 		},
-		pending: new(atomic.Uint32),
-		done:    make(chan struct{}),
+		wgc: helpers.NewWgCounter(bufferSize),
 	}
-
-	gj.pending.Add(uint32(bufferSize))
 
 	return gj
 }
@@ -107,19 +96,22 @@ func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGrou
 				id:      generateGroupId(config.Id),
 				payload: payload,
 			},
-			ResultController: gj.ResultController,
+			Response: gj.Response,
 		},
-		pending: gj.pending,
-		done:    gj.done,
+		wgc: gj.wgc,
 	}
 }
 
 func (gj *resultGroupJob[T, R]) NumPending() int {
-	return int(gj.pending.Load())
+	return gj.wgc.Count()
+}
+
+func (gj *resultGroupJob[T, R]) Wait() {
+	gj.wgc.Wait()
 }
 
 func (gj *resultGroupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch, err := gj.ResultController.Read()
+	ch, err := gj.Response.Read()
 
 	if err != nil {
 		tempCh := make(chan Result[R], 1)
@@ -137,11 +129,83 @@ func (gj *resultGroupJob[T, R]) close() error {
 
 	gj.ack()
 	gj.changeStatus(closed)
+	gj.wgc.Done()
 
-	// Close the result channel if all jobs are done
-	if gj.pending.Add(^uint32(0)) == 0 {
-		close(gj.done)
-		gj.ResultController.Close()
+	if gj.wgc.Count() == 0 {
+		gj.Response.Close()
+	}
+
+	return nil
+}
+
+type errorGroupJob[T any] struct {
+	errorJob[T]
+	wgc *helpers.WgCounter
+}
+
+type EnqueuedErrGroupJob interface {
+	Errs() (<-chan error, error)
+	PendingTracker
+	Awaitable
+	Drainer
+}
+
+func newErrorGroupJob[T any](bufferSize int) *errorGroupJob[T] {
+	return &errorGroupJob[T]{
+		errorJob: errorJob[T]{
+			job: job[T]{
+				wg: sync.WaitGroup{},
+			},
+			Response: helpers.NewResponse[error](bufferSize),
+		},
+		wgc: helpers.NewWgCounter(bufferSize),
+	}
+}
+
+func (gj *errorGroupJob[T]) NumPending() int {
+	return gj.wgc.Count()
+}
+
+func (gj *errorGroupJob[T]) Wait() {
+	gj.wgc.Wait()
+}
+
+func (gj *errorGroupJob[T]) newJob(payload T, config jobConfigs) *errorGroupJob[T] {
+	return &errorGroupJob[T]{
+		errorJob: errorJob[T]{
+			job: job[T]{
+				id:      generateGroupId(config.Id),
+				payload: payload,
+			},
+			Response: gj.Response,
+		},
+		wgc: gj.wgc,
+	}
+}
+
+func (gj *errorGroupJob[T]) Errs() (<-chan error, error) {
+	ch, err := gj.Response.Read()
+
+	if err != nil {
+		tempCh := make(chan error, 1)
+		close(tempCh)
+		return tempCh, err
+	}
+
+	return ch, nil
+}
+
+func (gj *errorGroupJob[T]) close() error {
+	if err := gj.isCloseable(); err != nil {
+		return err
+	}
+
+	gj.ack()
+	gj.changeStatus(closed)
+	gj.wgc.Done()
+
+	if gj.wgc.Count() == 0 {
+		gj.Response.Close()
 	}
 
 	return nil

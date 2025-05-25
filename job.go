@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/goptics/varmq/internal/helpers"
 )
 
 const (
@@ -32,23 +34,6 @@ type job[T any] struct {
 	ackId   string
 }
 
-type EnqueuedJob interface {
-	Identifiable
-	StatusProvider
-	Awaitable
-}
-
-type EnqueuedResultJob[R any] interface {
-	EnqueuedJob
-	Drainer
-	Result() (R, error)
-}
-
-type resultJob[T, R any] struct {
-	job[T]
-	*ResultController[R]
-}
-
 // jobView represents a view of a job's state for serialization.
 type jobView[T any] struct {
 	Id      string `json:"id"`
@@ -71,10 +56,10 @@ type iJob[T any] interface {
 	close() error
 }
 
-type iResultJob[T, R any] interface {
-	iJob[T]
-	saveAndSendResult(result R)
-	saveAndSendError(err error)
+type EnqueuedJob interface {
+	Identifiable
+	StatusProvider
+	Awaitable
 }
 
 // New creates a new job with the provided data.
@@ -219,6 +204,23 @@ func (j *job[T]) ack() error {
 	return nil
 }
 
+type iResultJob[T, R any] interface {
+	iJob[T]
+	saveAndSendResult(result R)
+	saveAndSendError(err error)
+}
+
+type resultJob[T, R any] struct {
+	job[T]
+	*helpers.Response[Result[R]]
+}
+
+type EnqueuedResultJob[R any] interface {
+	EnqueuedJob
+	Drainer
+	Result() (R, error)
+}
+
 func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
 	r := &resultJob[T, R]{
 		job: job[T]{
@@ -227,24 +229,30 @@ func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
 			status:  atomic.Uint32{},
 			wg:      sync.WaitGroup{},
 		},
-		ResultController: newResultController[R](1),
+		Response: helpers.NewResponse[Result[R]](1),
 	}
 	r.wg.Add(1)
 	return r
 }
 
+func (rj *resultJob[T, R]) Result() (R, error) {
+	result, err := rj.Response.Response()
+
+	if err != nil {
+		return *new(R), err
+	}
+
+	return result.Data, result.Err
+}
+
 // saveAndSendResult saves the result and sends it to the job's result channel.
 func (rj *resultJob[T, R]) saveAndSendResult(result R) {
-	r := Result[R]{JobId: rj.id, Data: result}
-	rj.ResultController.Send(r)
-	rj.ResultController.result = r
+	rj.Response.Send(Result[R]{JobId: rj.id, Data: result})
 }
 
 // saveAndSendError sends an error to the job's result channel.
 func (rj *resultJob[T, R]) saveAndSendError(err error) {
-	r := Result[R]{JobId: rj.id, Err: err}
-	rj.ResultController.Send(r)
-	rj.ResultController.result = r
+	rj.Response.Send(Result[R]{JobId: rj.id, Err: err})
 }
 
 func (rj *resultJob[T, R]) close() error {
@@ -252,6 +260,59 @@ func (rj *resultJob[T, R]) close() error {
 		return err
 	}
 
-	rj.ResultController.Close()
+	rj.Response.Close()
+	return nil
+}
+
+type iErrorJob[T any] interface {
+	iJob[T]
+	sendError(err error)
+}
+
+type errorJob[T any] struct {
+	job[T]
+	*helpers.Response[error]
+}
+
+type EnqueuedErrJob interface {
+	EnqueuedJob
+	Drainer
+	Err() error
+}
+
+func newErrorJob[T any](payload T, configs jobConfigs) *errorJob[T] {
+	e := &errorJob[T]{
+		job: job[T]{
+			id:      configs.Id,
+			payload: payload,
+			status:  atomic.Uint32{},
+			wg:      sync.WaitGroup{},
+		},
+		Response: helpers.NewResponse[error](1),
+	}
+	e.wg.Add(1)
+	return e
+}
+
+func (ej *errorJob[T]) Err() error {
+	resErr, err := ej.Response.Response()
+
+	if err != nil {
+		return err
+	}
+
+	return resErr
+}
+
+func (ej *errorJob[T]) sendError(err error) {
+	ej.Response.Send(err)
+}
+
+func (ej *errorJob[T]) close() error {
+	if err := ej.job.close(); err != nil {
+		return err
+	}
+
+	ej.Response.Close()
 	return nil
 }
