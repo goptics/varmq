@@ -550,3 +550,79 @@ func TestWorkerLifecycle(t *testing.T) {
 		w.Stop()
 	})
 }
+
+func TestWorkerPoolManagement(t *testing.T) {
+	t.Run("numMinIdleWorkers calculation", func(t *testing.T) {
+		// Create a worker function
+		voidFn := func(data string) {}
+
+		// Test cases for different concurrency levels and min idle ratios
+		testCases := []struct {
+			concurrency int
+			ratio       uint8
+			expected    int
+		}{
+			{concurrency: 10, ratio: 10, expected: 1},   // 10% of 10 = 1
+			{concurrency: 10, ratio: 20, expected: 2},   // 20% of 10 = 2
+			{concurrency: 5, ratio: 30, expected: 1},    // 30% of 5 = 1.5, rounded to 1
+			{concurrency: 100, ratio: 15, expected: 15}, // 15% of 100 = 15
+			{concurrency: 3, ratio: 50, expected: 1},    // 50% of 3 = 1.5, rounded to 1
+			{concurrency: 1, ratio: 100, expected: 1},   // 100% of 1 = 1
+		}
+
+		for _, tc := range testCases {
+			w := newWorker(voidFn,
+				WithConcurrency(tc.concurrency),
+				WithMinIdleWorkerRatio(tc.ratio),
+			)
+
+			assert := assert.New(t)
+			actual := w.numMinIdleWorkers()
+			assert.Equal(tc.expected, actual,
+				"numMinIdleWorkers should return %d for concurrency=%d and ratio=%d",
+				tc.expected, tc.concurrency, tc.ratio)
+		}
+	})
+
+	t.Run("idle worker management", func(t *testing.T) {
+		// Create a worker function
+		voidFn := func(data string) {}
+
+		// Create worker with idle worker expiry configuration
+		expirySetting := 100 * time.Millisecond
+		minIdleRatio := uint8(20) // 20%
+		w := newWorker(voidFn,
+			WithConcurrency(5),
+			WithIdleWorkerExpiryDuration(expirySetting),
+			WithMinIdleWorkerRatio(minIdleRatio),
+		)
+
+		assert := assert.New(t)
+
+		// Start worker
+		err := w.start()
+		assert.NoError(err, "Starting worker should not error")
+
+		// Create some idle nodes manually (simulating idle workers)
+		for range 5 {
+			node := w.initPoolNode()
+			w.pool.PushNode(node)
+		}
+
+		// Initial node count
+		initialCount := w.pool.Len()
+		assert.Greater(initialCount, 0, "Should have idle workers in the pool")
+
+		// Wait for idle workers to be removed
+		time.Sleep(expirySetting * 2)
+
+		// Should now have reduced to target idle workers
+		targetIdleWorkers := w.numMinIdleWorkers()
+		actualIdleWorkers := w.NumIdleWorkers()
+		assert.LessOrEqual(actualIdleWorkers, targetIdleWorkers,
+			"Number of idle workers should be reduced to target or less")
+
+		// Clean up
+		w.Stop()
+	})
+}
