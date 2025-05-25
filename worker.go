@@ -446,10 +446,10 @@ func (w *worker[T, JobType]) Stop() error {
 	}
 
 	defer w.status.Store(stopped)
-	w.stopTickers()
 
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.PauseAndWait()
+	w.stopTickers()
 	w.jobPullNotifier.Close()
 
 	// remove all nodes from the list and close the channels
