@@ -6,10 +6,10 @@ package varmq
 
 // 	"github.com/stretchr/testify/assert"
 
-// 	"github.com/goptics/varmq/internal/collections"
+// 	"github.com/goptics/varmq/internal/queues"
 // )
 
-// func initQueue() (*queue[string], *worker[string, int], *collections.Queue[any]) {
+// func initQueue() (*queue[string], *worker[string, int], *queues.Queue[any]) {
 // 	// Create a worker with a simple process function that doubles an integer
 // 	var workerFunc WorkerResultFunc[string, int]
 
@@ -22,8 +22,8 @@ package varmq
 // 		return val * 2, nil
 // 	}
 
-// 	// Create an internal queue from collections and bind the worker to it
-// 	internalQueue := collections.NewQueue[any]()
+// 	// Create an internal queue from queues and bind the worker to it
+// 	internalQueue := queues.NewQueue[any]()
 // 	worker := newWorker[string, int](workerFunc)
 // 	queue := newQueue(worker, internalQueue)
 

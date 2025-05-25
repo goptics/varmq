@@ -1,7 +1,7 @@
 package varmq
 
 import (
-	"github.com/goptics/varmq/internal/collections"
+	"github.com/goptics/varmq/internal/queues"
 )
 
 // IWorkerBinder is the base interface for binding workers to different queue types.
@@ -225,7 +225,7 @@ func (wb *workerBinder[T]) handleQueueSubscription(action string) {
 // BindQueue creates and binds a new standard queue to the worker
 // It returns a Queue interface that can be used to add jobs to the queue
 func (wb *workerBinder[T]) BindQueue() Queue[T] {
-	return wb.WithQueue(collections.NewQueue[iJob[T]]())
+	return wb.WithQueue(queues.NewQueue[iJob[T]]())
 }
 
 // WithQueue binds an existing queue implementation to the worker
@@ -237,7 +237,7 @@ func (wb *workerBinder[T]) WithQueue(q IQueue) Queue[T] {
 }
 
 func (wb *workerBinder[T]) BindPriorityQueue() PriorityQueue[T] {
-	return wb.WithPriorityQueue(collections.NewPriorityQueue[iJob[T]]())
+	return wb.WithPriorityQueue(queues.NewPriorityQueue[iJob[T]]())
 }
 
 func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T] {
@@ -286,7 +286,7 @@ func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorke
 }
 
 func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
-	return rwb.WithQueue(collections.NewQueue[iResultJob[T, R]]())
+	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]]())
 }
 
 func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
@@ -295,7 +295,7 @@ func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
 }
 
 func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
-	return rwb.WithPriorityQueue(collections.NewPriorityQueue[iResultJob[T, R]]())
+	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]]())
 }
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {

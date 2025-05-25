@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/goptics/varmq/internal/collections"
+	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
 	"github.com/goptics/varmq/utils"
 )
@@ -38,7 +38,7 @@ var (
 type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
 	concurrency     atomic.Uint32
-	pool            *collections.List[pool.Node[JobType]]
+	pool            *linkedlist.List[pool.Node[JobType]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
 	status          atomic.Uint32
@@ -98,7 +98,7 @@ func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 				wf(j.Payload())
 			})
 		},
-		pool:            collections.NewList[pool.Node[iJob[T]]](),
+		pool:            linkedlist.New[pool.Node[iJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		jobPullNotifier: utils.NewNotifier(1),
@@ -134,7 +134,7 @@ func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worke
 				j.saveAndSendError(err)
 			}
 		},
-		pool:            collections.NewList[pool.Node[iResultJob[T, R]]](),
+		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		jobPullNotifier: utils.NewNotifier(1),
@@ -168,7 +168,7 @@ func (w *worker[T, JobType]) wait() {
 // It continuously reads jobs from the channel and processes each one
 // Each job processing is wrapped in its own function with proper cleanup
 // Time complexity: O(1) per job
-func (w *worker[T, JobType]) spawnWorker(node *collections.Node[pool.Node[JobType]]) {
+func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType]]) {
 	for j := range node.Value.Read() {
 		w.workerFunc(j)
 
@@ -245,7 +245,7 @@ func (w *worker[T, JobType]) processNextJob() {
 	w.sendToNextChannel(j)
 }
 
-func (w *worker[T, JobType]) freePoolNode(node *collections.Node[pool.Node[JobType]]) {
+func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
 	// If worker timeout is enabled, update the last used time
 	enabledIdleWorkersRemover := w.Configs.IdleWorkerExpiryDuration > 0
 
@@ -276,8 +276,8 @@ func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
 	w.initPoolNode().Value.Send(j)
 }
 
-func (w *worker[T, JobType]) initPoolNode() *collections.Node[pool.Node[JobType]] {
-	node := collections.NewNode(pool.NewNode[JobType](1))
+func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
+	node := linkedlist.NewNode(pool.NewNode[JobType](1))
 	// Start a worker goroutine to process jobs from this nodes channel
 	go w.spawnWorker(node)
 
