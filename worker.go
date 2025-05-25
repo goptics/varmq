@@ -87,8 +87,6 @@ type Worker interface {
 }
 
 // newWorker creates a new worker with the given worker function and configurations
-// The worker function can be any of WorkerResultFunc, WorkerErrFunc, or WorkerFunc
-// It initializes the worker with the configured concurrency, cache, and other settings
 func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 	c := loadConfigs(configs...)
 
@@ -447,8 +445,8 @@ func (w *worker[T, JobType]) Stop() {
 	w.stopTickers()
 
 	// wait until all ongoing processes are done to gracefully close the channels
-	w.jobPullNotifier.Close()
 	w.PauseAndWait()
+	w.jobPullNotifier.Close()
 
 	// remove all nodes from the list and close the channels
 	for _, node := range w.pool.NodeSlice() {

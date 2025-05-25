@@ -14,12 +14,12 @@ type WgCounter struct {
 
 // NewWgCounter creates a new WgCounter with the given buffer size
 func NewWgCounter(bufferSize int) *WgCounter {
-	tracker := &WgCounter{}
+	wgc := &WgCounter{}
 
-	tracker.count.Add(uint32(bufferSize))
-	tracker.wg.Add(bufferSize) // Add a single wait that will be done when all jobs are complete
+	wgc.count.Add(uint32(bufferSize))
+	wgc.wg.Add(bufferSize)
 
-	return tracker
+	return wgc
 }
 
 // Count returns the number of pending jobs
