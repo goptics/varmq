@@ -67,9 +67,9 @@ type Worker interface {
 	// TunePool tunes (increase or decrease) the pool size of the worker.
 	TunePool(concurrency int) error
 	// Pause pauses the worker.
-	Pause()
+	Pause() error
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
-	PauseAndWait()
+	PauseAndWait() error
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	// Time complexity: O(n) where n is the number of channels
 	Stop() error
@@ -436,8 +436,13 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 	return w.pool.Len()
 }
 
-func (w *worker[T, JobType]) Pause() {
+func (w *worker[T, JobType]) Pause() error {
+	if !w.IsRunning() {
+		return errNotRunningWorker
+	}
+
 	w.status.Store(paused)
+	return nil
 }
 
 func (w *worker[T, JobType]) Stop() error {
@@ -524,7 +529,11 @@ func (w *worker[T, JobType]) Resume() error {
 	return nil
 }
 
-func (w *worker[T, JobType]) PauseAndWait() {
-	w.Pause()
+func (w *worker[T, JobType]) PauseAndWait() error {
+	if err := w.Pause(); err != nil {
+		return err
+	}
+
 	w.wg.Wait()
+	return nil
 }
