@@ -72,7 +72,7 @@ type Worker interface {
 	PauseAndWait()
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	// Time complexity: O(n) where n is the number of channels
-	Stop()
+	Stop() error
 	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
 	// Time complexity: O(n) where n is the concurrency
 	Restart() error
@@ -440,7 +440,11 @@ func (w *worker[T, JobType]) Pause() {
 	w.status.Store(paused)
 }
 
-func (w *worker[T, JobType]) Stop() {
+func (w *worker[T, JobType]) Stop() error {
+	if !w.IsRunning() {
+		return errNotRunningWorker
+	}
+
 	defer w.status.Store(stopped)
 	w.stopTickers()
 
@@ -453,6 +457,8 @@ func (w *worker[T, JobType]) Stop() {
 		node.Value.Close()
 		w.pool.Remove(node)
 	}
+
+	return nil
 }
 
 func (w *worker[T, JobType]) Restart() error {
