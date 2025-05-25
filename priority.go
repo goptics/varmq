@@ -26,7 +26,7 @@ func newPriorityQueue[T any](worker *worker[T, iJob[T]], pq IPriorityQueue) *pri
 }
 
 func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool) {
-	j := newJob[T](data, loadJobConfigs(q.w.configs(), configs...))
+	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j, priority); !ok {
 		j.close()

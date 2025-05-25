@@ -2,35 +2,24 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
+	"github.com/goptics/varmq"
 )
 
 func main() {
-	// w := varmq.NewWorker(func(data int) {
-	// 	fmt.Printf("Processing: %d\n", data)
-	// 	time.Sleep(1 * time.Second)
-	// }, 100)
+	w := varmq.NewErrWorker(func(data int) error {
+		fmt.Printf("Processing: %d\n", data)
+		time.Sleep(1 * time.Second)
+		return nil
+	}, 100)
 
-	pool, _ := ants.NewPool(100)
-	wg := sync.WaitGroup{}
-	// q := w.BindQueue()
+	q := w.BindQueue()
 	start := time.Now()
 	defer func() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
-	// defer q.WaitAndClose()
+	defer q.WaitAndClose()
 
-	for i := range 1000 {
-		wg.Add(1)
-		pool.Submit(func() {
-			fmt.Printf("Processing: %d\n", i)
-			time.Sleep(1 * time.Second)
-			wg.Done()
-		})
-	}
 	fmt.Println("Added jobs")
-	wg.Wait()
 }

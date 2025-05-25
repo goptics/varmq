@@ -78,14 +78,11 @@ type Worker interface {
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	// Time complexity: O(n) where n is the concurrency
+
 	Resume() error
-
 	queue() IBaseQueue
-
 	configs() configs
-
 	notifyToPullNextJobs()
-
 	wait()
 }
 
@@ -133,7 +130,7 @@ func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worke
 			})
 
 			// send error if any
-			if err := selectError(panicErr, err); err != nil {
+			if err := utils.SelectError(panicErr, err); err != nil {
 				j.saveAndSendError(err)
 			}
 		},
@@ -164,7 +161,7 @@ func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJ
 			})
 
 			// send error if any
-			if err := selectError(panicErr, err); err != nil {
+			if err := utils.SelectError(panicErr, err); err != nil {
 				j.sendError(err)
 			}
 		},

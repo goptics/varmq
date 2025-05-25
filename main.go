@@ -16,7 +16,7 @@ package varmq
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
 func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
-	return newQueues(newWorker[T](wf, config...))
+	return newQueues(newWorker(wf, config...))
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
@@ -37,7 +37,7 @@ func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
 //	})
 //	queue := worker.BindQueue() // Bind to standard queue
 func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IErrWorkerBinder[T] {
-	return newErrQueues(newErrWorker[T](wf, config...))
+	return newErrQueues(newErrWorker(wf, config...))
 }
 
 // NewResultWorker creates a worker for operations that don't return any value (void functions).
@@ -59,5 +59,5 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IErrWorkerBinder[T]
 //	queue := worker.BindQueue() // Bind to standard queue
 //	distQueue := worker.Copy().WithDistributedQueue(myDistributedQueue) // Bind to provided distributed queue
 func NewResultWorker[T, R any](wf WorkerResultFunc[T, R], config ...any) IResultWorkerBinder[T, R] {
-	return newResultQueues(newResultWorker[T, R](wf, config...))
+	return newResultQueues(newResultWorker(wf, config...))
 }

@@ -1,4 +1,4 @@
-package varmq
+package utils
 
 import (
 	"errors"
@@ -54,7 +54,7 @@ func TestSelectError(t *testing.T) {
 	// Run the tests
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := selectError(tc.errors...)
+			result := SelectError(tc.errors...)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
