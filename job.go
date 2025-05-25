@@ -23,6 +23,30 @@ const (
 	closed
 )
 
+// Result represents the result of a job, containing the data and any error that occurred.
+type Result[T any] struct {
+	JobId string
+	Data  T
+	Err   error
+}
+
+type Identifiable interface {
+	ID() string
+}
+
+type StatusProvider interface {
+	IsClosed() bool
+	Status() string
+}
+
+type Awaitable interface {
+	Wait()
+}
+
+type Drainer interface {
+	Drain() error
+}
+
 // job represents a task to be executed by a worker. It maintains the task's
 // current status, Payload data, and channels for receiving results.
 type job[T any] struct {

@@ -8,10 +8,9 @@ import (
 )
 
 func main() {
-	w := varmq.NewErrWorker(func(data int) error {
+	w := varmq.NewWorker(func(data int) {
 		fmt.Printf("Processing: %d\n", data)
 		time.Sleep(1 * time.Second)
-		return nil
 	}, 100)
 
 	q := w.BindQueue()
@@ -19,7 +18,7 @@ func main() {
 	defer func() {
 		fmt.Println("Time taken:", time.Since(start))
 	}()
-	defer q.WaitAndClose()
+	defer q.WaitUntilFinished()
 
 	fmt.Println("Added jobs")
 }
