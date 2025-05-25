@@ -338,12 +338,6 @@ func (w *worker[T, JobType]) stopTickers() {
 	w.tickers = make([]*time.Ticker, 0)
 }
 
-func (w *worker[T, JobType]) waitUnitCurrentProcessing() {
-	for w.NumProcessing() != 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 func (w *worker[T, JobType]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
@@ -496,5 +490,5 @@ func (w *worker[T, JobType]) Resume() error {
 
 func (w *worker[T, JobType]) PauseAndWait() {
 	w.Pause()
-	w.waitUnitCurrentProcessing()
+	w.wg.Wait()
 }
