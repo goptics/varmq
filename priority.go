@@ -7,10 +7,10 @@ type priorityQueue[T any] struct {
 
 type PriorityQueue[T any] interface {
 	IExternalQueue
-	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Add adds a new Job with the given priority to the queue and returns a EnqueuedJob to handle the job.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool)
-	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
+	// AddAll adds multiple Jobs with the given priority to the queue and returns a EnqueuedGroupJob to handle the job.
 	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedGroupJob
 }
@@ -64,10 +64,10 @@ type resultPriorityQueue[T any, R any] struct {
 
 type ResultPriorityQueue[T, R any] interface {
 	IExternalQueue
-	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Add adds a new Job with the given priority to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
-	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
+	// AddAll adds multiple Jobs with the given priority to the queue and returns a EnqueuedResultGroupJob to handle the job with result receiving.
 	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
 }
@@ -120,10 +120,10 @@ type errorPriorityQueue[T any] struct {
 
 type ErrPriorityQueue[T any] interface {
 	IExternalQueue
-	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Add adds a new Job with the given priority to the queue and returns a EnqueuedErrJob to handle the job with error receiving.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
-	// AddAll adds multiple Jobs with the given priority to the queue and returns a channel to receive all responses.
+	// AddAll adds multiple Jobs with the given priority to the queue and returns a EnqueuedErrGroupJob to handle the job with error receiving.
 	// Time complexity: O(n log n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }
