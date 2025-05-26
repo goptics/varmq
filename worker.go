@@ -39,13 +39,14 @@ type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
 	concurrency     atomic.Uint32
 	pool            *linkedlist.List[pool.Node[JobType]]
-	CurProcessing   atomic.Uint32
-	Queue           IBaseQueue
+	curProcessing   atomic.Uint32
 	status          atomic.Uint32
-	jobPullNotifier utils.Notifier
-	wg              sync.WaitGroup
+	eventLoopSignal chan struct{}
+	waiters         []chan struct{}
 	tickers         []*time.Ticker
+	mx              sync.RWMutex
 	Configs         configs
+	Queue           IBaseQueue
 }
 
 // Worker represents a worker that processes Jobs.
@@ -100,9 +101,9 @@ func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 		pool:            linkedlist.New[pool.Node[iJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
-		jobPullNotifier: utils.NewNotifier(1),
+		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		wg:              sync.WaitGroup{},
+		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
@@ -136,9 +137,9 @@ func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worke
 		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
-		jobPullNotifier: utils.NewNotifier(1),
+		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		wg:              sync.WaitGroup{},
+		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
@@ -167,9 +168,9 @@ func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJ
 		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
-		jobPullNotifier: utils.NewNotifier(1),
+		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		wg:              sync.WaitGroup{},
+		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
@@ -191,7 +192,25 @@ func (w *worker[T, JobType]) queue() IBaseQueue {
 }
 
 func (w *worker[T, JobType]) wait() {
-	w.wg.Wait()
+	// Check if we need to wait
+	// 1. If worker is paused or stopped and no jobs are processing, no need to wait
+	// 2. If worker is running but queue is empty and no jobs are processing, no need to wait
+	if !w.IsRunning() && w.curProcessing.Load() == 0 {
+		return
+	}
+
+	if w.IsRunning() && w.Queue.Len() == 0 && w.curProcessing.Load() == 0 {
+		return
+	}
+
+	// Otherwise, create a waiter channel and wait for it to be closed
+	waiter := make(chan struct{})
+
+	w.mx.Lock()
+	w.waiters = append(w.waiters, waiter)
+	w.mx.Unlock()
+
+	<-waiter
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the specified channel
@@ -204,10 +223,26 @@ func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType
 
 		j.changeStatus(finished)
 		j.Close()
-		w.freePoolNode(node)            // push back the free channel to the stack to be used for the next job
-		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
+		w.freePoolNode(node) // push back the free channel to the stack to be used for the next job
+		processing := w.curProcessing.Add(^uint32(0))
+
+		w.mx.Lock()
+		// if there is no waiters or processing is not zero, notify to pull next jobs
+		if len(w.waiters) == 0 || processing != 0 {
+			w.mx.Unlock()
+			w.notifyToPullNextJobs()
+			continue
+		}
+
+		if w.IsPaused() || (w.IsRunning() && w.Queue.Len() == 0) {
+			for _, waiter := range w.waiters {
+				close(waiter)
+			}
+			w.waiters = make([]chan struct{}, 0)
+		}
+		w.mx.Unlock()
+
 		w.notifyToPullNextJobs()
-		w.wg.Done()
 	}
 }
 
@@ -215,11 +250,11 @@ func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType
 // It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
 // When all conditions are met, it processes the next job in the queue
 func (w *worker[T, JobType]) startEventLoop() {
-	w.jobPullNotifier.Receive(func() {
-		for w.IsRunning() && w.CurProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
+	for range w.eventLoopSignal {
+		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
-	})
+	}
 }
 
 // processNextJob processes the next Job in the queue.
@@ -239,7 +274,6 @@ func (w *worker[T, JobType]) processNextJob() {
 		return
 	}
 
-	w.wg.Add(1)
 	var j JobType
 
 	// check the type of the value
@@ -254,7 +288,7 @@ func (w *worker[T, JobType]) processNextJob() {
 		}
 
 		if j, ok = v.(JobType); !ok {
-			w.skipAndProcessNext()
+			w.processNextJob()
 			return
 		}
 
@@ -264,23 +298,16 @@ func (w *worker[T, JobType]) processNextJob() {
 	}
 
 	if j.IsClosed() {
-		w.skipAndProcessNext()
+		w.processNextJob()
 		return
 	}
 
-	w.CurProcessing.Add(1)
+	w.curProcessing.Add(1)
 	j.changeStatus(processing)
 	j.setAckId(ackId)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
-}
-
-// skipAndProcessNext is a helper function to skip the current job processing,
-// decrement the wait group counter, and move on to the next job.
-func (w *worker[T, JobType]) skipAndProcessNext() {
-	w.wg.Done()
-	w.processNextJob()
 }
 
 func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
@@ -324,7 +351,13 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	w.jobPullNotifier.Send()
+	w.mx.RLock()
+	defer w.mx.RUnlock()
+
+	select {
+	case w.eventLoopSignal <- struct{}{}:
+	default:
+	}
 }
 
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
@@ -463,7 +496,10 @@ func (w *worker[T, JobType]) Stop() error {
 	// wait until all ongoing processes are done to gracefully close the channels
 	w.PauseAndWait()
 	w.stopTickers()
-	w.jobPullNotifier.Close()
+
+	w.mx.Lock()
+	close(w.eventLoopSignal)
+	w.mx.Unlock()
 
 	// remove all nodes from the list and close the channels
 	for _, node := range w.pool.NodeSlice() {
@@ -478,9 +514,10 @@ func (w *worker[T, JobType]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	w.PauseAndWait()
-	// close the old notifier to avoid routine leaks
-	w.jobPullNotifier.Close()
-	w.jobPullNotifier = utils.NewNotifier(1)
+
+	w.mx.Lock()
+	w.eventLoopSignal = make(chan struct{}, 1)
+	w.mx.Unlock()
 
 	if err := w.start(); err != nil {
 		return err
@@ -519,7 +556,7 @@ func (w *worker[T, JobType]) Status() string {
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
-	return int(w.CurProcessing.Load())
+	return int(w.curProcessing.Load())
 }
 
 func (w *worker[T, JobType]) Resume() error {
@@ -532,7 +569,7 @@ func (w *worker[T, JobType]) Resume() error {
 	}
 
 	w.status.Store(running)
-	w.jobPullNotifier.Send()
+	w.notifyToPullNextJobs()
 
 	return nil
 }
@@ -542,6 +579,6 @@ func (w *worker[T, JobType]) PauseAndWait() error {
 		return err
 	}
 
-	w.wg.Wait()
+	w.wait()
 	return nil
 }

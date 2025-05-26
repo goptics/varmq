@@ -31,12 +31,12 @@ func TestWorkerGroup(t *testing.T) {
 				assert.Equal(1, w.NumConcurrency(), "concurrency should match expected value")
 				assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
 				assert.NotNil(w.Queue, "queue should not be nil, expected null queue")
-				assert.False(reflect.ValueOf(w.jobPullNotifier).IsNil(), "jobPullNotifier should be initialized")
-				assert.Equal(reflect.Struct, reflect.ValueOf(&w.wg).Elem().Kind(), "wg should be initialized")
+				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
+				assert.NotNil(w.waiters, "waiters slice should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
 				assert.Zero(w.pool.Len(), "pool should be empty initially")
-				assert.Zero(w.CurProcessing.Load(), "current processing count should be initialized to zero")
+				assert.Zero(w.curProcessing.Load(), "current processing count should be initialized to zero")
 			})
 
 			t.Run("with direct concurrency value", func(t *testing.T) {
