@@ -197,18 +197,5 @@ func TestConfig(t *testing.T) {
 			configFunc(&jc)
 			assert.Equal(t, "original-id", jc.Id)
 		})
-
-		t.Run("withRequiredJobId", func(t *testing.T) {
-			// Test with non-empty ID (should not panic)
-			jc := jobConfigs{Id: "valid-id"}
-			result := withRequiredJobId(jc)
-			assert.Equal(t, jc, result)
-
-			// Test with empty ID (should panic)
-			jc = jobConfigs{Id: ""}
-			assert.Panics(t, func() {
-				withRequiredJobId(jc)
-			}, "withRequiredJobId should panic when ID is empty")
-		})
 	})
 }
