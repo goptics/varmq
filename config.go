@@ -10,7 +10,6 @@ type ConfigFunc func(*configs)
 
 type configs struct {
 	Concurrency              uint32
-	CleanupCacheInterval     time.Duration
 	JobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
 	MinIdleWorkerRatio       uint8
@@ -72,12 +71,6 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
-	}
-}
-
-func WithAutoCleanupCache(duration time.Duration) ConfigFunc {
-	return func(c *configs) {
-		c.CleanupCacheInterval = duration
 	}
 }
 

@@ -78,8 +78,8 @@ type Worker interface {
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	// Time complexity: O(n) where n is the concurrency
-
 	Resume() error
+
 	queue() IBaseQueue
 	configs() configs
 	notifyToPullNextJobs()

@@ -20,5 +20,8 @@ func main() {
 	}()
 	defer q.WaitUntilFinished()
 
+	for i := range 1000 {
+		q.Add(i)
+	}
 	fmt.Println("Added jobs")
 }
