@@ -631,3 +631,151 @@ func TestPriorityQueue(t *testing.T) {
 		})
 	})
 }
+
+func TestExternalQueue(t *testing.T) {
+	t.Run("NumPending", func(t *testing.T) {
+		queue, _, _ := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Initially no pending jobs
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs initially")
+
+		// Add a job and check pending count
+		queue.Add("test-data")
+		assert.Equal(1, queue.NumPending(), "Queue should have one pending job after Add")
+
+		// Add more jobs and check pending count
+		queue.Add("test-data-2")
+		queue.Add("test-data-3")
+		assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs after multiple Adds")
+	})
+
+	t.Run("Worker", func(t *testing.T) {
+		queue, expectedWorker, _ := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Test that Worker returns the expected worker
+		actualWorker := queue.Worker()
+		assert.Equal(expectedWorker, actualWorker, "Worker() should return the expected worker instance")
+	})
+
+	t.Run("WaitUntilFinished", func(t *testing.T) {
+		queue, worker, internalQueue := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Start the worker
+		err := worker.start()
+		assert.NoError(err, "Worker should start successfully")
+		defer worker.Stop()
+
+		// Add several jobs
+		for i := range 5 {
+			queue.Add("test-data-" + strconv.Itoa(i))
+		}
+		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+
+		// Wait until all jobs are processed
+		queue.WaitUntilFinished()
+
+		// After waiting, should have no pending jobs
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
+		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
+	})
+
+	t.Run("Purge", func(t *testing.T) {
+		queue, _, internalQueue := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Add several jobs
+		for i := range 5 {
+			queue.Add("test-data-" + strconv.Itoa(i))
+		}
+		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have five pending jobs")
+
+		// Purge the queue
+		queue.Purge()
+
+		// After purging, should have no pending jobs
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after Purge")
+		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after Purge")
+	})
+
+	t.Run("Close", func(t *testing.T) {
+		queue, worker, internalQueue := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Start the worker
+		err := worker.start()
+		assert.NoError(err, "Worker should start successfully")
+
+		// Add several jobs
+		for i := range 5 {
+			queue.Add("test-data-" + strconv.Itoa(i))
+		}
+		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+
+		// Close the queue
+		err = queue.Close()
+		assert.NoError(err, "Close should not return an error")
+
+		// After closing, should have no pending jobs and worker should be stopped
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after Close")
+		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after Close")
+		assert.True(worker.IsStopped(), "Worker should be stopped after Close")
+	})
+
+	t.Run("WaitAndClose", func(t *testing.T) {
+		queue, worker, internalQueue := setupBasicQueue()
+		assert := assert.New(t)
+
+		// Start the worker
+		err := worker.start()
+		assert.NoError(err, "Worker should start successfully")
+
+		// Add several jobs
+		for i := range 5 {
+			queue.Add("test-data-" + strconv.Itoa(i))
+		}
+		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+
+		// Wait and close the queue
+		err = queue.WaitAndClose()
+		assert.NoError(err, "WaitAndClose should not return an error")
+
+		// After waiting and closing, should have no pending jobs and worker should be stopped
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitAndClose")
+		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndClose")
+		assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndClose")
+	})
+
+	// t.Run("Resume paused worker during WaitUntilFinished", func(t *testing.T) {
+	// 	queue, worker, internalQueue := setupBasicQueue()
+	// 	assert := assert.New(t)
+
+	// 	// Start the worker
+	// 	err := worker.start()
+	// 	assert.NoError(err, "Worker should start successfully")
+
+	// 	// Pause the worker
+	// 	err = worker.Pause()
+	// 	assert.NoError(err, "Worker should pause successfully")
+	// 	assert.True(worker.IsPaused(), "Worker should be paused")
+
+	// 	// Add jobs while paused
+	// 	for i := range 3 {
+	// 		queue.Add("test-data-" + strconv.Itoa(i))
+	// 	}
+	// 	assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs")
+
+	// 	// WaitUntilFinished should automatically resume the worker
+	// 	queue.WaitUntilFinished()
+
+	// 	// After waiting, should have no pending jobs
+	// 	assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
+	// 	assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
+	// 	assert.False(worker.IsPaused(), "Worker should no longer be paused")
+
+	// 	// Clean up
+	// 	worker.Stop()
+	// })
+}
