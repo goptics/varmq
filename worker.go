@@ -253,7 +253,10 @@ func (w *worker[T, JobType]) processNextJob() {
 			return
 		}
 
-		j = v.(JobType)
+		if j, ok = v.(JobType); !ok {
+			w.skipAndProcessNext()
+			return
+		}
 
 		j.setInternalQueue(w.Queue)
 	default:
@@ -261,9 +264,7 @@ func (w *worker[T, JobType]) processNextJob() {
 	}
 
 	if j.IsClosed() {
-		w.wg.Done()
-		// process next Job recursively if the current one is closed
-		w.processNextJob()
+		w.skipAndProcessNext()
 		return
 	}
 
@@ -273,6 +274,13 @@ func (w *worker[T, JobType]) processNextJob() {
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
+}
+
+// skipAndProcessNext is a helper function to skip the current job processing,
+// decrement the wait group counter, and move on to the next job.
+func (w *worker[T, JobType]) skipAndProcessNext() {
+	w.wg.Done()
+	w.processNextJob()
 }
 
 func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
