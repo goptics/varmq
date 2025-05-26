@@ -7,7 +7,6 @@ import (
 
 	"github.com/goptics/sqliteq"
 	"github.com/goptics/varmq"
-	"github.com/lucsky/cuid"
 )
 
 func main() {
@@ -22,7 +21,7 @@ func main() {
 	}
 
 	// Create a worker
-	worker := varmq.NewVoidWorker(func(data string) {
+	worker := varmq.NewWorker(func(data string) {
 		fmt.Printf("Processing: %s\n", data)
 		time.Sleep(1 * time.Second)
 		fmt.Printf("Processed: %s\n", data)
@@ -32,14 +31,8 @@ func main() {
 	queue := worker.WithPersistentQueue(persistentQueue)
 	defer queue.WaitUntilFinished()
 
-	items := make([]varmq.Item[string], 10)
-	for i := range items {
-		items[i] = varmq.Item[string]{
-			Value: fmt.Sprintf("Task %d", i),
-			ID:    cuid.New(),
-		}
+	for i := range 10 {
+		queue.Add(fmt.Sprintf("Task %d", i))
 	}
 
-	// Add multiple jobs at once using AddAll
-	queue.AddAll(items)
 }

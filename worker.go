@@ -6,18 +6,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/goptics/varmq/internal/collections"
+	"github.com/goptics/varmq/internal/linkedlist"
+	"github.com/goptics/varmq/internal/pool"
 	"github.com/goptics/varmq/utils"
 )
 
-// WorkerFunc represents a function that processes a Job and returns a result and an error.
-type WorkerFunc[T, R any] func(T) (R, error)
+// WorkerResultFunc represents a function that processes a Job and returns a result and an error.
+type WorkerResultFunc[T, R any] func(T) (R, error)
 
 // WorkerErrFunc represents a function that processes a Job and returns an error.
 type WorkerErrFunc[T any] func(T) error
 
-// VoidWorkerFunc represents a function that processes a Job and returns nothing.
-type VoidWorkerFunc[T any] func(T)
+// WorkerFunc represents a function that processes a Job and returns nothing.
+type WorkerFunc[T any] func(T)
 
 type status = uint32
 
@@ -29,28 +30,26 @@ const (
 )
 
 var (
-	errInvalidWorkerType = errors.New("invalid worker type passed to worker")
-	errRunningWorker     = errors.New("worker is already running")
-	errNotRunningWorker  = errors.New("worker is not running")
-	errSameConcurrency   = errors.New("worker already has the same concurrency")
+	errRunningWorker    = errors.New("worker is already running")
+	errNotRunningWorker = errors.New("worker is not running")
+	errSameConcurrency  = errors.New("worker already has the same concurrency")
 )
 
-type worker[T, R any] struct {
-	workerFunc      any
+type worker[T any, JobType iJob[T]] struct {
+	workerFunc      func(j JobType)
 	concurrency     atomic.Uint32
-	pool            *collections.List[poolNode[T, R]]
+	pool            *linkedlist.List[pool.Node[JobType]]
 	CurProcessing   atomic.Uint32
 	Queue           IBaseQueue
-	Cache           ICache
 	status          atomic.Uint32
 	jobPullNotifier utils.Notifier
 	wg              sync.WaitGroup
 	tickers         []*time.Ticker
-	configs
+	Configs         configs
 }
 
 // Worker represents a worker that processes Jobs.
-type Worker[T, R any] interface {
+type Worker interface {
 	// IsPaused returns whether the worker is paused.
 	IsPaused() bool
 	// IsStopped returns whether the worker is stopped.
@@ -65,39 +64,44 @@ type Worker[T, R any] interface {
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
 	NumIdleWorkers() int
-	// Copy returns a copy of the worker.
-	Copy(config ...any) IWorkerBinder[T, R]
 	// TunePool tunes (increase or decrease) the pool size of the worker.
 	TunePool(concurrency int) error
 	// Pause pauses the worker.
-	Pause() Worker[T, R]
+	Pause() error
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
-	PauseAndWait()
+	PauseAndWait() error
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
 	// Time complexity: O(n) where n is the number of channels
-	Stop()
+	Stop() error
 	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
 	// Time complexity: O(n) where n is the concurrency
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
 	// Time complexity: O(n) where n is the concurrency
 	Resume() error
+
+	queue() IBaseQueue
+	configs() configs
+	notifyToPullNextJobs()
+	wait()
 }
 
 // newWorker creates a new worker with the given worker function and configurations
-// The worker function can be any of WorkerFunc, WorkerErrFunc, or VoidWorkerFunc
-// It initializes the worker with the configured concurrency, cache, and other settings
-func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
+func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 	c := loadConfigs(configs...)
 
-	w := &worker[T, R]{
-		workerFunc:      wf,
+	w := &worker[T, iJob[T]]{
+		workerFunc: func(j iJob[T]) {
+			// TODO: The panic error will be passed through inside logger in future
+			utils.WithSafe("worker", func() {
+				wf(j.Payload())
+			})
+		},
+		pool:            linkedlist.New[pool.Node[iJob[T]]](),
 		concurrency:     atomic.Uint32{},
-		pool:            collections.NewList[poolNode[T, R]](),
 		Queue:           getNullQueue(),
-		Cache:           c.Cache,
 		jobPullNotifier: utils.NewNotifier(1),
-		configs:         c,
+		Configs:         c,
 		wg:              sync.WaitGroup{},
 		tickers:         make([]*time.Ticker, 0),
 	}
@@ -107,28 +111,99 @@ func newWorker[T, R any](wf any, configs ...any) *worker[T, R] {
 	return w
 }
 
-func (w *worker[T, R]) setQueue(q IBaseQueue) {
+func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worker[T, iResultJob[T, R]] {
+	c := loadConfigs(configs...)
+
+	w := &worker[T, iResultJob[T, R]]{
+		workerFunc: func(j iResultJob[T, R]) {
+			var panicErr error
+			var err error
+
+			panicErr = utils.WithSafe("worker", func() {
+				result, e := wf(j.Payload())
+				if e != nil {
+					err = e
+				} else {
+					j.saveAndSendResult(result)
+				}
+			})
+
+			// send error if any
+			if err := utils.SelectError(panicErr, err); err != nil {
+				j.saveAndSendError(err)
+			}
+		},
+		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
+		concurrency:     atomic.Uint32{},
+		Queue:           getNullQueue(),
+		jobPullNotifier: utils.NewNotifier(1),
+		Configs:         c,
+		wg:              sync.WaitGroup{},
+		tickers:         make([]*time.Ticker, 0),
+	}
+
+	w.concurrency.Store(c.Concurrency)
+
+	return w
+}
+
+func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJob[T]] {
+	c := loadConfigs(configs...)
+
+	w := &worker[T, iErrorJob[T]]{
+		workerFunc: func(j iErrorJob[T]) {
+			var panicErr error
+			var err error
+
+			panicErr = utils.WithSafe("worker", func() {
+				err = wf(j.Payload())
+			})
+
+			// send error if any
+			if err := utils.SelectError(panicErr, err); err != nil {
+				j.sendError(err)
+			}
+		},
+		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
+		concurrency:     atomic.Uint32{},
+		Queue:           getNullQueue(),
+		jobPullNotifier: utils.NewNotifier(1),
+		Configs:         c,
+		wg:              sync.WaitGroup{},
+		tickers:         make([]*time.Ticker, 0),
+	}
+
+	w.concurrency.Store(c.Concurrency)
+
+	return w
+}
+
+func (w *worker[T, JobType]) setQueue(q IBaseQueue) {
 	w.Queue = q
 }
 
-func (w *worker[T, R]) setCache(c ICache) {
-	w.Cache = c
+func (w *worker[T, JobType]) configs() configs {
+	return w.Configs
 }
 
-func (w *worker[T, R]) isNullCache() bool {
-	return w.Cache == getCache()
+func (w *worker[T, JobType]) queue() IBaseQueue {
+	return w.Queue
+}
+
+func (w *worker[T, JobType]) wait() {
+	w.wg.Wait()
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the specified channel
 // It continuously reads jobs from the channel and processes each one
 // Each job processing is wrapped in its own function with proper cleanup
 // Time complexity: O(1) per job
-func (w *worker[T, R]) spawnWorker(node *collections.Node[poolNode[T, R]]) {
-	for j := range node.Value.ch {
-		w.processSingleJob(j)
+func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType]]) {
+	for j := range node.Value.Read() {
+		w.workerFunc(j)
 
-		j.ChangeStatus(finished)
-		j.close()
+		j.changeStatus(finished)
+		j.Close()
 		w.freePoolNode(node)            // push back the free channel to the stack to be used for the next job
 		w.CurProcessing.Add(^uint32(0)) // Decrement the processing counter
 		w.notifyToPullNextJobs()
@@ -136,49 +211,10 @@ func (w *worker[T, R]) spawnWorker(node *collections.Node[poolNode[T, R]]) {
 	}
 }
 
-// processSingleJob processes a single job using the appropriate worker function type
-// It handles all three worker function types (VoidWorkerFunc, WorkerErrFunc, WorkerFunc)
-// and safely captures any panics that might occur during processing
-// It also sends any errors or results back to the job's result channel
-func (w *worker[T, R]) processSingleJob(j iJob[T, R]) {
-	var panicErr error
-	var err error
-
-	switch worker := w.workerFunc.(type) {
-	case VoidWorkerFunc[T]:
-		panicErr = utils.WithSafe("void worker", func() {
-			worker(j.Data())
-		})
-
-	case WorkerErrFunc[T]:
-		panicErr = utils.WithSafe("error worker", func() {
-			err = worker(j.Data())
-		})
-
-	case WorkerFunc[T, R]:
-		panicErr = utils.WithSafe("worker", func() {
-			result, e := worker(j.Data())
-			if e != nil {
-				err = e
-			} else {
-				j.SaveAndSendResult(result)
-			}
-		})
-	default:
-		// Log or handle the invalid type to avoid silent failures
-		err = errInvalidWorkerType
-	}
-
-	// send error if any
-	if err := selectError(panicErr, err); err != nil {
-		j.SaveAndSendError(err)
-	}
-}
-
 // startEventLoop starts the event loop that processes pending jobs when workers become available
 // It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
 // When all conditions are met, it processes the next job in the queue
-func (w *worker[T, R]) startEventLoop() {
+func (w *worker[T, JobType]) startEventLoop() {
 	w.jobPullNotifier.Receive(func() {
 		for w.IsRunning() && w.CurProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
@@ -187,7 +223,7 @@ func (w *worker[T, R]) startEventLoop() {
 }
 
 // processNextJob processes the next Job in the queue.
-func (w *worker[T, R]) processNextJob() {
+func (w *worker[T, JobType]) processNextJob() {
 	var v any
 	var ok bool
 	var ackId string
@@ -204,48 +240,52 @@ func (w *worker[T, R]) processNextJob() {
 	}
 
 	w.wg.Add(1)
-	var j iJob[T, R]
+	var j JobType
 
 	// check the type of the value
 	// and cast it to the appropriate job type
 	switch value := v.(type) {
-	case iJob[T, R]:
+	case JobType:
 		j = value
 	case []byte:
 		var err error
-		if j, err = parseToJob[T, R](value); err != nil {
+		if v, err = parseToJob[T](value); err != nil {
 			return
 		}
 
-		if cachedJob, ok := w.Cache.Load(j.ID()); ok {
-			j = cachedJob.(iJob[T, R])
-		} else {
-			w.Cache.Store(j.ID(), j)
-			j.SetInternalQueue(w.Queue)
+		if j, ok = v.(JobType); !ok {
+			w.skipAndProcessNext()
+			return
 		}
+
+		j.setInternalQueue(w.Queue)
 	default:
 		return
 	}
 
 	if j.IsClosed() {
-		w.wg.Done()
-		w.Cache.Delete(j.ID())
-		// process next Job recursively if the current one is closed
-		w.processNextJob()
+		w.skipAndProcessNext()
 		return
 	}
 
 	w.CurProcessing.Add(1)
-	j.ChangeStatus(processing)
-	j.SetAckId(ackId)
+	j.changeStatus(processing)
+	j.setAckId(ackId)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
-	w.pickNextChannel() <- j
+	w.sendToNextChannel(j)
 }
 
-func (w *worker[T, R]) freePoolNode(node *collections.Node[poolNode[T, R]]) {
+// skipAndProcessNext is a helper function to skip the current job processing,
+// decrement the wait group counter, and move on to the next job.
+func (w *worker[T, JobType]) skipAndProcessNext() {
+	w.wg.Done()
+	w.processNextJob()
+}
+
+func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
 	// If worker timeout is enabled, update the last used time
-	enabledIdleWorkersRemover := w.configs.IdleWorkerExpiryDuration > 0
+	enabledIdleWorkersRemover := w.Configs.IdleWorkerExpiryDuration > 0
 
 	if enabledIdleWorkersRemover {
 		node.Value.UpdateLastUsed()
@@ -261,65 +301,42 @@ func (w *worker[T, R]) freePoolNode(node *collections.Node[poolNode[T, R]]) {
 	node.Value.Close()
 }
 
-// pickNextChannel picks the next available channel for processing a Job.
+// sendToNextChannel sends the job to the next available channel for processing.
 // Time complexity: O(1)
-func (w *worker[T, R]) pickNextChannel() chan<- iJob[T, R] {
+func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
 	// pop the last free channel
 	if node := w.pool.PopBack(); node != nil {
-		return node.Value.ch
+		node.Value.Send(j)
+		return
 	}
 
 	// if the channel stack is empty, create a new channel and spawn a worker
-	return w.initPoolNode().Value.ch
+	w.initPoolNode().Value.Send(j)
 }
 
-func (w *worker[T, R]) initPoolNode() *collections.Node[poolNode[T, R]] {
-	node := collections.NewNode(newPoolNode[T, R](1))
+func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
+	node := linkedlist.NewNode(pool.NewNode[JobType](1))
 	// Start a worker goroutine to process jobs from this nodes channel
 	go w.spawnWorker(node)
+
 	return node
 }
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
-func (w *worker[T, R]) notifyToPullNextJobs() {
+func (w *worker[T, JobType]) notifyToPullNextJobs() {
 	w.jobPullNotifier.Send()
 }
 
-// goCleanupCache starts a background process that periodically cleans up finished jobs from the cache
-// It checks if a ticker is already running for this cache, and if so, returns without creating another one
-// If the interval is > 0, it will create a ticker that triggers cleanup at the specified interval
-func (w *worker[T, R]) goCleanupCache() {
-	interval := w.configs.CleanupCacheInterval
-
-	if interval == 0 {
-		return
-	}
-
-	ticker := time.NewTicker(interval)
-	w.tickers = append(w.tickers, ticker)
-
-	go func() {
-		for range ticker.C {
-			w.Cache.Range(func(key, value any) bool {
-				if j, ok := value.(iJob[T, R]); ok && j.Status() == "Closed" {
-					w.Cache.Delete(key)
-				}
-				return true
-			})
-		}
-	}()
-}
-
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
-func (w *worker[T, R]) numMinIdleWorkers() int {
-	percentage := w.configs.MinIdleWorkerRatio
+func (w *worker[T, JobType]) numMinIdleWorkers() int {
+	percentage := w.Configs.MinIdleWorkerRatio
 	concurrency := w.concurrency.Load()
 
 	return int(max((concurrency*uint32(percentage))/100, 1))
 }
 
-func (w *worker[T, R]) goRemoveIdleWorkers() {
-	interval := w.configs.IdleWorkerExpiryDuration
+func (w *worker[T, JobType]) goRemoveIdleWorkers() {
+	interval := w.Configs.IdleWorkerExpiryDuration
 
 	if interval == 0 {
 		return
@@ -351,7 +368,7 @@ func (w *worker[T, R]) goRemoveIdleWorkers() {
 	}()
 }
 
-func (w *worker[T, R]) stopTickers() {
+func (w *worker[T, JobType]) stopTickers() {
 	for _, ticker := range w.tickers {
 		ticker.Stop()
 	}
@@ -359,20 +376,9 @@ func (w *worker[T, R]) stopTickers() {
 	w.tickers = make([]*time.Ticker, 0)
 }
 
-func (w *worker[T, R]) waitUnitCurrentProcessing() {
-	for w.NumProcessing() != 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func (w *worker[T, R]) start() error {
+func (w *worker[T, JobType]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
-	}
-
-	// if cache is been set and cleanup interval is not set, use default cleanup interval for 10 minutes
-	if !w.isNullCache() && w.configs.CleanupCacheInterval == 0 {
-		w.configs.CleanupCacheInterval = 10 * time.Minute
 	}
 
 	defer w.notifyToPullNextJobs()
@@ -380,7 +386,6 @@ func (w *worker[T, R]) start() error {
 
 	go w.startEventLoop()
 
-	w.goCleanupCache()
 	w.goRemoveIdleWorkers()
 
 	// init the first worker by default
@@ -389,7 +394,7 @@ func (w *worker[T, R]) start() error {
 	return nil
 }
 
-func (w *worker[T, R]) TunePool(concurrency int) error {
+func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	if w.status.Load() != running {
 		return errNotRunningWorker
 	}
@@ -412,7 +417,7 @@ func (w *worker[T, R]) TunePool(concurrency int) error {
 
 	// if idle worker expiry duration is set, then no need to shrink the pool size
 	// cause it will be removed by the idle worker remover
-	if w.configs.IdleWorkerExpiryDuration != 0 {
+	if w.Configs.IdleWorkerExpiryDuration != 0 {
 		return nil
 	}
 
@@ -431,46 +436,34 @@ func (w *worker[T, R]) TunePool(concurrency int) error {
 	return nil
 }
 
-func (w *worker[T, R]) Copy(config ...any) IWorkerBinder[T, R] {
-	c := mergeConfigs(w.configs, config...)
-
-	newWorker := &worker[T, R]{
-		workerFunc:      w.workerFunc,
-		concurrency:     atomic.Uint32{},
-		Queue:           getNullQueue(),
-		Cache:           c.Cache,
-		pool:            collections.NewList[poolNode[T, R]](),
-		jobPullNotifier: utils.NewNotifier(1),
-		wg:              sync.WaitGroup{},
-		configs:         c,
-		tickers:         make([]*time.Ticker, 0),
-	}
-
-	newWorker.concurrency.Store(c.Concurrency)
-
-	return newQueues(newWorker)
-}
-
-func (w *worker[T, R]) NumConcurrency() int {
+func (w *worker[T, JobType]) NumConcurrency() int {
 	return int(w.concurrency.Load())
 }
 
-func (w *worker[T, R]) NumIdleWorkers() int {
+func (w *worker[T, JobType]) NumIdleWorkers() int {
 	return w.pool.Len()
 }
 
-func (w *worker[T, R]) Pause() Worker[T, R] {
+func (w *worker[T, JobType]) Pause() error {
+	if !w.IsRunning() {
+		return errNotRunningWorker
+	}
+
 	w.status.Store(paused)
-	return w
+	return nil
 }
 
-func (w *worker[T, R]) Stop() {
+func (w *worker[T, JobType]) Stop() error {
+	if !w.IsRunning() {
+		return errNotRunningWorker
+	}
+
 	defer w.status.Store(stopped)
-	w.stopTickers()
 
 	// wait until all ongoing processes are done to gracefully close the channels
-	w.jobPullNotifier.Close()
 	w.PauseAndWait()
+	w.stopTickers()
+	w.jobPullNotifier.Close()
 
 	// remove all nodes from the list and close the channels
 	for _, node := range w.pool.NodeSlice() {
@@ -478,10 +471,10 @@ func (w *worker[T, R]) Stop() {
 		w.pool.Remove(node)
 	}
 
-	w.Cache.Clear()
+	return nil
 }
 
-func (w *worker[T, R]) Restart() error {
+func (w *worker[T, JobType]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the channels if any.
 	w.PauseAndWait()
@@ -498,19 +491,19 @@ func (w *worker[T, R]) Restart() error {
 	return nil
 }
 
-func (w *worker[T, R]) IsPaused() bool {
+func (w *worker[T, JobType]) IsPaused() bool {
 	return w.status.Load() == paused
 }
 
-func (w *worker[T, R]) IsRunning() bool {
+func (w *worker[T, JobType]) IsRunning() bool {
 	return w.status.Load() == running
 }
 
-func (w *worker[T, R]) IsStopped() bool {
+func (w *worker[T, JobType]) IsStopped() bool {
 	return w.status.Load() == stopped
 }
 
-func (w *worker[T, R]) Status() string {
+func (w *worker[T, JobType]) Status() string {
 	switch w.status.Load() {
 	case initiated:
 		return "Initiated"
@@ -525,11 +518,11 @@ func (w *worker[T, R]) Status() string {
 	}
 }
 
-func (w *worker[T, R]) NumProcessing() int {
+func (w *worker[T, JobType]) NumProcessing() int {
 	return int(w.CurProcessing.Load())
 }
 
-func (w *worker[T, R]) Resume() error {
+func (w *worker[T, JobType]) Resume() error {
 	if w.status.Load() == initiated {
 		return w.start()
 	}
@@ -544,7 +537,11 @@ func (w *worker[T, R]) Resume() error {
 	return nil
 }
 
-func (w *worker[T, R]) PauseAndWait() {
-	w.Pause()
-	w.waitUnitCurrentProcessing()
+func (w *worker[T, JobType]) PauseAndWait() error {
+	if err := w.Pause(); err != nil {
+		return err
+	}
+
+	w.wg.Wait()
+	return nil
 }

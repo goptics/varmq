@@ -15,8 +15,8 @@ package varmq
 //	    return len(data), nil
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
-func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R] {
-	return newQueues(newWorker[T, R](wf, config...))
+func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
+	return newQueues(newWorker(wf, config...))
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
@@ -36,11 +36,11 @@ func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
 //	    return nil
 //	})
 //	queue := worker.BindQueue() // Bind to standard queue
-func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any] {
-	return newQueues(newWorker[T, any](wf, config...))
+func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IErrWorkerBinder[T] {
+	return newErrQueues(newErrWorker(wf, config...))
 }
 
-// NewVoidWorker creates a worker for operations that don't return any value (void functions).
+// NewResultWorker creates a worker for operations that don't return any value (void functions).
 // This is the most performant worker type as it doesn't use result channels except for panic handling.
 // VoidWorker is the only worker type that can be bound to distributed queues in addition to
 // standard, priority, and persistent queue types.
@@ -53,11 +53,11 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, an
 //
 // Example:
 //
-//	worker := NewVoidWorker(func(data int) {
+//	worker := NewResultWorker(func(data int) {
 //	    fmt.Printf("Processing: %d\n", data)
 //	})
 //	queue := worker.BindQueue() // Bind to standard queue
 //	distQueue := worker.Copy().WithDistributedQueue(myDistributedQueue) // Bind to provided distributed queue
-func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T] {
-	return newVoidQueues(newWorker[T, any](wf, config...))
+func NewResultWorker[T, R any](wf WorkerResultFunc[T, R], config ...any) IResultWorkerBinder[T, R] {
+	return newResultQueues(newResultWorker(wf, config...))
 }

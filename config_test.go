@@ -14,23 +14,11 @@ func TestConfig(t *testing.T) {
 
 		// Test default values
 		assert.Equal(t, uint32(1), c.Concurrency)
-		assert.NotNil(t, c.Cache)
-		assert.Equal(t, time.Duration(0), c.CleanupCacheInterval)
 		assert.NotNil(t, c.JobIdGenerator)
 		assert.Equal(t, "", c.JobIdGenerator())
 	})
 
 	t.Run("ConfigOptions", func(t *testing.T) {
-		t.Run("WithCache", func(t *testing.T) {
-			mockCache := getCache()
-			configFunc := WithCache(mockCache)
-
-			c := newConfig()
-			configFunc(&c)
-
-			assert.Equal(t, mockCache, c.Cache)
-		})
-
 		t.Run("WithConcurrency", func(t *testing.T) {
 			tests := []struct {
 				name        string
@@ -70,16 +58,6 @@ func TestConfig(t *testing.T) {
 					assert.Equal(t, tc.expected, result)
 				})
 			}
-		})
-
-		t.Run("WithAutoCleanupCache", func(t *testing.T) {
-			duration := 5 * time.Minute
-			configFunc := WithAutoCleanupCache(duration)
-
-			c := newConfig()
-			configFunc(&c)
-
-			assert.Equal(t, duration, c.CleanupCacheInterval)
 		})
 
 		t.Run("WithJobIdGenerator", func(t *testing.T) {
@@ -141,38 +119,28 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, uint32(5), c.Concurrency)
 
 			// Test with multiple config funcs
-			mockCache := getCache()
-			duration := 10 * time.Minute
 			expectedId := "custom-id"
 
 			c = loadConfigs(
 				WithConcurrency(3),
-				WithCache(mockCache),
-				WithAutoCleanupCache(duration),
 				WithJobIdGenerator(func() string { return expectedId }),
 			)
 
 			assert.Equal(t, uint32(3), c.Concurrency)
-			assert.Equal(t, mockCache, c.Cache)
-			assert.Equal(t, duration, c.CleanupCacheInterval)
 			assert.Equal(t, expectedId, c.JobIdGenerator())
 
 			// Test with a mixture of int and config funcs
 			c = loadConfigs(
 				4,
-				WithCache(mockCache),
 			)
 
 			assert.Equal(t, uint32(4), c.Concurrency)
-			assert.Equal(t, mockCache, c.Cache)
 		})
 
 		t.Run("MergeConfigs", func(t *testing.T) {
 			baseConfig := configs{
-				Concurrency:          1,
-				Cache:                getCache(),
-				CleanupCacheInterval: 0,
-				JobIdGenerator:       func() string { return "" },
+				Concurrency:    1,
+				JobIdGenerator: func() string { return "" },
 			}
 
 			// Test with no changes
@@ -184,15 +152,50 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, uint32(5), c.Concurrency)
 
 			// Test with config funcs
-			newCache := getCache()
 			c = mergeConfigs(
 				baseConfig,
-				WithCache(newCache),
 				WithConcurrency(3),
 			)
 
 			assert.Equal(t, uint32(3), c.Concurrency)
-			assert.Equal(t, newCache, c.Cache)
+		})
+	})
+
+	t.Run("JobConfigs", func(t *testing.T) {
+		t.Run("loadJobConfigs", func(t *testing.T) {
+			// Test with default job ID generator
+			qConfig := configs{
+				JobIdGenerator: func() string { return "default-id" },
+			}
+
+			// Test with no custom configs
+			jc := loadJobConfigs(qConfig)
+			assert.Equal(t, "default-id", jc.Id)
+
+			// Test with custom job ID
+			jc = loadJobConfigs(qConfig, WithJobId("custom-id"))
+			assert.Equal(t, "custom-id", jc.Id)
+
+			// Test with multiple configs (should apply in order)
+			jc = loadJobConfigs(qConfig,
+				WithJobId("first-id"),
+				WithJobId("second-id"),
+			)
+			assert.Equal(t, "second-id", jc.Id)
+		})
+
+		t.Run("WithJobId", func(t *testing.T) {
+			// Test with non-empty ID
+			configFunc := WithJobId("test-id")
+			jc := jobConfigs{Id: "original-id"}
+			configFunc(&jc)
+			assert.Equal(t, "test-id", jc.Id)
+
+			// Test with empty ID (should not change the original ID)
+			configFunc = WithJobId("")
+			jc = jobConfigs{Id: "original-id"}
+			configFunc(&jc)
+			assert.Equal(t, "original-id", jc.Id)
 		})
 	})
 }

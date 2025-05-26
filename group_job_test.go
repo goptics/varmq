@@ -1,8 +1,8 @@
 package varmq
 
 import (
+	"errors"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,16 +13,14 @@ func TestGroupJob(t *testing.T) {
 	t.Run("group job creation with newGroupJob", func(t *testing.T) {
 		// Create a new group job with buffer size 3
 		bufferSize := 3
-		gj := newGroupJob[string, int](bufferSize)
+		gj := newGroupJob[string](bufferSize)
 
 		assert := assert.New(t)
 
 		// Validate group job structure
 		assert.NotNil(gj, "group job should not be nil")
-		assert.NotNil(gj.resultChannel, "result channel should be initialized")
-		assert.NotNil(gj.done, "done channel should be initialized")
-		assert.NotNil(gj.len, "atomic counter should be initialized")
-		assert.Equal(bufferSize, gj.Len(), "initial length should match buffer size")
+		assert.NotNil(gj.wgc, "WaitGroup counter should be initialized")
+		assert.Equal(bufferSize, gj.NumPending(), "initial pending count should match buffer size")
 	})
 
 	t.Run("generate group ID", func(t *testing.T) {
@@ -40,204 +38,451 @@ func TestGroupJob(t *testing.T) {
 	t.Run("creating new job in a group", func(t *testing.T) {
 		// Create a new group job
 		bufferSize := 3
-		gj := newGroupJob[string, int](bufferSize)
+		gj := newGroupJob[string](bufferSize)
 
 		// Create a job within the group
 		jobData := "test group data"
 		jobId := "group-job-123"
-		newJob := gj.NewJob(jobData, jobConfigs{Id: jobId})
+		newJob := gj.newJob(jobData, jobConfigs{Id: jobId})
 
 		assert := assert.New(t)
 
 		// Validate the new job
 		assert.NotNil(newJob, "new job in group should not be nil")
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
-		assert.Equal(jobData, newJob.Data(), "job data should match")
-		assert.Equal(gj.resultChannel, newJob.resultChannel, "result channel should be shared with the group")
-		assert.Equal(gj.done, newJob.done, "done channel should be shared with the group")
-		assert.Equal(gj.len, newJob.len, "length counter should be shared with the group")
-	})
-
-	t.Run("getting results from a group job", func(t *testing.T) {
-		// Create a group job
-		bufferSize := 2
-		gj := newGroupJob[string, int](bufferSize)
-
-		assert := assert.New(t)
-
-		// Add a result to the channel
-		result := Result[int]{Data: 42, Err: nil}
-		gj.resultChannel.Send(result)
-
-		// Get results
-		ch, err := gj.Results()
-		assert.Nil(err, "getting results should not fail")
-		assert.NotNil(ch, "result channel should not be nil")
-
-		// Check if the result can be read
-		select {
-		case r := <-ch:
-			assert.Equal(result, r, "result value should match")
-		case <-time.After(time.Millisecond * 100):
-			t.Fatal("timeout waiting for result")
-		}
-	})
-
-	t.Run("wait for group job completion", func(t *testing.T) {
-		// Create a group job
-		bufferSize := 1
-		gj := newGroupJob[string, int](bufferSize)
-
-		// Setup done channel to simulate completion
-		go func() {
-			time.Sleep(time.Millisecond * 50)
-			close(gj.done)
-		}()
-
-		// Create a wait group to synchronize test completion
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		// Start waiting for job completion in a goroutine
-		go func() {
-			defer wg.Done()
-			gj.Wait()
-		}()
-
-		// Wait with timeout
-		waitCh := make(chan struct{})
-		go func() {
-			wg.Wait()
-			close(waitCh)
-		}()
-
-		select {
-		case <-waitCh:
-			// Success, wait completed
-		case <-time.After(time.Millisecond * 500):
-			t.Fatal("timeout waiting for job completion")
-		}
-	})
-
-	t.Run("getting length of a group job", func(t *testing.T) {
-		// Create a group job with buffer size 5
-		bufferSize := 5
-		gj := newGroupJob[string, int](bufferSize)
-
-		assert := assert.New(t)
-
-		// Verify initial length
-		assert.Equal(bufferSize, gj.Len(), "initial length should match buffer size")
-
-		// Simulate jobs completing by decrementing counter
-		gj.len.Add(^uint32(0)) // Subtract 1
-		assert.Equal(bufferSize-1, gj.Len(), "length should be decremented after a job completes")
-	})
-
-	t.Run("draining a group job", func(t *testing.T) {
-		// Create a group job
-		bufferSize := 3
-		gj := newGroupJob[string, int](bufferSize)
-
-		assert := assert.New(t)
-
-		// Add results to drain
-		gj.resultChannel.Send(Result[int]{Data: 1, Err: nil})
-		gj.resultChannel.Send(Result[int]{Data: 2, Err: nil})
-
-		// Drain the results
-		err := gj.Drain()
-		assert.Nil(err, "draining should not fail")
-
-		// After draining, we should be able to add more results
-		// (This verifies the drain is working and not blocking)
-		gj.resultChannel.Send(Result[int]{Data: 3, Err: nil})
-	})
-
-	t.Run("closing a group job", func(t *testing.T) {
-		// Create a group job with small buffer to avoid wait group blocking
-		bufferSize := 2
-		gj := newGroupJob[string, int](bufferSize)
-
-		assert := assert.New(t)
-
-		// Close the job - this should decrement the counter but not close channels yet
-		err := gj.close()
-		assert.Nil(err, "closing group job should not fail")
-		assert.Equal("Closed", gj.Status(), "job status should be 'Closed' after close")
-		assert.True(gj.IsClosed(), "job should be marked as closed")
-		assert.Equal(bufferSize-1, gj.Len(), "length should be decremented after close")
-
-		// Close another job from the group
-		jobData := "test data"
-		jobId := "test-job"
-		newJob := gj.NewJob(jobData, jobConfigs{Id: jobId})
-		err = newJob.close()
-		assert.Nil(err, "closing second job should not fail")
-		assert.Equal(bufferSize-2, gj.Len(), "length should be decremented again")
-
-		// Attempting to close again should fail
-		err = gj.close()
-		assert.NotNil(err, "closing an already closed job should fail")
-		assert.Contains(err.Error(), "already closed", "error message should indicate job is already closed")
-	})
-
-	t.Run("closing all jobs in a group", func(t *testing.T) {
-		// Create a group job with buffer size 2
-		bufferSize := 2
-		gj := newGroupJob[string, int](bufferSize)
-
-		// Create a second job in the group
-		job2 := gj.NewJob("test data", jobConfigs{Id: "test-job"})
-
-		assert := assert.New(t)
-
-		// Close both jobs, which should close the group
-		_ = gj.close()
-		_ = job2.close()
-
-		// Length should be 0 now
-		assert.Equal(0, gj.Len(), "length should be 0 after all jobs are closed")
-
-		// Check if the channels are closed by trying to add a result
-		// This should panic, so we recover from it
-		didPanic := false
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					didPanic = true
-				}
-			}()
-			gj.resultChannel.Send(Result[int]{Data: 1, Err: nil})
-		}()
-		assert.True(didPanic, "adding to a closed channel should panic")
+		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(gj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
 	})
 
 	t.Run("job status transitions in a group job", func(t *testing.T) {
 		// Create a new group job
 		bufferSize := 1
-		gj := newGroupJob[string, int](bufferSize)
+		gj := newGroupJob[string](bufferSize)
 
 		assert := assert.New(t)
 
-		// Initial status should be created (the job.status.Load() is defaulted to 0)
+		// Initial status should be default (0 value, which is 'created')
 		assert.Equal("Created", gj.Status(), "initial status should be 'Created'")
 
 		// Transition to queued
-		gj.ChangeStatus(queued)
+		gj.changeStatus(queued)
 		assert.Equal("Queued", gj.Status(), "status should be 'Queued' after change")
 
 		// Transition to processing
-		gj.ChangeStatus(processing)
+		gj.changeStatus(processing)
 		assert.Equal("Processing", gj.Status(), "status should be 'Processing' after change")
 
-		// Attempting to close a processing job should fail
-		err := gj.close()
-		assert.NotNil(err, "closing a processing job should fail")
-		assert.Contains(err.Error(), "processing", "error message should indicate job is processing")
-
 		// Transition to finished
-		gj.ChangeStatus(finished)
+		gj.changeStatus(finished)
 		assert.Equal("Finished", gj.Status(), "status should be 'Finished' after change")
+	})
+
+	t.Run("waiting for group job completion", func(t *testing.T) {
+		// Create a group job
+		bufferSize := 1
+		gj := newGroupJob[string](bufferSize)
+
+		assert := assert.New(t)
+
+		// Check the initial pending count
+		assert.Equal(bufferSize, gj.NumPending(), "initial pending count should match buffer size")
+
+		// Test Wait method in a goroutine
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			gj.Wait() // This should block until all jobs are done
+		}()
+
+		// Try to receive - this should timeout because Wait is blocking
+		select {
+		case <-done:
+			assert.Fail("Wait returned before jobs were completed")
+		case <-time.After(100 * time.Millisecond):
+			// This is expected - Wait is still blocking
+		}
+
+		// Complete all pending jobs
+		for i := 0; i < bufferSize; i++ {
+			gj.wgc.Done()
+		}
+
+		// Now should have 0 pending jobs
+		assert.Equal(0, gj.NumPending(), "pending count should be 0 after completion")
+
+		// Wait should now complete
+		select {
+		case <-done:
+			// This is expected - Wait has completed
+		case <-time.After(100 * time.Millisecond):
+			assert.Fail("Wait did not return after jobs were completed")
+		}
+	})
+
+	t.Run("closing a group job", func(t *testing.T) {
+		// Create a group job
+		bufferSize := 2
+		gj := newGroupJob[string](bufferSize)
+
+		// Set job status to make it closeable
+		gj.changeStatus(created)
+
+		assert := assert.New(t)
+
+		// Close the job
+		err := gj.Close()
+		assert.Nil(err, "closing group job should not fail")
+		assert.Equal("Closed", gj.Status(), "job status should be 'Closed' after close")
+		assert.True(gj.IsClosed(), "job should be marked as closed")
+	})
+
+	t.Run("closing a processing group job should fail", func(t *testing.T) {
+		// Create a group job
+		bufferSize := 2
+		gj := newGroupJob[string](bufferSize)
+
+		// Set job status to processing
+		gj.changeStatus(processing)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with processing error
+		err := gj.Close()
+		expectedError := errors.New("job is processing, you can't close processing job")
+		assert.NotNil(err, "closing a processing job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is processing")
+	})
+
+	t.Run("closing an already closed group job should fail", func(t *testing.T) {
+		// Create a group job
+		bufferSize := 2
+		gj := newGroupJob[string](bufferSize)
+
+		// Set job status to closed
+		gj.changeStatus(closed)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with already closed error
+		err := gj.Close()
+		expectedError := errors.New("job is already closed")
+		assert.NotNil(err, "closing an already closed job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is already closed")
+	})
+}
+
+func TestResultGroupJob(t *testing.T) {
+	t.Run("result group job creation", func(t *testing.T) {
+		// Create a new result group job with buffer size 3
+		bufferSize := 3
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		assert := assert.New(t)
+
+		// Validate result group job structure
+		assert.NotNil(rgj, "result group job should not be nil")
+		assert.NotNil(rgj.wgc, "WaitGroup counter should be initialized")
+		assert.Equal(bufferSize, rgj.NumPending(), "initial pending count should match buffer size")
+	})
+
+	t.Run("result group job Wait method", func(t *testing.T) {
+		// Create a result group job
+		bufferSize := 1
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		assert := assert.New(t)
+
+		// Test Wait method in a goroutine
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			rgj.Wait() // This should block until all jobs are done
+		}()
+
+		// Try to receive - this should timeout because Wait is blocking
+		select {
+		case <-done:
+			assert.Fail("Wait returned before jobs were completed")
+		case <-time.After(100 * time.Millisecond):
+			// This is expected - Wait is still blocking
+		}
+
+		// Complete all pending jobs
+		for i := 0; i < bufferSize; i++ {
+			rgj.wgc.Done()
+		}
+
+		// Wait should now complete
+		select {
+		case <-done:
+			// This is expected - Wait has completed
+		case <-time.After(100 * time.Millisecond):
+			assert.Fail("Wait did not return after jobs were completed")
+		}
+	})
+
+	// We're skipping the "result group job Results error branch" test because
+	// proper error simulation would require a complete reimplementation of
+	// the channel behavior, which is outside the scope of these tests
+
+	t.Run("creating new job in a result group", func(t *testing.T) {
+		// Create a new result group job
+		bufferSize := 3
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		// Create a job within the group
+		jobData := "test result group data"
+		jobId := "result-group-job-123"
+		newJob := rgj.newJob(jobData, jobConfigs{Id: jobId})
+
+		assert := assert.New(t)
+
+		// Validate the new job
+		assert.NotNil(newJob, "new job in result group should not be nil")
+		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
+		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(rgj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
+		assert.Equal(rgj.Response, newJob.Response, "Response should be shared with the group")
+	})
+
+	t.Run("getting results channel", func(t *testing.T) {
+		// Create a result group job
+		bufferSize := 2
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		assert := assert.New(t)
+
+		// Get results channel
+		ch, err := rgj.Results()
+		assert.Nil(err, "getting results channel should not fail")
+		assert.NotNil(ch, "results channel should not be nil")
+	})
+
+	t.Run("closing a result group job", func(t *testing.T) {
+		// Create a result group job
+		bufferSize := 2
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		// Set job status to make it closeable
+		rgj.changeStatus(created)
+
+		assert := assert.New(t)
+
+		// Close the job
+		err := rgj.Close()
+		assert.Nil(err, "closing result group job should not fail")
+		assert.Equal("Closed", rgj.Status(), "job status should be 'Closed' after close")
+		assert.True(rgj.IsClosed(), "job should be marked as closed")
+	})
+
+	t.Run("closing a result group job with all jobs complete", func(t *testing.T) {
+		// Create a result group job with just one job
+		bufferSize := 1
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		// Set job status to make it closeable
+		rgj.changeStatus(created)
+
+		assert := assert.New(t)
+
+		// Mark all jobs as done
+		rgj.wgc.Done()
+
+		// Close the job
+		err := rgj.Close()
+		assert.Nil(err, "closing result group job should not fail")
+		assert.Equal("Closed", rgj.Status(), "job status should be 'Closed' after close")
+	})
+
+	t.Run("closing a processing result group job should fail", func(t *testing.T) {
+		// Create a result group job
+		bufferSize := 2
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		// Set job status to processing
+		rgj.changeStatus(processing)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with processing error
+		err := rgj.Close()
+		expectedError := errors.New("job is processing, you can't close processing job")
+		assert.NotNil(err, "closing a processing job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is processing")
+	})
+
+	t.Run("closing an already closed result group job should fail", func(t *testing.T) {
+		// Create a result group job
+		bufferSize := 2
+		rgj := newResultGroupJob[string, int](bufferSize)
+
+		// Set job status to closed
+		rgj.changeStatus(closed)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with already closed error
+		err := rgj.Close()
+		expectedError := errors.New("job is already closed")
+		assert.NotNil(err, "closing an already closed job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is already closed")
+	})
+}
+
+func TestErrorGroupJob(t *testing.T) {
+	t.Run("error group job creation", func(t *testing.T) {
+		// Create a new error group job with buffer size 3
+		bufferSize := 3
+		egj := newErrorGroupJob[string](bufferSize)
+
+		assert := assert.New(t)
+
+		// Validate error group job structure
+		assert.NotNil(egj, "error group job should not be nil")
+		assert.NotNil(egj.wgc, "WaitGroup counter should be initialized")
+		assert.Equal(bufferSize, egj.NumPending(), "initial pending count should match buffer size")
+	})
+
+	t.Run("error group job Wait method", func(t *testing.T) {
+		// Create an error group job
+		bufferSize := 1
+		egj := newErrorGroupJob[string](bufferSize)
+
+		assert := assert.New(t)
+
+		// Test Wait method in a goroutine
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			egj.Wait() // This should block until all jobs are done
+		}()
+
+		// Try to receive - this should timeout because Wait is blocking
+		select {
+		case <-done:
+			assert.Fail("Wait returned before jobs were completed")
+		case <-time.After(100 * time.Millisecond):
+			// This is expected - Wait is still blocking
+		}
+
+		// Complete all pending jobs
+		for i := 0; i < bufferSize; i++ {
+			egj.wgc.Done()
+		}
+
+		// Wait should now complete
+		select {
+		case <-done:
+			// This is expected - Wait has completed
+		case <-time.After(100 * time.Millisecond):
+			assert.Fail("Wait did not return after jobs were completed")
+		}
+	})
+
+	t.Run("creating new job in an error group", func(t *testing.T) {
+		// Create a new error group job
+		bufferSize := 3
+		egj := newErrorGroupJob[string](bufferSize)
+
+		// Create a job within the group
+		jobData := "test error group data"
+		jobId := "error-group-job-123"
+		newJob := egj.newJob(jobData, jobConfigs{Id: jobId})
+
+		assert := assert.New(t)
+
+		// Validate the new job
+		assert.NotNil(newJob, "new job in error group should not be nil")
+		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
+		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(egj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
+		assert.Equal(egj.Response, newJob.Response, "Response should be shared with the group")
+	})
+
+	t.Run("getting errors channel", func(t *testing.T) {
+		// Create an error group job
+		bufferSize := 2
+		egj := newErrorGroupJob[string](bufferSize)
+
+		assert := assert.New(t)
+
+		// Get errors channel
+		ch, err := egj.Errs()
+		assert.Nil(err, "getting errors channel should not fail")
+		assert.NotNil(ch, "errors channel should not be nil")
+	})
+
+	// We're skipping the "error group job Errs error branch" test because
+	// proper error simulation would require a complete reimplementation of
+	// the channel behavior, which is outside the scope of these tests
+
+	t.Run("closing an error group job", func(t *testing.T) {
+		// Create an error group job
+		bufferSize := 2
+		egj := newErrorGroupJob[string](bufferSize)
+
+		// Set job status to make it closeable
+		egj.changeStatus(created)
+
+		assert := assert.New(t)
+
+		// Close the job
+		err := egj.Close()
+		assert.Nil(err, "closing error group job should not fail")
+		assert.Equal("Closed", egj.Status(), "job status should be 'Closed' after close")
+		assert.True(egj.IsClosed(), "job should be marked as closed")
+	})
+
+	t.Run("closing an error group job with all jobs complete", func(t *testing.T) {
+		// Create an error group job with just one job
+		bufferSize := 1
+		egj := newErrorGroupJob[string](bufferSize)
+
+		// Set job status to make it closeable
+		egj.changeStatus(created)
+
+		assert := assert.New(t)
+
+		// Mark all jobs as done
+		egj.wgc.Done()
+
+		// Close the job
+		err := egj.Close()
+		assert.Nil(err, "closing error group job should not fail")
+		assert.Equal("Closed", egj.Status(), "job status should be 'Closed' after close")
+	})
+
+	t.Run("closing a processing error group job should fail", func(t *testing.T) {
+		// Create an error group job
+		bufferSize := 2
+		egj := newErrorGroupJob[string](bufferSize)
+
+		// Set job status to processing
+		egj.changeStatus(processing)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with processing error
+		err := egj.Close()
+		expectedError := errors.New("job is processing, you can't close processing job")
+		assert.NotNil(err, "closing a processing job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is processing")
+	})
+
+	t.Run("closing an already closed error group job should fail", func(t *testing.T) {
+		// Create an error group job
+		bufferSize := 2
+		egj := newErrorGroupJob[string](bufferSize)
+
+		// Set job status to closed
+		egj.changeStatus(closed)
+
+		assert := assert.New(t)
+
+		// Try to close the job - should fail with already closed error
+		err := egj.Close()
+		expectedError := errors.New("job is already closed")
+		assert.NotNil(err, "closing an already closed job should fail")
+		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is already closed")
 	})
 }

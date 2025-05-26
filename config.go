@@ -10,8 +10,6 @@ type ConfigFunc func(*configs)
 
 type configs struct {
 	Concurrency              uint32
-	Cache                    ICache
-	CleanupCacheInterval     time.Duration
 	JobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
 	MinIdleWorkerRatio       uint8
@@ -20,7 +18,6 @@ type configs struct {
 func newConfig() configs {
 	return configs{
 		Concurrency: 1,
-		Cache:       getCache(),
 		JobIdGenerator: func() string {
 			return ""
 		},
@@ -71,21 +68,9 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 	}
 }
 
-func WithCache(cache ICache) ConfigFunc {
-	return func(c *configs) {
-		c.Cache = cache
-	}
-}
-
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
-	}
-}
-
-func WithAutoCleanupCache(duration time.Duration) ConfigFunc {
-	return func(c *configs) {
-		c.CleanupCacheInterval = duration
 	}
 }
 
@@ -101,4 +86,31 @@ func withSafeConcurrency(concurrency int) uint32 {
 		return utils.Cpus()
 	}
 	return uint32(concurrency)
+}
+
+type JobConfigFunc func(*jobConfigs)
+
+type jobConfigs struct {
+	Id string
+}
+
+func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
+	c := jobConfigs{
+		Id: qConfig.JobIdGenerator(),
+	}
+
+	for _, config := range config {
+		config(&c)
+	}
+
+	return c
+}
+
+func WithJobId(id string) JobConfigFunc {
+	return func(c *jobConfigs) {
+		if id == "" {
+			return
+		}
+		c.Id = id
+	}
 }

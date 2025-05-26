@@ -1,4 +1,4 @@
-package varmq
+package pool
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := newPoolNode[string, int](1)
+		node := NewNode[string](1)
 
 		// Check initial lastUsed time is zero
 		assert.True(node.GetLastUsed().IsZero(), "lastUsed time should be zero for a newly created node")
@@ -25,7 +25,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := newPoolNode[string, int](1)
+		node := NewNode[string](1)
 
 		// Initial time should be zero
 		assert.True(node.GetLastUsed().IsZero(), "lastUsed time should initially be zero")
@@ -47,7 +47,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := newPoolNode[string, int](1)
+		node := NewNode[string](1)
 
 		// Initial time should be zero
 		initialTime := node.GetLastUsed()
@@ -64,7 +64,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := newPoolNode[string, int](1)
+		node := NewNode[any](1)
 
 		// Close the channel
 		node.Close()

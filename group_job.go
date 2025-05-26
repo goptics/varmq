@@ -2,29 +2,33 @@ package varmq
 
 import (
 	"fmt"
-	"sync/atomic"
+	"sync"
+
+	"github.com/goptics/varmq/internal/helpers"
 )
 
 // groupJob represents a job that can be used in a group.
-type groupJob[T, R any] struct {
-	job[T, R]
-	done chan struct{}
-	len  *atomic.Uint32
+type groupJob[T any] struct {
+	job[T]
+	wgc *helpers.WgCounter
+}
+
+type PendingTracker interface {
+	NumPending() int
+}
+
+type EnqueuedGroupJob interface {
+	PendingTracker
+	Awaitable
 }
 
 const groupIdPrefixed = "g:"
 
-func newGroupJob[T, R any](bufferSize int) *groupJob[T, R] {
-	gj := &groupJob[T, R]{
-		job: job[T, R]{
-			resultChannel: newResultChannel[R](bufferSize),
-		},
-		done: make(chan struct{}),
-		len:  new(atomic.Uint32),
+func newGroupJob[T any](bufferSize int) *groupJob[T] {
+	gj := &groupJob[T]{
+		job: job[T]{},
+		wgc: helpers.NewWgCounter(bufferSize),
 	}
-
-	gj.len.Add(uint32(bufferSize))
-
 	return gj
 }
 
@@ -32,20 +36,82 @@ func generateGroupId(id string) string {
 	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T, R]) NewJob(data T, config jobConfigs) *groupJob[T, R] {
-	return &groupJob[T, R]{
-		job: job[T, R]{
-			id:            generateGroupId(config.Id),
-			Input:         data,
-			resultChannel: gj.resultChannel,
+func (gj *groupJob[T]) newJob(payload T, config jobConfigs) *groupJob[T] {
+	return &groupJob[T]{
+		job: job[T]{
+			id:      generateGroupId(config.Id),
+			payload: payload,
 		},
-		done: gj.done,
-		len:  gj.len,
+		wgc: gj.wgc,
 	}
 }
 
-func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch, err := gj.resultChannel.Read()
+func (gj *groupJob[T]) NumPending() int {
+	return gj.wgc.Count()
+}
+
+func (gj *groupJob[T]) Wait() {
+	gj.wgc.Wait()
+}
+
+func (gj *groupJob[T]) Close() error {
+	if err := gj.isCloseable(); err != nil {
+		return err
+	}
+
+	gj.ack()
+	gj.changeStatus(closed)
+	gj.wgc.Done()
+
+	return nil
+}
+
+type resultGroupJob[T, R any] struct {
+	resultJob[T, R]
+	wgc *helpers.WgCounter
+}
+
+func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
+	gj := &resultGroupJob[T, R]{
+		resultJob: resultJob[T, R]{
+			Response: helpers.NewResponse[Result[R]](bufferSize),
+		},
+		wgc: helpers.NewWgCounter(bufferSize),
+	}
+
+	return gj
+}
+
+type EnqueuedResultGroupJob[R any] interface {
+	Results() (<-chan Result[R], error)
+	PendingTracker
+	Awaitable
+	Drainer
+}
+
+func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGroupJob[T, R] {
+	return &resultGroupJob[T, R]{
+		resultJob: resultJob[T, R]{
+			job: job[T]{
+				id:      generateGroupId(config.Id),
+				payload: payload,
+			},
+			Response: gj.Response,
+		},
+		wgc: gj.wgc,
+	}
+}
+
+func (gj *resultGroupJob[T, R]) NumPending() int {
+	return gj.wgc.Count()
+}
+
+func (gj *resultGroupJob[T, R]) Wait() {
+	gj.wgc.Wait()
+}
+
+func (gj *resultGroupJob[T, R]) Results() (<-chan Result[R], error) {
+	ch, err := gj.Response.Read()
 
 	if err != nil {
 		tempCh := make(chan Result[R], 1)
@@ -56,45 +122,91 @@ func (gj *groupJob[T, R]) Results() (<-chan Result[R], error) {
 	return ch, nil
 }
 
-func (gj *groupJob[T, R]) Wait() {
-	<-gj.done
-}
-
-func (gj *groupJob[T, R]) Len() int {
-	return int(gj.len.Load())
-}
-
-// Drain discards the job's result and error values asynchronously.
-// This is useful when you no longer need the results but want to ensure
-// the channels are emptied.
-func (gj *groupJob[T, R]) Drain() error {
-	ch, err := gj.resultChannel.Read()
-
-	if ch != nil {
-		return err
-	}
-
-	go func() {
-		for range ch {
-			// drain
-		}
-	}()
-
-	return nil
-}
-
-func (gj *groupJob[T, R]) close() error {
+func (gj *resultGroupJob[T, R]) Close() error {
 	if err := gj.isCloseable(); err != nil {
 		return err
 	}
 
-	gj.Ack()
-	gj.ChangeStatus(closed)
+	gj.ack()
+	gj.changeStatus(closed)
+	gj.wgc.Done()
 
-	// Close the result channel if all jobs are done
-	if gj.len.Add(^uint32(0)) == 0 {
-		close(gj.done)
-		gj.CloseResultChannel()
+	if gj.wgc.Count() == 0 {
+		gj.Response.Close()
 	}
+
+	return nil
+}
+
+type errorGroupJob[T any] struct {
+	errorJob[T]
+	wgc *helpers.WgCounter
+}
+
+type EnqueuedErrGroupJob interface {
+	Errs() (<-chan error, error)
+	PendingTracker
+	Awaitable
+	Drainer
+}
+
+func newErrorGroupJob[T any](bufferSize int) *errorGroupJob[T] {
+	return &errorGroupJob[T]{
+		errorJob: errorJob[T]{
+			job: job[T]{
+				wg: sync.WaitGroup{},
+			},
+			Response: helpers.NewResponse[error](bufferSize),
+		},
+		wgc: helpers.NewWgCounter(bufferSize),
+	}
+}
+
+func (gj *errorGroupJob[T]) NumPending() int {
+	return gj.wgc.Count()
+}
+
+func (gj *errorGroupJob[T]) Wait() {
+	gj.wgc.Wait()
+}
+
+func (gj *errorGroupJob[T]) newJob(payload T, config jobConfigs) *errorGroupJob[T] {
+	return &errorGroupJob[T]{
+		errorJob: errorJob[T]{
+			job: job[T]{
+				id:      generateGroupId(config.Id),
+				payload: payload,
+			},
+			Response: gj.Response,
+		},
+		wgc: gj.wgc,
+	}
+}
+
+func (gj *errorGroupJob[T]) Errs() (<-chan error, error) {
+	ch, err := gj.Response.Read()
+
+	if err != nil {
+		tempCh := make(chan error, 1)
+		close(tempCh)
+		return tempCh, err
+	}
+
+	return ch, nil
+}
+
+func (gj *errorGroupJob[T]) Close() error {
+	if err := gj.isCloseable(); err != nil {
+		return err
+	}
+
+	gj.ack()
+	gj.changeStatus(closed)
+	gj.wgc.Done()
+
+	if gj.wgc.Count() == 0 {
+		gj.Response.Close()
+	}
+
 	return nil
 }

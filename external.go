@@ -1,18 +1,16 @@
 package varmq
 
 import (
-	"fmt"
-	"strings"
+	"io"
 	"time"
 )
 
-type externalQueue[T, R any] struct {
-	*worker[T, R]
+type externalQueue struct {
+	w Worker
 }
 
 type IExternalBaseQueue interface {
-	// NumPending returns the number of Jobs pending in the queue.
-	NumPending() int
+	PendingTracker
 	// Purge removes all pending Jobs from the queue.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	Purge()
@@ -22,15 +20,11 @@ type IExternalBaseQueue interface {
 }
 
 // IExternalQueue is the root interface of concurrent queue operations.
-type IExternalQueue[T, R any] interface {
+type IExternalQueue interface {
 	IExternalBaseQueue
 
 	// Worker returns the worker.
-	Worker() Worker[T, R]
-	// JobById returns the job with the given id.
-	JobById(id string) (EnqueuedJob[R], error)
-	// GroupsJobById returns the groups job with the given id.
-	GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error)
+	Worker() Worker
 	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
 	// Time complexity: O(n) where n is the number of pending Jobs
 	WaitUntilFinished()
@@ -39,84 +33,55 @@ type IExternalQueue[T, R any] interface {
 	WaitAndClose() error
 }
 
-func newExternalQueue[T, R any](worker *worker[T, R]) *externalQueue[T, R] {
-	return &externalQueue[T, R]{
-		worker: worker,
+func newExternalQueue(worker Worker) *externalQueue {
+	return &externalQueue{
+		w: worker,
 	}
 }
 
-func (eq *externalQueue[T, R]) postEnqueue(j iJob[T, R]) {
-	defer eq.notifyToPullNextJobs()
-	j.ChangeStatus(queued)
-
-	if id := j.ID(); id != "" {
-		eq.Cache.Store(id, j)
-	}
+func (eq *externalQueue) NumPending() int {
+	return eq.w.queue().Len()
 }
 
-func (eq *externalQueue[T, R]) NumPending() int {
-	return eq.Queue.Len()
+func (eq *externalQueue) Worker() Worker {
+	return eq.w
 }
 
-func (eq *externalQueue[T, R]) Worker() Worker[T, R] {
-	return eq.worker
-}
-
-func (eq *externalQueue[T, R]) JobById(id string) (EnqueuedJob[R], error) {
-	if val, ok := eq.Cache.Load(id); ok {
-		return val.(EnqueuedJob[R]), nil
-	}
-
-	return nil, fmt.Errorf("job not found for id: %s", id)
-}
-
-func (eq *externalQueue[T, R]) GroupsJobById(id string) (EnqueuedSingleGroupJob[R], error) {
-	if !strings.HasPrefix(id, groupIdPrefixed) {
-		id = generateGroupId(id)
-	}
-
-	if val, ok := eq.Cache.Load(id); ok {
-		return val.(EnqueuedSingleGroupJob[R]), nil
-	}
-
-	return nil, fmt.Errorf("groups job not found for id: %s", id)
-}
-
-func (eq *externalQueue[T, R]) WaitUntilFinished() {
+func (eq *externalQueue) WaitUntilFinished() {
 	// to ignore deadlock error if the queue is paused
-	if eq.IsPaused() {
-		eq.Resume()
+	if eq.w.IsPaused() {
+		eq.w.Resume()
 	}
 
-	eq.wg.Wait()
+	eq.w.wait()
 
 	// wait until all ongoing processes are done if still pending
-	for eq.NumPending() > 0 || eq.NumProcessing() > 0 {
+	for eq.NumPending() > 0 || eq.w.NumProcessing() > 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func (eq *externalQueue[T, R]) Purge() {
-	prevValues := eq.Queue.Values()
-	eq.Queue.Purge()
+func (eq *externalQueue) Purge() {
+	prevValues := eq.w.queue().Values()
+	eq.w.queue().Purge()
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
-		if j, ok := val.(iJob[T, R]); ok {
-			j.CloseResultChannel()
+		if j, ok := val.(io.Closer); ok {
+			j.Close()
 		}
 	}
 }
 
-func (q *externalQueue[T, R]) Close() error {
+func (q *externalQueue) Close() error {
 	q.Purge()
-	q.Stop()
+	q.w.Stop()
 	q.WaitUntilFinished()
 
 	return nil
 }
 
-func (q *externalQueue[T, R]) WaitAndClose() error {
+func (q *externalQueue) WaitAndClose() error {
 	q.WaitUntilFinished()
 	return q.Close()
 }

@@ -1,70 +1,41 @@
 package varmq
 
-type PersistentPriorityQueue[T, R any] interface {
-	PriorityQueue[T, R]
+type PersistentPriorityQueue[T any] interface {
+	IExternalQueue
+	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
+	// Time complexity: O(log n)
+	Add(data T, priority int, configs ...JobConfigFunc) bool
 }
 
-type persistentPriorityQueue[T, R any] struct {
-	*priorityQueue[T, R]
+type persistentPriorityQueue[T any] struct {
+	*priorityQueue[T]
 }
 
-func newPersistentPriorityQueue[T, R any](worker *worker[T, R], pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
+func newPersistentPriorityQueue[T any](worker *worker[T, iJob[T]], pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
 	worker.setQueue(pq)
-	return &persistentPriorityQueue[T, R]{
+	return &persistentPriorityQueue[T]{
 		priorityQueue: newPriorityQueue(worker, pq),
 	}
 }
 
-func (q *persistentPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob[R], bool) {
-	jobConfig := withRequiredJobId(loadJobConfigs(q.configs, configs...))
-
-	j := newJob[T, R](data, jobConfig)
+func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) bool {
+	j := newJob[T](data, loadJobConfigs(q.w.configs(), configs...))
 	val, err := j.Json()
+
 	if err != nil {
-		return nil, false
+		return false
 	}
-	j.SetInternalQueue(q.internalQueue)
 
 	if ok := q.internalQueue.Enqueue(val, priority); !ok {
-		j.close()
-		return nil, false
+		return false
 	}
 
-	q.postEnqueue(j)
+	q.w.notifyToPullNextJobs()
 
-	return j, true
+	return true
 }
 
-func (q *persistentPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedGroupJob[R] {
-	groupJob := newGroupJob[T, R](len(items))
-
-	for _, item := range items {
-		jConfigs := withRequiredJobId(loadJobConfigs(q.configs, WithJobId(item.ID)))
-
-		j := groupJob.NewJob(item.Value, jConfigs)
-		val, err := j.Json()
-		if err != nil {
-			j.close()
-			continue
-		}
-		j.SetInternalQueue(q.internalQueue)
-
-		if ok := q.internalQueue.Enqueue(val, item.Priority); !ok {
-			j.close()
-			continue
-		}
-
-		q.postEnqueue(j)
-	}
-
-	return groupJob
-}
-
-func (q *persistentPriorityQueue[T, R]) Purge() {
-	q.Queue.Purge()
-}
-
-func (q *persistentPriorityQueue[T, R]) Close() error {
-	defer q.Stop()
-	return q.Queue.Close()
+func (q *persistentPriorityQueue[T]) Close() error {
+	defer q.w.Stop()
+	return q.internalQueue.Close()
 }

@@ -1,17 +1,11 @@
 package varmq
 
 import (
-	"sync"
-
-	"github.com/goptics/varmq/internal/collections"
+	"github.com/goptics/varmq/internal/queues"
 )
 
-// IWorkerBinder is the base interface for binding workers to different queue types.
-// It provides methods to connect workers with various queue implementations, enabling
-// flexible worker-queue configurations. This interface extends the Worker interface
-// with queue binding capabilities for handling tasks of type T and producing results of type R.
-type IWorkerBinder[T, R any] interface {
-	Worker[T, R]
+type IErrWorkerBinder[T any] interface {
+	Worker
 
 	// BindQueue binds the worker to a standard Queue implementation.
 	// It creates a new Queue with default settings and connects the worker to it.
@@ -23,7 +17,46 @@ type IWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   queue := worker.BindQueue()
 	//   queue.Add(data) // Enqueues a job that will be processed by the worker
-	BindQueue() Queue[T, R]
+	BindQueue() ErrQueue[T]
+	// WithQueue binds the worker to a custom Queue implementation.
+	// This method allows you to use your own queue implementation as long as it
+	// satisfies the IQueue interface. This is useful when you need specialized
+	// queueing behavior beyond what the standard queue provides.
+	//
+	// Parameters:
+	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//
+	// Returns:
+	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customQueue := NewCustomQueue()
+	//   queue := worker.WithQueue(customQueue)
+	WithQueue(q IQueue) ErrQueue[T]
+
+	BindPriorityQueue() ErrPriorityQueue[T]
+
+	WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T]
+}
+
+// IWorkerBinder is the base interface for binding workers to different queue types.
+// It provides methods to connect workers with various queue implementations, enabling
+// flexible worker-queue configurations. This interface extends the Worker interface
+// with queue binding capabilities for handling tasks of type T and producing results of type R.
+type IResultWorkerBinder[T, R any] interface {
+	Worker
+
+	// BindQueue binds the worker to a standard Queue implementation.
+	// It creates a new Queue with default settings and connects the worker to it.
+	// This is the simplest way to get a standard FIFO queue working with this worker.
+	//
+	// Returns:
+	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   queue := worker.BindQueue()
+	//   queue.Add(data) // Enqueues a job that will be processed by the worker
+	BindQueue() ResultQueue[T, R]
 
 	// WithQueue binds the worker to a custom Queue implementation.
 	// This method allows you to use your own queue implementation as long as it
@@ -39,7 +72,7 @@ type IWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
 	//   queue := worker.WithQueue(customQueue)
-	WithQueue(q IQueue) Queue[T, R]
+	WithQueue(q IQueue) ResultQueue[T, R]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects the worker to it.
@@ -51,7 +84,7 @@ type IWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
 	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
-	BindPriorityQueue() PriorityQueue[T, R]
+	BindPriorityQueue() ResultPriorityQueue[T, R]
 
 	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
 	// This method allows you to use your own priority queue implementation as long as it
@@ -67,7 +100,66 @@ type IWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
-	WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T, R]
+	WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R]
+}
+
+type IWorkerBinder[T any] interface {
+	Worker
+	// BindQueue binds the worker to a standard Queue implementation.
+	// It creates a new Queue with default settings and connects the worker to it.
+	// This is the simplest way to get a standard FIFO queue working with this worker.
+	//
+	// Returns:
+	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   queue := worker.BindQueue()
+	//   queue.Add(data) // Enqueues a job that will be processed by the worker
+	BindQueue() Queue[T]
+
+	// WithQueue binds the worker to a custom Queue implementation.
+	// This method allows you to use your own queue implementation as long as it
+	// satisfies the IQueue interface. This is useful when you need specialized
+	// queueing behavior beyond what the standard queue provides.
+	//
+	// Parameters:
+	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//
+	// Returns:
+	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customQueue := NewCustomQueue() // satisfies IQueue interface
+	//   queue := worker.WithQueue(customQueue)
+	WithQueue(q IQueue) Queue[T]
+
+	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
+	// It creates a new PriorityQueue with default settings and connects the worker to it.
+	// Use this when you need to process jobs based on priority rather than FIFO order.
+	//
+	// Returns:
+	//   - PriorityQueue[T, R]: A fully configured PriorityQueue that processes jobs using this worker.
+	//
+	// Example usage:
+	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
+	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
+	BindPriorityQueue() PriorityQueue[T]
+
+	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
+	// This method allows you to use your own priority queue implementation as long as it
+	// satisfies the IPriorityQueue interface. This is useful when you need specialized
+	// priority-based queueing beyond what the standard implementation provides.
+	//
+	// Parameters:
+	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//
+	// Returns:
+	//   - PriorityQueue[T, R]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customPriorityQueue := NewCustomPriorityQueue()
+	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
+	WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T]
 
 	// WithPersistentQueue binds the worker to a PersistentQueue.
 	// PersistentQueue provides durability guarantees for jobs, ensuring they are not lost
@@ -78,11 +170,11 @@ type IWorkerBinder[T, R any] interface {
 	//   - pq IQueue: A queue implementation that provides persistence capabilities.
 	//
 	// Returns:
-	//   - PersistentQueue[T, R]: A persistent queue that ensures jobs are not lost and processes them with the worker.
+	//   - PersistentQueue[T, any]: A persistent queue that ensures jobs are not lost and processes them with the worker.
 	//
 	// Example usage:
 	//   persistentQueue := worker.WithPersistentQueue(redisQueue)
-	WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T, R]
+	WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T]
 
 	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
 	// This combines the benefits of persistence with priority-based processing. Jobs are
@@ -92,23 +184,12 @@ type IWorkerBinder[T, R any] interface {
 	//   - pq IPersistentPriorityQueue: A priority queue implementation that provides persistence capabilities.
 	//
 	// Returns:
-	//   - PersistentPriorityQueue[T, R]: A persistent priority queue that processes jobs based on priority
+	//   - PersistentPriorityQueue[T, any]: A persistent priority queue that processes jobs based on priority
 	//     while ensuring they are not lost, using this worker for processing.
 	//
 	// Example usage:
 	//   persistentPriorityQueue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
-	WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R]
-}
-
-// IVoidWorkerBinder extends IWorkerBinder with distributed queue capabilities
-// specifically for void workers that don't return results. This interface is specialized
-// for workers that perform actions but don't need to return any data, making them suitable
-// for distributed processing scenarios where results aren't needed or are handled externally.
-//
-// The void worker pattern is ideal for fire-and-forget operations like sending notifications,
-// updating external systems, or logging events where no response is required.
-type IVoidWorkerBinder[T any] interface {
-	IWorkerBinder[T, any]
+	WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T]
 
 	// WithDistributedQueue binds the void worker to a DistributedQueue implementation.
 	// Distributed queues allow job processing to be spread across multiple instances or processes,
@@ -126,7 +207,7 @@ type IVoidWorkerBinder[T any] interface {
 	//   distributedQueue := NewDistributedQueue() // satisfies IDistributedQueue interface,  might be backed by Redis or other systems
 	//   distributedQueue := voidWorker.WithDistributedQueue(distributedQueue)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
-	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, any]
+	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]
 
 	// WithDistributedPriorityQueue binds the void worker to a DistributedPriorityQueue implementation.
 	// This combines distributed processing with priority-based job ordering. Jobs are distributed
@@ -147,29 +228,21 @@ type IVoidWorkerBinder[T any] interface {
 	//   priorityQueue := NewDistributedPriorityQueue() // satisfies IDistributedPriorityQueue interface, might be backed by Redis or other systems
 	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
 	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
-	WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, any]
+	WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T]
 }
 
 // workerBinder implements both IWorkerBinder and IVoidWorkerBinder interfaces
-type workerBinder[T, R any] struct {
-	*worker[T, R]
-}
-
-// newQueues creates a standard worker binder that implements the IWorkerBinder interface
-// It wraps a worker instance and provides methods to bind it to various queue implementations
-func newQueues[T, R any](worker *worker[T, R]) IWorkerBinder[T, R] {
-	return &workerBinder[T, R]{
-		worker: worker,
-	}
+type workerBinder[T any] struct {
+	*worker[T, iJob[T]]
 }
 
 // newVoidQueues creates a void worker binder that implements the IVoidWorkerBinder interface
 // It is specifically for workers that don't return results (void workers)
 // This binder adds support for distributed queue types in addition to standard queue types
-func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
+func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
 	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
 	// This works because workerBinder implements all methods of IVoidWorkerBinder
-	return &workerBinder[T, any]{
+	return &workerBinder[T]{
 		worker: worker,
 	}
 }
@@ -177,70 +250,118 @@ func newVoidQueues[T any](worker *worker[T, any]) IVoidWorkerBinder[T] {
 // handleQueueSubscription processes notifications from distributed queues
 // When a job is enqueued in a distributed queue, this handler is called with the "enqueued" action
 // It then notifies the worker to pull and process the new job
-func (qs *workerBinder[T, R]) handleQueueSubscription(action string) {
+func (wb *workerBinder[T]) handleQueueSubscription(action string) {
 	switch action {
 	case "enqueued":
-		qs.worker.notifyToPullNextJobs()
+		wb.worker.notifyToPullNextJobs()
 	}
 }
 
 // BindQueue creates and binds a new standard queue to the worker
 // It returns a Queue interface that can be used to add jobs to the queue
-func (qs *workerBinder[T, R]) BindQueue() Queue[T, R] {
-	return qs.WithQueue(collections.NewQueue[iJob[T, R]]())
+func (wb *workerBinder[T]) BindQueue() Queue[T] {
+	return wb.WithQueue(queues.NewQueue[iJob[T]]())
 }
 
 // WithQueue binds an existing queue implementation to the worker
 // It starts the worker and returns a Queue interface to interact with the queue
-func (qs *workerBinder[T, R]) WithQueue(q IQueue) Queue[T, R] {
-	qs.worker.start()
+func (wb *workerBinder[T]) WithQueue(q IQueue) Queue[T] {
+	wb.worker.start()
 
-	return newQueue(qs.worker, q)
+	return newQueue(wb.worker, q)
 }
 
-func (q *workerBinder[T, R]) BindPriorityQueue() PriorityQueue[T, R] {
-	return q.WithPriorityQueue(collections.NewPriorityQueue[iJob[T, R]]())
+func (wb *workerBinder[T]) BindPriorityQueue() PriorityQueue[T] {
+	return wb.WithPriorityQueue(queues.NewPriorityQueue[iJob[T]]())
 }
 
-func (q *workerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T, R] {
-	q.worker.start()
+func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T] {
+	wb.worker.start()
 
-	return newPriorityQueue(q.worker, pq)
+	return newPriorityQueue(wb.worker, pq)
 }
 
-func (q *workerBinder[T, R]) WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T, R] {
-	q.worker.start()
-	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
-	if q.worker.isNullCache() {
-		q.setCache(new(sync.Map))
-	}
+func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T] {
+	wb.worker.start()
 
-	return newPersistentQueue(q.worker, pq)
+	return newPersistentQueue(wb.worker, pq)
 }
 
-func (q *workerBinder[T, R]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T, R] {
-	q.worker.start()
-	// if cache is not set, use sync.Map as the default cache, we need it for persistent queue
-	if q.worker.isNullCache() {
-		q.setCache(new(sync.Map))
-	}
+func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
+	wb.worker.start()
 
-	return newPersistentPriorityQueue(q.worker, pq)
+	return newPersistentPriorityQueue(wb.worker, pq)
 }
 
-func (qs *workerBinder[T, R]) WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T, R] {
-	qs.worker.start()
-	defer dq.Subscribe(qs.handleQueueSubscription)
+func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T] {
+	wb.worker.start()
+	defer dq.Subscribe(wb.handleQueueSubscription)
 
-	queue := NewDistributedQueue[T, R](dq)
-	qs.worker.setQueue(dq)
+	queue := NewDistributedQueue[T](dq)
+	wb.worker.setQueue(dq)
 	return queue
 }
 
-func (qs *workerBinder[T, R]) WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T, R] {
-	qs.worker.start()
-	defer dq.Subscribe(qs.handleQueueSubscription)
-	defer qs.worker.setQueue(dq)
+func (wb *workerBinder[T]) WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T] {
+	wb.worker.start()
+	defer dq.Subscribe(wb.handleQueueSubscription)
+	defer wb.worker.setQueue(dq)
 
-	return NewDistributedPriorityQueue[T, R](dq)
+	return NewDistributedPriorityQueue[T](dq)
+}
+
+type resultWorkerBinder[T, R any] struct {
+	*worker[T, iResultJob[T, R]]
+}
+
+func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
+	return &resultWorkerBinder[T, R]{
+		worker: worker,
+	}
+}
+
+func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
+	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]]())
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
+	rwb.worker.start()
+	return newResultQueue(rwb.worker, q)
+}
+
+func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
+	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]]())
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
+	rwb.worker.start()
+	return newResultPriorityQueue(rwb.worker, pq)
+}
+
+type errWorkerBinder[T any] struct {
+	*worker[T, iErrorJob[T]]
+}
+
+func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
+	return &errWorkerBinder[T]{
+		worker: worker,
+	}
+}
+
+func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
+	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
+	ewb.worker.start()
+	return newErrorQueue(ewb.worker, q)
+}
+
+func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
+	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
+	ewb.worker.start()
+	return newErrorPriorityQueue(ewb.worker, pq)
 }

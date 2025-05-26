@@ -1,14 +1,18 @@
 package varmq
 
 import (
+	"sync"
 	"testing"
+
+	"github.com/alitto/pond/v2"
+	"github.com/panjf2000/ants/v2"
 )
 
-func task(data int) (int, error) {
+func resultTask(data int) (int, error) {
 	return data * 2, nil
 }
 
-func voidTask(data int) {
+func task(data int) {
 	// do nothing
 	_ = data * 2
 }
@@ -17,18 +21,15 @@ func voidTask(data int) {
 func BenchmarkQueue_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a worker with the double function
-		worker := NewWorker(func(data int) (int, error) {
-			return data * 2, nil
-		})
+		worker := NewWorker(task)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
 
 		b.ResetTimer()
 		for j := 0; j < b.N; j++ {
-			if job, ok := q.Add(j); ok {
-				job.Result()
-			}
+			job, _ := q.Add(j)
+			job.Wait()
 		}
 	})
 
@@ -50,6 +51,37 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		}
 	})
 }
+func BenchmarkPond_Operations(b *testing.B) {
+	b.Run("Pond_Submit", func(b *testing.B) {
+		// Create a worker with the double function
+		pool := pond.NewPool(1)
+
+		b.ResetTimer()
+		for j := 0; j < b.N; j++ {
+			task := pool.Submit(func() {
+				task(j)
+			})
+			task.Wait()
+		}
+	})
+}
+func BenchmarkAnts_Operations(b *testing.B) {
+	b.Run("Ants_Submit", func(b *testing.B) {
+		// Create a worker with the double function
+		wg := sync.WaitGroup{}
+		pool, _ := ants.NewPool(1)
+
+		b.ResetTimer()
+		for j := 0; j < b.N; j++ {
+			wg.Add(1)
+			pool.Submit(func() {
+				task(j)
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	})
+}
 
 // BenchmarkQueue_ParallelOperations benchmarks parallel operations of Queue.
 func BenchmarkQueue_ParallelOperations(b *testing.B) {
@@ -64,7 +96,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				if job, ok := q.Add(1); ok {
-					job.Result()
+					job.Wait()
 				}
 			}
 		})
@@ -103,7 +135,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			if job, ok := q.Add(i, i%10); ok {
-				job.Result()
+				job.Wait()
 			}
 		}
 	})
@@ -140,7 +172,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				if job, ok := q.Add(1, 0); ok {
-					job.Result()
+					job.Wait()
 				}
 			}
 		})
@@ -167,11 +199,11 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 	})
 }
 
-// BenchmarkVoidWorker_Operations benchmarks operations with a VoidWorker.
-func BenchmarkVoidWorker_Operations(b *testing.B) {
+// BenchmarkResultWorker_Operations benchmarks operations with a VoidWorker.
+func BenchmarkResultWorker_Operations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -186,7 +218,7 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -203,11 +235,11 @@ func BenchmarkVoidWorker_Operations(b *testing.B) {
 	})
 }
 
-// BenchmarkVoidWorker_ParallelOperations benchmarks parallel operations with a VoidWorker.
-func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
+// BenchmarkResultWorker_ParallelOperations benchmarks parallel operations with a VoidWorker.
+func BenchmarkResultWorker_ParallelOperations(b *testing.B) {
 	b.Run("Add", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()
@@ -224,7 +256,7 @@ func BenchmarkVoidWorker_ParallelOperations(b *testing.B) {
 
 	b.Run("AddAll", func(b *testing.B) {
 		// Create a void worker (no return value)
-		worker := NewVoidWorker(voidTask)
+		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
 		defer q.WaitAndClose()

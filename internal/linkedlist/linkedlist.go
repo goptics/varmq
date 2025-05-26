@@ -1,4 +1,4 @@
-package collections
+package linkedlist
 
 import (
 	"sync"
@@ -62,7 +62,7 @@ func (l *List[T]) Init() *List[T] {
 }
 
 // NewList returns an initialized list
-func NewList[T any]() *List[T] {
+func New[T any]() *List[T] {
 	return new(List[T]).Init()
 }
 

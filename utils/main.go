@@ -35,3 +35,12 @@ func GoWithSafe(name string, fn func()) <-chan error {
 
 	return err
 }
+
+func SelectError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
