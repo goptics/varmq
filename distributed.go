@@ -21,7 +21,7 @@ func (q *distributedQueue[T]) NumPending() int {
 }
 
 func (q *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
-	j := newJob[T](data, loadJobConfigs(newConfig(), c...))
+	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()
 
