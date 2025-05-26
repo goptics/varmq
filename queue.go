@@ -244,7 +244,9 @@ func (eq *externalQueue) Purge() {
 
 func (q *externalQueue) Close() error {
 	q.Purge()
-	q.w.Stop()
+	if err := q.w.Stop(); err != nil {
+		return err
+	}
 	q.WaitUntilFinished()
 
 	return nil
