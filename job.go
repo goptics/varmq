@@ -180,6 +180,7 @@ func parseToJob[T any](data []byte) (any, error) {
 	case "Queued":
 		j.status.Store(queued)
 	case "Processing":
+		j.status.Store(processing)
 	case "Finished":
 		j.status.Store(finished)
 	case "Closed":
