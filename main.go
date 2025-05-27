@@ -5,7 +5,7 @@ package varmq
 // and if concurrency is less than 1, it defaults to number of CPU cores.
 // Parameters:
 //   - wf: Worker function that processes queue items
-//   - config: Optional configuration parameters (concurrency, cache settings, etc.)
+//   - config: Optional configuration parameters (concurrency, idle worker ratio, etc.)
 //
 // Example:
 //
@@ -27,7 +27,7 @@ func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
 // Unlike NewWorker, it can't be bound to distributed or persistent queue.
 // Parameters:
 //   - wf: Worker function that processes items and returns only error
-//   - config: Optional configuration parameters (concurrency, cache settings, etc.)
+//   - config: Optional configuration parameters (concurrency, idle worker ratio, etc.)
 //
 // Example:
 //
@@ -47,7 +47,7 @@ func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IErrWorkerBinder[T]
 // Unlike NewWorker, it can't be bound to distributed or persistent queue.
 // Parameters:
 //   - wf: Worker function that processes items and returns a result and error
-//   - config: Optional configuration parameters (concurrency, cache settings, etc.)
+//   - config: Optional configuration parameters (concurrency, idle worker ratio, etc.)
 //
 // Example:
 //
