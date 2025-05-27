@@ -79,7 +79,7 @@ type resultGroupJob[T, R any] struct {
 // cleanup capabilities. This interface is returned by the AddAll method when used with NewResultWorker,
 // allowing clients to collect job results through the Results() method
 type EnqueuedResultGroupJob[R any] interface {
-	Results() (<-chan Result[R], error)
+	Results() <-chan Result[R]
 	PendingTracker
 	Awaitable
 	Drainer
@@ -117,16 +117,8 @@ func (gj *resultGroupJob[T, R]) Wait() {
 	gj.wgc.Wait()
 }
 
-func (gj *resultGroupJob[T, R]) Results() (<-chan Result[R], error) {
-	ch, err := gj.Response.Read()
-
-	if err != nil {
-		tempCh := make(chan Result[R], 1)
-		close(tempCh)
-		return tempCh, err
-	}
-
-	return ch, nil
+func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
+	return gj.Response.Read()
 }
 
 func (gj *resultGroupJob[T, R]) Close() error {
@@ -155,7 +147,7 @@ type errorGroupJob[T any] struct {
 // cleanup capabilities. This interface is returned by the AddAll method when used with NewErrWorker,
 // allowing clients to collect errors generated during job processing through the Errs() method
 type EnqueuedErrGroupJob interface {
-	Errs() (<-chan error, error)
+	Errs() <-chan error
 	PendingTracker
 	Awaitable
 	Drainer
@@ -194,16 +186,8 @@ func (gj *errorGroupJob[T]) newJob(payload T, config jobConfigs) *errorGroupJob[
 	}
 }
 
-func (gj *errorGroupJob[T]) Errs() (<-chan error, error) {
-	ch, err := gj.Response.Read()
-
-	if err != nil {
-		tempCh := make(chan error, 1)
-		close(tempCh)
-		return tempCh, err
-	}
-
-	return ch, nil
+func (gj *errorGroupJob[T]) Errs() <-chan error {
+	return gj.Response.Read()
 }
 
 func (gj *errorGroupJob[T]) Close() error {

@@ -253,8 +253,7 @@ func TestResultGroupJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Get results channel
-		ch, err := rgj.Results()
-		assert.Nil(err, "getting results channel should not fail")
+		ch := rgj.Results()
 		assert.NotNil(ch, "results channel should not be nil")
 	})
 
@@ -407,8 +406,7 @@ func TestErrorGroupJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Get errors channel
-		ch, err := egj.Errs()
-		assert.Nil(err, "getting errors channel should not fail")
+		ch := egj.Errs()
 		assert.NotNil(ch, "errors channel should not be nil")
 	})
 

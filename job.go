@@ -45,7 +45,7 @@ type Awaitable interface {
 }
 
 type Drainer interface {
-	Drain() error
+	Drain()
 }
 
 // job represents a task to be executed by a worker. It maintains the task's
