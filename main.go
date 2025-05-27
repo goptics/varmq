@@ -13,9 +13,9 @@ package varmq
 //	    return len(data), nil
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
-//	distQueue := worker.BindDistributedQueue(myDistributedQueue) // Bind to distributed queue
 //	priorityQueue := worker.BindPriorityQueue() // Bind to priority queue
-//	persistentQueue := worker.BindPersistentQueue() // Bind to persistent queue
+//	persistentQueue := worker.BindPersistentQueue(myPersistentQueue) // Bind to persistent queue
+//	distQueue := worker.BindDistributedQueue(myDistributedQueue) // Bind to distributed queue
 func NewWorker[T any](wf WorkerFunc[T], config ...any) IWorkerBinder[T] {
 	return newQueues(newWorker(wf, config...))
 }
