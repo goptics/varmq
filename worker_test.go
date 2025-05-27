@@ -327,6 +327,69 @@ func TestWorkerGroup(t *testing.T) {
 
 				w.Stop()
 			})
+
+			t.Run("restart functionality", func(t *testing.T) {
+				// Track job processing
+				var jobsProcessed atomic.Uint32
+
+				// Create a worker function that increments counter
+				workerFn := func(data int) {
+					time.Sleep(5 * time.Millisecond) // Simulate work
+					jobsProcessed.Add(1)
+				}
+
+				// Create worker with concurrency 2
+				w := newWorker(workerFn, WithConcurrency(2))
+				assert := assert.New(t)
+
+				// Create a queue for testing
+				q := queues.NewQueue[iJob[int]]()
+				w.setQueue(q)
+
+				// Submit some initial jobs
+				for i := range 5 {
+					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
+				}
+
+				// Start worker
+				err := w.start()
+				assert.NoError(err, "Starting worker should not error")
+				assert.True(w.IsRunning(), "Worker should be running after start")
+
+				// Wait for some jobs to be processed
+				time.Sleep(50 * time.Millisecond)
+
+				// Store the state before restart
+				processedBeforeRestart := jobsProcessed.Load()
+				assert.Greater(processedBeforeRestart, uint32(0), "Some jobs should be processed before restart")
+
+				// Verify eventLoopSignal exists before restart
+				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should exist before restart")
+
+				// Restart the worker
+				err = w.Restart()
+				assert.NoError(err, "Restarting worker should not error")
+
+				// Verify worker is running after restart
+				assert.True(w.IsRunning(), "Worker should be running after restart")
+
+				// Verify the eventLoopSignal was recreated
+				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be recreated after restart")
+
+				// Submit more jobs after restart
+				for i := range 5 {
+					q.Enqueue(newJob(i+5, loadJobConfigs(w.configs())))
+				}
+
+				// Wait for jobs to be processed after restart
+				time.Sleep(100 * time.Millisecond)
+
+				// Verify more jobs were processed after restart
+				assert.Greater(jobsProcessed.Load(), processedBeforeRestart, "More jobs should be processed after restart")
+
+				// Clean up
+				w.Stop()
+			})
 		})
 
 		// Group 5: Pool management tests

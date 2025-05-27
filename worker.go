@@ -529,8 +529,6 @@ func (w *worker[T, JobType]) Restart() error {
 		return err
 	}
 
-	// resume the queue to process pending Jobs
-	w.Resume()
 	return nil
 }
 
