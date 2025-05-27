@@ -186,6 +186,9 @@ func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJ
 }
 
 func (w *worker[T, JobType]) setQueue(q IBaseQueue) {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+
 	w.Queue = q
 }
 
@@ -194,6 +197,9 @@ func (w *worker[T, JobType]) configs() configs {
 }
 
 func (w *worker[T, JobType]) queue() IBaseQueue {
+	w.mx.RLock()
+	defer w.mx.RUnlock()
+
 	return w.Queue
 }
 
@@ -205,7 +211,7 @@ func (w *worker[T, JobType]) wait() {
 		return
 	}
 
-	if w.IsRunning() && w.Queue.Len() == 0 && w.curProcessing.Load() == 0 {
+	if w.IsRunning() && w.queue().Len() == 0 && w.curProcessing.Load() == 0 {
 		return
 	}
 
@@ -336,7 +342,7 @@ func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobTyp
 	}
 
 	// If queue length is high or we're under our idle worker target, keep this worker
-	if w.Queue.Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	if w.queue().Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}

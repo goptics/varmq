@@ -1,8 +1,6 @@
 package varmq
 
-import (
-	"github.com/goptics/varmq/internal/queues"
-)
+import "github.com/goptics/varmq/internal/queues"
 
 type workerBinder[T any] struct {
 	*worker[T, iJob[T]]
