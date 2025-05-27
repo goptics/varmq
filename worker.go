@@ -274,7 +274,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 // When all conditions are met, it processes the next job in the queue
 func (w *worker[T, JobType]) startEventLoop() {
 	for range w.eventLoopSignal {
-		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queue().Len() > 0 {
+		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
 			w.processNextJob()
 		}
 	}
@@ -286,7 +286,7 @@ func (w *worker[T, JobType]) processNextJob() {
 	var ok bool
 	var ackId string
 
-	switch q := w.queue().(type) {
+	switch q := w.Queue.(type) {
 	case IAcknowledgeable:
 		v, ok, ackId = q.DequeueWithAckId()
 	default:
@@ -315,7 +315,7 @@ func (w *worker[T, JobType]) processNextJob() {
 			return
 		}
 
-		j.setInternalQueue(w.queue())
+		j.setInternalQueue(w.Queue)
 	default:
 		return
 	}
