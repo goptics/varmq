@@ -173,6 +173,21 @@ func parseToJob[T any](data []byte) (any, error) {
 		Id: view.Id,
 	})
 
+	// Set the status
+	switch view.Status {
+	case "Created":
+		j.status.Store(created)
+	case "Queued":
+		j.status.Store(queued)
+	case "Processing":
+	case "Finished":
+		j.status.Store(finished)
+	case "Closed":
+		j.status.Store(closed)
+	default:
+		return nil, fmt.Errorf("invalid status: %s", view.Status)
+	}
+
 	return j, nil
 }
 
