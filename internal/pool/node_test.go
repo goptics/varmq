@@ -78,4 +78,60 @@ func TestPoolNode(t *testing.T) {
 		// This should panic because the channel is closed
 		node.ch <- nil
 	})
+
+	t.Run("Read", func(t *testing.T) {
+		assert := assert.New(t)
+
+		// Create a new node with buffer size 1
+		node := NewNode[string](1)
+
+		// Verify Read returns a channel
+		readCh := node.Read()
+		assert.NotNil(readCh, "Read() should return a channel")
+
+		// Send a value through the channel directly
+		expectedValue := "test-value"
+		node.ch <- expectedValue
+
+		// Verify we can read the value through the returned channel
+		actualValue := <-readCh
+		assert.Equal(expectedValue, actualValue, "Value read from channel should match what was sent")
+	})
+
+	t.Run("Send", func(t *testing.T) {
+		assert := assert.New(t)
+
+		// Create a new node with buffer size 1
+		node := NewNode[string](1)
+
+		// Send a value using the Send method
+		expectedValue := "test-value"
+		node.Send(expectedValue)
+
+		// Verify we can read the value from the channel
+		actualValue := <-node.ch
+		assert.Equal(expectedValue, actualValue, "Value read from channel should match what was sent")
+	})
+
+	t.Run("Send and Read Integration", func(t *testing.T) {
+		assert := assert.New(t)
+
+		// Create a new node with buffer size 5
+		node := NewNode[string](5)
+		
+		// Get the read channel
+		readCh := node.Read()
+
+		// Send multiple values
+		expectedValues := []string{"value1", "value2", "value3"}
+		for _, val := range expectedValues {
+			node.Send(val)
+		}
+
+		// Read and verify each value
+		for _, expected := range expectedValues {
+			actual := <-readCh
+			assert.Equal(expected, actual, "Values should be received in the same order they were sent")
+		}
+	})
 }

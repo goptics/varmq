@@ -12,7 +12,7 @@ import (
 )
 
 // TestWorkerGroup demonstrates the test group pattern for worker tests
-func TestWorkerGroup(t *testing.T) {
+func TestWorkers(t *testing.T) {
 	// Main test function that groups all worker tests
 
 	t.Run("BasicWorker", func(t *testing.T) {
@@ -573,6 +573,118 @@ func TestWorkerGroup(t *testing.T) {
 				actualMinIdleWorkers := w.numMinIdleWorkers()
 				assert.Equal(expectedMinIdleWorkers, actualMinIdleWorkers, "numMinIdleWorkers should return the expected value")
 			})
+		})
+	})
+}
+
+// TestWorkerBinders tests the worker binder implementations
+func TestWorkerBinders(t *testing.T) {
+	// Test standard worker binder
+	t.Run("WorkerBinder", func(t *testing.T) {
+		// Create a worker
+		w := newWorker(func(data string) {})
+
+		// Create a worker binder
+		binder := newQueues(w)
+
+		// Test BindQueue
+		t.Run("BindQueue", func(t *testing.T) {
+			queue := binder.BindQueue()
+			assert.NotNil(t, queue, "Queue should not be nil")
+
+			// Check if returned type implements Queue interface
+			_, ok := queue.(Queue[string])
+			assert.True(t, ok, "Returned value should implement Queue interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		})
+
+		// Test BindPriorityQueue
+		t.Run("BindPriorityQueue", func(t *testing.T) {
+			pQueue := binder.BindPriorityQueue()
+			assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
+
+			// Check if returned type implements PriorityQueue interface
+			_, ok := pQueue.(PriorityQueue[string])
+			assert.True(t, ok, "Returned value should implement PriorityQueue interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+		})
+
+		// Skip actual test for distributed queue since it requires a real implementation
+		// Just verify the method exists
+		t.Run("HasDistributedQueueMethod", func(t *testing.T) {
+			// Use reflection to check if the method exists
+			binderType := reflect.TypeOf(binder)
+			_, exists := binderType.MethodByName("WithDistributedQueue")
+			assert.True(t, exists, "WorkerBinder should have WithDistributedQueue method")
+
+			_, exists = binderType.MethodByName("WithDistributedPriorityQueue")
+			assert.True(t, exists, "WorkerBinder should have WithDistributedPriorityQueue method")
+		})
+	})
+
+	// Test result worker binder
+	t.Run("ResultWorkerBinder", func(t *testing.T) {
+		// Create a result worker
+		w := newResultWorker[string, int](func(data string) (int, error) {
+			return len(data), nil
+		})
+
+		// Create a result worker binder
+		binder := newResultQueues(w)
+
+		// Test BindQueue
+		t.Run("BindQueue", func(t *testing.T) {
+			queue := binder.BindQueue()
+			assert.NotNil(t, queue, "ResultQueue should not be nil")
+
+			// Check if returned type implements ResultQueue[string, int] interface
+			_, ok := queue.(ResultQueue[string, int])
+			assert.True(t, ok, "Returned value should implement ResultQueue[string, int] interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		})
+
+		// Test BindPriorityQueue
+		t.Run("BindPriorityQueue", func(t *testing.T) {
+			pQueue := binder.BindPriorityQueue()
+			assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
+
+			// Check if returned type implements ResultPriorityQueue[string, int] interface
+			_, ok := pQueue.(ResultPriorityQueue[string, int])
+			assert.True(t, ok, "Returned value should implement ResultPriorityQueue[string, int] interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+		})
+	})
+
+	// Test error worker binder
+	t.Run("ErrWorkerBinder", func(t *testing.T) {
+		// Create an error worker
+		w := newErrWorker(func(data string) error {
+			return nil
+		})
+
+		// Create an error worker binder
+		binder := newErrQueues(w)
+
+		// Test BindQueue
+		t.Run("BindQueue", func(t *testing.T) {
+			queue := binder.BindQueue()
+			assert.NotNil(t, queue, "ErrQueue should not be nil")
+
+			// Check if returned type implements ErrQueue interface
+			_, ok := queue.(ErrQueue[string])
+			assert.True(t, ok, "Returned value should implement ErrQueue interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		})
+
+		// Test BindPriorityQueue
+		t.Run("BindPriorityQueue", func(t *testing.T) {
+			pQueue := binder.BindPriorityQueue()
+			assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
+
+			// Check if returned type implements ErrPriorityQueue interface
+			_, ok := pQueue.(ErrPriorityQueue[string])
+			assert.True(t, ok, "Returned value should implement ErrPriorityQueue interface")
+			assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
 		})
 	})
 }

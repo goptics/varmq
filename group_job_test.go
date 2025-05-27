@@ -103,7 +103,7 @@ func TestGroupJob(t *testing.T) {
 		}
 
 		// Complete all pending jobs
-		for i := 0; i < bufferSize; i++ {
+		for range bufferSize {
 			gj.wgc.Done()
 		}
 
