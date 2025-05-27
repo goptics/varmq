@@ -169,26 +169,9 @@ func parseToJob[T any](data []byte) (any, error) {
 		return nil, fmt.Errorf("failed to parse job: %w", err)
 	}
 
-	j := &job[T]{
-		id:      view.Id,
-		payload: view.Payload,
-	}
-
-	// Set the status
-	switch view.Status {
-	case "Created":
-		j.status.Store(created)
-	case "Queued":
-		j.status.Store(queued)
-	case "Processing":
-		j.status.Store(processing)
-	case "Finished":
-		j.status.Store(finished)
-	case "Closed":
-		j.status.Store(closed)
-	default:
-		return nil, fmt.Errorf("invalid status: %s", view.Status)
-	}
+	j := newJob(view.Payload, jobConfigs{
+		Id: view.Id,
+	})
 
 	return j, nil
 }
