@@ -273,6 +273,11 @@ func TestWorkerGroup(t *testing.T) {
 				assert.True(w.IsStopped(), "Worker should be stopped after Stop()")
 				assert.False(w.IsRunning(), "Worker should not be running after Stop()")
 				assert.False(w.IsPaused(), "Worker should not be paused after Stop()")
+
+				// Test the "Unknown" status case
+				// This is a direct manipulation of internal state for testing purposes
+				w.status.Store(99) // Invalid status value
+				assert.Equal("Unknown", w.Status(), "Status string for unknown status should be 'Unknown'")
 			})
 
 			t.Run("pause and wait functionality", func(t *testing.T) {
