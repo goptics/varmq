@@ -1,29 +1,18 @@
 package helpers
 
-import (
-	"errors"
-	"sync/atomic"
-)
-
 type Response[R any] struct {
-	ch       chan R
-	consumed atomic.Bool
-	res      R
+	ch  chan R
+	res R
 }
 
 func NewResponse[R any](cap int) *Response[R] {
 	return &Response[R]{
-		ch:       make(chan R, cap),
-		consumed: atomic.Bool{},
+		ch: make(chan R, cap),
 	}
 }
 
-func (rc *Response[R]) Read() (<-chan R, error) {
-	if rc.consumed.CompareAndSwap(false, true) {
-		return rc.ch, nil
-	}
-
-	return nil, errors.New("result channel has already been consumed")
+func (rc *Response[R]) Read() <-chan R {
+	return rc.ch
 }
 
 func (c *Response[R]) Send(res R) {
@@ -43,20 +32,14 @@ func (c *Response[R]) Response() (R, error) {
 	return c.res, nil
 }
 
-func (c *Response[R]) Drain() error {
-	ch, err := c.Read()
-
-	if err != nil {
-		return err
-	}
+func (c *Response[R]) Drain() {
+	ch := c.Read()
 
 	go func() {
 		for range ch {
-			// drain
+			// drain all values
 		}
 	}()
-
-	return nil
 }
 
 func (rc *Response[R]) Close() error {

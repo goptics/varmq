@@ -193,9 +193,7 @@ func TestQueue(t *testing.T) {
 			assert.NoError(t, err, "Worker should start successfully")
 			defer worker.Stop()
 
-			results, _ := groupJob.Results()
-			_, err = groupJob.Results()
-			assert.Error(t, err, "Results channel should not be accessible more than once")
+			results := groupJob.Results()
 
 			// Collect all results
 			var got []int
@@ -292,8 +290,7 @@ func TestQueue(t *testing.T) {
 			assert.NoError(t, err, "Worker should start successfully")
 			defer worker.Stop()
 
-			errors, err := groupJob.Errs()
-			assert.NoError(t, err, "Getting errors channel should not fail")
+			errors := groupJob.Errs()
 
 			// Collect all errors
 			errorCount := 0
@@ -522,7 +519,7 @@ func TestPriorityQueue(t *testing.T) {
 			assert.NoError(t, err, "Worker should start successfully")
 			defer worker.Stop()
 
-			results, _ := groupJob.Results()
+			results := groupJob.Results()
 
 			// Collect all results
 			var got []int
@@ -612,8 +609,7 @@ func TestPriorityQueue(t *testing.T) {
 			assert.NoError(t, err, "Worker should start successfully")
 			defer worker.Stop()
 
-			errors, err := groupJob.Errs()
-			assert.NoError(t, err, "Getting errors channel should not fail")
+			errors := groupJob.Errs()
 
 			// Collect all errors
 			errorCount := 0
@@ -748,34 +744,35 @@ func TestExternalQueue(t *testing.T) {
 		assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndClose")
 	})
 
-	// t.Run("Resume paused worker during WaitUntilFinished", func(t *testing.T) {
-	// 	queue, worker, internalQueue := setupBasicQueue()
-	// 	assert := assert.New(t)
+	t.Run("Resume paused worker during WaitUntilFinished", func(t *testing.T) {
+		queue, worker, internalQueue := setupBasicQueue()
+		assert := assert.New(t)
 
-	// 	// Start the worker
-	// 	err := worker.start()
-	// 	assert.NoError(err, "Worker should start successfully")
+		// Start the worker
+		err := worker.start()
+		assert.NoError(err, "Worker should start successfully")
 
-	// 	// Pause the worker
-	// 	err = worker.Pause()
-	// 	assert.NoError(err, "Worker should pause successfully")
-	// 	assert.True(worker.IsPaused(), "Worker should be paused")
+		// Pause the worker
+		err = worker.Pause()
+		assert.NoError(err, "Worker should pause successfully")
+		assert.True(worker.IsPaused(), "Worker should be paused")
 
-	// 	// Add jobs while paused
-	// 	for i := range 3 {
-	// 		queue.Add("test-data-" + strconv.Itoa(i))
-	// 	}
-	// 	assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs")
+		// Add jobs while paused
+		for i := range 3 {
+			queue.Add("test-data-" + strconv.Itoa(i))
+		}
 
-	// 	// WaitUntilFinished should automatically resume the worker
-	// 	queue.WaitUntilFinished()
+		assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs")
 
-	// 	// After waiting, should have no pending jobs
-	// 	assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
-	// 	assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
-	// 	assert.False(worker.IsPaused(), "Worker should no longer be paused")
+		// WaitUntilFinished should automatically resume the worker
+		queue.WaitUntilFinished()
 
-	// 	// Clean up
-	// 	worker.Stop()
-	// })
+		// After waiting, should have no pending jobs
+		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
+		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
+		assert.False(worker.IsPaused(), "Worker should no longer be paused")
+
+		// Clean up
+		worker.Stop()
+	})
 }
