@@ -230,26 +230,37 @@ func (w *worker[T, JobType]) spawnWorker(node *linkedlist.Node[pool.Node[JobType
 		j.changeStatus(finished)
 		j.Close()
 		w.freePoolNode(node) // push back the free channel to the stack to be used for the next job
-		processing := w.curProcessing.Add(^uint32(0))
-
-		w.mx.Lock()
-		// if there is no waiters or processing is not zero, notify to pull next jobs
-		if len(w.waiters) == 0 || processing != 0 {
-			w.mx.Unlock()
-			w.notifyToPullNextJobs()
-			continue
-		}
-
-		if w.IsPaused() || (w.IsRunning() && w.Queue.Len() == 0) {
-			for _, waiter := range w.waiters {
-				close(waiter)
-			}
-			w.waiters = make([]chan struct{}, 0)
-		}
-		w.mx.Unlock()
-
+		w.releaseWaiters(w.curProcessing.Add(^uint32(0)))
 		w.notifyToPullNextJobs()
 	}
+}
+
+func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
+	// Early return if there's still processing happening
+	if processing != 0 {
+		return
+	}
+
+	w.mx.Lock()
+	defer w.mx.Unlock()
+
+	// Nothing to do if there are no waiters
+	if len(w.waiters) == 0 {
+		return
+	}
+
+	// Only release waiters if worker is paused or if running with an empty queue
+	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.Queue.Len() == 0); !shouldReleaseWaiters {
+		return
+	}
+
+	// Close all waiter channels to signal waiting goroutines
+	for _, waiter := range w.waiters {
+		close(waiter)
+	}
+
+	// Reset the waiters slice
+	w.waiters = make([]chan struct{}, 0)
 }
 
 // startEventLoop starts the event loop that processes pending jobs when workers become available
@@ -529,8 +540,6 @@ func (w *worker[T, JobType]) Restart() error {
 		return err
 	}
 
-	// resume the queue to process pending Jobs
-	w.Resume()
 	return nil
 }
 

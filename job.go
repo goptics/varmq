@@ -169,10 +169,9 @@ func parseToJob[T any](data []byte) (any, error) {
 		return nil, fmt.Errorf("failed to parse job: %w", err)
 	}
 
-	j := &job[T]{
-		id:      view.Id,
-		payload: view.Payload,
-	}
+	j := newJob(view.Payload, jobConfigs{
+		Id: view.Id,
+	})
 
 	// Set the status
 	switch view.Status {
