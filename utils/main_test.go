@@ -24,7 +24,7 @@ func TestWithSafe(t *testing.T) {
 		// Define a function that doesn't panic
 		fn := func() {
 			// Do some work without panicking
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				_ = i * i
 			}
 		}
@@ -59,7 +59,7 @@ func TestGoWithSafe(t *testing.T) {
 		// Define a function that doesn't panic
 		fn := func() {
 			// Do some work without panicking
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				_ = i * i
 			}
 		}
@@ -141,7 +141,6 @@ func TestSelectError(t *testing.T) {
 		},
 	}
 
-	// Run the tests
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := SelectError(tc.errors...)

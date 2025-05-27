@@ -5,15 +5,12 @@ import (
 	"sync/atomic"
 )
 
-// Response manages result channels and provides safe operations for receiving
-// both successful results and errors from asynchronous operations.
 type Response[R any] struct {
-	ch       chan R      // Channel for sending/receiving results
-	consumed atomic.Bool // Tracks if the channel has been consumed
-	res      R           // Stores the last result/error
+	ch       chan R
+	consumed atomic.Bool
+	res      R
 }
 
-// NewResponse creates a new Response with the specified buffer size.
 func NewResponse[R any](cap int) *Response[R] {
 	return &Response[R]{
 		ch:       make(chan R, cap),
@@ -21,8 +18,6 @@ func NewResponse[R any](cap int) *Response[R] {
 	}
 }
 
-// Read returns the underlying channel for reading.
-// The channel can only be consumed once.
 func (rc *Response[R]) Read() (<-chan R, error) {
 	if rc.consumed.CompareAndSwap(false, true) {
 		return rc.ch, nil
@@ -38,9 +33,6 @@ func (c *Response[R]) Send(res R) {
 	c.ch <- res
 }
 
-// Result blocks until the job completes and returns the result and any error.
-// If the job's result channel is closed without a value, it returns the zero value
-// and any error from the error channel.
 func (c *Response[R]) Response() (R, error) {
 	result, ok := <-c.ch
 
@@ -67,7 +59,6 @@ func (c *Response[R]) Drain() error {
 	return nil
 }
 
-// Close closes the Response.
 func (rc *Response[R]) Close() error {
 	close(rc.ch)
 	return nil

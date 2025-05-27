@@ -1,10 +1,11 @@
 package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
-// where jobs can be recovered even after application restarts. All jobs must have unique IDs.
 type PersistentQueue[T any] interface {
 	IExternalQueue
 
+	// Add adds a job with the given data to the persistent queue
+	// It returns true if the job was added successfully
 	Add(data T, configs ...JobConfigFunc) bool
 }
 
@@ -23,9 +24,8 @@ func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue) Persi
 }
 
 // Add adds a job with the given data to the persistent queue
-// It requires a job ID to be provided in the job config for persistence
 func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
-	j := newJob[T](data, loadJobConfigs(q.w.configs(), configs...))
+	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 	val, err := j.Json()
 
 	if err != nil {

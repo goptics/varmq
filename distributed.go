@@ -1,8 +1,9 @@
 package varmq
 
+// DistributedQueue is a external queue wrapper of an any IDistributedQueue
 type DistributedQueue[T any] interface {
 	IExternalBaseQueue
-	// Time complexity: O(1)
+	// Add data to the queue
 	Add(data T, configs ...JobConfigFunc) bool
 }
 

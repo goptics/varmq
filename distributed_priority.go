@@ -1,8 +1,10 @@
 package varmq
 
+// DistributedPriorityQueue is a external queue wrapper of an any IDistributedPriorityQueue
 type DistributedPriorityQueue[T any] interface {
 	IExternalBaseQueue
-	// Time complexity: O(log n)
+
+	// Add data to the queue with priority
 	Add(data T, priority int, configs ...JobConfigFunc) bool
 }
 
@@ -21,7 +23,7 @@ func (q *distributedPriorityQueue[T]) NumPending() int {
 }
 
 func (q *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFunc) bool {
-	j := newJob[T](data, loadJobConfigs(newConfig(), c...))
+	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()
 

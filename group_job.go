@@ -17,6 +17,9 @@ type PendingTracker interface {
 	NumPending() int
 }
 
+// EnqueuedGroupJob is an interface representing a group job that has been successfully enqueued.
+// It extends PendingTracker and Awaitable
+// This interface is returned by the AddAll method when used with NewWorker
 type EnqueuedGroupJob interface {
 	PendingTracker
 	Awaitable
@@ -71,6 +74,17 @@ type resultGroupJob[T, R any] struct {
 	wgc *helpers.WgCounter
 }
 
+// EnqueuedResultGroupJob is an interface representing a result group job that has been successfully enqueued.
+// It extends PendingTracker, Awaitable, and Drainer interfaces to provide tracking, waiting, and
+// cleanup capabilities. This interface is returned by the AddAll method when used with NewResultWorker,
+// allowing clients to collect job results through the Results() method
+type EnqueuedResultGroupJob[R any] interface {
+	Results() (<-chan Result[R], error)
+	PendingTracker
+	Awaitable
+	Drainer
+}
+
 func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	gj := &resultGroupJob[T, R]{
 		resultJob: resultJob[T, R]{
@@ -80,13 +94,6 @@ func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	}
 
 	return gj
-}
-
-type EnqueuedResultGroupJob[R any] interface {
-	Results() (<-chan Result[R], error)
-	PendingTracker
-	Awaitable
-	Drainer
 }
 
 func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGroupJob[T, R] {
@@ -143,6 +150,10 @@ type errorGroupJob[T any] struct {
 	wgc *helpers.WgCounter
 }
 
+// EnqueuedErrGroupJob is an interface representing an error group job that has been successfully enqueued.
+// It extends PendingTracker, Awaitable, and Drainer interfaces to provide tracking, waiting, and
+// cleanup capabilities. This interface is returned by the AddAll method when used with NewErrWorker,
+// allowing clients to collect errors generated during job processing through the Errs() method
 type EnqueuedErrGroupJob interface {
 	Errs() (<-chan error, error)
 	PendingTracker

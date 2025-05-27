@@ -1,8 +1,6 @@
 package varmq
 
-import (
-	"io"
-)
+import "io"
 
 // queue is the base implementation of the Queue interface
 // It contains an externalQueue for worker management and an internalQueue for job storage
@@ -78,10 +76,10 @@ type resultQueue[T, R any] struct {
 
 type ResultQueue[T, R any] interface {
 	IExternalQueue
-	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Add adds a new Job to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedResultGroupJob to handle the job with result receiving.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
 }
@@ -133,10 +131,10 @@ type errorQueue[T any] struct {
 
 type ErrQueue[T any] interface {
 	IExternalQueue
-	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// Add adds a new Job to the queue and returns a EnqueuedErrJob to handle the job with error receiving.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedErrGroupJob to handle the job with error receiving.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }

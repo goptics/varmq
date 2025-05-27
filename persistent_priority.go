@@ -2,8 +2,8 @@ package varmq
 
 type PersistentPriorityQueue[T any] interface {
 	IExternalQueue
-	// Add adds a new Job with the given priority to the queue and returns a channel to receive the result.
-	// Time complexity: O(log n)
+	// Add adds a new Job with the given priority to the queue
+	// It returns true if the job was added successfully
 	Add(data T, priority int, configs ...JobConfigFunc) bool
 }
 

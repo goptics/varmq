@@ -12,12 +12,18 @@ import (
 )
 
 // WorkerResultFunc represents a function that processes a Job and returns a result and an error.
+// This is useful for operations where you need to return a result value.
+// Used with NewResultWorker
 type WorkerResultFunc[T, R any] func(T) (R, error)
 
 // WorkerErrFunc represents a function that processes a Job and returns an error.
+// This is useful for operations where you only care about success/failure status.
+// Used with NewErrWorker
 type WorkerErrFunc[T any] func(T) error
 
 // WorkerFunc represents a function that processes a Job and returns nothing.
+// This is useful for operations where you don't need to return a result value.
+// Used with NewWorker
 type WorkerFunc[T any] func(T)
 
 type status = uint32
@@ -331,13 +337,13 @@ func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobTyp
 // sendToNextChannel sends the job to the next available channel for processing.
 // Time complexity: O(1)
 func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
-	// pop the last free channel
+	// pop the last free node
 	if node := w.pool.PopBack(); node != nil {
 		node.Value.Send(j)
 		return
 	}
 
-	// if the channel stack is empty, create a new channel and spawn a worker
+	// if the pool is empty, create a new node and spawn a worker
 	w.initPoolNode().Value.Send(j)
 }
 
@@ -444,7 +450,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	// if new concurrency is greater than the old concurrency, then notify to pull next jobs
 	// cause it will be extended by the event loop when it needs
 	if safeConcurrency > oldConcurrency {
-		defer w.notifyToPullNextJobs()
+		w.notifyToPullNextJobs()
 		return nil
 	}
 
@@ -458,7 +464,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
 	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
-		// since the channel might be busy processing a job, we need to retry until we get the channels
+		// since the pool node might be busy processing a job, we need to retry until we get the nodes
 		if node := w.pool.PopBack(); node != nil {
 			node.Value.Close()
 			w.pool.Remove(node)
@@ -493,7 +499,7 @@ func (w *worker[T, JobType]) Stop() error {
 
 	defer w.status.Store(stopped)
 
-	// wait until all ongoing processes are done to gracefully close the channels
+	// wait until all ongoing processes are done to gracefully close the pool nodes
 	w.PauseAndWait()
 	w.stopTickers()
 
@@ -501,7 +507,7 @@ func (w *worker[T, JobType]) Stop() error {
 	close(w.eventLoopSignal)
 	w.mx.Unlock()
 
-	// remove all nodes from the list and close the channels
+	// remove all nodes from the list and close the pool nodes
 	for _, node := range w.pool.NodeSlice() {
 		node.Value.Close()
 		w.pool.Remove(node)
@@ -512,7 +518,7 @@ func (w *worker[T, JobType]) Stop() error {
 
 func (w *worker[T, JobType]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
-	// wait until all ongoing processes are done to gracefully close the channels if any.
+	// wait until all ongoing processes are done to gracefully close the pool nodes if any.
 	w.PauseAndWait()
 
 	w.mx.Lock()

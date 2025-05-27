@@ -81,6 +81,10 @@ type iJob[T any] interface {
 	io.Closer
 }
 
+// EnqueuedJob is an interface representing a job that has been successfully enqueued.
+// It extends Identifiable, StatusProvider, and Awaitable interfaces to provide
+// identification, status tracking, and waiting capabilities. This interface is
+// returned by the Add method when used with NewWorker
 type EnqueuedJob interface {
 	Identifiable
 	StatusProvider
@@ -240,6 +244,10 @@ type resultJob[T, R any] struct {
 	*helpers.Response[Result[R]]
 }
 
+// EnqueuedResultJob is an interface representing a result job that has been successfully enqueued.
+// It extends EnqueuedJob and Drainer interfaces to provide identification, status tracking,
+// waiting, and cleanup capabilities. This interface is returned by the Add method when used
+// with NewResultWorker, allowing clients to retrieve the job result through the Result() method.
 type EnqueuedResultJob[R any] interface {
 	EnqueuedJob
 	Drainer
@@ -299,6 +307,10 @@ type errorJob[T any] struct {
 	*helpers.Response[error]
 }
 
+// EnqueuedErrJob is an interface representing an error job that has been successfully enqueued.
+// It extends EnqueuedJob and Drainer interfaces to provide identification, status tracking,
+// waiting, and cleanup capabilities. This interface is returned by the Add method when used
+// with NewErrWorker, allowing clients to retrieve any error through the Err() method.
 type EnqueuedErrJob interface {
 	EnqueuedJob
 	Drainer

@@ -6,6 +6,7 @@ import (
 	"github.com/goptics/varmq/utils"
 )
 
+// ConfigFunc is a function that configures a worker.
 type ConfigFunc func(*configs)
 
 type configs struct {
