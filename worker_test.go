@@ -227,6 +227,57 @@ func TestWorkerGroup(t *testing.T) {
 				assert.ErrorIs(t, err, errSameConcurrency, "TunePool should return error when concurrency is the same")
 				assert.Equal(t, initialConcurrency, w.NumConcurrency(), "Concurrency should remain unchanged when set to same value")
 			})
+
+			t.Run("decrease concurrency with idle worker expiry duration", func(t *testing.T) {
+				initialConcurrency := 10
+				idleExpiryDuration := 100 * time.Millisecond
+
+				w := newWorker(func(data string) {
+					time.Sleep(5 * time.Millisecond)
+				},
+					WithConcurrency(initialConcurrency),
+					WithIdleWorkerExpiryDuration(idleExpiryDuration),
+				)
+
+				// Create a queue for testing
+				q := queues.NewQueue[iJob[string]]()
+				w.setQueue(q)
+				defer w.Stop()
+
+				// Verify IdleWorkerExpiryDuration is set
+				assert.Equal(t, idleExpiryDuration, w.Configs.IdleWorkerExpiryDuration,
+					"IdleWorkerExpiryDuration should be set to specified value")
+				assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(),
+					"Initial concurrency should be set correctly")
+
+				// Add jobs to expand the worker pool to its maximum size
+				for i := range initialConcurrency * 2 {
+					q.Enqueue(newJob("job"+string(rune(i)), loadJobConfigs(w.configs())))
+				}
+
+				err := w.start()
+				assert := assert.New(t)
+				assert.NoError(err, "Worker should start without error")
+
+				// Wait for jobs to be processed and pool to expand
+				w.wait()
+
+				assert.Equal(w.pool.Len(), w.NumConcurrency(), "Pool size should be equal to the concurrency")
+
+				// Decrease concurrency
+				newConcurrency := 3
+				err = w.TunePool(newConcurrency)
+				assert.NoError(err, "TunePool should not return error when decreasing concurrency")
+
+				// Concurrency should be updated but pool size should not be manually shrunk
+				assert.Equal(uint32(newConcurrency), w.concurrency.Load(),
+					"Concurrency should be updated to new lower value")
+
+				assert.Greater(w.pool.Len(), newConcurrency, "Pool size should be greater than the concurrency")
+				time.Sleep(idleExpiryDuration * 2)
+				// After the expiration the pool size must be equal to one
+				assert.Equal(w.pool.Len(), 1, "Pool size should be equal to one after expiration")
+			})
 		})
 
 		// Group 4: Lifecycle tests
@@ -343,8 +394,7 @@ func TestWorkerGroup(t *testing.T) {
 					jobsProcessed.Add(1)
 				}
 
-				// Create worker with concurrency 2
-				w := newWorker(workerFn, WithConcurrency(2))
+				w := newWorker(workerFn)
 				assert := assert.New(t)
 
 				// Create a queue for testing
@@ -352,7 +402,7 @@ func TestWorkerGroup(t *testing.T) {
 				w.setQueue(q)
 
 				// Submit some initial jobs
-				for i := range 5 {
+				for i := range 50 {
 					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
 				}
 
@@ -381,13 +431,8 @@ func TestWorkerGroup(t *testing.T) {
 				// Verify the eventLoopSignal was recreated
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be recreated after restart")
 
-				// Submit more jobs after restart
-				for i := range 5 {
-					q.Enqueue(newJob(i+5, loadJobConfigs(w.configs())))
-				}
-
 				// Wait for jobs to be processed after restart
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 
 				// Verify more jobs were processed after restart
 				assert.Greater(jobsProcessed.Load(), processedBeforeRestart, "More jobs should be processed after restart")
