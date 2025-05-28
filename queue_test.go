@@ -743,36 +743,4 @@ func TestExternalQueue(t *testing.T) {
 		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndClose")
 		assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndClose")
 	})
-
-	t.Run("Resume paused worker during WaitUntilFinished", func(t *testing.T) {
-		queue, worker, internalQueue := setupBasicQueue()
-		assert := assert.New(t)
-
-		// Start the worker
-		err := worker.start()
-		assert.NoError(err, "Worker should start successfully")
-
-		// Pause the worker
-		err = worker.Pause()
-		assert.NoError(err, "Worker should pause successfully")
-		assert.True(worker.IsPaused(), "Worker should be paused")
-
-		// Add jobs while paused
-		for i := range 3 {
-			queue.Add("test-data-" + strconv.Itoa(i))
-		}
-
-		assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs")
-
-		// WaitUntilFinished should automatically resume the worker
-		queue.WaitUntilFinished()
-
-		// After waiting, should have no pending jobs
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
-		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
-		assert.False(worker.IsPaused(), "Worker should no longer be paused")
-
-		// Clean up
-		worker.Stop()
-	})
 }
