@@ -50,7 +50,7 @@ func TestGroupJob(t *testing.T) {
 		// Validate the new job
 		assert.NotNil(newJob, "new job in group should not be nil")
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
-		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(gj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
 	})
 
@@ -240,7 +240,7 @@ func TestResultGroupJob(t *testing.T) {
 		// Validate the new job
 		assert.NotNil(newJob, "new job in result group should not be nil")
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
-		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(rgj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
 		assert.Equal(rgj.Response, newJob.Response, "Response should be shared with the group")
 	})
@@ -393,7 +393,7 @@ func TestErrorGroupJob(t *testing.T) {
 		// Validate the new job
 		assert.NotNil(newJob, "new job in error group should not be nil")
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
-		assert.Equal(jobData, newJob.Payload(), "job data should match")
+		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(egj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
 		assert.Equal(egj.Response, newJob.Response, "Response should be shared with the group")
 	})

@@ -20,7 +20,7 @@ func TestWorkers(t *testing.T) {
 		t.Run("Initialization", func(t *testing.T) {
 			t.Run("with default configuration", func(t *testing.T) {
 				// Create worker with default config
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
 				assert := assert.New(t)
@@ -41,7 +41,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("with direct concurrency value", func(t *testing.T) {
 				concurrencyValue := 5
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, concurrencyValue)
 				assert := assert.New(t)
@@ -52,7 +52,7 @@ func TestWorkers(t *testing.T) {
 				customIdGenerator := func() string {
 					return "test-id"
 				}
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithJobIdGenerator(customIdGenerator))
 				assert := assert.New(t)
@@ -60,7 +60,7 @@ func TestWorkers(t *testing.T) {
 			})
 
 			t.Run("with zero concurrency (should use CPU count)", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(0))
 				assert := assert.New(t)
@@ -68,7 +68,7 @@ func TestWorkers(t *testing.T) {
 			})
 
 			t.Run("with negative concurrency (should use CPU count)", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(-5))
 				assert := assert.New(t)
@@ -77,8 +77,8 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("with closure capturing", func(t *testing.T) {
 				counter := 0
-				wf := func(data string) {
-					counter += len(data)
+				wf := func(j iJob[string]) {
+					counter += len(j.Data())
 				}
 				w := newWorker(wf)
 				assert := assert.New(t)
@@ -87,7 +87,7 @@ func TestWorkers(t *testing.T) {
 			})
 
 			t.Run("pool node initialization", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
 				assert := assert.New(t)
@@ -101,14 +101,14 @@ func TestWorkers(t *testing.T) {
 		t.Run("Concurrency", func(t *testing.T) {
 			t.Run("initial value", func(t *testing.T) {
 				concurrencyValue := 4
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(concurrencyValue))
 				assert.Equal(t, concurrencyValue, w.NumConcurrency(), "CurrentConcurrency should return the initial concurrency value")
 			})
 
 			t.Run("default value", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
 				expectedConcurrency := int(withSafeConcurrency(1))
@@ -117,7 +117,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("after tuning", func(t *testing.T) {
 				initialConcurrency := 2
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -137,7 +137,7 @@ func TestWorkers(t *testing.T) {
 		// Group 3: Pool tuning tests
 		t.Run("PoolTuning", func(t *testing.T) {
 			t.Run("worker not running error", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(2))
 				err := w.TunePool(4)
@@ -147,7 +147,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("increase concurrency", func(t *testing.T) {
 				initialConcurrency := 2
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -167,7 +167,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("decrease concurrency", func(t *testing.T) {
 				initialConcurrency := 5
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -187,7 +187,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("set concurrency to zero", func(t *testing.T) {
 				initialConcurrency := 3
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -201,7 +201,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("set concurrency to negative value", func(t *testing.T) {
 				initialConcurrency := 3
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -215,7 +215,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("same concurrency value", func(t *testing.T) {
 				initialConcurrency := 4
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				}, WithConcurrency(initialConcurrency))
 				err := w.start()
@@ -232,7 +232,7 @@ func TestWorkers(t *testing.T) {
 				initialConcurrency := 10
 				idleExpiryDuration := 100 * time.Millisecond
 
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
 				},
 					WithConcurrency(initialConcurrency),
@@ -283,7 +283,7 @@ func TestWorkers(t *testing.T) {
 		// Group 4: Lifecycle tests
 		t.Run("Lifecycle", func(t *testing.T) {
 			t.Run("worker state transitions", func(t *testing.T) {
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
 				assert := assert.New(t)
@@ -336,13 +336,13 @@ func TestWorkers(t *testing.T) {
 				var jobsProcessed atomic.Uint32
 
 				// Create a worker function that increments counter
-				voidFn := func(data int) {
+				fn := func(j iJob[int]) {
 					time.Sleep(10 * time.Millisecond) // Simulate work
 					jobsProcessed.Add(1)
 				}
 
 				// Create worker with concurrency 2
-				w := newWorker(voidFn)
+				w := newWorker(fn)
 				assert := assert.New(t)
 
 				// Create a queue for testing using internal implementation
@@ -389,7 +389,7 @@ func TestWorkers(t *testing.T) {
 				var jobsProcessed atomic.Uint32
 
 				// Create a worker function that increments counter
-				workerFn := func(data int) {
+				workerFn := func(j iJob[int]) {
 					time.Sleep(5 * time.Millisecond) // Simulate work
 					jobsProcessed.Add(1)
 				}
@@ -459,7 +459,7 @@ func TestWorkers(t *testing.T) {
 				}
 
 				for _, tc := range testCases {
-					w := newWorker(func(data string) {
+					w := newWorker(func(j iJob[string]) {
 						time.Sleep(10 * time.Millisecond)
 					},
 						WithConcurrency(tc.concurrency),
@@ -476,7 +476,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("idle worker management", func(t *testing.T) {
 				expirySetting := 50 * time.Millisecond
-				w := newWorker(func(data string) {
+				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				},
 					WithConcurrency(10),
@@ -511,8 +511,8 @@ func TestWorkers(t *testing.T) {
 		// Group 1: Initialization tests
 		t.Run("Initialization", func(t *testing.T) {
 			t.Run("with default configuration", func(t *testing.T) {
-				w := newResultWorker(func(data string) (int, error) {
-					return len(data), nil
+				w := newResultWorker(func(j iResultJob[string, int]) {
+					j.sendResult(len(j.Data()))
 				})
 				assert := assert.New(t)
 				assert.NotNil(w, "worker should not be nil")
@@ -522,8 +522,8 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("with custom concurrency", func(t *testing.T) {
 				customConcurrency := 4
-				w := newResultWorker(func(data string) (int, error) {
-					return len(data), nil
+				w := newResultWorker(func(j iResultJob[string, int]) {
+					j.sendResult(len(j.Data()))
 				}, WithConcurrency(customConcurrency))
 				assert := assert.New(t)
 				assert.Equal(customConcurrency, w.NumConcurrency(), "concurrency should be set to custom value")
@@ -535,8 +535,8 @@ func TestWorkers(t *testing.T) {
 		// Group 1: Initialization tests
 		t.Run("Initialization", func(t *testing.T) {
 			t.Run("with default configuration", func(t *testing.T) {
-				w := newErrWorker(func(data string) error {
-					return nil
+				w := newErrWorker(func(j iErrorJob[string]) {
+					j.sendError(nil)
 				})
 				assert := assert.New(t)
 				assert.NotNil(w, "worker should not be nil")
@@ -545,11 +545,10 @@ func TestWorkers(t *testing.T) {
 			})
 
 			t.Run("with custom configuration", func(t *testing.T) {
-				wf := func(data string) error {
-					if len(data) == 0 {
-						return errors.New("empty data")
+				wf := func(j iErrorJob[string]) {
+					if len(j.Data()) == 0 {
+						j.sendError(errors.New("empty data"))
 					}
-					return nil
 				}
 
 				customConcurrency := 3
@@ -582,7 +581,7 @@ func TestWorkerBinders(t *testing.T) {
 	// Test standard worker binder
 	t.Run("WorkerBinder_BindQueue", func(t *testing.T) {
 		// Create a worker
-		w := newWorker(func(data string) {})
+		w := newWorker(func(j iJob[string]) {})
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -601,7 +600,7 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("WorkerBinder_BindPriorityQueue", func(t *testing.T) {
 		// Create a worker
-		w := newWorker(func(data string) {})
+		w := newWorker(func(j iJob[string]) {})
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -620,7 +619,7 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("WorkerBinder_HasDistributedQueueMethod", func(t *testing.T) {
 		// Create a worker
-		w := newWorker(func(data string) {})
+		w := newWorker(func(j iJob[string]) {})
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -638,7 +637,7 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("WorkerBinder_HasPersistentQueueMethod", func(t *testing.T) {
 		// Create a worker
-		w := newWorker(func(data string) {})
+		w := newWorker(func(j iJob[string]) {})
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -656,8 +655,8 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("ResultWorkerBinder_HasQueueMethods", func(t *testing.T) {
 		// Create a result worker
-		w := newResultWorker(func(data string) (int, error) {
-			return len(data), nil
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
 		})
 
 		// Create a result worker binder
@@ -685,8 +684,8 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("ErrWorkerBinder_HasQueueMethods", func(t *testing.T) {
 		// Create an error worker
-		w := newErrWorker(func(data string) error {
-			return nil
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
 		})
 
 		// Create an error worker binder
@@ -715,8 +714,8 @@ func TestWorkerBinders(t *testing.T) {
 	// Test result worker binder
 	t.Run("ResultWorkerBinder_BindQueue", func(t *testing.T) {
 		// Create a result worker
-		w := newResultWorker(func(data string) (int, error) {
-			return len(data), nil
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
 		})
 
 		// Create a result worker binder
@@ -736,8 +735,8 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("ResultWorkerBinder_BindPriorityQueue", func(t *testing.T) {
 		// Create a result worker
-		w := newResultWorker(func(data string) (int, error) {
-			return len(data), nil
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
 		})
 
 		// Create a result worker binder
@@ -758,8 +757,8 @@ func TestWorkerBinders(t *testing.T) {
 	// Test error worker binder
 	t.Run("ErrWorkerBinder_BindQueue", func(t *testing.T) {
 		// Create an error worker
-		w := newErrWorker(func(data string) error {
-			return nil
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
 		})
 
 		// Create an error worker binder
@@ -779,8 +778,8 @@ func TestWorkerBinders(t *testing.T) {
 
 	t.Run("ErrWorkerBinder_BindPriorityQueue", func(t *testing.T) {
 		// Create an error worker
-		w := newErrWorker(func(data string) error {
-			return nil
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
 		})
 
 		// Create an error worker binder

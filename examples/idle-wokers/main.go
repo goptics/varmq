@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	w := varmq.NewWorker(func(data int) {
+	w := varmq.NewWorker(func(j varmq.Job[int]) {
 		time.Sleep(1 * time.Second)
 	},
 		200, // the initial concurrency

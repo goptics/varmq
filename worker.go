@@ -8,23 +8,7 @@ import (
 
 	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
-	"github.com/goptics/varmq/utils"
 )
-
-// WorkerResultFunc represents a function that processes a Job and returns a result and an error.
-// This is useful for operations where you need to return a result value.
-// Used with NewResultWorker
-type WorkerResultFunc[T, R any] func(T) (R, error)
-
-// WorkerErrFunc represents a function that processes a Job and returns an error.
-// This is useful for operations where you only care about success/failure status.
-// Used with NewErrWorker
-type WorkerErrFunc[T any] func(T) error
-
-// WorkerFunc represents a function that processes a Job and returns nothing.
-// This is useful for operations where you don't need to return a result value.
-// Used with NewWorker
-type WorkerFunc[T any] func(T)
 
 type status = uint32
 
@@ -94,16 +78,11 @@ type Worker interface {
 }
 
 // newWorker creates a new worker with the given worker function and configurations
-func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
+func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	c := loadConfigs(configs...)
 
 	w := &worker[T, iJob[T]]{
-		workerFunc: func(j iJob[T]) {
-			// TODO: The panic error will be passed through inside logger in future
-			utils.WithSafe("worker", func() {
-				wf(j.Payload())
-			})
-		},
+		workerFunc:      wf,
 		pool:            linkedlist.New[pool.Node[iJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
@@ -118,29 +97,12 @@ func newWorker[T any](wf WorkerFunc[T], configs ...any) *worker[T, iJob[T]] {
 	return w
 }
 
-func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worker[T, iResultJob[T, R]] {
+func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iErrorJob[T]] {
 	c := loadConfigs(configs...)
 
-	w := &worker[T, iResultJob[T, R]]{
-		workerFunc: func(j iResultJob[T, R]) {
-			var panicErr error
-			var err error
-
-			panicErr = utils.WithSafe("worker", func() {
-				result, e := wf(j.Payload())
-				if e != nil {
-					err = e
-				} else {
-					j.saveAndSendResult(result)
-				}
-			})
-
-			// send error if any
-			if err := utils.SelectError(panicErr, err); err != nil {
-				j.saveAndSendError(err)
-			}
-		},
-		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
+	w := &worker[T, iErrorJob[T]]{
+		workerFunc:      wf,
+		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		eventLoopSignal: make(chan struct{}, 1),
@@ -154,24 +116,12 @@ func newResultWorker[T, R any](wf WorkerResultFunc[T, R], configs ...any) *worke
 	return w
 }
 
-func newErrWorker[T any](wf WorkerErrFunc[T], configs ...any) *worker[T, iErrorJob[T]] {
+func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *worker[T, iResultJob[T, R]] {
 	c := loadConfigs(configs...)
 
-	w := &worker[T, iErrorJob[T]]{
-		workerFunc: func(j iErrorJob[T]) {
-			var panicErr error
-			var err error
-
-			panicErr = utils.WithSafe("worker", func() {
-				err = wf(j.Payload())
-			})
-
-			// send error if any
-			if err := utils.SelectError(panicErr, err); err != nil {
-				j.sendError(err)
-			}
-		},
-		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
+	w := &worker[T, iResultJob[T, R]]{
+		workerFunc:      wf,
+		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
 		concurrency:     atomic.Uint32{},
 		Queue:           getNullQueue(),
 		eventLoopSignal: make(chan struct{}, 1),

@@ -22,7 +22,7 @@ func TestJob(t *testing.T) {
 		// Validate job structure
 		assert.NotNil(j, "job should not be nil")
 		assert.Equal(jobId, j.ID(), "job ID should match")
-		assert.Equal(jobData, j.Payload(), "job data should match")
+		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 		assert.False(j.IsClosed(), "job should not be closed initially")
 	})
@@ -103,7 +103,7 @@ func TestJob(t *testing.T) {
 		j, ok := result.(*job[string])
 		assert.True(ok, "result should be a *job[string]")
 		assert.Equal("test-id", j.ID(), "job ID should match")
-		assert.Equal("test payload", j.Payload(), "job payload should match")
+		assert.Equal("test payload", j.Data(), "job payload should match")
 		assert.Equal("Created", j.Status(), "job status should match")
 
 		// Test each status type
@@ -234,12 +234,12 @@ func TestResultJob(t *testing.T) {
 		// Validate job structure
 		assert.NotNil(j, "resultJob should not be nil")
 		assert.Equal(jobId, j.ID(), "job ID should match")
-		assert.Equal(jobData, j.Payload(), "job data should match")
+		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 
 		// Save and send a result
 		expectedResult := 42
-		j.saveAndSendResult(expectedResult)
+		j.sendResult(expectedResult)
 
 		// Get the result
 		result, err := j.Result()
@@ -254,7 +254,7 @@ func TestResultJob(t *testing.T) {
 
 		// Save and send an error
 		expectedErr := errors.New("test error")
-		j.saveAndSendError(expectedErr)
+		j.sendError(expectedErr)
 
 		// Get the result
 		var zeroValue int
@@ -275,18 +275,18 @@ func TestResultJob(t *testing.T) {
 		assert.True(j.IsClosed(), "job should be marked as closed")
 	})
 
-	t.Run("resultJob Result after saveAndSendError", func(t *testing.T) {
+	t.Run("resultJob Result after sendError", func(t *testing.T) {
 		// Create a new result job
 		j := newResultJob[string, int]("test data", jobConfigs{Id: "result-job-error"})
 		assert := assert.New(t)
 
 		// Send an error through the job
 		expectedErr := errors.New("job closed error")
-		j.saveAndSendError(expectedErr)
+		j.sendError(expectedErr)
 
 		// Try to get result
 		result, err := j.Result()
-		assert.Error(err, "Result should return an error after saveAndSendError")
+		assert.Error(err, "Result should return an error after sendError")
 		assert.Equal(expectedErr, err, "error should match what was sent")
 		assert.Equal(0, result, "result should be zero value when error occurs")
 	})
@@ -322,7 +322,7 @@ func TestErrorJob(t *testing.T) {
 		// Validate job structure
 		assert.NotNil(j, "errorJob should not be nil")
 		assert.Equal(jobId, j.ID(), "job ID should match")
-		assert.Equal(jobData, j.Payload(), "job data should match")
+		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 
 		// Send an error
