@@ -13,7 +13,7 @@ import (
 // Setup functions for each queue type
 func setupBasicQueue() (*queue[string], *worker[string, iJob[string]], *queues.Queue[any]) {
 	// Create a worker with a simple process function
-	workerFunc := func(data string) {
+	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
 	}
 
@@ -26,13 +26,14 @@ func setupBasicQueue() (*queue[string], *worker[string, iJob[string]], *queues.Q
 
 func setupResultQueue() (*resultQueue[string, int], *worker[string, iResultJob[string, int]], *queues.Queue[any]) {
 	// Create a worker with a simple process function that doubles an integer
-	workerFunc := func(data string) (int, error) {
-		// Simple processor that converts string to int and doubles it
-		val, err := strconv.Atoi(data)
+	workerFunc := func(j iResultJob[string, int]) {
+		val, err := strconv.Atoi(j.Data())
 		if err != nil {
-			return 0, err
+			j.sendError(err)
+			return
 		}
-		return val * 2, nil
+
+		j.sendResult(val * 2)
 	}
 
 	internalQueue := queues.NewQueue[any]()
@@ -44,12 +45,11 @@ func setupResultQueue() (*resultQueue[string, int], *worker[string, iResultJob[s
 
 func setupErrorQueue() (*errorQueue[string], *worker[string, iErrorJob[string]], *queues.Queue[any]) {
 	// Create a worker with a simple process function that may return an error
-	workerFunc := func(data string) error {
+	workerFunc := func(j iErrorJob[string]) {
 		// Return error for specific input
-		if data == "error" {
-			return errors.New("test error")
+		if j.Data() == "error" {
+			j.sendError(errors.New("test error"))
 		}
-		return nil
 	}
 
 	internalQueue := queues.NewQueue[any]()
@@ -313,7 +313,7 @@ func TestQueues(t *testing.T) {
 // Setup functions for priority queues
 func setupPriorityQueue() (*priorityQueue[string], *worker[string, iJob[string]], *queues.PriorityQueue[any]) {
 	// Create a worker with a simple process function
-	workerFunc := func(data string) {
+	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
 	}
 
@@ -326,13 +326,14 @@ func setupPriorityQueue() (*priorityQueue[string], *worker[string, iJob[string]]
 
 func setupResultPriorityQueue() (*resultPriorityQueue[string, int], *worker[string, iResultJob[string, int]], *queues.PriorityQueue[any]) {
 	// Create a worker with a simple process function that doubles an integer
-	workerFunc := func(data string) (int, error) {
-		// Simple processor that converts string to int and doubles it
-		val, err := strconv.Atoi(data)
+	workerFunc := func(j iResultJob[string, int]) {
+		val, err := strconv.Atoi(j.Data())
 		if err != nil {
-			return 0, err
+			j.sendError(err)
+			return
 		}
-		return val * 2, nil
+
+		j.sendResult(val * 2)
 	}
 
 	internalQueue := queues.NewPriorityQueue[any]()
@@ -344,12 +345,11 @@ func setupResultPriorityQueue() (*resultPriorityQueue[string, int], *worker[stri
 
 func setupErrorPriorityQueue() (*errorPriorityQueue[string], *worker[string, iErrorJob[string]], *queues.PriorityQueue[any]) {
 	// Create a worker with a simple process function that may return an error
-	workerFunc := func(data string) error {
+	workerFunc := func(j iErrorJob[string]) {
 		// Return error for specific input
-		if data == "error" {
-			return errors.New("test error")
+		if j.Data() == "error" {
+			j.sendError(errors.New("test error"))
 		}
-		return nil
 	}
 
 	internalQueue := queues.NewPriorityQueue[any]()

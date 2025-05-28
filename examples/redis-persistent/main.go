@@ -16,22 +16,10 @@ func main() {
 	defer pq.Close()
 
 	// bind with persistent queue
-	w := varmq.NewWorker(func(data int) (int, error) {
-		fmt.Printf("Processing: %d\n", data)
+	w := varmq.NewWorker(func(j varmq.Job[int]) {
+		fmt.Printf("Processing: %d\n", j.Data())
 		time.Sleep(1 * time.Second)
-		r := data * 3
-
-		// error on every 10th job
-		if data%10 == 0 {
-			return 0, fmt.Errorf("error")
-		}
-
-		// panic on every 15th job
-		if data%15 == 0 {
-			panic("panic")
-		}
-
-		return r, nil
+		fmt.Println("Processed: ", j.Data())
 	})
 
 	// Using redisq adapter (you can use any adapter that implements IPersistentQueue)
@@ -47,10 +35,7 @@ func main() {
 
 	// terminate the program to see the persistent pending jobs in the queue
 	// before that comment out the following lines to see the results
-	items := make([]varmq.Item[int], 10)
-	for i := range items {
-		items[i] = varmq.Item[int]{Value: i, ID: fmt.Sprintf("%d", i)}
+	for i := range 10 {
+		q.Add(i)
 	}
-
-	q.AddAll(items)
 }

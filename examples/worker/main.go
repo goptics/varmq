@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	w := varmq.NewWorker(func(data int) {
-		fmt.Println("Processing:", data)
+	w := varmq.NewWorker(func(j varmq.Job[int]) {
+		fmt.Println("Processing:", j.Data())
 		time.Sleep(1 * time.Second)
 	})
 	q := w.BindQueue()

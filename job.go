@@ -68,7 +68,7 @@ type jobView[T any] struct {
 
 type Job[T any] interface {
 	Identifiable
-	Payload() T
+	Data() T
 }
 
 type iJob[T any] interface {
@@ -117,7 +117,7 @@ func (j *job[T]) ID() string {
 	return j.id
 }
 
-func (j *job[T]) Payload() T {
+func (j *job[T]) Data() T {
 	return j.payload
 }
 
@@ -232,70 +232,6 @@ func (j *job[T]) ack() error {
 	return nil
 }
 
-type iResultJob[T, R any] interface {
-	iJob[T]
-	saveAndSendResult(result R)
-	saveAndSendError(err error)
-}
-
-type resultJob[T, R any] struct {
-	job[T]
-	*helpers.Response[Result[R]]
-}
-
-// EnqueuedResultJob is an interface representing a result job that has been successfully enqueued.
-// It extends EnqueuedJob and Drainer interfaces to provide identification, status tracking,
-// waiting, and cleanup capabilities. This interface is returned by the Add method when used
-// with NewResultWorker, allowing clients to retrieve the job result through the Result() method.
-type EnqueuedResultJob[R any] interface {
-	EnqueuedJob
-	Drainer
-	Result() (R, error)
-}
-
-func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
-	r := &resultJob[T, R]{
-		job: job[T]{
-			id:      configs.Id,
-			payload: payload,
-			status:  atomic.Uint32{},
-			wg:      sync.WaitGroup{},
-		},
-		Response: helpers.NewResponse[Result[R]](1),
-	}
-	r.wg.Add(1)
-	return r
-}
-
-func (rj *resultJob[T, R]) Result() (R, error) {
-	result, err := rj.Response.Response()
-
-	if err != nil {
-		return *new(R), err
-	}
-
-	return result.Data, result.Err
-}
-
-// saveAndSendResult saves the result and sends it to the job's result channel.
-func (rj *resultJob[T, R]) saveAndSendResult(result R) {
-	rj.Response.Send(Result[R]{JobId: rj.id, Data: result})
-}
-
-// saveAndSendError sends an error to the job's result channel.
-func (rj *resultJob[T, R]) saveAndSendError(err error) {
-	rj.Response.Send(Result[R]{JobId: rj.id, Err: err})
-}
-
-func (rj *resultJob[T, R]) Close() error {
-	if err := rj.job.Close(); err != nil {
-		return err
-	}
-
-	rj.Response.Close()
-	return nil
-}
-
 type iErrorJob[T any] interface {
 	iJob[T]
 	sendError(err error)
@@ -350,5 +286,69 @@ func (ej *errorJob[T]) Close() error {
 	}
 
 	ej.Response.Close()
+	return nil
+}
+
+type iResultJob[T, R any] interface {
+	iErrorJob[T]
+	sendResult(result R)
+}
+
+type resultJob[T, R any] struct {
+	job[T]
+	*helpers.Response[Result[R]]
+}
+
+// EnqueuedResultJob is an interface representing a result job that has been successfully enqueued.
+// It extends EnqueuedJob and Drainer interfaces to provide identification, status tracking,
+// waiting, and cleanup capabilities. This interface is returned by the Add method when used
+// with NewResultWorker, allowing clients to retrieve the job result through the Result() method.
+type EnqueuedResultJob[R any] interface {
+	EnqueuedJob
+	Drainer
+	Result() (R, error)
+	Close() error
+}
+
+func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
+	r := &resultJob[T, R]{
+		job: job[T]{
+			id:      configs.Id,
+			payload: payload,
+			status:  atomic.Uint32{},
+			wg:      sync.WaitGroup{},
+		},
+		Response: helpers.NewResponse[Result[R]](1),
+	}
+	r.wg.Add(1)
+	return r
+}
+
+func (rj *resultJob[T, R]) Result() (R, error) {
+	result, err := rj.Response.Response()
+
+	if err != nil {
+		return *new(R), err
+	}
+
+	return result.Data, result.Err
+}
+
+// sendResult saves the result and sends it to the job's result channel.
+func (rj *resultJob[T, R]) sendResult(result R) {
+	rj.Response.Send(Result[R]{JobId: rj.id, Data: result})
+}
+
+// sendError sends an error to the job's result channel.
+func (rj *resultJob[T, R]) sendError(err error) {
+	rj.Response.Send(Result[R]{JobId: rj.id, Err: err})
+}
+
+func (rj *resultJob[T, R]) Close() error {
+	if err := rj.job.Close(); err != nil {
+		return err
+	}
+
+	rj.Response.Close()
 	return nil
 }

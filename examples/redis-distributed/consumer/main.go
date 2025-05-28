@@ -20,7 +20,8 @@ func main() {
 	defer rq.Close()
 	defer rq.Listen()
 
-	w := varmq.NewVoidWorker(func(data []string) {
+	w := varmq.NewWorker(func(j varmq.Job[[]string]) {
+		data := j.Data()
 		url, id := data[0], data[1]
 		fmt.Printf("Scraping url: %s, id: %s\n", url, id)
 		time.Sleep(2 * time.Second)

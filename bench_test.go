@@ -1,20 +1,16 @@
 package varmq
 
 import (
-	"sync"
 	"testing"
-
-	"github.com/alitto/pond/v2"
-	"github.com/panjf2000/ants/v2"
 )
 
-func resultTask(data int) (int, error) {
-	return data * 2, nil
+func resultTask(j Job[int]) (int, error) {
+	return j.Data() * 2, nil
 }
 
-func task(data int) {
+func task(j Job[int]) {
 	// do nothing
-	_ = data * 2
+	_ = j.Data() * 2
 }
 
 // BenchmarkQueue_Operations benchmarks the operations of Queue.
@@ -49,37 +45,6 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			q.AddAll(data).Wait()
 		}
-	})
-}
-func BenchmarkPond_Operations(b *testing.B) {
-	b.Run("Pond_Submit", func(b *testing.B) {
-		// Create a worker with the double function
-		pool := pond.NewPool(1)
-
-		b.ResetTimer()
-		for j := 0; j < b.N; j++ {
-			task := pool.Submit(func() {
-				task(j)
-			})
-			task.Wait()
-		}
-	})
-}
-func BenchmarkAnts_Operations(b *testing.B) {
-	b.Run("Ants_Submit", func(b *testing.B) {
-		// Create a worker with the double function
-		wg := sync.WaitGroup{}
-		pool, _ := ants.NewPool(1)
-
-		b.ResetTimer()
-		for j := 0; j < b.N; j++ {
-			wg.Add(1)
-			pool.Submit(func() {
-				task(j)
-				wg.Done()
-			})
-		}
-		wg.Wait()
 	})
 }
 
