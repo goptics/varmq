@@ -113,7 +113,7 @@ type IWorkerBinder[T any] interface {
 	//   - DistributedQueue[T, any]: A distributed queue that can distribute jobs across multiple workers or instances.
 	//
 	// Example usage:
-	//   distributedQueue := NewDistributedQueue() // satisfies IDistributedQueue interface,  might be backed by Redis or other systems
+	//   distributedQueue := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
 	//   distributedQueue := voidWorker.WithDistributedQueue(distributedQueue)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
 	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]
@@ -317,7 +317,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// This is the simplest way to get a standard FIFO queue working with this worker.
 	//
 	// Returns:
-	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//   - ResultQueue[T, R]: A fully configured Result Queue that automatically processes jobs using this worker.
 	//
 	// Example usage:
 	//   queue := worker.BindQueue()
@@ -333,7 +333,7 @@ type IResultWorkerBinder[T, R any] interface {
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
 	//
 	// Returns:
-	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//   - ResultQueue[T, R]: A Result Queue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
@@ -345,7 +345,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// Use this when you need to process jobs based on priority rather than FIFO order.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A fully configured PriorityQueue that processes jobs using this worker.
+	//   - ResultPriorityQueue[T, R]: A fully configured ResultPriorityQueue that processes jobs using this worker.
 	//
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
@@ -361,7 +361,7 @@ type IResultWorkerBinder[T, R any] interface {
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//   - ResultPriorityQueue[T, R]: A Result PriorityQueue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
