@@ -220,11 +220,6 @@ func (eq *externalQueue) Worker() Worker {
 }
 
 func (eq *externalQueue) WaitUntilFinished() {
-	// to ignore deadlock error if the queue is paused
-	if eq.w.IsPaused() {
-		eq.w.Resume()
-	}
-
 	eq.w.wait()
 }
 
