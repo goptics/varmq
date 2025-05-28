@@ -40,11 +40,11 @@ func generateGroupId(id string) string {
 	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
 }
 
-func (gj *groupJob[T]) newJob(payload T, config jobConfigs) *groupJob[T] {
+func (gj *groupJob[T]) newJob(data T, config jobConfigs) *groupJob[T] {
 	return &groupJob[T]{
 		job: job[T]{
-			id:      generateGroupId(config.Id),
-			payload: payload,
+			id:   generateGroupId(config.Id),
+			data: data,
 		},
 		wgc: gj.wgc,
 	}
@@ -99,12 +99,12 @@ func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	return gj
 }
 
-func (gj *resultGroupJob[T, R]) newJob(payload T, config jobConfigs) *resultGroupJob[T, R] {
+func (gj *resultGroupJob[T, R]) newJob(data T, config jobConfigs) *resultGroupJob[T, R] {
 	return &resultGroupJob[T, R]{
 		resultJob: resultJob[T, R]{
 			job: job[T]{
-				id:      generateGroupId(config.Id),
-				payload: payload,
+				id:   generateGroupId(config.Id),
+				data: data,
 			},
 			Response: gj.Response,
 		},
@@ -178,12 +178,12 @@ func (gj *errorGroupJob[T]) Wait() {
 	gj.wgc.Wait()
 }
 
-func (gj *errorGroupJob[T]) newJob(payload T, config jobConfigs) *errorGroupJob[T] {
+func (gj *errorGroupJob[T]) newJob(data T, config jobConfigs) *errorGroupJob[T] {
 	return &errorGroupJob[T]{
 		errorJob: errorJob[T]{
 			job: job[T]{
-				id:      generateGroupId(config.Id),
-				payload: payload,
+				id:   generateGroupId(config.Id),
+				data: data,
 			},
 			Response: gj.Response,
 		},

@@ -43,7 +43,7 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
 			j.Close()
@@ -99,7 +99,7 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
 			j.Close()
@@ -155,7 +155,7 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
 			j.Close()

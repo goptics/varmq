@@ -53,10 +53,10 @@ func TestJob(t *testing.T) {
 		// Create a new job but don't call the constructor
 		// to avoid automatic wg initialization
 		j := &job[string]{
-			id:      "job-wait-test",
-			payload: "test data",
-			status:  atomic.Uint32{},
-			wg:      sync.WaitGroup{},
+			id:     "job-wait-test",
+			data:   "test data",
+			status: atomic.Uint32{},
+			wg:     sync.WaitGroup{},
 		}
 
 		// Manually add to waitgroup
@@ -95,7 +95,7 @@ func TestJob(t *testing.T) {
 		assert := assert.New(t)
 
 		// Test valid JSON parsing
-		validJSON := []byte(`{"id":"test-id","status":"Created","payload":"test payload"}`)
+		validJSON := []byte(`{"id":"test-id","status":"Created","data":"test data"}`)
 		result, err := parseToJob[string](validJSON)
 		assert.NoError(err, "parseToJob should not error with valid JSON")
 		assert.NotNil(result, "parseToJob result should not be nil")
@@ -103,13 +103,13 @@ func TestJob(t *testing.T) {
 		j, ok := result.(*job[string])
 		assert.True(ok, "result should be a *job[string]")
 		assert.Equal("test-id", j.ID(), "job ID should match")
-		assert.Equal("test payload", j.Data(), "job payload should match")
+		assert.Equal("test data", j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should match")
 
 		// Test each status type
 		statuses := []string{"Queued", "Processing", "Finished", "Closed"}
 		for _, status := range statuses {
-			jsonWithStatus := []byte(`{"id":"test-id","status":"` + status + `","payload":"test payload"}`)
+			jsonWithStatus := []byte(`{"id":"test-id","status":"` + status + `","data":"test data"}`)
 			result, err := parseToJob[string](jsonWithStatus)
 			assert.NoError(err, "parseToJob should not error with status "+status)
 			j, _ := result.(*job[string])
@@ -117,7 +117,7 @@ func TestJob(t *testing.T) {
 		}
 
 		// Test invalid status
-		invalidStatus := []byte(`{"id":"test-id","status":"Invalid","payload":"test payload"}`)
+		invalidStatus := []byte(`{"id":"test-id","status":"Invalid","data":"test data"}`)
 		_, err = parseToJob[string](invalidStatus)
 		assert.Error(err, "parseToJob should error with invalid status")
 		assert.Contains(err.Error(), "invalid status", "error should mention invalid status")
@@ -174,7 +174,7 @@ func TestJob(t *testing.T) {
 		// but we can verify the JSON contains expected fields
 		jsonStr := string(jsonData)
 		assert.Contains(jsonStr, `"id":"job-json"`, "JSON should contain job ID")
-		assert.Contains(jsonStr, `"payload":"test data"`, "JSON should contain job payload")
+		assert.Contains(jsonStr, `"data":"test data"`, "JSON should contain job data")
 		assert.Contains(jsonStr, `"status":"Created"`, "JSON should contain job status")
 	})
 

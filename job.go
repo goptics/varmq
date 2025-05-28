@@ -67,24 +67,24 @@ type Drainer interface {
 // job represents a task to be executed by a worker. It maintains the task's
 // current status, Payload data, and channels for receiving results.
 type job[T any] struct {
-	id      string
-	payload T
-	status  atomic.Uint32
-	wg      sync.WaitGroup
-	queue   IBaseQueue
-	ackId   string
+	id     string
+	data   T
+	status atomic.Uint32
+	wg     sync.WaitGroup
+	queue  IBaseQueue
+	ackId  string
 }
 
 // jobView represents a view of a job's state for serialization.
 type jobView[T any] struct {
 	Id      string `json:"id"`
 	Status  string `json:"status"`
-	Payload T      `json:"payload"`
+	Payload T      `json:"data"`
 }
 
 type Job[T any] interface {
 	Identifiable
-	// Data returns the payload data associated with the job.
+	// Data returns the data associated with the job.
 	Data() T
 }
 
@@ -106,15 +106,19 @@ type EnqueuedJob interface {
 	Identifiable
 	StatusProvider
 	Awaitable
+	// Close marks the job as closed without removing it from the queue.
+	// When a closed job is dequeued, the worker will skip processing it.
+	// This operation takes constant time as it only updates the job's state.
+	Close() error
 }
 
 // New creates a new job with the provided data.
 func newJob[T any](data T, configs jobConfigs) *job[T] {
 	j := &job[T]{
-		id:      configs.Id,
-		payload: data,
-		status:  atomic.Uint32{},
-		wg:      sync.WaitGroup{},
+		id:     configs.Id,
+		data:   data,
+		status: atomic.Uint32{},
+		wg:     sync.WaitGroup{},
 	}
 
 	j.wg.Add(1)
@@ -135,7 +139,7 @@ func (j *job[T]) ID() string {
 }
 
 func (j *job[T]) Data() T {
-	return j.payload
+	return j.data
 }
 
 // State returns the current status of the job as a string.
@@ -174,7 +178,7 @@ func (j *job[T]) Json() ([]byte, error) {
 	view := jobView[T]{
 		Id:      j.ID(),
 		Status:  j.Status(),
-		Payload: j.payload,
+		Payload: j.data,
 	}
 
 	return json.Marshal(view)
@@ -273,13 +277,13 @@ type EnqueuedErrJob interface {
 	Err() error
 }
 
-func newErrorJob[T any](payload T, configs jobConfigs) *errorJob[T] {
+func newErrorJob[T any](data T, configs jobConfigs) *errorJob[T] {
 	e := &errorJob[T]{
 		job: job[T]{
-			id:      configs.Id,
-			payload: payload,
-			status:  atomic.Uint32{},
-			wg:      sync.WaitGroup{},
+			id:     configs.Id,
+			data:   data,
+			status: atomic.Uint32{},
+			wg:     sync.WaitGroup{},
 		},
 		Response: helpers.NewResponse[error](1),
 	}
@@ -331,19 +335,15 @@ type EnqueuedResultJob[R any] interface {
 	// This method blocks the caller until the job processing is complete.
 	// If the job has already finished, it returns immediately with the result.
 	Result() (R, error)
-	// Close marks the job as closed without removing it from the queue.
-	// When a closed job is dequeued, the worker will skip processing it.
-	// This operation takes constant time as it only updates the job's state.
-	Close() error
 }
 
-func newResultJob[T, R any](payload T, configs jobConfigs) *resultJob[T, R] {
+func newResultJob[T, R any](data T, configs jobConfigs) *resultJob[T, R] {
 	r := &resultJob[T, R]{
 		job: job[T]{
-			id:      configs.Id,
-			payload: payload,
-			status:  atomic.Uint32{},
-			wg:      sync.WaitGroup{},
+			id:     configs.Id,
+			data:   data,
+			status: atomic.Uint32{},
+			wg:     sync.WaitGroup{},
 		},
 		Response: helpers.NewResponse[Result[R]](1),
 	}

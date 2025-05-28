@@ -97,9 +97,9 @@ func TestQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs to queue", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "job1", ID: "1"},
-				{Value: "job2", ID: "2"},
-				{Value: "job3", ID: "3"},
+				{Data: "job1", ID: "1"},
+				{Data: "job2", ID: "2"},
+				{Data: "job3", ID: "3"},
 			}
 
 			queue, worker, internalQueue := setupBasicQueue()
@@ -174,11 +174,11 @@ func TestQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs to queue", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "1", ID: "job1"},
-				{Value: "2", ID: "job2"},
-				{Value: "3", ID: "job3"},
-				{Value: "4", ID: "job4"},
-				{Value: "5", ID: "job5"},
+				{Data: "1", ID: "job1"},
+				{Data: "2", ID: "job2"},
+				{Data: "3", ID: "job3"},
+				{Data: "4", ID: "job4"},
+				{Data: "5", ID: "job5"},
 			}
 
 			queue, worker, internalQueue := setupResultQueue()
@@ -207,7 +207,7 @@ func TestQueues(t *testing.T) {
 			// Build expected set of doubled values
 			expected := make(map[int]struct{}, len(jobs))
 			for _, j := range jobs {
-				v, _ := strconv.Atoi(j.Value)
+				v, _ := strconv.Atoi(j.Data)
 				expected[v*2] = struct{}{}
 			}
 
@@ -273,9 +273,9 @@ func TestQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs to queue", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "success", ID: "job1"},
-				{Value: "error", ID: "job2"},
-				{Value: "success", ID: "job3"},
+				{Data: "success", ID: "job1"},
+				{Data: "error", ID: "job2"},
+				{Data: "success", ID: "job3"},
 			}
 
 			queue, worker, internalQueue := setupErrorQueue()
@@ -408,9 +408,9 @@ func TestPriorityQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs with priorities", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "high", ID: "job1", Priority: 1},
-				{Value: "medium", ID: "job2", Priority: 5},
-				{Value: "low", ID: "job3", Priority: 10},
+				{Data: "high", ID: "job1", Priority: 1},
+				{Data: "medium", ID: "job2", Priority: 5},
+				{Data: "low", ID: "job3", Priority: 10},
 			}
 
 			queue, worker, internalQueue := setupPriorityQueue()
@@ -502,9 +502,9 @@ func TestPriorityQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs with priorities", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "5", ID: "job1", Priority: 1},   // high priority
-				{Value: "10", ID: "job2", Priority: 5},  // medium priority
-				{Value: "15", ID: "job3", Priority: 10}, // low priority
+				{Data: "5", ID: "job1", Priority: 1},   // high priority
+				{Data: "10", ID: "job2", Priority: 5},  // medium priority
+				{Data: "15", ID: "job3", Priority: 10}, // low priority
 			}
 
 			queue, worker, internalQueue := setupResultPriorityQueue()
@@ -592,9 +592,9 @@ func TestPriorityQueues(t *testing.T) {
 
 		t.Run("Adding multiple jobs with priorities", func(t *testing.T) {
 			jobs := []Item[string]{
-				{Value: "success", ID: "job1", Priority: 1},  // high priority
-				{Value: "error", ID: "job2", Priority: 5},    // medium priority
-				{Value: "success", ID: "job3", Priority: 10}, // low priority
+				{Data: "success", ID: "job1", Priority: 1},  // high priority
+				{Data: "error", ID: "job2", Priority: 5},    // medium priority
+				{Data: "success", ID: "job3", Priority: 10}, // low priority
 			}
 
 			queue, worker, internalQueue := setupErrorPriorityQueue()

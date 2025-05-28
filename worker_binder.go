@@ -19,7 +19,7 @@ type IWorkerBinder[T any] interface {
 	// This is the simplest way to get a standard FIFO queue working with this worker.
 	//
 	// Returns:
-	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//   - Queue[T]: A fully configured Queue that automatically processes jobs using this worker.
 	//
 	// Example usage:
 	//   queue := worker.BindQueue()
@@ -35,7 +35,7 @@ type IWorkerBinder[T any] interface {
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
 	//
 	// Returns:
-	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//   - Queue[T]: A Queue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
@@ -47,7 +47,7 @@ type IWorkerBinder[T any] interface {
 	// Use this when you need to process jobs based on priority rather than FIFO order.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A fully configured PriorityQueue that processes jobs using this worker.
+	//   - PriorityQueue[T]: A fully configured PriorityQueue that processes jobs using this worker.
 	//
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
@@ -63,7 +63,7 @@ type IWorkerBinder[T any] interface {
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//   - PriorityQueue[T]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
@@ -113,8 +113,8 @@ type IWorkerBinder[T any] interface {
 	//   - DistributedQueue[T, any]: A distributed queue that can distribute jobs across multiple workers or instances.
 	//
 	// Example usage:
-	//   distributedQueue := NewDistributedQueue() // satisfies IDistributedQueue interface,  might be backed by Redis or other systems
-	//   distributedQueue := voidWorker.WithDistributedQueue(distributedQueue)
+	//   dq := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
+	//   distributedQueue := voidWorker.WithDistributedQueue(dq)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
 	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]
 
@@ -211,98 +211,6 @@ func (wb *workerBinder[T]) WithDistributedPriorityQueue(dq IDistributedPriorityQ
 	return NewDistributedPriorityQueue[T](dq)
 }
 
-type resultWorkerBinder[T, R any] struct {
-	*worker[T, iResultJob[T, R]]
-}
-
-// IResultWorkerBinder is the base interface for binding workers to different queue types.
-// It provides methods to connect workers with various queue implementations, enabling
-// flexible worker-queue configurations.
-// With queue binding capabilities for handling tasks of type T and producing results of type R.
-type IResultWorkerBinder[T, R any] interface {
-	Worker
-
-	// BindQueue binds the worker to a standard Queue implementation.
-	// It creates a new Queue with default settings and connects the worker to it.
-	// This is the simplest way to get a standard FIFO queue working with this worker.
-	//
-	// Returns:
-	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
-	//
-	// Example usage:
-	//   queue := worker.BindQueue()
-	//   queue.Add(data) // Enqueues a job that will be processed by the worker
-	BindQueue() ResultQueue[T, R]
-
-	// WithQueue binds the worker to a custom Queue implementation.
-	// This method allows you to use your own queue implementation as long as it
-	// satisfies the IQueue interface. This is useful when you need specialized
-	// queueing behavior beyond what the standard queue provides.
-	//
-	// Parameters:
-	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
-	//
-	// Returns:
-	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
-	//
-	// Example usage:
-	//   customQueue := NewCustomQueue() // satisfies IQueue interface
-	//   queue := worker.WithQueue(customQueue)
-	WithQueue(q IQueue) ResultQueue[T, R]
-
-	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
-	// It creates a new PriorityQueue with default settings and connects the worker to it.
-	// Use this when you need to process jobs based on priority rather than FIFO order.
-	//
-	// Returns:
-	//   - PriorityQueue[T, R]: A fully configured PriorityQueue that processes jobs using this worker.
-	//
-	// Example usage:
-	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
-	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
-	BindPriorityQueue() ResultPriorityQueue[T, R]
-
-	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
-	// This method allows you to use your own priority queue implementation as long as it
-	// satisfies the IPriorityQueue interface. This is useful when you need specialized
-	// priority-based queueing beyond what the standard implementation provides.
-	//
-	// Parameters:
-	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
-	//
-	// Returns:
-	//   - PriorityQueue[T, R]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
-	//
-	// Example usage:
-	//   customPriorityQueue := NewCustomPriorityQueue()
-	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
-	WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R]
-}
-
-func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
-	return &resultWorkerBinder[T, R]{
-		worker: worker,
-	}
-}
-
-func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
-	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]]())
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
-	defer rwb.worker.start()
-	return newResultQueue(rwb.worker, q)
-}
-
-func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
-	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]]())
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
-	defer rwb.worker.start()
-	return newResultPriorityQueue(rwb.worker, pq)
-}
-
 type errWorkerBinder[T any] struct {
 	*worker[T, iErrorJob[T]]
 }
@@ -391,4 +299,96 @@ func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
 func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
 	defer ewb.worker.start()
 	return newErrorPriorityQueue(ewb.worker, pq)
+}
+
+type resultWorkerBinder[T, R any] struct {
+	*worker[T, iResultJob[T, R]]
+}
+
+// IResultWorkerBinder is the base interface for binding workers to different queue types.
+// It provides methods to connect workers with various queue implementations, enabling
+// flexible worker-queue configurations.
+// With queue binding capabilities for handling tasks of type T and producing results of type R.
+type IResultWorkerBinder[T, R any] interface {
+	Worker
+
+	// BindQueue binds the worker to a standard Queue implementation.
+	// It creates a new Queue with default settings and connects the worker to it.
+	// This is the simplest way to get a standard FIFO queue working with this worker.
+	//
+	// Returns:
+	//   - ResultQueue[T, R]: A fully configured Result Queue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   queue := worker.BindQueue()
+	//   queue.Add(data) // Enqueues a job that will be processed by the worker
+	BindQueue() ResultQueue[T, R]
+
+	// WithQueue binds the worker to a custom Queue implementation.
+	// This method allows you to use your own queue implementation as long as it
+	// satisfies the IQueue interface. This is useful when you need specialized
+	// queueing behavior beyond what the standard queue provides.
+	//
+	// Parameters:
+	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//
+	// Returns:
+	//   - ResultQueue[T, R]: A Result Queue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customQueue := NewCustomQueue() // satisfies IQueue interface
+	//   queue := worker.WithQueue(customQueue)
+	WithQueue(q IQueue) ResultQueue[T, R]
+
+	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
+	// It creates a new PriorityQueue with default settings and connects the worker to it.
+	// Use this when you need to process jobs based on priority rather than FIFO order.
+	//
+	// Returns:
+	//   - ResultPriorityQueue[T, R]: A fully configured ResultPriorityQueue that processes jobs using this worker.
+	//
+	// Example usage:
+	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
+	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
+	BindPriorityQueue() ResultPriorityQueue[T, R]
+
+	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
+	// This method allows you to use your own priority queue implementation as long as it
+	// satisfies the IPriorityQueue interface. This is useful when you need specialized
+	// priority-based queueing beyond what the standard implementation provides.
+	//
+	// Parameters:
+	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//
+	// Returns:
+	//   - ResultPriorityQueue[T, R]: A Result PriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customPriorityQueue := NewCustomPriorityQueue()
+	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
+	WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R]
+}
+
+func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
+	return &resultWorkerBinder[T, R]{
+		worker: worker,
+	}
+}
+
+func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
+	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]]())
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
+	defer rwb.worker.start()
+	return newResultQueue(rwb.worker, q)
+}
+
+func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
+	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]]())
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
+	defer rwb.worker.start()
+	return newResultPriorityQueue(rwb.worker, pq)
 }

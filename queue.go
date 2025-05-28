@@ -21,9 +21,11 @@ type Queue[T any] interface {
 
 // Item represents a data item to be processed by a worker
 // It combines a unique identifier with a value of any generic type
+// and a optional priority for priority queues
+// This only used for AddAll operations
 type Item[T any] struct {
 	ID       string
-	Value    T
+	Data     T
 	Priority int
 }
 
@@ -56,7 +58,7 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
@@ -111,7 +113,7 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
@@ -166,7 +168,7 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Value, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
