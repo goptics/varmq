@@ -32,19 +32,35 @@ type Result[T any] struct {
 }
 
 type Identifiable interface {
+	// ID returns the unique identifier of the job.
+	// Returns empty in case don't set any id by client
 	ID() string
 }
 
 type StatusProvider interface {
+	// IsClosed returns true if the job has been closed.
 	IsClosed() bool
+	// Status returns a string representation of the job's current lifecycle state.
+	// Possible return values:
+	// - "Created": Job has been created but not yet added to a queue
+	// - "Queued": Job has been added to a queue and is waiting to be processed
+	// - "Processing": Job is currently being processed by a worker
+	// - "Finished": Job processing has completed successfully
+	// - "Closed": Job has been manually closed and will not be processed
 	Status() string
 }
 
 type Awaitable interface {
+	// Wait blocks the caller until the job has completed processing.
+	// This method can be used to synchronize execution flow with job completion.
+	// If the job has already finished, this method returns immediately.
 	Wait()
 }
 
 type Drainer interface {
+	// Drain cleans up the job's internal communication channels and releases associated resources.
+	// This should be called when the job is no longer needed.
+	// After calling Drain, the job's result channels will be closed and cannot be used again.
 	Drain()
 }
 
@@ -68,6 +84,7 @@ type jobView[T any] struct {
 
 type Job[T any] interface {
 	Identifiable
+	// Data returns the payload data associated with the job.
 	Data() T
 }
 
@@ -249,6 +266,10 @@ type errorJob[T any] struct {
 type EnqueuedErrJob interface {
 	EnqueuedJob
 	Drainer
+	// Err retrieves any error that occurred during job execution.
+	// This method blocks the caller until the job processing is complete.
+	// If the job has already finished, it returns immediately with the error result.
+	// A nil return value indicates successful job execution without errors.
 	Err() error
 }
 
@@ -306,7 +327,13 @@ type resultJob[T, R any] struct {
 type EnqueuedResultJob[R any] interface {
 	EnqueuedJob
 	Drainer
+	// Result retrieves the computed result value and any error from the job execution.
+	// This method blocks the caller until the job processing is complete.
+	// If the job has already finished, it returns immediately with the result.
 	Result() (R, error)
+	// Close marks the job as closed without removing it from the queue.
+	// When a closed job is dequeued, the worker will skip processing it.
+	// This operation takes constant time as it only updates the job's state.
 	Close() error
 }
 

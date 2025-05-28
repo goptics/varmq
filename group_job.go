@@ -14,6 +14,7 @@ type groupJob[T any] struct {
 }
 
 type PendingTracker interface {
+	// NumPending returns the number of pending jobs in the group.
 	NumPending() int
 }
 
@@ -79,6 +80,8 @@ type resultGroupJob[T, R any] struct {
 // cleanup capabilities. This interface is returned by the AddAll method when used with NewResultWorker,
 // allowing clients to collect job results through the Results() method
 type EnqueuedResultGroupJob[R any] interface {
+	// Results returns a channel from which results of the group jobs can be received.
+	// It blocks until all jobs in the group are completed.
 	Results() <-chan Result[R]
 	PendingTracker
 	Awaitable
@@ -147,6 +150,8 @@ type errorGroupJob[T any] struct {
 // cleanup capabilities. This interface is returned by the AddAll method when used with NewErrWorker,
 // allowing clients to collect errors generated during job processing through the Errs() method
 type EnqueuedErrGroupJob interface {
+	// Errs returns a channel from which errors of the group jobs can be received.
+	// It blocks until all jobs in the group are completed.
 	Errs() <-chan error
 	PendingTracker
 	Awaitable
