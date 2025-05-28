@@ -38,7 +38,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i}
+			data[i] = Item[int]{Data: i}
 		}
 
 		b.ResetTimer()
@@ -76,7 +76,7 @@ func BenchmarkQueue_ParallelOperations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i}
+			data[i] = Item[int]{Data: i}
 		}
 
 		b.ResetTimer()
@@ -114,7 +114,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i, Priority: i % 10}
+			data[i] = Item[int]{Data: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -152,7 +152,7 @@ func BenchmarkPriorityQueue_ParallelOperations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i, Priority: i % 10}
+			data[i] = Item[int]{Data: i, Priority: i % 10}
 		}
 
 		b.ResetTimer()
@@ -190,7 +190,7 @@ func BenchmarkResultWorker_Operations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i}
+			data[i] = Item[int]{Data: i}
 		}
 
 		b.ResetTimer()
@@ -228,7 +228,7 @@ func BenchmarkResultWorker_ParallelOperations(b *testing.B) {
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
-			data[i] = Item[int]{Value: i}
+			data[i] = Item[int]{Data: i}
 		}
 
 		b.ResetTimer()
