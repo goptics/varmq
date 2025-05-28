@@ -60,7 +60,7 @@ func setupErrorQueue() (*errorQueue[string], *worker[string, iErrorJob[string]],
 }
 
 // Test groups for each queue type
-func TestQueue(t *testing.T) {
+func TestQueues(t *testing.T) {
 	t.Run("BasicQueue", func(t *testing.T) {
 		t.Run("Start worker", func(t *testing.T) {
 			_, worker, _ := setupBasicQueue()
@@ -359,7 +359,7 @@ func setupErrorPriorityQueue() (*errorPriorityQueue[string], *worker[string, iEr
 	return queue, worker, internalQueue
 }
 
-func TestPriorityQueue(t *testing.T) {
+func TestPriorityQueues(t *testing.T) {
 	// Test cases for Priority Queue
 	t.Run("PriorityQueue", func(t *testing.T) {
 		t.Run("Start worker", func(t *testing.T) {
