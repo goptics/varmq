@@ -106,6 +106,10 @@ type EnqueuedJob interface {
 	Identifiable
 	StatusProvider
 	Awaitable
+	// Close marks the job as closed without removing it from the queue.
+	// When a closed job is dequeued, the worker will skip processing it.
+	// This operation takes constant time as it only updates the job's state.
+	Close() error
 }
 
 // New creates a new job with the provided data.
@@ -331,10 +335,6 @@ type EnqueuedResultJob[R any] interface {
 	// This method blocks the caller until the job processing is complete.
 	// If the job has already finished, it returns immediately with the result.
 	Result() (R, error)
-	// Close marks the job as closed without removing it from the queue.
-	// When a closed job is dequeued, the worker will skip processing it.
-	// This operation takes constant time as it only updates the job's state.
-	Close() error
 }
 
 func newResultJob[T, R any](data T, configs jobConfigs) *resultJob[T, R] {
