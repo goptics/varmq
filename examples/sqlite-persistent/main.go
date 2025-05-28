@@ -21,10 +21,10 @@ func main() {
 	}
 
 	// Create a worker
-	worker := varmq.NewWorker(func(data string) {
-		fmt.Printf("Processing: %s\n", data)
+	worker := varmq.NewWorker(func(j varmq.Job[string]) {
+		fmt.Printf("Processing: %s\n", j.Data())
 		time.Sleep(1 * time.Second)
-		fmt.Printf("Processed: %s\n", data)
+		fmt.Printf("Processed: %s\n", j.Data())
 	})
 
 	// Bind the worker to the persistent queue
