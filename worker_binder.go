@@ -113,8 +113,8 @@ type IWorkerBinder[T any] interface {
 	//   - DistributedQueue[T, any]: A distributed queue that can distribute jobs across multiple workers or instances.
 	//
 	// Example usage:
-	//   distributedQueue := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
-	//   distributedQueue := voidWorker.WithDistributedQueue(distributedQueue)
+	//   dq := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
+	//   distributedQueue := voidWorker.WithDistributedQueue(dq)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
 	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]
 
