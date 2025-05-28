@@ -44,18 +44,44 @@ func mergeConfigs(c configs, cs ...any) configs {
 	return c
 }
 
+// WithIdleWorkerExpiryDuration configures the time period after which idle workers are
+// automatically removed from the worker pool to conserve system resources.
+//
+// This setting helps optimize resource usage by removing unnecessary idle workers when
+// the system experiences prolonged periods of low activity. When job volume increases again,
+// new workers will be created as needed up to the configured concurrency level.
+//
+// Parameters:
+//   - duration: The time period a worker can remain idle before being removed
+//     (e.g., 30*time.Second, 5*time.Minute)
+//
+// Default behavior: If this option is not set, exactly one idle worker will always be maintained
+// in the pool, regardless of how high the concurrency level is configured.
+//
+// When job load decreases below the concurrency level, the system will immediately begin
+// removing excess idle workers according to this expiry duration setting.
 func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 	return func(c *configs) {
 		c.IdleWorkerExpiryDuration = duration
 	}
 }
 
-// WithMinIdleWorkerRatio sets the percentage of idle workers to keep in the pool
-// relative to the concurrency level.
-// This helps scale the idle worker pool with concurrency changes.
-// Example: 20 means keep 20% of the concurrency level as idle workers.
-// The actual number of idle workers will be calculated as: concurrency * percentage / 100.
-// The percentage must be between 1 and 100. Values outside this range will be clamped.
+// WithMinIdleWorkerRatio configures the minimum percentage of idle workers to maintain in the pool
+// as a proportion of the total concurrency level.
+//
+// This configuration helps optimize resource usage by dynamically scaling the idle worker pool
+// when the concurrency level changes. Maintaining some idle workers allows the system to respond
+// quickly to incoming jobs without the overhead of creating new worker goroutines.
+//
+// Parameters:
+//   - percentage: An integer between 1-100 representing the percentage of workers to keep idle
+//
+// Examples:
+//   - WithMinIdleWorkerRatio(20): With concurrency=10, maintains 2 idle workers (20%)
+//   - WithMinIdleWorkerRatio(50): With concurrency=10, maintains 5 idle workers (50%)
+//
+// Values outside the range 1-100 are automatically clamped (0 becomes 1, >100 becomes 100).
+// By default there is always at least one idle worker inside the pool.
 func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 	// Clamp percentage between 1 and 100
 	if percentage == 0 {
@@ -69,12 +95,17 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 	}
 }
 
+// WithConcurrency sets the concurrency level for the worker.
+// If not set, the default concurrency level is 1.
+// If concurrency is less than 1, it defaults to number of CPU cores.
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
 		c.Concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
+// WithJobIdGenerator sets the job ID generator function for the worker.
+// If not set there wouldn't be any job id
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		c.JobIdGenerator = fn
@@ -107,6 +138,7 @@ func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 	return c
 }
 
+// WithJobId sets the job ID for the job.
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
 		if id == "" {
