@@ -84,7 +84,7 @@ type jobView[T any] struct {
 
 type Job[T any] interface {
 	Identifiable
-	// Data returns the data data associated with the job.
+	// Data returns the data associated with the job.
 	Data() T
 }
 
