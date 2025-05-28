@@ -19,7 +19,7 @@ type IWorkerBinder[T any] interface {
 	// This is the simplest way to get a standard FIFO queue working with this worker.
 	//
 	// Returns:
-	//   - Queue[T, R]: A fully configured Queue that automatically processes jobs using this worker.
+	//   - Queue[T]: A fully configured Queue that automatically processes jobs using this worker.
 	//
 	// Example usage:
 	//   queue := worker.BindQueue()
@@ -35,7 +35,7 @@ type IWorkerBinder[T any] interface {
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
 	//
 	// Returns:
-	//   - Queue[T, R]: A Queue that uses the provided implementation and processes jobs with this worker.
+	//   - Queue[T]: A Queue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
@@ -47,7 +47,7 @@ type IWorkerBinder[T any] interface {
 	// Use this when you need to process jobs based on priority rather than FIFO order.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A fully configured PriorityQueue that processes jobs using this worker.
+	//   - PriorityQueue[T]: A fully configured PriorityQueue that processes jobs using this worker.
 	//
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
@@ -63,7 +63,7 @@ type IWorkerBinder[T any] interface {
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
 	//
 	// Returns:
-	//   - PriorityQueue[T, R]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//   - PriorityQueue[T]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
 	//
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
@@ -211,6 +211,96 @@ func (wb *workerBinder[T]) WithDistributedPriorityQueue(dq IDistributedPriorityQ
 	return NewDistributedPriorityQueue[T](dq)
 }
 
+type errWorkerBinder[T any] struct {
+	*worker[T, iErrorJob[T]]
+}
+
+// IErrWorkerBinder is the interface for binding error workers to different queue types.
+// It provides methods to connect error workers with various queue implementations, enabling
+// with queue binding capabilities for handling tasks of type T and collecting errors during processing.
+type IErrWorkerBinder[T any] interface {
+	Worker
+
+	// BindQueue binds the worker to a standard Queue implementation.
+	// It creates a new Queue with default settings and connects with the worker.
+	// Returns:
+	//   - ErrQueue[T]: A fully configured ErrQueue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   errQueue := errWorker.BindQueue()
+	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
+	BindQueue() ErrQueue[T]
+	// WithQueue binds the worker to a custom Queue implementation.
+	// This method allows you to use your own queue implementation as long as it
+	// satisfies the IQueue interface. This is useful when you need specialized
+	// queueing behavior beyond what the standard queue provides.
+	//
+	// Parameters:
+	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//
+	// Returns:
+	//   - ErrQueue[T]: A fully configured ErrQueue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customQueue := NewCustomQueue()
+	//   errQueue := errWorker.WithQueue(customQueue)
+	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
+	WithQueue(q IQueue) ErrQueue[T]
+
+	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
+	// It creates a new PriorityQueue with default settings and connects with the worker.
+	// Use this when you need to process jobs based on priority rather than FIFO order.
+	//
+	// Returns:
+	//   - ErrPriorityQueue[T]: A fully configured ErrPriorityQueue that automatically processes jobs using this worker.
+	//
+	// Example usage:
+	//   errPriorityQueue := errWorker.BindPriorityQueue()
+	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
+	BindPriorityQueue() ErrPriorityQueue[T]
+
+	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
+	// This method allows you to use your own priority queue implementation as long as it
+	// satisfies the IPriorityQueue interface. This is useful when you need specialized
+	// priority-based queueing beyond what the standard implementation provides.
+	//
+	// Parameters:
+	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//
+	// Returns:
+	//   - ErrPriorityQueue[T]: A fully configured ErrPriorityQueue that uses the provided implementation and processes jobs with this worker.
+	//
+	// Example usage:
+	//   customPriorityQueue := NewCustomPriorityQueue()
+	//   errPriorityQueue := errWorker.WithPriorityQueue(customPriorityQueue)
+	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
+	WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T]
+}
+
+func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
+	return &errWorkerBinder[T]{
+		worker: worker,
+	}
+}
+
+func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
+	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
+	defer ewb.worker.start()
+	return newErrorQueue(ewb.worker, q)
+}
+
+func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
+	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]]())
+}
+
+func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
+	defer ewb.worker.start()
+	return newErrorPriorityQueue(ewb.worker, pq)
+}
+
 type resultWorkerBinder[T, R any] struct {
 	*worker[T, iResultJob[T, R]]
 }
@@ -301,94 +391,4 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
 	defer rwb.worker.start()
 	return newResultPriorityQueue(rwb.worker, pq)
-}
-
-type errWorkerBinder[T any] struct {
-	*worker[T, iErrorJob[T]]
-}
-
-// IErrWorkerBinder is the interface for binding error workers to different queue types.
-// It provides methods to connect error workers with various queue implementations, enabling
-// with queue binding capabilities for handling tasks of type T and collecting errors during processing.
-type IErrWorkerBinder[T any] interface {
-	Worker
-
-	// BindQueue binds the worker to a standard Queue implementation.
-	// It creates a new Queue with default settings and connects with the worker.
-	// Returns:
-	//   - ErrQueue[T]: A fully configured ErrQueue that automatically processes jobs using this worker.
-	//
-	// Example usage:
-	//   errQueue := errWorker.BindQueue()
-	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
-	BindQueue() ErrQueue[T]
-	// WithQueue binds the worker to a custom Queue implementation.
-	// This method allows you to use your own queue implementation as long as it
-	// satisfies the IQueue interface. This is useful when you need specialized
-	// queueing behavior beyond what the standard queue provides.
-	//
-	// Parameters:
-	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
-	//
-	// Returns:
-	//   - ErrQueue[T]: A fully configured ErrQueue that uses the provided implementation and processes jobs with this worker.
-	//
-	// Example usage:
-	//   customQueue := NewCustomQueue()
-	//   errQueue := errWorker.WithQueue(customQueue)
-	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
-	WithQueue(q IQueue) ErrQueue[T]
-
-	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
-	// It creates a new PriorityQueue with default settings and connects with the worker.
-	// Use this when you need to process jobs based on priority rather than FIFO order.
-	//
-	// Returns:
-	//   - ErrPriorityQueue[T]: A fully configured ErrPriorityQueue that automatically processes jobs using this worker.
-	//
-	// Example usage:
-	//   errPriorityQueue := errWorker.BindPriorityQueue()
-	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
-	BindPriorityQueue() ErrPriorityQueue[T]
-
-	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
-	// This method allows you to use your own priority queue implementation as long as it
-	// satisfies the IPriorityQueue interface. This is useful when you need specialized
-	// priority-based queueing beyond what the standard implementation provides.
-	//
-	// Parameters:
-	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
-	//
-	// Returns:
-	//   - ErrPriorityQueue[T]: A fully configured ErrPriorityQueue that uses the provided implementation and processes jobs with this worker.
-	//
-	// Example usage:
-	//   customPriorityQueue := NewCustomPriorityQueue()
-	//   errPriorityQueue := errWorker.WithPriorityQueue(customPriorityQueue)
-	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
-	WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T]
-}
-
-func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
-	return &errWorkerBinder[T]{
-		worker: worker,
-	}
-}
-
-func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
-	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]]())
-}
-
-func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
-	defer ewb.worker.start()
-	return newErrorQueue(ewb.worker, q)
-}
-
-func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
-	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]]())
-}
-
-func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
-	defer ewb.worker.start()
-	return newErrorPriorityQueue(ewb.worker, pq)
 }
