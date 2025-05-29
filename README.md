@@ -140,11 +140,13 @@ cpu: AMD EPYC 7763 64-Core Processor
 - **Minimal Dependencies**: Core library has no external dependencies
 - **Production Ready**: Built for real-world scenarios and high-load applications
 - **Highly Extensible**: Create your own storage adapters by implementing VarMQ's [internal queue interfaces](./diagrams/interface.drawio.png)
-- **Built-in adapters**:
-  - ⚡ Redis: [redisq](https://github.com/goptics/redisq)
-  - 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
-  - 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
-  - 🐘 PostgreSQL: 🔄 Upcoming
+
+### Built-in adapters
+
+- ⚡ Redis: [redisq](https://github.com/goptics/redisq)
+- 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
+- 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
+- 🐘 PostgreSQL: 🔄 Upcoming
 
 ## API Reference
 
