@@ -1,647 +1,483 @@
 # VarMQ API Reference
 
-Comprehensive API documentation for theVarMQ (Go Concurrent Queue) library.
+Welcome to the VarMQ API reference. VarMQ is a powerful Go library for creating concurrent job queues, enabling robust and scalable background task processing.
+
+## Core Concepts
+
+- **Workers**: Entities that execute tasks. You define the task logic as a function.
+- **Jobs**: Represent individual tasks to be processed. Each job carries data and progresses through a lifecycle (e.g., Created, Queued, Processing, Finished).
+- **Queues**: Structures that hold jobs before they are picked up by workers. VarMQ supports various queue types (standard, priority, persistent, distributed).
+- **Concurrency**: VarMQ manages a pool of worker goroutines to process jobs concurrently. The level of concurrency is configurable.
 
 ## Worker Creation
 
-VarMQ provides three main worker creation functions, each designed for different use cases.
+VarMQ provides three primary functions to create workers, tailored for different job outcomes:
 
-### `NewWorker`
+### 1. `NewWorker`
 
-Creates a worker that processes items and returns both a result and an error.
+Creates a general-purpose worker. The worker function provided to `NewWorker` does not explicitly return a value or error; its interaction is primarily through the `Job[T]` argument it receives. This worker type is versatile and is the **only type that can be bound to persistent and distributed queues**.
 
 ```go
-func NewWorker[T, R any](wf WorkerFunc[T, R], config ...any) IWorkerBinder[T, R]
+func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T]
 ```
+
+- **`wf func(j Job[T])`**: Your function that defines the work. `j Job[T]` provides access to job data and ID.
+- **`config ...any`**: Optional configurations (e.g., `varmq.WithConcurrency(4)` or simply `4`).
+- **Returns**: `IWorkerBinder[T]`, used to bind this worker to various queue types.
 
 **Example:**
 
 ```go
-worker := varmq.NewWorker(func(data string) (int, error) {
-    return len(data), nil
-})
-
-queue := worker.BindQueue()
-
-data, err := queue.Add("hello gophers").Result()
-if err != nil {
-    fmt.Printf("Error adding job: %v\n", err)
-    return
-}
-
-fmt.Printf("Result: %d\n", data)
-```
-
-### `NewErrWorker`
-
-Creates a worker for operations that only need to return an error status (no result value).
-
-```go
-func NewErrWorker[T any](wf WorkerErrFunc[T], config ...any) IWorkerBinder[T, any]
-```
-
-**Example:**
-
-```go
-worker := varmq.NewErrWorker(func(data int) error {
-    log.Printf("Processing: %d", data)
-    return nil
-})
-
-queue := worker.BindQueue()
-queue.Add(42).Drain() // Returns a job that will only indicate success/failure
-```
-
-### `NewVoidWorker`
-
-Creates a worker for operations that don't return any value (void functions). This is the most performant worker type and the only one that can be bound to distributed queues.
-
-```go
-func NewVoidWorker[T any](wf VoidWorkerFunc[T], config ...any) IVoidWorkerBinder[T]
-```
-
-**Example:**
-
-```go
-worker := varmq.NewVoidWorker(func(data int) {
-    fmt.Printf("Processing: %d\n", data)
-})
-
-q1 := worker.BindQueue()
-q1.Add(42).Drain() // Fire and forget
-
-q2 := worker.BindPriorityQueue() // ❌ one worker can't be bound with multiple queues. it will panic
-
-q2 := worker.Copy().BindPriorityQueue() // ✅ using Copy, you can bind multiple queues but each queue will have its own worker
-```
-
-### Worker Configuration
-
-All worker creation functions accept optional configuration parameters that customize worker behavior. These can be passed as additional arguments after the worker function.
-
-```go
-// Create a worker with 8 concurrent processors
-worker := varmq.NewWorker(myWorkerFunc, varmq.WithConcurrency(8))
-
-// Or simply pass an integer for concurrency (shorthand)
-worker := varmq.NewWorker(myWorkerFunc, 8)
-
-
-// Multiple configurations can be combined
-worker := varmq.NewWorker(myWorkerFunc,
-    varmq.WithConcurrency(8),
-    varmq.WithJobIdGenerator(myIdGenerator))
-```
-
-#### Configuration Options
-
-| Configuration                            | Description                                                         | Default                       |
-| ---------------------------------------- | ------------------------------------------------------------------- | ----------------------------- |
-| `WithConcurrency(n)`                     | Sets the number of concurrent workers                               | `1`                           |
-| `WithCache(cache)`                       | Provides a custom cache implementation                              | In-memory cache               |
-| `WithAutoCleanupCache(duration)`         | Sets the cache cleanup interval                                     | No auto-cleanup               |
-| `WithJobIdGenerator(func)`               | Custom job ID generation function                                   | Empty string (auto-generated) |
-| `WithIdleWorkerExpiryDuration(duration)` | Sets how long idle workers will be kept before expiry               | `0` (no expiry)               |
-| `WithMinIdleWorkerRatio(percentage)`     | Sets the percentage of idle workers to keep relative to concurrency | `0` (no minimum)              |
-
-**Examples:**
-
-```go
-// Set concurrency to use all available CPU cores
-// if the concurrency is set to less than 1, then its set the concurrency number of cpu using runtime.NumCPU() func
-worker := varmq.NewWorker(myFunc, varmq.WithConcurrency(0))
-
-// Combine idle worker management options with other configuration
-worker := varmq.NewWorker(myFunc,
-    varmq.WithConcurrency(50), // Setting the max concurrency to 50
-    varmq.WithIdleWorkerExpiryDuration(5 * time.Minute), // Set idle worker expiry duration to 5 minutes
-    varmq.WithMinIdleWorkerRatio(20), // This will keep 10 idle workers (20% of 50) and expire others (40) after 5 minutes of inactivity
-    )
-
-// Use custom job ID generator
-worker := varmq.NewWorker(myFunc, varmq.WithJobIdGenerator(func() string {
-    return uuid.New().String() // Using UUID for job IDs
-}))
-
-// Configure cache to clean up every hour
-worker := varmq.NewWorker(myFunc, varmq.WithAutoCleanupCache(1 * time.Hour))
-```
-
-## Queue Types
-
-VarMQ supports different queue types for various use cases.
-
-### Standard Queue
-
-A First-In-First-Out (FIFO) queue for sequential processing of jobs.
-
-```go
-// Create and bind a standard queue
-queue := worker.BindQueue()
-
-// Or use a custom queue implementation
-customQueue := myCustomQueue // implements IQueue
-queue := worker.WithQueue(customQueue)
-```
-
-### Priority Queue
-
-Processes jobs based on their assigned priority rather than insertion order.
-
-```go
-// Create and bind a priority queue
-priorityQueue := worker.BindPriorityQueue()
-
-// Add a job with priority (lower numbers = higher priority)
-priorityQueue.Add(data, 5).Drain()
-
-// Or use a custom priority queue implementation
-customPriorityQueue := myCustomPriorityQueue // implements IPriorityQueue
-priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
-```
-
-### Persistent Queue
-
-Ensures jobs are not lost even if the application crashes or restarts.
-
-```go
-// Bind to a persistent queue implementation
-persistentQueue := myPersistentQueue // implements IPersistentQueue
-queue := worker.WithPersistentQueue(persistentQueue)
-```
-
-**SQLite Adapter Example:**
-
-```go
-package main
-
 import (
     "fmt"
+    "github.com/goptics/varmq"
     "time"
-
-    "github.com/goptics/sqliteq"
-    "github.com/goptics/varmq"
-    "github.com/lucsky/cuid"
 )
 
-func main() {
-    w := varmq.NewVoidWorker(func(num int) {
-        println(num)
-        time.Sleep(1 * time.Second)
-    }, 2)
-    sq := sqliteq.New("test.db")
-    pq, err := sq.NewQueue("test")
-
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-
-    q := w.WithPersistentQueue(pq)
-    defer q.WaitUntilFinished()
-
-    for i := range 20 {
-        q.Add(i, varmq.WithJobId(cuid.New()))
-    }
-
-    fmt.Println("done")
-}
-```
-
-**Redis Adapter Example:**
-
-```go
-// Using the redisq adapter (one of many possible adapters)
-import (
-    "github.com/goptics/varmq"
-    "github.com/goptics/redisq"
-)
-
-// Connect to Redis using the adapter
-redisQueue := redisq.New("redis://localhost:6379")
-defer redisQueue.Close()
-
-// Create a persistent queue
-persistentQueue := redisQueue.NewQueue("my_jobs")
-defer persistentQueue.Close()
-
-// Create a worker and bind to the persistent queue
-worker := varmq.NewWorker(func(data string) (string, error) {
-    return "Processed: " + data, nil
-}, 5)
-
-// Bind the worker to the persistent queue
-queue := worker.WithPersistentQueue(persistentQueue)
-```
-
-**Creating Your Own Adapter:**
-
-You can create your own persistent queue adapter by implementing the `IPersistentQueue` interface:
-
-```go
-// IPersistentQueue is the root interface of persistent queue operations.
-type IPersistentQueue interface {
-    IQueue
-    IAcknowledgeable
+func myTask(job varmq.Job[string]) {
+    fmt.Printf("Processing job %s with data: %s\n", job.ID(), job.Data())
+    // Simulate work
+    time.Sleep(100 * time.Millisecond)
+    fmt.Printf("Finished job %s\n", job.ID())
 }
 
-// IAcknowledgeable is the root interface of acknowledgeable operations.
-type IAcknowledgeable interface {
-    // Returns true if the item was successfully acknowledged, false otherwise.
-    Acknowledge(ackID string) bool
-    // DequeueWithAckId dequeues an item from the queue
-    // Returns the item, a boolean indicating if the operation was successful, and the acknowledgment ID.
-    DequeueWithAckId() (any, bool, string)
-}
-```
+// Create a worker with default concurrency (1)
+worker := varmq.NewWorker(myTask)
 
-### Persistent Priority Queue
-
-Combines persistence with priority-based processing.
-
-```go
-// Bind to a persistent priority queue implementation
-persistentPriorityQueue := myPersistentPriorityQueue // implements IPersistentPriorityQueue
-queue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
-```
-
-### Distributed Queue
-
-Allows job processing across multiple instances or processes. Only compatible with void workers.
-
-```go
-// Bind to a distributed queue implementation
-distributedQueue := myDistributedQueue // implements IDistributedQueue
-queue := voidWorker.WithDistributedQueue(distributedQueue)
-```
-
-**Redis Adapter for Distributed Queue:**
-
-```go
-// Provider (adds jobs to queue)
-import (
-    "fmt"
-    "github.com/goptics/varmq"
-    "github.com/goptics/redisq"
-)
-
-// Connect to Redis ensure the redis server is running
-redisQueue := redisq.New("redis://localhost:6379")
-rq := redisQueue.NewDistributedQueue("jobs_queue")
-
-// Create a distributed queue
-distQueue := varmq.NewDistributedQueue[string, string](rq)
-
-// Add jobs from anywhere
-for i := 0; i < 1000; i++ {
-    distQueue.Add(fmt.Sprintf("Job %d", i))
-}
-```
-
-```go
-// Consumer (processes jobs)
-import (
-    "fmt"
-    "github.com/goptics/varmq"
-    "github.com/goptics/redisq"
-)
-
-// Connect to the same Redis server
-redisQueue := redisq.New("redis://localhost:6379")
-rq := redisQueue.NewDistributedQueue("jobs_queue")
-
-// Create a worker
-worker := varmq.NewVoidWorker(func(data string) {
-    fmt.Println("Processing:", data)
-}, 10) // 10 concurrent workers
-
-// Bind to distributed queue
-queue := worker.WithDistributedQueue(rq)
-
-// Start listening for jobs
-rq.Listen()
-```
-
-**Creating Your Own Distributed Queue Adapter:**
-
-You can create your own distributed queue adapter by implementing the `IDistributedQueue` interface:
-
-```go
-// IDistributedQueue is the root interface of distributed queue operations.
-type IDistributedQueue interface {
-    IPersistentQueue
-    ISubscribable
-}
-
-// ISubscribable is the root interface of subscribable operations.
-type ISubscribable interface {
-    Subscribe(func(action string))
-}
-```
-
-### Distributed Priority Queue
-
-Combines distributed processing with priority-based ordering.
-
-```go
-// Bind to a distributed priority queue implementation
-distributedPriorityQueue := myDistributedPriorityQueue // implements IDistributedPriorityQueue
-queue := voidWorker.WithDistributedPriorityQueue(distributedPriorityQueue)
-```
-
-## Queue Operations
-
-### Adding Jobs
-
-```go
-// Add a single job
-job := queue.Add(data)
-
-// Add multiple jobs
-groupJob := queue.AddAll([]varmq.Item{
-    {ID: "job1", Value: data1},
-    {ID: "job2", Value: data2},
-})
-
-// If you don't need the results, use Drain to free the result channel resources
-job.Drain()
-
-> For group jobs, call `groupJob.Drain()` to free the shared result channel
-> Note: Individual jobs in a group job are not accessible - you can only drain the entire group
-```
-
-```go
-// Create a worker that processes strings and returns their length
-worker := varmq.NewWorker(func(data string) (int, error) {
-    return len(data), nil
-}, 4) // 4 concurrent workers
-
-// Bind a queue
+// Bind to a standard queue
 queue := worker.BindQueue()
 
-// Create a batch of items to process
-items := []varmq.Item[string]{
-    {ID: "job1", Value: "hello"},
-    {ID: "job2", Value: "world"},
-    {ID: "job3", Value: "concurrent"},
+// Add a job (fire-and-forget style for this worker type when using standard queue)
+if job, ok := queue.Add("hello from NewWorker"); ok {
+    fmt.Printf("Added job %s to standard queue.\n", job.ID())
+    // For NewWorker with standard queues, job.Wait() can be used if needed.
+    job.Wait() // Wait for this specific job to complete (optional)
+}
+```
+
+> NOTE: One worker can be bound with only one queue type at a time. Multi binding is not supported. Will be supported in the near future.
+
+#### Persistent Queue
+
+```go
+// Example with persistent queue (conceptual - requires an adapter)
+// persistentAdapter := myRedisQueueAdapter.NewQueue("my_jobs")
+persistentQ := worker.WithPersistentQueue(persistentAdapter)
+if ok := persistentQ.Add("critical task data"); ok {
+    fmt.Println("Job added to persistent queue.")
 }
 
-// Add all items to the queue at once
-groupJob := queue.AddAll(items)
+worker.WaitUntilFinished() // Wait for all current jobs to finish
+```
 
-// Stream all results through a non-blocking channel
-resultsChan, err := groupJob.Results()
-if err != nil {
-    fmt.Printf("Error getting results channel: %v\n", err)
-    return
+For concrete examples of persistent queue adapter usage, see the [redis-persistent example](../examples/redis-persistent) and the [sqlite-persistent example](../examples/sqlite-persistent).
+
+#### Distributed Queue
+
+```go
+// Example with distributed queue (conceptual - requires an adapter)
+distributedQ := worker.WithDistributedQueue(distributedAdapter)
+if ok := distributedQ.Add("critical task data"); ok {
+    fmt.Println("Job added to distributed queue.")
 }
 
-// Process results as they arrive even though they are processed concurrently
-for result := range resultsChan {
-    // Each result contains JobId, Data, and Err fields
-    if result.Err != nil {
-        fmt.Printf("Job %s failed with error: %v\n", result.JobId, result.Err)
+worker.WaitUntilFinished() // Wait for all current jobs to finish
+```
+
+For concrete examples of distributed queue adapter usage, see the [redis-distributed example](../examples/redis-distributed)
+
+### 2. `NewErrWorker`
+
+Creates a worker for tasks that only need to report success or failure (an error).
+
+```go
+func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinder[T]
+```
+
+- **`wf func(j Job[T]) error`**: Your worker function that returns an `error`.
+- **Returns**: `IErrWorkerBinder[T]`.
+- **Note**: Cannot be bound to persistent or distributed queues.
+
+**Example:**
+
+```go
+import (
+    "fmt"
+    "github.com/goptics/varmq"
+)
+
+func validationTask(job varmq.Job[int]) error {
+    data := job.Data()
+    if data < 0 {
+        return fmt.Errorf("job %s: invalid data %d, must be non-negative", job.ID(), data)
+    }
+    fmt.Printf("Job %s: data %d is valid.\n", job.ID(), data)
+    return nil
+}
+
+errWorker := varmq.NewErrWorker(validationTask, varmq.WithConcurrency(2))
+errQueue := errWorker.BindQueue()
+
+if enqueuedJob, ok := errQueue.Add(42); ok {
+    fmt.Printf("Added job %s. Waiting for error status...\n", enqueuedJob.ID())
+    if err := enqueuedJob.Err(); err != nil {
+        fmt.Printf("Job %s failed: %v\n", enqueuedJob.ID(), err)
     } else {
-        fmt.Printf("Job %s result: %v\n", result.JobId, result.Data)
+        fmt.Printf("Job %s succeeded.\n", enqueuedJob.ID())
     }
 }
+
+errWorker.WaitUntilFinished() // Wait for all current jobs to finish
 ```
 
-### Shutdown Operations
+### 3. `NewResultWorker`
+
+Creates a worker for tasks that produce a result value and may also return an error.
 
 ```go
-// Graceful shutdown - waits for all jobs to complete
-queue.WaitAndClose()
-
-// Immediate shutdown - discards pending jobs
-queue.Close()
-
-// Purge - removes all pending jobs without shutting down
-queue.Purge()
+func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IResultWorkerBinder[T, R]
 ```
 
-## Worker Control
+- **`wf func(j Job[T]) (R, error)`**: Your worker function returning a result of type `R` and an `error`.
+- **Returns**: `IResultWorkerBinder[T, R]`.
+- **Note**: Cannot be bound to persistent or distributed queues.
 
-VarMQ provides several methods to control worker behavior at runtime. Most control methods affect the worker's status which can be checked using `worker.Status()`.
-
-### `Pause()`
-
-Temporarily suspends worker processing. Jobs will remain in the queue but won't be processed until resumed.
-
-- Sets worker status to `"Paused"`
-- All currently running jobs will complete, but no new jobs will be processed
+**Example:**
 
 ```go
-worker.Pause()
-fmt.Println(worker.Status()) // Outputs: "Paused"
+import (
+    "fmt"
+    "strings"
+    "github.com/goptics/varmq"
+)
+
+func stringLengthTask(job varmq.Job[string]) (int, error) {
+    data := job.Data()
+    if data == "" {
+        return 0, fmt.Errorf("job %s: input string cannot be empty", job.ID())
+    }
+    fmt.Printf("Job %s: calculating length of '%s'\n", job.ID(), data)
+    return len(data), nil
+}
+
+resultWorker := varmq.NewResultWorker(stringLengthTask)
+resultQueue := resultWorker.BindQueue()
+
+if enqueuedJob, ok := resultQueue.Add("hello gophers"); ok {
+    fmt.Printf("Added job %s. Waiting for result...\n", enqueuedJob.ID())
+    res, err := enqueuedJob.Result() // or call Drain() to release resources
+    if err != nil {
+        fmt.Printf("Job %s failed: %v\n", enqueuedJob.ID(), err)
+    } else {
+        fmt.Printf("Job %s result: %d\n", enqueuedJob.ID(), res)
+    }
+}
+
+resultWorker.WaitUntilFinished() // Wait for all current jobs to finish
 ```
 
-### `Resume()`
+## Worker Configuration
 
-Resumes processing of jobs after the worker has been paused.
-
-- Sets worker status to `"Running"`
-- Begins processing jobs from the queue again
-- Returns an error if the worker is already running
+Worker behavior can be customized using configuration functions passed during creation. You can pass an `int` directly for concurrency or use `ConfigFunc` options.
 
 ```go
-err := worker.Resume()
-fmt.Println(worker.Status()) // Outputs: "Running"
+// Example: Concurrency as int
+worker1 := varmq.NewWorker(myTask, 4) // 4 concurrent workers
+
+// Example: Using ConfigFunc
+worker2 := varmq.NewWorker(myTask, varmq.WithConcurrency(8))
+
+// Example: Multiple ConfigFuncs
+worker3 := varmq.NewWorker(myTask,
+    varmq.WithConcurrency(2),
+    varmq.WithJobIdGenerator(func() string { return "my-prefix-" + uuid.NewString() }),
+    varmq.WithMinIdleWorkerRatio(50),
+)
+
+// Note: Some configuration options work best together. For example,
+// WithMinIdleWorkerRatio is most effective when combined with WithIdleWorkerExpiryDuration.
 ```
 
-### `Stop()`
+Available `ConfigFunc` options (defined in `config.go`):
 
-Shuts down the worker pool by removing all running goroutines. The worker can be restarted later using the `Restart()` method.
+| Option                                          | Description                                                                                           | Default                                                                                             |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `WithConcurrency(n int)`                        | Sets max concurrent worker goroutines. If `n < 1`, uses `runtime.NumCPU()`.                           | `1`                                                                                                 |
+| `WithJobIdGenerator(fn func() string)`          | Provides a custom function to generate job IDs.                                                       | Returns `""` (empty string)                                                                         |
+| `WithIdleWorkerExpiryDuration(d time.Duration)` | Duration after which excess idle workers (beyond min ratio) are removed.                              | `0` (no expiry, keeps 1 idle)                                                                       |
+| `WithMinIdleWorkerRatio(p uint8)`               | Minimum percentage (1-100) of idle workers to maintain relative to max concurrency. Clamped to 1-100. | `1` (effectively keeps 1 idle worker by default, or more if `IdleWorkerExpiryDuration` is also set) |
 
-- Sets worker status to `"Stopped"`
-- Stops all background processes (timers, tickers)
-- Closes job channels and clears the channel stack
-- Clears the worker cache
+## The `Worker` Interface
+
+All worker binders (`IWorkerBinder`, `IErrWorkerBinder`, `IResultWorkerBinder`) embed the `Worker` interface, providing methods to control and inspect the worker pool. These methods can typically be accessed via `queue.Worker()`.
 
 ```go
-worker.Stop()
-fmt.Println(worker.Status()) // Outputs: "Stopped"
+// Accessing worker methods through a queue
+queue := worker.BindQueue()
+workerInstance := queue.Worker()
+workerInstance.Pause()
 ```
 
-### `Restart()`
+Key methods of the `Worker` interface (defined in `worker.go`):
 
-Reinitializes worker goroutines. Useful after configuration changes or to recover from errors.
+- **Status Inspection:**
 
-- First pauses and waits for ongoing jobs to complete
-- Reinitializes the worker's internal notifier system
-- Sets worker status to `"Running"`
-- Returns any error that occurs during restart
+  - `IsPaused() bool`: Returns `true` if the worker pool is paused.
+  - `IsStopped() bool`: Returns `true` if the worker pool is stopped.
+  - `IsRunning() bool`: Returns `true` if the worker pool is active (not paused or stopped).
+  - `Status() string`: Returns the current status (e.g., "Initiated", "Running", "Paused", "Stopped").
+  - `NumProcessing() int`: Number of jobs currently being processed.
+  - `NumConcurrency() int`: Current maximum concurrency (pool size).
+  - `NumIdleWorkers() int`: Number of idle workers in the pool.
+
+- **Control Methods:**
+  - `TunePool(concurrency int) error`: Dynamically adjusts the worker pool size. Returns error if not running or if concurrency is the same.
+  - `Pause() error`: Pauses the worker pool; new jobs won't be picked up. Processing jobs complete.
+  - `PauseAndWait() error`: Pauses and waits for all currently processing jobs to finish.
+  - `Resume() error`: Resumes a paused worker pool.
+  - `Stop() error`: Stops the worker pool gracefully. Waits for processing jobs to finish. Queue is not closed.
+  - `Restart() error`: Restarts a stopped worker pool.
+  - `WaitUntilFinished()`: Blocks until all jobs _currently in the queue and being processed_ are finished. Does not prevent new jobs from being added.
+  - `WaitAndStop() error`: Waits for all jobs in the queue to be processed, then stops the worker.
+
+## Job Lifecycle and Interfaces
+
+Jobs in VarMQ progress through several states: "Created", "Queued", "Processing", "Finished", "Closed".
+
+### Core Job Interfaces (`job.go`)
+
+- **`Job[T any]`**: Basic job information.
+
+  - `ID() string`: The job's unique identifier.
+  - `Data() T`: The payload/data of the job.
+
+- **`EnqueuedJob`**: Represents a job successfully added to a queue (typically from `NewWorker` + standard/priority queue).
+
+  - Embeds `Identifiable`, `StatusProvider`, `Awaitable`.
+  - `ID() string`
+  - `Status() string`: Current lifecycle status.
+  - `IsClosed() bool`
+  - `Wait()`: Blocks until this job completes processing.
+  - `Close() error`: Marks the job as closed; workers will skip it. (Does not remove from queue instantly).
+
+- **`EnqueuedErrJob`**: For jobs from `NewErrWorker`.
+
+  - Embeds `EnqueuedJob` and `Drainer`.
+  - `Err() error`: Blocks until completion, then returns the error status.
+  - `Drain()`: Cleans up resources (e.g., internal channels). Call if you need to abandon the job without reading its error.
+
+- **`EnqueuedResultJob[R any]`**: For jobs from `NewResultWorker`.
+  - Embeds `EnqueuedJob` and `Drainer`.
+  - `Result() (R, error)`: Blocks until completion, then returns the result and error.
+  - `Drain()`: Cleans up resources. Call if you need to abandon the job without reading its result.
+
+### `Result[T any]` Struct
+
+Used by `EnqueuedResultGroupJob` to stream results.
 
 ```go
-err := worker.Restart()
-fmt.Println(worker.Status()) // Outputs: "Running"
-```
-
-### `TunePool(concurrency int) error`
-
-Dynamically adjusts the number of concurrent worker goroutines at runtime.
-
-- Returns an error if the worker is not in the running state
-- Does not affect the worker's status
-- Only changes the number of concurrent worker goroutines
-
-```go
-// Later, scale up concurrency based on load
-worker.TunePool(8)  // Scale up to 8 workers
-
-// Later, scale down when load decreases
-worker.TunePool(2)  // Scale down to 2 workers
-```
-
-## Worker Status Methods
-
-VarMQ provides methods to query the current status and state of workers. These methods are useful for monitoring, logging, and implementing adaptive behavior based on the worker's current state.
-
-### `IsPaused() bool`
-
-Checks if the worker is currently in the paused state.
-
-```go
-if worker.IsPaused() {
-    fmt.Println("Worker is paused")
+type Result[T any] struct {
+    JobId string
+    Data  T
+    Err   error
 }
 ```
 
-### `IsStopped() bool`
+## Job Configuration
 
-Checks if the worker is currently in the stopped state.
+When adding jobs, you can provide optional configurations.
 
 ```go
-if worker.IsStopped() {
-    fmt.Println("Worker is stopped")
+// Example: Custom Job ID
+jobId := "my-unique-job-123"
+queue.Add(myData, varmq.WithJobId(jobId))
+```
+
+Available `JobConfigFunc` options (defined in `config.go`):
+
+| Option                 | Description                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `WithJobId(id string)` | Sets a specific ID for the job. If `id` is empty, it's ignored. If not provided, the worker's `JobIdGenerator` is used. |
+
+## Queue Types and Binding
+
+Workers are bound to queues. The type of worker determines which queue types it can bind to.
+
+### Worker Binder Interfaces (`worker_binder.go`)
+
+These interfaces are returned by the worker creation functions and provide methods to bind to queues.
+
+- **`IWorkerBinder[T]`** (from `NewWorker`)
+- **`IErrWorkerBinder[T]`** (from `NewErrWorker`)
+- **`IResultWorkerBinder[T, R]`** (from `NewResultWorker`)
+
+### Common Binding Methods
+
+Each binder provides methods to bind to standard and priority queues:
+
+- **Standard Queue (FIFO):**
+
+  - `BindQueue() Queue[T]`: Creates and binds to a new default standard queue.
+  - `WithQueue(q IQueue) Queue[T]`: Binds to a custom `IQueue` implementation.
+    (Returns `ErrQueue[T]` or `ResultQueue[T,R]` for respective binders).
+
+- **Priority Queue:**
+  - `BindPriorityQueue() PriorityQueue[T]`: Creates and binds to a new default priority queue.
+  - `WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T]`: Binds to a custom `IPriorityQueue`.
+    (Returns `ErrPriorityQueue[T]` or `ResultPriorityQueue[T,R]` for respective binders).
+
+### Specialized Bindings for `IWorkerBinder[T]` (from `NewWorker`)
+
+`NewWorker` is unique in its ability to bind to persistent and distributed queues.
+
+- **Persistent Queues:** (Requires an external `IPersistentQueue` adapter, e.g., Redis-backed)
+
+  - `WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T]`
+  - `WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T]`
+
+- **Distributed Queues:** (Requires an external `IDistributedQueue` adapter, e.g., Redis Pub/Sub)
+  - `WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]`
+  - `WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T]`
+    _Note: When using distributed queues, the worker binder subscribes to queue events (e.g., "enqueued") to trigger job processing._
+
+### Queue Interfaces
+
+All specific queue interfaces (e.g., `Queue[T]`, `PriorityQueue[T]`) embed `IExternalBaseQueue`.
+
+- **`IExternalBaseQueue`** (`queue.go`):
+
+  - `NumPending() int`: Number of jobs waiting in the queue.
+  - `Purge()`: Removes all pending jobs from the queue.
+  - `Close() error`: Stops the associated worker and closes the queue. Pending jobs may be discarded.
+  - `Worker() Worker`: Returns the worker instance bound to this queue.
+
+- **Standard Queues (`queue.go`):**
+
+  - `Queue[T]`: `Add(data T, ...) (EnqueuedJob, bool)`
+  - `ErrQueue[T]`: `Add(data T, ...) (EnqueuedErrJob, bool)`
+  - `ResultQueue[T, R]`: `Add(data T, ...) (EnqueuedResultJob[R], bool)`
+    _Also include `AddAll` methods for each._
+
+- **Priority Queues (`priority.go`):**
+
+  - `PriorityQueue[T]`: `Add(data T, priority int, ...) (EnqueuedJob, bool)`
+  - `ErrPriorityQueue[T]`: `Add(data T, priority int, ...) (EnqueuedErrJob, bool)`
+  - `ResultPriorityQueue[T, R]`: `Add(data T, priority int, ...) (EnqueuedResultJob[R], bool)`
+    _Also include `AddAll` methods for each._
+
+- **Persistent Queues (`persistent.go`, `persistent_priority.go`) - For `NewWorker` only:**
+
+  - `PersistentQueue[T]`: `Add(data T, ...) bool`. Returns `bool` indicating success/failure of enqueueing the serialized job.
+  - `PersistentPriorityQueue[T]`: `Add(data T, priority int, ...) bool`.
+    _Note: These `Add` methods return `bool` because the job is serialized and handed off. Direct `EnqueuedJob` tracking is not provided from `Add`._
+
+- **Distributed Queues (`distributed.go`, `distributed_priority.go`) - For `NewWorker` only:**
+  - `DistributedQueue[T]`: `Add(data T, ...) bool`.
+  - `DistributedPriorityQueue[T]`: `Add(data T, priority int, ...) bool`.
+    _Similar to persistent queues, `Add` returns `bool`._
+
+## Adding Jobs
+
+### Single Jobs
+
+- **Standard/Priority Queues (Non-Persistent/Distributed):**
+  The `Add` method returns an `EnqueuedJob`, `EnqueuedErrJob`, or `EnqueuedResultJob[R]` (and a `bool` for success).
+
+  ```go
+  // For Queue[T] from NewWorker
+  if enqueuedJob, ok := queue.Add(myData); ok {
+    enqueuedJob.Wait()
+  }
+
+  // For ErrQueue[T] from NewErrWorker
+  if enqueuedErrJob, ok := errQueue.Add(myData); ok {
+    // Example: Consume the error. Calling Err() consumes the job's outcome.
+    if err := enqueuedErrJob.Err(); err != nil {
+       fmt.Printf("Job %s processing error: %v\n", enqueuedErrJob.ID(), err)
+    }
+    // Note: Calling Err() automatically handles resource cleanup.
+    // Only call Drain() if you need to abandon the job without reading its result.
+  }
+
+  // For ResultQueue[T,R] from NewResultWorker
+  if enqueuedResultJob, ok := resultQueue.Add(myData); ok {
+    // Example: Consume the result. Calling Result() consumes the job's outcome.
+    if res, err := enqueuedResultJob.Result(); err != nil {
+      fmt.Printf("Job %s processing error: %v\n", enqueuedResultJob.ID(), err)
+    } else {
+      fmt.Printf("Job %s result: %v\n", enqueuedResultJob.ID(), res)
+    }
+    // Note: Calling Result() automatically handles resource cleanup.
+    // Only call Drain() if you need to abandon the job without reading its result.
+  }
+  ```
+
+- **Persistent/Distributed Queues (Bound with `NewWorker`):**
+  The `Add` method returns a `bool`.
+
+  ```go
+  // For PersistentQueue[T]
+  if ok := persistentQueue.Add(criticalData); ok {
+    fmt.Println("Job added to persistent queue.")
+  }
+  ```
+
+### Batch Jobs (`AddAll`)
+
+Use `AddAll` to enqueue multiple jobs at once. It takes a slice of `varmq.Item[T]`.
+
+```go
+type Item[T any] struct {
+    ID       string // Optional: custom job ID
+    Data     T      // Job payload
+    Priority int    // Used by priority queues; ignored by standard queues
 }
 ```
 
-### `IsRunning() bool`
+`AddAll` returns a group job handler:
 
-Checks if the worker is currently in the running state and processing jobs.
+- `EnqueuedGroupJob` (for `Queue[T]` from `NewWorker`):
 
-```go
-if worker.IsRunning() {
-    fmt.Println("Worker is actively processing jobs")
-}
-```
+  - `NumPending() int`
+  - `Wait()`: Waits for all jobs in the group to complete.
 
-### `Status() string`
+- `EnqueuedErrGroupJob` (for `ErrQueue[T]` from `NewErrWorker`):
 
-Returns the current status of the worker as a string. Possible values are "Initiated", "Running", "Paused", and "Stopped".
+  - `NumPending() int`
+  - `Wait()`
+  - `Errs() <-chan error`: Returns a channel to receive errors from jobs in the group. Iterate until the channel is closed.
+  - `Drain()`: Call if you need to abandon the job without reading its errors.
 
-```go
-status := worker.Status()
-fmt.Println("Current worker status:", status)  // e.g., "Current worker status: Running"
-```
+- `EnqueuedResultGroupJob[R]` (for `ResultQueue[T,R]` from `NewResultWorker`):
+  - `NumPending() int`
+  - `Wait()`
+  - `Results() <-chan Result[R]`: Returns a channel to receive `Result[R]` structs. Iterate until the channel is closed.
+  - `Drain()`: Call if you need to abandon the job without reading its result.
 
-### `NumProcessing() int`
-
-Returns the number of jobs currently being processed by the worker. This can be useful for monitoring workload and implementing adaptive behavior.
-
-```go
-processingCount := worker.NumProcessing()
-fmt.Printf("Currently processing %d jobs\n", processingCount)
-```
-
-#### `NumConcurrency() int`
-
-Returns the current max concurrency. This indicates how many jobs the worker can process simultaneously.
+**Example with `AddAll` and `EnqueuedResultGroupJob`:**
 
 ```go
-concurrency := worker.NumConcurrency()
-fmt.Printf("Worker is configured with %d concurrent processors\n", concurrency)
-```
-
-#### `NumIdleWorkers() int`
-
-Returns the number of idle workers currently in the pool. This can be useful for monitoring resource usage and understanding the effects of your idle worker configuration.
-
-```go
-idleWorkers := worker.NumIdleWorkers()
-fmt.Printf("Worker has %d idle workers ready to process jobs\n", idleWorkers)
-```
-
-## Adapters
-
-VarMQ supports multiple storage backends through adapters. An adapter is any implementation that satisfies the required interfaces.
-
-### Available Adapters
-
-- **Redis:** [redisq](https://github.com/goptics/redisq) - Redis-based adapter for persistent and distributed queues
-- **SQLite:** [sqliteq](https://github.com/goptics/sqliteq) - SQLite-based adapter for persistent queues
-- **DuckDB:** [duckdbq](https://github.com/goptics/duckdbq) - DuckDB-based adapter for persistent queues
-
-### Planned Adapters
-
-- **PostgreSQL** - For robust persistent and distributed queues
-- **DiceDB** - Future adapter implementation
-
-### Creating Custom Adapters
-
-You can create your own adapters by implementing the appropriate interfaces:
-
-- For persistent queues: `IPersistentQueue`
-- For persistent priority queues: `IPersistentPriorityQueue`
-- For distributed queues: `IDistributedQueue`
-- For distributed priority queues: `IDistributedPriorityQueue`
-
-Example skeleton of a custom adapter:
-
-```go
-type MyPersistentQueue struct {
-    // Your implementation details
+items := []varmq.Item[string]{
+    {Data: "task1", Priority: 1},
+    {ID: "custom-id-2", Data: "task2", Priority: 0}, // Higher priority
+    {Data: "task3"},
 }
 
-// Implement IQueue methods
-func (q *MyPersistentQueue) Enqueue(item any) bool {
-    // Store the item in your backend
+// Assuming resultPriorityQueue is a ResultPriorityQueue[string, int]
+groupJob := resultPriorityQueue.AddAll(items)
+
+fmt.Printf("%d jobs pending in group.\n", groupJob.NumPending())
+
+// Iterate over the results channel in real-time
+for res := range groupJob.Results() {
+    if res.Err != nil {
+        fmt.Printf("Group job %s failed: %v\n", res.JobId, res.Err)
+    } else {
+        fmt.Printf("Group job %s result: %v\n", res.JobId, res.Data)
+    }
 }
 
-// ... implement other required methods
-
-// Implement IAcknowledgeable methods
-func (q *MyPersistentQueue) Acknowledge(ackID string) bool {
-    // Mark the item as acknowledged in your backend
-}
-
-func (q *MyPersistentQueue) DequeueWithAckId() (any, bool, string) {
-    // Store the item for future acknowledgment
-}
+// Note: Calling Results() automatically handles resource cleanup.
+// Only call Drain() if you need to abandon the job without reading its result.
+fmt.Println("All group jobs processed.")
 ```
-
-## Interface Hierarchy
-
-**Click to Open [VarMQ Interface Hierarchy Diagram](../diagrams/interface.drawio.png)**
-
-## Job Management
-
-### `Job`
-
-Represents a job that can be enqueued and processed, returned by invoking `Add` and `AddAll` method
-
-#### Methods
-
-- `Status() string`
-
-  - Returns the current status of the job.
-
-- `IsClosed() bool`
-
-  - Returns whether the job is closed.
-
-- `Drain()`
-
-  - Discards the job's result and error values asynchronously.
-
-- `Result() (R, error)`
-
-  - Blocks until the job completes and returns the result and any error.
-
-- `Errors() <-chan error`
-
-  - Returns a channel that will receive the errors of the void group job.
-
-- `Results() (<-chan Result[R], error)`
-  - Returns a receive-only channel that will receive the results of the group job and an error if one occurred during channel creation.

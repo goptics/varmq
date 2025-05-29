@@ -1,5 +1,66 @@
 # Changelog
 
+## [v1.2.0] (2025-05-29)
+
+### ✨ What's New in v1.2.0
+
+- **Dynamic Worker Pool Tuning**:
+  - `worker.TunePool(concurrency int)`: Allows dynamic adjustment of the worker pool size at runtime.
+- **Idle Worker Management**:
+  - Configuration option `WithMinIdleWorkerRatio` for fine-grained control over the minimum ratio of idle workers.
+  - Configuration option `WithIdleWorkerExpiryDuration` for setting the expiry duration of idle workers, optimizing resource usage.
+- Added `worker.NumIdleWorkers()` to get the number of idle workers.
+- Added `worker.NumConcurrency()` to get the current number of concurrency.
+
+### 📊 Performance Improvements
+
+- **`Add` Operation Benchmark:**
+  - _Previous Version_: 384 Bytes/operation, 8 allocations/operation
+  - _Current Version (v1.2.0)_: 122 Bytes/operation, 3 allocations/operation
+  - _Impact_: Approximately 68% reduction in memory usage and 62.5% reduction in allocations per operation.
+
+### 📈 Improvements
+
+- **Pool Management**: Enhanced control over worker pool lifecycle and resource allocation with new tuning and idle management features.
+- **Wait Management**: Centralized and clarified wait/stop logic on the `IWorker` interface and replaced wait group implementation by channels (`WaitUntilFinished`, `WaitAndStop`).
+- **Job Management**:
+  - The `Job[T]` interface, now passed to all worker functions, offers richer interaction with job data and metadata (e.g., `job.ID()`, `job.Data()`).
+  - Single job can be closeable.
+- **Group Job Management**:
+  - Improved handling of batch operations with `EnqueuedGroupJob[T,R]` interface, providing methods like `NumPending()`, `Results()`, `Errors()` and `Wait()`
+
+### ➖ Removed Features
+
+- **Built-in Cache**:
+  - Removed `WithCache` and `WithAutoCleanupCache` configuration options. Cache management is now externalized.
+- **Persistent Queue `AddAll`**:
+  - The `AddAll` batch submission feature has been removed from persistent queue implementations.
+- **Internal Job Management for Persistent Queues (via Cache)**:
+  - With the removal of the internal cache, job state management for persistent queues relies more directly on the specific persistent adapter implementation.
+
+### 💥 Breaking Changes
+
+This version introduces significant API changes for improved clarity, consistency, and functionality.
+
+| Old API Element                               | New API Element                                            | Description                                                                                                                                              |
+| --------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `w.CurrentProcessingCount()`                  | `w.NumProcessing()`                                        | Renamed worker method for getting the count of currently processing jobs.                                                                                |
+| `q.PendingCount()`                            | `q.NumPending()`                                           | Renamed queue method for getting the count of pending jobs.                                                                                              |
+| `PQItem[T]` struct                            | Merged into `Item[T]` (or direct priority in `Add`)        | Priority queue item handling simplified. `Item[T]` is now used (primarily for `AddAll` operations), removing the need for a separate `PQItem[T]` struct. |
+| `NewWorker[T, R](wf func(T) (R, error), ...)` | `NewResultWorker[T, R](wf func(j Job[T]) (R, error), ...)` | Worker for tasks returning a result and error. Worker function now receives `Job[T]`.                                                                    |
+| `NewVoidWorker[T](wf func(T), ...)`           | `NewWorker[T](wf func(j Job[T]), ...)`                     | Worker for fire-and-forget tasks. Renamed and worker function now receives `Job[T]`. This is also the primary worker for persistent/distributed queues.  |
+| `NewErrWorker[T](wf func(T) error, ...)`      | `NewErrWorker[T](wf func(j Job[T]) error, ...)`            | Worker for tasks returning only an error. Worker function now receives `Job[T]`.                                                                         |
+| `queue.WaitUntilFinished()`                   | `worker.WaitUntilFinished()`                               | Responsibility for waiting for all jobs to complete moved from queue to worker.                                                                          |
+| `queue.WaitAndClose()`                        | `worker.WaitAndStop()`                                     | Responsibility for waiting and stopping processing moved from queue to worker.                                                                           |
+
+---
+
+## [v1.1.0]
+
+- 📦 Bump Release
+
+---
+
 ## [v1.0.0] (2025-05-01)
 
 ### 🔄 Project Evolution: GoCQ → VarMQ
@@ -137,7 +198,7 @@
 - Enhanced test coverage
 - Added benchmarks for normal and void queue operations
 
-## [v1.0.0] (2025-03-7)
+## [v1.0.0] (Gocq Initial Release) - 2025-03-07
 
 ### 🎉 Initial Release
 
