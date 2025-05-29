@@ -148,24 +148,7 @@ cpu: AMD EPYC 7763 64-Core Processor
 
 ## API Reference
 
-For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
-
-### Table of Contents
-
-- [Core Concepts](./docs/API_REFERENCE.md#core-concepts)
-- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
-  - [`NewWorker`](./docs/API_REFERENCE.md#1-newworker)
-  - [`NewErrWorker`](./docs/API_REFERENCE.md#2-newerrworker)
-  - [`NewResultWorker`](./docs/API_REFERENCE.md#3-newresultworker)
-- [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
-- [Worker Control](./docs/API_REFERENCE.md#worker-control)
-- [Queue Types](./docs/API_REFERENCE.md#queue-types)
-- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
-- [Job Management](./docs/API_REFERENCE.md#job-management)
-- [GroupJob Management](./docs/API_REFERENCE.md#groupjob-management)
-- [Adapters](./docs/API_REFERENCE.md#adapters)
-- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
-  - [Queue Interfaces](./docs/API_REFERENCE.md#queue-interfaces)
+For detailed API documentation, see the **[API Reference](./docs/API_REFERENCE.md.md)**.
 
 ## The Concurrency Architecture
 
