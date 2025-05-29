@@ -2,7 +2,10 @@ package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 type PersistentQueue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+
+	// Worker returns the bound worker.
+	Worker() Worker
 
 	// Add adds a job with the given data to the persistent queue
 	// It returns true if the job was added successfully
@@ -18,8 +21,8 @@ type persistentQueue[T any] struct {
 func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue) PersistentQueue[T] {
 	w.setQueue(pq)
 	return &persistentQueue[T]{queue: &queue[T]{
-		externalQueue: newExternalQueue(w),
-		internalQueue: pq,
+		externalBaseQueue: newExternalQueue(pq, w),
+		internalQueue:     pq,
 	}}
 }
 

@@ -29,7 +29,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		worker := NewWorker(task)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for j := range b.N {
@@ -43,7 +43,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		worker := NewWorker(task)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
@@ -64,7 +64,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		worker := NewWorker(task)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for i := range b.N {
@@ -79,7 +79,7 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		worker := NewWorker(task)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
@@ -100,7 +100,7 @@ func BenchmarkErrWorker_Operations(b *testing.B) {
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for j := range b.N {
@@ -115,7 +115,7 @@ func BenchmarkErrWorker_Operations(b *testing.B) {
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
@@ -136,7 +136,7 @@ func BenchmarkErrPriorityQueue_Operations(b *testing.B) {
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for i := range b.N {
@@ -151,7 +151,7 @@ func BenchmarkErrPriorityQueue_Operations(b *testing.B) {
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
@@ -172,7 +172,7 @@ func BenchmarkResultWorker_Operations(b *testing.B) {
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for j := range b.N {
@@ -187,7 +187,7 @@ func BenchmarkResultWorker_Operations(b *testing.B) {
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
 		q := worker.BindQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {
@@ -208,7 +208,7 @@ func BenchmarkResultPriorityQueue_Operations(b *testing.B) {
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		b.ResetTimer()
 		for i := range b.N {
@@ -223,7 +223,7 @@ func BenchmarkResultPriorityQueue_Operations(b *testing.B) {
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a priority queue
 		q := worker.BindPriorityQueue()
-		defer q.WaitAndClose()
+		defer worker.WaitAndStop()
 
 		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
 		for i := range data {

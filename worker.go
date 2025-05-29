@@ -62,19 +62,19 @@ type Worker interface {
 	// PauseAndWait pauses the worker and waits until all ongoing processes are done.
 	PauseAndWait() error
 	// Stop stops the worker and waits until all ongoing processes are done to gracefully close the channels.
-	// Time complexity: O(n) where n is the number of channels
 	Stop() error
 	// Restart restarts the worker and initializes new worker goroutines based on the concurrency.
-	// Time complexity: O(n) where n is the concurrency
 	Restart() error
 	// Resume continues processing jobs those are pending in the queue.
-	// Time complexity: O(n) where n is the concurrency
 	Resume() error
+	// WaitUntilFinished waits until all pending Jobs in the are processed.
+	WaitUntilFinished()
+	// WaitAndStop waits until all pending Jobs in the queue are processed and then closes the queue.
+	WaitAndStop() error
 
 	queue() IBaseQueue
 	configs() configs
 	notifyToPullNextJobs()
-	wait()
 }
 
 // newWorker creates a new worker with the given worker function and configurations
@@ -153,7 +153,7 @@ func (w *worker[T, JobType]) queue() IBaseQueue {
 	return w.Queue
 }
 
-func (w *worker[T, JobType]) wait() {
+func (w *worker[T, JobType]) WaitUntilFinished() {
 	// Check if we need to wait
 	// 1. If worker is paused or stopped and no jobs are processing, no need to wait
 	// 2. If worker is running but queue is empty and no jobs are processing, no need to wait
@@ -550,6 +550,12 @@ func (w *worker[T, JobType]) PauseAndWait() error {
 		return err
 	}
 
-	w.wait()
+	w.WaitUntilFinished()
 	return nil
+}
+
+func (w *worker[T, JobType]) WaitAndStop() error {
+	w.WaitUntilFinished()
+
+	return w.Stop()
 }

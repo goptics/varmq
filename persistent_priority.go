@@ -1,7 +1,7 @@
 package varmq
 
 type PersistentPriorityQueue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
 	// Add adds a new Job with the given priority to the queue
 	// It returns true if the job was added successfully
 	Add(data T, priority int, configs ...JobConfigFunc) bool

@@ -1,12 +1,14 @@
 package varmq
 
 type priorityQueue[T any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IPriorityQueue
 }
 
 type PriorityQueue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job with the given priority to the queue and returns a EnqueuedJob to handle the job.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool)
@@ -20,8 +22,8 @@ func newPriorityQueue[T any](worker *worker[T, iJob[T]], pq IPriorityQueue) *pri
 	worker.setQueue(pq)
 
 	return &priorityQueue[T]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: pq,
+		externalBaseQueue: newExternalQueue(pq, worker),
+		internalQueue:     pq,
 	}
 }
 
@@ -58,12 +60,14 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 }
 
 type resultPriorityQueue[T any, R any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IPriorityQueue
 }
 
 type ResultPriorityQueue[T, R any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job with the given priority to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
@@ -76,8 +80,8 @@ func newResultPriorityQueue[T, R any](worker *worker[T, iResultJob[T, R]], pq IP
 	worker.setQueue(pq)
 
 	return &resultPriorityQueue[T, R]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: pq,
+		externalBaseQueue: newExternalQueue(pq, worker),
+		internalQueue:     pq,
 	}
 }
 
@@ -114,12 +118,14 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 }
 
 type errorPriorityQueue[T any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IPriorityQueue
 }
 
 type ErrPriorityQueue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job with the given priority to the queue and returns a EnqueuedErrJob to handle the job with error receiving.
 	// Time complexity: O(log n)
 	Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
@@ -132,8 +138,8 @@ func newErrorPriorityQueue[T any](worker *worker[T, iErrorJob[T]], pq IPriorityQ
 	worker.setQueue(pq)
 
 	return &errorPriorityQueue[T]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: pq,
+		externalBaseQueue: newExternalQueue(pq, worker),
+		internalQueue:     pq,
 	}
 }
 

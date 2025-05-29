@@ -3,6 +3,7 @@ package varmq
 import (
 	"errors"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -260,7 +261,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(err, "Worker should start without error")
 
 				// Wait for jobs to be processed and pool to expand
-				w.wait()
+				w.WaitUntilFinished()
 
 				assert.Equal(w.pool.Len(), w.NumConcurrency(), "Pool size should be equal to the concurrency")
 
@@ -277,6 +278,53 @@ func TestWorkers(t *testing.T) {
 				time.Sleep(idleExpiryDuration * 2)
 				// After the expiration the pool size must be equal to one
 				assert.Equal(w.pool.Len(), 1, "Pool size should be equal to one after expiration")
+			})
+
+			t.Run("WaitUntilFinished", func(t *testing.T) {
+				queue, worker, internalQueue := setupBasicQueue()
+				assert := assert.New(t)
+
+				// Start the worker
+				err := worker.start()
+				assert.NoError(err, "Worker should start successfully")
+				defer worker.Stop()
+
+				// Add several jobs
+				for i := range 5 {
+					queue.Add("test-data-" + strconv.Itoa(i))
+				}
+				assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+
+				// Wait until all jobs are processed
+				worker.WaitUntilFinished()
+
+				// After waiting, should have no pending jobs
+				assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
+				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
+			})
+
+			t.Run("WaitAndStop", func(t *testing.T) {
+				queue, worker, internalQueue := setupBasicQueue()
+				assert := assert.New(t)
+
+				// Start the worker
+				err := worker.start()
+				assert.NoError(err, "Worker should start successfully")
+
+				// Add several jobs
+				for i := range 5 {
+					queue.Add("test-data-" + strconv.Itoa(i))
+				}
+				assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+
+				// Wait and close the queue
+				err = worker.WaitAndStop()
+				assert.NoError(err, "WaitAndStop should not return an error")
+
+				// After waiting and closing, should have no pending jobs and worker should be stopped
+				assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitAndStop")
+				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndStop")
+				assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndStop")
 			})
 		})
 
