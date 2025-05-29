@@ -55,6 +55,8 @@ if job, ok := queue.Add("hello from NewWorker"); ok {
 }
 ```
 
+> NOTE: One worker can be bound with only one queue type at a time. Multi binding is not supported. Will be supported in the near future.
+
 #### Persistent Queue
 
 ```go
