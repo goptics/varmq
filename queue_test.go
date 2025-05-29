@@ -655,29 +655,6 @@ func TestExternalQueue(t *testing.T) {
 		assert.Equal(expectedWorker, actualWorker, "Worker() should return the expected worker instance")
 	})
 
-	t.Run("WaitUntilFinished", func(t *testing.T) {
-		queue, worker, internalQueue := setupBasicQueue()
-		assert := assert.New(t)
-
-		// Start the worker
-		err := worker.start()
-		assert.NoError(err, "Worker should start successfully")
-		defer worker.Stop()
-
-		// Add several jobs
-		for i := range 5 {
-			queue.Add("test-data-" + strconv.Itoa(i))
-		}
-		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
-
-		// Wait until all jobs are processed
-		queue.WaitUntilFinished()
-
-		// After waiting, should have no pending jobs
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitUntilFinished")
-		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
-	})
-
 	t.Run("Purge", func(t *testing.T) {
 		queue, _, internalQueue := setupBasicQueue()
 		assert := assert.New(t)
@@ -717,30 +694,5 @@ func TestExternalQueue(t *testing.T) {
 		// After closing, should have no pending jobs and worker should be stopped
 		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after Close")
 		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after Close")
-		assert.True(worker.IsStopped(), "Worker should be stopped after Close")
-	})
-
-	t.Run("WaitAndClose", func(t *testing.T) {
-		queue, worker, internalQueue := setupBasicQueue()
-		assert := assert.New(t)
-
-		// Start the worker
-		err := worker.start()
-		assert.NoError(err, "Worker should start successfully")
-
-		// Add several jobs
-		for i := range 5 {
-			queue.Add("test-data-" + strconv.Itoa(i))
-		}
-		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
-
-		// Wait and close the queue
-		err = queue.WaitAndClose()
-		assert.NoError(err, "WaitAndClose should not return an error")
-
-		// After waiting and closing, should have no pending jobs and worker should be stopped
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after WaitAndClose")
-		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndClose")
-		assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndClose")
 	})
 }

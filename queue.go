@@ -3,14 +3,17 @@ package varmq
 import "io"
 
 // queue is the base implementation of the Queue interface
-// It contains an externalQueue for worker management and an internalQueue for job storage
+// It contains an externalBaseQueue for worker management and an internalQueue for job storage
 type queue[T any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IQueue
 }
 
 type Queue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool)
@@ -35,8 +38,8 @@ func newQueue[T any](worker *worker[T, iJob[T]], q IQueue) *queue[T] {
 	worker.setQueue(q)
 
 	return &queue[T]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: q,
+		externalBaseQueue: newExternalQueue(q, worker),
+		internalQueue:     q,
 	}
 }
 
@@ -72,12 +75,14 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 }
 
 type resultQueue[T, R any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IQueue
 }
 
 type ResultQueue[T, R any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
@@ -90,8 +95,8 @@ func newResultQueue[T, R any](worker *worker[T, iResultJob[T, R]], q IQueue) *re
 	worker.setQueue(q)
 
 	return &resultQueue[T, R]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: q,
+		externalBaseQueue: newExternalQueue(q, worker),
+		internalQueue:     q,
 	}
 }
 
@@ -127,12 +132,15 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 }
 
 type errorQueue[T any] struct {
-	*externalQueue
+	*externalBaseQueue
 	internalQueue IQueue
 }
 
 type ErrQueue[T any] interface {
-	IExternalQueue
+	IExternalBaseQueue
+
+	// Worker returns the bound worker.
+	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedErrJob to handle the job with error receiving.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
@@ -145,8 +153,8 @@ func newErrorQueue[T any](worker *worker[T, iErrorJob[T]], q IQueue) *errorQueue
 	worker.setQueue(q)
 
 	return &errorQueue[T]{
-		externalQueue: newExternalQueue(worker),
-		internalQueue: q,
+		externalBaseQueue: newExternalQueue(q, worker),
+		internalQueue:     q,
 	}
 }
 
@@ -181,8 +189,9 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	return groupJob
 }
 
-type externalQueue struct {
+type externalBaseQueue struct {
 	w Worker
+	q IBaseQueue
 }
 
 type IExternalBaseQueue interface {
@@ -193,41 +202,24 @@ type IExternalBaseQueue interface {
 	Close() error
 }
 
-// IExternalQueue is the root interface of concurrent queue operations.
-type IExternalQueue interface {
-	IExternalBaseQueue
-
-	// Worker returns the worker.
-	Worker() Worker
-	// WaitUntilFinished waits until all pending Jobs in the queue are processed.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	WaitUntilFinished()
-	// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
-	// Time complexity: O(n) where n is the number of pending Jobs
-	WaitAndClose() error
-}
-
-func newExternalQueue(worker Worker) *externalQueue {
-	return &externalQueue{
+func newExternalQueue(q IBaseQueue, worker Worker) *externalBaseQueue {
+	return &externalBaseQueue{
 		w: worker,
+		q: q,
 	}
 }
 
-func (eq *externalQueue) NumPending() int {
-	return eq.w.queue().Len()
+func (eq *externalBaseQueue) NumPending() int {
+	return eq.q.Len()
 }
 
-func (eq *externalQueue) Worker() Worker {
+func (eq *externalBaseQueue) Worker() Worker {
 	return eq.w
 }
 
-func (eq *externalQueue) WaitUntilFinished() {
-	eq.w.wait()
-}
-
-func (eq *externalQueue) Purge() {
-	prevValues := eq.w.queue().Values()
-	eq.w.queue().Purge()
+func (eq *externalBaseQueue) Purge() {
+	prevValues := eq.q.Values()
+	eq.q.Purge()
 
 	// close all pending channels to avoid routine leaks
 	for _, val := range prevValues {
@@ -237,17 +229,6 @@ func (eq *externalQueue) Purge() {
 	}
 }
 
-func (q *externalQueue) Close() error {
-	q.Purge()
-	if err := q.w.Stop(); err != nil {
-		return err
-	}
-	q.WaitUntilFinished()
-
-	return nil
-}
-
-func (q *externalQueue) WaitAndClose() error {
-	q.WaitUntilFinished()
-	return q.Close()
+func (eq *externalBaseQueue) Close() error {
+	return eq.q.Close()
 }

@@ -74,7 +74,13 @@ type Worker interface {
 	queue() IBaseQueue
 	configs() configs
 	notifyToPullNextJobs()
-	wait()
+
+	// WaitUntilFinished waits until all pending Jobs in the are processed.
+	WaitUntilFinished()
+
+	// WaitAndClose waits until all pending Jobs in the queue are processed and then closes the queue.
+	// Time complexity: O(n) where n is the number of pending Jobs
+	WaitAndStop() error
 }
 
 // newWorker creates a new worker with the given worker function and configurations
@@ -153,7 +159,7 @@ func (w *worker[T, JobType]) queue() IBaseQueue {
 	return w.Queue
 }
 
-func (w *worker[T, JobType]) wait() {
+func (w *worker[T, JobType]) WaitUntilFinished() {
 	// Check if we need to wait
 	// 1. If worker is paused or stopped and no jobs are processing, no need to wait
 	// 2. If worker is running but queue is empty and no jobs are processing, no need to wait
@@ -550,6 +556,12 @@ func (w *worker[T, JobType]) PauseAndWait() error {
 		return err
 	}
 
-	w.wait()
+	w.WaitUntilFinished()
 	return nil
+}
+
+func (w *worker[T, JobType]) WaitAndStop() error {
+	w.WaitUntilFinished()
+
+	return w.Stop()
 }

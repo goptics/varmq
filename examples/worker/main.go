@@ -13,7 +13,7 @@ func main() {
 		time.Sleep(1 * time.Second)
 	})
 	q := w.BindQueue()
-	defer q.WaitUntilFinished()
+	defer w.WaitUntilFinished()
 
 	for i := range 100 {
 		q.Add(i)

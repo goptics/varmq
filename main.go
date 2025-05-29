@@ -49,7 +49,7 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 		var panicErr error
 		var err error
 
-		panicErr = utils.WithSafe("worker", func() {
+		panicErr = utils.WithSafe("err-worker", func() {
 			err = wf(ij)
 		})
 
@@ -81,7 +81,7 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 		var panicErr error
 		var err error
 
-		panicErr = utils.WithSafe("worker", func() {
+		panicErr = utils.WithSafe("result-worker", func() {
 			result, e := wf(ij)
 			if e != nil {
 				err = e
