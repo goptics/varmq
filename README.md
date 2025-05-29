@@ -13,7 +13,7 @@
 
 With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
 
-This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](./docs/API_REFERENCE_New.md#available-adapters) that extends its capabilities beyond simple in-memory queues.
+This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](./docs/API_REFERENCE.md#available-adapters) that extends its capabilities beyond simple in-memory queues.
 
 ## Features
 
