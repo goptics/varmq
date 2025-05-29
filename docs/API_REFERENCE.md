@@ -193,6 +193,9 @@ worker3 := varmq.NewWorker(myTask,
     varmq.WithJobIdGenerator(func() string { return "my-prefix-" + uuid.NewString() }),
     varmq.WithMinIdleWorkerRatio(50),
 )
+
+// Note: Some configuration options work best together. For example,
+// WithMinIdleWorkerRatio is most effective when combined with WithIdleWorkerExpiryDuration.
 ```
 
 Available `ConfigFunc` options (defined in `config.go`):
@@ -235,7 +238,7 @@ Key methods of the `Worker` interface (defined in `worker.go`):
   - `Stop() error`: Stops the worker pool gracefully. Waits for processing jobs to finish. Queue is not closed.
   - `Restart() error`: Restarts a stopped worker pool.
   - `WaitUntilFinished()`: Blocks until all jobs _currently in the queue and being processed_ are finished. Does not prevent new jobs from being added.
-  - `WaitAndStop() error`: Waits for all jobs in the queue to be processed, then stops the worker. (Used internally by `queue.WaitAndClose()`).
+  - `WaitAndStop() error`: Waits for all jobs in the queue to be processed, then stops the worker.
 
 ## Job Lifecycle and Interfaces
 
@@ -392,9 +395,8 @@ All specific queue interfaces (e.g., `Queue[T]`, `PriorityQueue[T]`) embed `IExt
     if err := enqueuedErrJob.Err(); err != nil {
        fmt.Printf("Job %s processing error: %v\n", enqueuedErrJob.ID(), err)
     }
-    // Drain() is generally not needed here because Err() was called.
-    // Call enqueuedErrJob.Drain() only if you added the job
-    // but decided NOT to call enqueuedErrJob.Err().
+    // Note: Calling Err() automatically handles resource cleanup.
+    // Only call Drain() if you need to abandon the job without reading its result.
   }
 
   // For ResultQueue[T,R] from NewResultWorker
@@ -405,9 +407,8 @@ All specific queue interfaces (e.g., `Queue[T]`, `PriorityQueue[T]`) embed `IExt
     } else {
       fmt.Printf("Job %s result: %v\n", enqueuedResultJob.ID(), res)
     }
-    // Drain() is generally not needed here because Result() was called.
-    // Call enqueuedResultJob.Drain() only if you added the job
-    // but decided NOT to call enqueuedResultJob.Result().
+    // Note: Calling Result() automatically handles resource cleanup.
+    // Only call Drain() if you need to abandon the job without reading its result.
   }
   ```
 
@@ -445,13 +446,13 @@ type Item[T any] struct {
   - `NumPending() int`
   - `Wait()`
   - `Errs() <-chan error`: Returns a channel to receive errors from jobs in the group. Iterate until the channel is closed.
-  - `Drain()`: Call after processing all errors.
+  - `Drain()`: Call if you need to abandon the job without reading its errors.
 
 - `EnqueuedResultGroupJob[R]` (for `ResultQueue[T,R]` from `NewResultWorker`):
   - `NumPending() int`
   - `Wait()`
   - `Results() <-chan Result[R]`: Returns a channel to receive `Result[R]` structs. Iterate until the channel is closed.
-  - `Drain()`: Call after processing all results.
+  - `Drain()`: Call if you need to abandon the job without reading its result.
 
 **Example with `AddAll` and `EnqueuedResultGroupJob`:**
 
@@ -476,6 +477,7 @@ for res := range groupJob.Results() {
     }
 }
 
-groupJob.Drain() // Drain after consuming all results
+// Note: Calling Results() automatically handles resource cleanup.
+// Only call Drain() if you need to abandon the job without reading its result.
 fmt.Println("All group jobs processed.")
 ```
