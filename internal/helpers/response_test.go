@@ -44,16 +44,14 @@ func TestResponse(t *testing.T) {
 		go r.Send("hello")
 
 		// Get the response
-		val, err := r.Response()
-		assert.NoError(err, "response should not return error")
+		val := r.Response()
 		assert.Equal("hello", val, "should receive the sent value")
 
 		// Test after closing
 		r.Close()
 
 		// Response should still return the last value after closing
-		val, err = r.Response()
-		assert.NoError(err, "response should not return error after closing")
+		val = r.Response()
 		assert.Equal("hello", val, "should receive the last stored value after closing")
 	})
 
@@ -99,8 +97,7 @@ func TestResponse(t *testing.T) {
 		assert.NoError(err, "close should not return error")
 
 		// Try to read after closing
-		val, err := r.Response()
-		assert.NoError(err, "response should not return error after closing")
+		val := r.Response()
 		assert.Equal(42, val, "should receive the stored value after closing")
 
 		// Reading from the channel directly should return zero value and false
@@ -122,8 +119,7 @@ func TestResponse(t *testing.T) {
 		// Read values concurrently
 		var received []int
 		for i := 0; i < 5; i++ {
-			val, err := r.Response()
-			assert.NoError(err, "response should not return error")
+			val := r.Response()
 			received = append(received, val)
 		}
 

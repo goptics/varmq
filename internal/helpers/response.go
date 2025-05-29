@@ -22,14 +22,14 @@ func (c *Response[R]) Send(res R) {
 	c.ch <- res
 }
 
-func (c *Response[R]) Response() (R, error) {
+func (c *Response[R]) Response() R {
 	result, ok := <-c.ch
 
 	if ok {
-		return result, nil
+		return result
 	}
 
-	return c.res, nil
+	return c.res
 }
 
 func (c *Response[R]) Drain() {
