@@ -277,6 +277,7 @@ type EnqueuedErrJob interface {
 	Err() error
 }
 
+// newErrorJob creates a new errorJob instance with the provided data and configuration, initializing its response channel and wait group.
 func newErrorJob[T any](data T, configs jobConfigs) *errorJob[T] {
 	e := &errorJob[T]{
 		job: job[T]{
@@ -331,6 +332,7 @@ type EnqueuedResultJob[R any] interface {
 	Result() (R, error)
 }
 
+// newResultJob creates a new resultJob instance with the provided data and configuration, initializing its response channel and wait group.
 func newResultJob[T, R any](data T, configs jobConfigs) *resultJob[T, R] {
 	r := &resultJob[T, R]{
 		job: job[T]{
