@@ -292,13 +292,7 @@ func newErrorJob[T any](data T, configs jobConfigs) *errorJob[T] {
 }
 
 func (ej *errorJob[T]) Err() error {
-	resErr, err := ej.Response.Response()
-
-	if err != nil {
-		return err
-	}
-
-	return resErr
+	return ej.Response.Response()
 }
 
 func (ej *errorJob[T]) sendError(err error) {
@@ -352,11 +346,7 @@ func newResultJob[T, R any](data T, configs jobConfigs) *resultJob[T, R] {
 }
 
 func (rj *resultJob[T, R]) Result() (R, error) {
-	result, err := rj.Response.Response()
-
-	if err != nil {
-		return *new(R), err
-	}
+	result := rj.Response.Response()
 
 	return result.Data, result.Err
 }
