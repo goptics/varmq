@@ -212,7 +212,7 @@ Available `ConfigFunc` options (defined in `config.go`):
 All worker binders (`IWorkerBinder`, `IErrWorkerBinder`, `IResultWorkerBinder`) embed the `Worker` interface, providing methods to control and inspect the worker pool. These methods can typically be accessed via `queue.Worker()`.
 
 ```go
-// Accessing worker methods via a queue
+// Accessing worker methods through a queue
 queue := worker.BindQueue()
 workerInstance := queue.Worker()
 workerInstance.Pause()
@@ -258,18 +258,18 @@ Jobs in VarMQ progress through several states: "Created", "Queued", "Processing"
   - `Status() string`: Current lifecycle status.
   - `IsClosed() bool`
   - `Wait()`: Blocks until this job completes processing.
-  - `Close() error`: Marks the job as closed; workers will skip it. (Does not remove from queue).
+  - `Close() error`: Marks the job as closed; workers will skip it. (Does not remove from queue instantly).
 
 - **`EnqueuedErrJob`**: For jobs from `NewErrWorker`.
 
   - Embeds `EnqueuedJob` and `Drainer`.
   - `Err() error`: Blocks until completion, then returns the error status.
-  - `Drain()`: Cleans up resources (e.g., internal channels). **Call this when done with the job.**
+  - `Drain()`: Cleans up resources (e.g., internal channels). Call if you need to abandon the job without reading its error.
 
 - **`EnqueuedResultJob[R any]`**: For jobs from `NewResultWorker`.
   - Embeds `EnqueuedJob` and `Drainer`.
   - `Result() (R, error)`: Blocks until completion, then returns the result and error.
-  - `Drain()`: Cleans up resources. **Call this when done with the job.**
+  - `Drain()`: Cleans up resources. Call if you need to abandon the job without reading its result.
 
 ### `Result[T any]` Struct
 
