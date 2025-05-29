@@ -13,7 +13,7 @@
 
 With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
 
-This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](./docs/API_Reference_New.md#available-adapters) that extends its capabilities beyond simple in-memory queues.
+This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](./docs/API_REFERENCE_New.md#available-adapters) that extends its capabilities beyond simple in-memory queues.
 
 ## Features
 
@@ -148,24 +148,24 @@ cpu: AMD EPYC 7763 64-Core Processor
 
 ## API Reference
 
-For detailed API documentation, see the [API Reference](./docs/API_Reference.md).
+For detailed API documentation, see the [API Reference](./docs/API_REFERENCE.md).
 
 ### Table of Contents
 
-- [Core Concepts](./docs/API_Reference.md#core-concepts)
-- [Worker Creation](./docs/API_Reference.md#worker-creation)
-  - [`NewWorker`](./docs/API_Reference.md#1-newworker)
-  - [`NewErrWorker`](./docs/API_Reference.md#2-newerrworker)
-  - [`NewResultWorker`](./docs/API_Reference.md#3-newresultworker)
-- [Worker Configuration](./docs/API_Reference.md#worker-configuration)
-- [Worker Control](./docs/API_Reference.md#worker-control)
-- [Queue Types](./docs/API_Reference.md#queue-types)
-- [Queue Operations](./docs/API_Reference.md#queue-operations)
-- [Job Management](./docs/API_Reference.md#job-management)
-- [GroupJob Management](./docs/API_Reference.md#groupjob-management)
-- [Adapters](./docs/API_Reference.md#adapters)
-- [Interface Hierarchy](./docs/API_Reference.md#interface-hierarchy)
-  - [Queue Interfaces](./docs/API_Reference.md#queue-interfaces)
+- [Core Concepts](./docs/API_REFERENCE.md#core-concepts)
+- [Worker Creation](./docs/API_REFERENCE.md#worker-creation)
+  - [`NewWorker`](./docs/API_REFERENCE.md#1-newworker)
+  - [`NewErrWorker`](./docs/API_REFERENCE.md#2-newerrworker)
+  - [`NewResultWorker`](./docs/API_REFERENCE.md#3-newresultworker)
+- [Worker Configuration](./docs/API_REFERENCE.md#worker-configuration)
+- [Worker Control](./docs/API_REFERENCE.md#worker-control)
+- [Queue Types](./docs/API_REFERENCE.md#queue-types)
+- [Queue Operations](./docs/API_REFERENCE.md#queue-operations)
+- [Job Management](./docs/API_REFERENCE.md#job-management)
+- [GroupJob Management](./docs/API_REFERENCE.md#groupjob-management)
+- [Adapters](./docs/API_REFERENCE.md#adapters)
+- [Interface Hierarchy](./docs/API_REFERENCE.md#interface-hierarchy)
+  - [Queue Interfaces](./docs/API_REFERENCE.md#queue-interfaces)
 
 ## The Concurrency Architecture
 
