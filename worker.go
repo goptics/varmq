@@ -327,9 +327,19 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 	w.mx.RLock()
 	defer w.mx.RUnlock()
 
+	// If worker is not in a running state (e.g., it's pausing or stopped),
+	// it should not attempt to signal the event loop for new jobs.
+	// This check prevents a panic from sending on a closed eventLoopSignal
+	// during shutdown.
+	if w.status.Load() != running { // 'running' is an existing status constant
+		return
+	}
+
 	select {
 	case w.eventLoopSignal <- struct{}{}:
 	default:
+		// This default case means the eventLoopSignal buffer is full or
+		// no one is listening. This is generally fine as it's a non-blocking send.
 	}
 }
 
