@@ -28,7 +28,7 @@ func main() {
 	defer func() {
 		fmt.Println("Time taken:", time.Since(start).Microseconds(), "ms")
 	}()
-	defer q.WaitUntilFinished()
+	defer w.WaitUntilFinished()
 	defer func() {
 		fmt.Println("Pending jobs:", q.NumPending())
 	}()
