@@ -29,7 +29,7 @@ func main() {
 
 	// Bind the worker to the persistent queue
 	queue := worker.WithPersistentQueue(persistentQueue)
-	defer queue.WaitUntilFinished()
+	defer worker.WaitUntilFinished()
 
 	for i := range 10 {
 		queue.Add(fmt.Sprintf("Task %d", i))
