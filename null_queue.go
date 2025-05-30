@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"sync"
 	"sync/atomic"
 )
 
@@ -11,19 +12,15 @@ type nullQueue struct {
 
 // Initialize a default nullQueue instance
 var defaultNullQueue IQueue
+var once sync.Once
 
 // getNullQueue returns a singleton instance of nullQueue
 func getNullQueue() IQueue {
-	if defaultNullQueue != nil {
-		return defaultNullQueue
-	}
+	once.Do(func() {
+		defaultNullQueue = &nullQueue{}
+	})
 
-	defaultNullQueue = &nullQueue{}
 	return defaultNullQueue
-}
-
-func (nq *nullQueue) NotificationChannel() <-chan struct{} {
-	return nil
 }
 
 func (nq *nullQueue) Dequeue() (any, bool) {
