@@ -34,4 +34,4 @@ jobs:
           verbose: true
       - name: Run benchmark tests
         run: |
-          go test -bench=. -benchmem
+          go test -bench=. -benchmem -benchtime=100x
