@@ -152,7 +152,7 @@ cpu: AMD EPYC 7763 64-Core Processor
 
 ## API Reference
 
-For detailed API documentation, see the **[API Reference](./docs/API_REFERENCE.md.md)**.
+For detailed API documentation, see the **[API Reference](./docs/API_REFERENCE.md)**.
 
 ## The Concurrency Architecture
 
