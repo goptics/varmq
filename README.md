@@ -66,7 +66,7 @@ func main() {
 }
 ```
 
-▶️ Run it on **[Playground](https://go.dev/play/p/gx-Q8Qf7BWd)**
+↗️ **[Run it on Playground](https://go.dev/play/p/gx-Q8Qf7BWd)**
 
 ## Persistent and Distributed Queues
 
