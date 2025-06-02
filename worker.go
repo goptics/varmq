@@ -193,11 +193,8 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
 	// Only release waiters if worker is paused or if running with an empty queue
-	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.Queue.Len() == 0); !shouldReleaseWaiters {
+	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.queue().Len() == 0); !shouldReleaseWaiters {
 		return
 	}
 
