@@ -201,7 +201,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	// Close all waiter channels to signal waiting goroutines
+	// Broadcast to all waiters to signal they can continue
 	w.waiters.Broadcast()
 }
 
