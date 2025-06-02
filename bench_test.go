@@ -10,7 +10,6 @@ func resultTask(j Job[int]) (int, error) {
 }
 
 func task(j Job[int]) {
-	// do nothing
 	_ = j.Data() * 2
 }
 

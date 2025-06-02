@@ -14,6 +14,7 @@ type configs struct {
 	JobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
 	MinIdleWorkerRatio       uint8
+	Strategy                 uint8
 }
 
 func newConfig() configs {
@@ -22,6 +23,7 @@ func newConfig() configs {
 		JobIdGenerator: func() string {
 			return ""
 		},
+		Strategy: MaxLen,
 	}
 }
 
@@ -63,6 +65,25 @@ func mergeConfigs(c configs, cs ...any) configs {
 func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 	return func(c *configs) {
 		c.IdleWorkerExpiryDuration = duration
+	}
+}
+
+// WithStrategy configures the queue selection strategy for the worker.
+//
+// The worker uses this strategy to determine which queue to pull jobs from when multiple queues are registered.
+// Available strategies are:
+//   - RoundRobin: Selects queues in a round-robin fashion
+//   - MaxLen: Selects the queue with the most items (default)
+//   - MinLen: Selects the queue with the fewest items
+//   - Priority: Selects the queue with the highest priority
+//
+// Parameters:
+//   - strategy: The strategy to use (RoundRobin, MaxLen, MinLen, or Priority)
+//
+// Default: If this option is not set, MaxLen strategy will be used.
+func WithStrategy(strategy uint8) ConfigFunc {
+	return func(c *configs) {
+		c.Strategy = strategy
 	}
 }
 

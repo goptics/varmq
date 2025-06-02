@@ -1,6 +1,18 @@
 package varmq
 
-import "io"
+import (
+	"errors"
+	"io"
+
+	"github.com/goptics/varmq/internal/helpers"
+)
+
+const (
+	RoundRobin uint8 = iota
+	MaxLen
+	MinLen
+	Priority
+)
 
 // queue is the base implementation of the Queue interface
 // It contains an externalBaseQueue for worker management and an internalQueue for job storage
@@ -231,4 +243,31 @@ func (eq *externalBaseQueue) Purge() {
 
 func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
+}
+
+type queueManager struct {
+	helpers.Manager[IBaseQueue]
+	strategy uint8
+}
+
+func createQueueManager(strategy uint8) queueManager {
+	return queueManager{
+		Manager:  helpers.CreateManager[IBaseQueue](),
+		strategy: strategy,
+	}
+}
+
+func (qm *queueManager) Next() (IBaseQueue, error) {
+	switch qm.strategy {
+	case RoundRobin:
+		return qm.GetRoundRobinItem()
+	case MaxLen:
+		return qm.GetMaxLenItem()
+	case MinLen:
+		return qm.GetMinLenItem()
+	case Priority:
+		return qm.GetPriorityItem()
+	default:
+		return nil, errors.New("invalid strategy")
+	}
 }
