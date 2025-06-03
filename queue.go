@@ -10,9 +10,13 @@ import (
 type Strategy uint8
 
 const (
+	// Selects queues in a round-robin fashion
 	RoundRobin Strategy = iota
+	// Selects the queue with the most items
 	MaxLen
+	// Selects the queue with the fewest items
 	MinLen
+	// Selects the queue with the highest priority
 	Priority
 )
 
@@ -247,6 +251,8 @@ func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
 }
 
+// queueManager manages multiple queues bound to a worker and selects the appropriate queue
+// based on the configured strategy (RoundRobin, MaxLen, MinLen, or Priority)
 type queueManager struct {
 	helpers.Manager[IBaseQueue]
 	strategy Strategy

@@ -72,10 +72,10 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 //
 // The worker uses this strategy to determine which queue to pull jobs from when multiple queues are registered.
 // Available strategies are:
-//   - RoundRobin: Selects queues in a round-robin fashion
 //   - MaxLen: Selects the queue with the most items (default)
 //   - MinLen: Selects the queue with the fewest items
-//   - Priority: Selects the queue with the highest priority
+//   - RoundRobin: Selects queues in a round-robin fashion
+//   - Priority: Selects the queue with the highest priority (lower priority number means higher priority)
 //
 // Parameters:
 //   - strategy: The strategy to use (RoundRobin, MaxLen, MinLen, or Priority)
