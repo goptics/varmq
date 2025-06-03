@@ -32,7 +32,7 @@ type worker[T any, JobType iJob[T]] struct {
 	curProcessing   atomic.Uint32
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
-	waiters         []chan struct{}
+	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
 	Configs         configs
@@ -87,10 +87,10 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
+	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.Concurrency)
 
 	return w
@@ -106,10 +106,10 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
+	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.Concurrency)
 
 	return w
@@ -125,10 +125,10 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
-		waiters:         make([]chan struct{}, 0),
 		tickers:         make([]*time.Ticker, 0),
 	}
 
+	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.Concurrency)
 
 	return w
@@ -157,14 +157,10 @@ func (w *worker[T, JobType]) WaitUntilFinished() {
 		return
 	}
 
-	// Otherwise, create a waiter channel and wait for it to be closed
-	waiter := make(chan struct{})
-
 	w.mx.Lock()
-	w.waiters = append(w.waiters, waiter)
-	w.mx.Unlock()
+	defer w.mx.Unlock()
 
-	<-waiter
+	w.waiters.Wait()
 }
 
 // spawnWorker starts a worker goroutine to process jobs from the specified channel
@@ -189,26 +185,13 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	// Nothing to do if there are no waiters
-	if len(w.waiters) == 0 {
-		return
-	}
-
 	// Only release waiters if worker is paused or if running with an empty queue
 	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0); !shouldReleaseWaiters {
 		return
 	}
 
-	// Close all waiter channels to signal waiting goroutines
-	for _, waiter := range w.waiters {
-		close(waiter)
-	}
-
-	// Reset the waiters slice
-	w.waiters = make([]chan struct{}, 0)
+	// Broadcast to all waiters to signal they can continue
+	w.waiters.Broadcast()
 }
 
 // startEventLoop starts the event loop that processes pending jobs when workers become available
