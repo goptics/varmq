@@ -207,7 +207,7 @@ func (w *worker[T, JobType]) startEventLoop() {
 
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() {
-	queue, err := w.queues.Next()
+	queue, err := w.queues.next()
 
 	if err != nil {
 		return
@@ -305,9 +305,6 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	w.mx.RLock()
-	defer w.mx.RUnlock()
-
 	// If worker is not in a running state (e.g., it's pausing or stopped),
 	// it should not attempt to signal the event loop for new jobs.
 	// This check prevents a panic from sending on a closed eventLoopSignal
@@ -316,12 +313,14 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 		return
 	}
 
+	w.mx.RLock()
 	select {
 	case w.eventLoopSignal <- struct{}{}:
 	default:
 		// This default case means the eventLoopSignal buffer is full or
 		// no one is listening. This is generally fine as it's a non-blocking send.
 	}
+	w.mx.RUnlock()
 }
 
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage

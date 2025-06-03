@@ -10,6 +10,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// mockQueue is a no-op implementation of IQueue interface
+type mockQueue struct {
+	len atomic.Int64
+}
+
+// Initialize a default mockQueue instance
+var defaultMockQueue IQueue
+var once sync.Once
+
+// getMockQueue returns a singleton instance of mockQueue
+func getMockQueue() IQueue {
+	once.Do(func() {
+		defaultMockQueue = &mockQueue{}
+	})
+
+	return defaultMockQueue
+}
+
+func (nq *mockQueue) Dequeue() (any, bool) {
+	nq.len.Add(-1)
+	return nil, false
+}
+
+func (nq *mockQueue) Enqueue(item any) bool {
+	nq.len.Add(1)
+	return false
+}
+
+func (nq *mockQueue) Len() int {
+	return int(nq.len.Load())
+}
+
+func (nq *mockQueue) Values() []any {
+	return []any{}
+}
+
+func (nq *mockQueue) Purge() {
+	nq.len.Store(0)
+}
+
+func (nq *mockQueue) Close() error {
+	nq.Purge()
+	return nil
+}
+
 func TestJob(t *testing.T) {
 	t.Run("job creation with newJob", func(t *testing.T) {
 		// Create a new job
@@ -39,7 +84,7 @@ func TestJob(t *testing.T) {
 		// We can't directly assert j.ackId since it's private, but we can test it indirectly through other methods
 
 		// Test setInternalQueue
-		mockQueue := getNullQueue()
+		mockQueue := getMockQueue()
 		j.setInternalQueue(mockQueue)
 		// We can't directly assert j.queue since it's private, but we can test it indirectly through other methods
 
@@ -215,7 +260,7 @@ func TestJob(t *testing.T) {
 		// Test 3: Queue doesn't implement IAcknowledgeable
 		j3 := newJob("test data", jobConfigs{Id: "job-ack-no-impl"})
 		j3.setAckId("some-ack-id")
-		j3.setInternalQueue(getNullQueue()) // Null queue doesn't implement IAcknowledgeable
+		j3.setInternalQueue(getMockQueue()) // Null queue doesn't implement IAcknowledgeable
 		err = j3.ack()
 		assert.Error(err, "ack should fail with queue not implementing IAcknowledgeable")
 		assert.Contains(err.Error(), "not acknowledgeable", "error should mention not acknowledgeable")

@@ -85,6 +85,9 @@ func (m *Manager[T]) Len() int {
 
 // GetMaxLenItem returns the item with the maximum length
 func (m *Manager[T]) GetMaxLenItem() (T, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
 	// Zero value to return in case of error
 	var zero T
 
@@ -108,6 +111,9 @@ func (m *Manager[T]) GetMaxLenItem() (T, error) {
 
 // GetMinLenItem returns the item with the minimum length (excluding empty items unless all are empty)
 func (m *Manager[T]) GetMinLenItem() (T, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
 	// Zero value to return in case of error
 	var zero T
 
@@ -137,6 +143,9 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 
 // GetRoundRobinItem returns the next item in round-robin order using popFront/pushBack approach
 func (m *Manager[T]) GetRoundRobinItem() (T, error) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
 	// Zero value to return in case of error
 	var zero T
 
@@ -157,6 +166,9 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 
 // GetPriorityItem returns the item with the highest priority
 func (m *Manager[T]) GetPriorityItem() (T, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
 	// Zero value to return in case of error
 	var zero T
 
