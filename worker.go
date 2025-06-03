@@ -296,7 +296,7 @@ func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
 }
 
 func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := linkedlist.NewNode(pool.NewNode[JobType](1))
+	node := linkedlist.NewNode(pool.CreateNode[JobType](1))
 	// Start a worker goroutine to process jobs from this nodes channel
 	go w.spawnWorker(node)
 

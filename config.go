@@ -14,7 +14,7 @@ type configs struct {
 	JobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
 	MinIdleWorkerRatio       uint8
-	Strategy                 uint8
+	Strategy                 Strategy
 }
 
 func newConfig() configs {
@@ -81,9 +81,9 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 //   - strategy: The strategy to use (RoundRobin, MaxLen, MinLen, or Priority)
 //
 // Default: If this option is not set, MaxLen strategy will be used.
-func WithStrategy(strategy uint8) ConfigFunc {
+func WithStrategy(s Strategy) ConfigFunc {
 	return func(c *configs) {
-		c.Strategy = strategy
+		c.Strategy = s
 	}
 }
 

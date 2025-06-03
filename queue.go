@@ -7,8 +7,10 @@ import (
 	"github.com/goptics/varmq/internal/helpers"
 )
 
+type Strategy uint8
+
 const (
-	RoundRobin uint8 = iota
+	RoundRobin Strategy = iota
 	MaxLen
 	MinLen
 	Priority
@@ -247,10 +249,10 @@ func (eq *externalBaseQueue) Close() error {
 
 type queueManager struct {
 	helpers.Manager[IBaseQueue]
-	strategy uint8
+	strategy Strategy
 }
 
-func createQueueManager(strategy uint8) queueManager {
+func createQueueManager(strategy Strategy) queueManager {
 	return queueManager{
 		Manager:  helpers.CreateManager[IBaseQueue](),
 		strategy: strategy,
