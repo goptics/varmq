@@ -6,10 +6,8 @@ import (
 	"sync"
 )
 
-var (
-	// ErrNoItemsRegistered is returned when no items are registered
-	ErrNoItemsRegistered = errors.New("no items registered")
-)
+// ErrNoItemsRegistered is returned when no items are registered
+var ErrNoItemsRegistered = errors.New("no items registered")
 
 // Sizer is an interface for anything that has a Len method
 type Sizer interface {
