@@ -628,6 +628,151 @@ func TestPriorityQueues(t *testing.T) {
 	})
 }
 
+func TestQueueManagerNext(t *testing.T) {
+	t.Run("Strategy: RoundRobin", func(t *testing.T) {
+		qm := createQueueManager(RoundRobin)
+		
+		// Create and register three queues
+		q1 := queues.NewQueue[any]()
+		q2 := queues.NewQueue[any]()
+		q3 := queues.NewQueue[any]()
+		
+		// Add items to queues to distinguish them
+		q1.Enqueue("q1-item")
+		q2.Enqueue("q2-item1")
+		q2.Enqueue("q2-item2") // q2 has more items
+		q3.Enqueue("q3-item")
+		
+		qm.Register(q1, 1)
+		qm.Register(q2, 2)
+		qm.Register(q3, 3)
+		
+		// Test round-robin behavior
+		queue1, err := qm.next()
+		assert.NoError(t, err)
+		
+		queue2, err := qm.next()
+		assert.NoError(t, err)
+		
+		queue3, err := qm.next()
+		assert.NoError(t, err)
+		
+		// Fourth call should cycle back to first queue
+		queue4, err := qm.next()
+		assert.NoError(t, err)
+		
+		// Order should be maintained in round-robin
+		assert.Equal(t, queue1, queue4, "Round-robin should cycle back to first queue")
+		assert.NotEqual(t, queue1, queue2, "Different queues should be returned in sequence")
+		assert.NotEqual(t, queue2, queue3, "Different queues should be returned in sequence")
+	})
+	
+	t.Run("Strategy: MaxLen", func(t *testing.T) {
+		qm := createQueueManager(MaxLen)
+		
+		// Create and register three queues with different lengths
+		q1 := queues.NewQueue[any]()
+		q2 := queues.NewQueue[any]()
+		q3 := queues.NewQueue[any]()
+		
+		// Add different number of items to each queue
+		q1.Enqueue("q1-item")                 // 1 item
+		q2.Enqueue("q2-item1")                // 2 items
+		q2.Enqueue("q2-item2")
+		q3.Enqueue("q3-item1")                // 3 items
+		q3.Enqueue("q3-item2")
+		q3.Enqueue("q3-item3")
+		
+		qm.Register(q1, 0)
+		qm.Register(q2, 0)
+		qm.Register(q3, 0)
+		
+		// MaxLen should always return the queue with the most items
+		queue, err := qm.next()
+		assert.NoError(t, err)
+		assert.Equal(t, 3, queue.Len(), "MaxLen strategy should return queue with the most items")
+		assert.Equal(t, q3, queue, "MaxLen strategy should return q3 with 3 items")
+	})
+	
+	t.Run("Strategy: MinLen", func(t *testing.T) {
+		qm := createQueueManager(MinLen)
+		
+		// Create and register three queues with different lengths
+		q1 := queues.NewQueue[any]()
+		q2 := queues.NewQueue[any]()
+		q3 := queues.NewQueue[any]()
+		
+		// Add different number of items to each queue
+		q1.Enqueue("q1-item")                 // 1 item
+		q2.Enqueue("q2-item1")                // 2 items
+		q2.Enqueue("q2-item2")
+		q3.Enqueue("q3-item1")                // 3 items
+		q3.Enqueue("q3-item2")
+		q3.Enqueue("q3-item3")
+		
+		qm.Register(q1, 0)
+		qm.Register(q2, 0)
+		qm.Register(q3, 0)
+		
+		// MinLen should always return the queue with the fewest items
+		queue, err := qm.next()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, queue.Len(), "MinLen strategy should return queue with the fewest items")
+		assert.Equal(t, q1, queue, "MinLen strategy should return q1 with 1 item")
+	})
+	
+	t.Run("Strategy: Priority", func(t *testing.T) {
+		qm := createQueueManager(Priority)
+		
+		// Create and register three queues with different priorities
+		q1 := queues.NewQueue[any]()
+		q2 := queues.NewQueue[any]()
+		q3 := queues.NewQueue[any]()
+		
+		// Add items to all queues
+		q1.Enqueue("q1-item")
+		q2.Enqueue("q2-item")
+		q3.Enqueue("q3-item")
+		
+		// Register queues with different priorities
+		qm.Register(q1, 1) // Low priority
+		qm.Register(q2, 2) // Medium priority
+		qm.Register(q3, 3) // High priority
+		
+		// Priority strategy should return the queue with highest priority
+		queue, err := qm.next()
+		assert.NoError(t, err)
+		assert.Equal(t, q3, queue, "Priority strategy should return queue with highest priority")
+	})
+	
+	t.Run("No Queues Registered", func(t *testing.T) {
+		// Test all strategies with no queues registered
+		strategies := []Strategy{RoundRobin, MaxLen, MinLen, Priority}
+		
+		for _, strategy := range strategies {
+			qm := createQueueManager(strategy)
+			queue, err := qm.next()
+			assert.Error(t, err, "Should return error when no queues are registered")
+			assert.Nil(t, queue, "Should return nil queue when no queues are registered")
+			assert.Equal(t, "no items registered", err.Error(), "Error message should indicate no items registered")
+		}
+	})
+	
+	t.Run("Invalid Strategy", func(t *testing.T) {
+		// Create queue manager with an invalid strategy (out of range)
+		invalidStrategy := Strategy(99)
+		qm := createQueueManager(invalidStrategy)
+		
+		q := queues.NewQueue[any]()
+		qm.Register(q, 0)
+		
+		queue, err := qm.next()
+		assert.Error(t, err, "Should return error for invalid strategy")
+		assert.Nil(t, queue, "Should return nil queue for invalid strategy")
+		assert.Equal(t, "invalid strategy", err.Error(), "Error message should indicate invalid strategy")
+	})
+}
+
 func TestExternalQueue(t *testing.T) {
 	t.Run("NumPending", func(t *testing.T) {
 		queue, _, _ := setupBasicQueue()
