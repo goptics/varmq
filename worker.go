@@ -134,13 +134,6 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	return w
 }
 
-func (w *worker[T, JobType]) setQueue(q IBaseQueue) {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	w.queues.Register(q, 0)
-}
-
 func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
 }

@@ -242,7 +242,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[string]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 				defer w.Stop()
 
 				// Verify IdleWorkerExpiryDuration is set
@@ -395,7 +395,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing using internal implementation
 				q := queues.NewQueue[iJob[int]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 
 				// Submit some jobs
 				for i := range 10 {
@@ -447,7 +447,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[int]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 
 				// Submit some initial jobs
 				for i := range 50 {

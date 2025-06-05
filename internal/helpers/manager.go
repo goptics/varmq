@@ -14,35 +14,26 @@ type Sizer interface {
 	Len() int
 }
 
-// Item[T] stores an item along with its priority
-type Item[T Sizer] struct {
-	Value    T
-	Priority int
-}
-
 // Manager is a generic item manager that manages items implementing the Sizer interface
 type Manager[T Sizer] struct {
-	items []Item[T]
+	items []T
 	mx    sync.RWMutex
 }
 
 // NewManager creates a new Manager with the specified strategy
 func CreateManager[T Sizer]() Manager[T] {
 	return Manager[T]{
-		items: make([]Item[T], 0),
+		items: make([]T, 0),
 	}
 }
 
 // Register adds a new item to the manager
-func (m *Manager[T]) Register(item T, priority int) {
+func (m *Manager[T]) Register(item T) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
 	// Store the item with its priority
-	m.items = append(m.items, Item[T]{
-		Value:    item,
-		Priority: priority,
-	})
+	m.items = append(m.items, item)
 }
 
 // UnregisterItem removes an item from the manager
@@ -55,7 +46,7 @@ func (m *Manager[T]) UnregisterItem(itemToRemove T) {
 	itemToRemovePtr := reflect.ValueOf(itemToRemove).Pointer()
 
 	for i, item := range m.items {
-		itemValuePtr := reflect.ValueOf(item.Value).Pointer()
+		itemValuePtr := reflect.ValueOf(item).Pointer()
 
 		// Compare memory addresses for reliable equality check
 		if itemToRemovePtr == itemValuePtr {
@@ -75,7 +66,7 @@ func (m *Manager[T]) Len() int {
 
 	totalLen := 0
 	for _, item := range m.items {
-		totalLen += item.Value.Len()
+		totalLen += item.Len()
 	}
 
 	return totalLen
@@ -97,10 +88,10 @@ func (m *Manager[T]) GetMaxLenItem() (T, error) {
 	maxLen := -1
 
 	for _, item := range m.items {
-		currentLen := item.Value.Len()
+		currentLen := item.Len()
 		if currentLen > maxLen {
 			maxLen = currentLen
-			maxItem = item.Value
+			maxItem = item
 		}
 	}
 
@@ -124,16 +115,16 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 
 	// First try to find the minimum length excluding empty items
 	for _, item := range m.items {
-		currentLen := item.Value.Len()
+		currentLen := item.Len()
 		if currentLen > 0 && (minLen == -1 || currentLen < minLen) {
 			minLen = currentLen
-			minItem = item.Value
+			minItem = item
 		}
 	}
 
 	// If all items are empty, just pick the first one
 	if minLen == -1 && len(m.items) > 0 {
-		minItem = m.items[0].Value
+		minItem = m.items[0]
 	}
 
 	return minItem, nil
@@ -152,7 +143,7 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	}
 
 	// Get the first item
-	firstItem := m.items[0].Value
+	firstItem := m.items[0]
 
 	// Move it to the back to implement round-robin
 	if len(m.items) > 1 {
@@ -160,31 +151,6 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	}
 
 	return firstItem, nil
-}
-
-// GetPriorityItem returns the item with the highest priority
-func (m *Manager[T]) GetPriorityItem() (T, error) {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
-
-	// Zero value to return in case of error
-	var zero T
-
-	if len(m.items) == 0 {
-		return zero, ErrNoItemsRegistered
-	}
-
-	var priorityItem T
-	highestPriority := -1
-
-	for _, item := range m.items {
-		if item.Priority > highestPriority {
-			highestPriority = item.Priority
-			priorityItem = item.Value
-		}
-	}
-
-	return priorityItem, nil
 }
 
 // Count returns the number of registered items
