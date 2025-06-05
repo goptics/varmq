@@ -36,7 +36,7 @@ type worker[T any, JobType iJob[T]] struct {
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
 	Configs         configs
-	Queue           IBaseQueue
+	queues          queueManager
 }
 
 // Worker represents a worker that processes Jobs.
@@ -72,7 +72,6 @@ type Worker interface {
 	// WaitAndStop waits until all pending Jobs in the queue are processed and then closes the queue.
 	WaitAndStop() error
 
-	queue() IBaseQueue
 	configs() configs
 	notifyToPullNextJobs()
 }
@@ -85,7 +84,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		workerFunc:      wf,
 		pool:            linkedlist.New[pool.Node[iJob[T]]](),
 		concurrency:     atomic.Uint32{},
-		Queue:           getNullQueue(),
+		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
 		tickers:         make([]*time.Ticker, 0),
@@ -104,7 +103,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		workerFunc:      wf,
 		pool:            linkedlist.New[pool.Node[iErrorJob[T]]](),
 		concurrency:     atomic.Uint32{},
-		Queue:           getNullQueue(),
+		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
 		tickers:         make([]*time.Ticker, 0),
@@ -123,7 +122,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		workerFunc:      wf,
 		pool:            linkedlist.New[pool.Node[iResultJob[T, R]]](),
 		concurrency:     atomic.Uint32{},
-		Queue:           getNullQueue(),
+		queues:          createQueueManager(c.Strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		Configs:         c,
 		tickers:         make([]*time.Ticker, 0),
@@ -135,22 +134,8 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	return w
 }
 
-func (w *worker[T, JobType]) setQueue(q IBaseQueue) {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	w.Queue = q
-}
-
 func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
-}
-
-func (w *worker[T, JobType]) queue() IBaseQueue {
-	w.mx.RLock()
-	defer w.mx.RUnlock()
-
-	return w.Queue
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
@@ -161,7 +146,7 @@ func (w *worker[T, JobType]) WaitUntilFinished() {
 		return
 	}
 
-	if w.IsRunning() && w.queue().Len() == 0 && w.curProcessing.Load() == 0 {
+	if w.IsRunning() && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
 		return
 	}
 
@@ -194,7 +179,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	}
 
 	// Only release waiters if worker is paused or if running with an empty queue
-	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.queue().Len() == 0); !shouldReleaseWaiters {
+	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0); !shouldReleaseWaiters {
 		return
 	}
 
@@ -207,7 +192,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 // When all conditions are met, it processes the next job in the queue
 func (w *worker[T, JobType]) startEventLoop() {
 	for range w.eventLoopSignal {
-		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.Queue.Len() > 0 {
+		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 			w.processNextJob()
 		}
 	}
@@ -215,11 +200,17 @@ func (w *worker[T, JobType]) startEventLoop() {
 
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() {
+	queue, err := w.queues.next()
+
+	if err != nil {
+		return
+	}
+
 	var v any
 	var ok bool
 	var ackId string
 
-	switch q := w.Queue.(type) {
+	switch q := queue.(type) {
 	case IAcknowledgeable:
 		v, ok, ackId = q.DequeueWithAckId()
 	default:
@@ -248,7 +239,7 @@ func (w *worker[T, JobType]) processNextJob() {
 			return
 		}
 
-		j.setInternalQueue(w.Queue)
+		j.setInternalQueue(queue)
 	default:
 		return
 	}
@@ -275,7 +266,7 @@ func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobTyp
 	}
 
 	// If queue length is high or we're under our idle worker target, keep this worker
-	if w.queue().Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	if w.queues.Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}
@@ -298,7 +289,7 @@ func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
 }
 
 func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := linkedlist.NewNode(pool.NewNode[JobType](1))
+	node := linkedlist.NewNode(pool.CreateNode[JobType](1))
 	// Start a worker goroutine to process jobs from this nodes channel
 	go w.spawnWorker(node)
 
@@ -307,9 +298,6 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	w.mx.RLock()
-	defer w.mx.RUnlock()
-
 	// If worker is not in a running state (e.g., it's pausing or stopped),
 	// it should not attempt to signal the event loop for new jobs.
 	// This check prevents a panic from sending on a closed eventLoopSignal
@@ -318,12 +306,14 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 		return
 	}
 
+	w.mx.RLock()
 	select {
 	case w.eventLoopSignal <- struct{}{}:
 	default:
 		// This default case means the eventLoopSignal buffer is full or
 		// no one is listening. This is generally fine as it's a non-blocking send.
 	}
+	w.mx.RUnlock()
 }
 
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
@@ -424,11 +414,12 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
 	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
-		// since the pool node might be busy processing a job, we need to retry until we get the nodes
 		if node := w.pool.PopBack(); node != nil {
 			node.Value.Close()
 			w.pool.Remove(node)
 			shrinkPoolSize--
+		} else {
+			break
 		}
 	}
 

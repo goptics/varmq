@@ -8,44 +8,33 @@ type DistributedQueue[T any] interface {
 }
 
 type distributedQueue[T any] struct {
-	internalQueue IDistributedQueue
+	IDistributedQueue
 }
 
 func NewDistributedQueue[T any](internalQueue IDistributedQueue) DistributedQueue[T] {
 	return &distributedQueue[T]{
-		internalQueue: internalQueue,
+		IDistributedQueue: internalQueue,
 	}
 }
 
-func (q *distributedQueue[T]) NumPending() int {
-	return q.internalQueue.Len()
+func (dq *distributedQueue[T]) NumPending() int {
+	return dq.Len()
 }
 
-func (q *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
+func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
 	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()
 
 	if err != nil {
 		j.Close()
-
 		return false
 	}
 
-	if ok := q.internalQueue.Enqueue(jBytes); !ok {
+	if ok := dq.Enqueue(jBytes); !ok {
 		j.Close()
 		return false
 	}
 
-	j.setInternalQueue(q.internalQueue)
-
 	return true
-}
-
-func (q *distributedQueue[T]) Purge() {
-	q.internalQueue.Purge()
-}
-
-func (q *distributedQueue[T]) Close() error {
-	return q.internalQueue.Close()
 }

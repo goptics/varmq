@@ -167,7 +167,7 @@ func (wb *workerBinder[T]) BindQueue() Queue[T] {
 // WithQueue binds an existing queue implementation to the worker
 // It starts the worker and returns a Queue interface to interact with the queue
 func (wb *workerBinder[T]) WithQueue(q IQueue) Queue[T] {
-	defer wb.worker.start()
+	defer wb.start()
 
 	return newQueue(wb.worker, q)
 }
@@ -177,38 +177,37 @@ func (wb *workerBinder[T]) BindPriorityQueue() PriorityQueue[T] {
 }
 
 func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T] {
-	defer wb.worker.start()
+	defer wb.start()
 
 	return newPriorityQueue(wb.worker, pq)
 }
 
 func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T] {
-	defer wb.worker.start()
+	defer wb.start()
 
 	return newPersistentQueue(wb.worker, pq)
 }
 
 func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
-	defer wb.worker.start()
+	defer wb.start()
 
 	return newPersistentPriorityQueue(wb.worker, pq)
 }
 
 func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T] {
-	defer wb.worker.start()
 	defer dq.Subscribe(wb.handleQueueSubscription)
+	defer wb.start()
+	defer wb.queues.Register(dq)
 
-	queue := NewDistributedQueue[T](dq)
-	wb.worker.setQueue(dq)
-	return queue
+	return NewDistributedQueue[T](dq)
 }
 
-func (wb *workerBinder[T]) WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T] {
-	defer wb.worker.start()
-	defer dq.Subscribe(wb.handleQueueSubscription)
-	defer wb.worker.setQueue(dq)
+func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue) DistributedPriorityQueue[T] {
+	defer dpq.Subscribe(wb.handleQueueSubscription)
+	defer wb.start()
+	defer wb.queues.Register(dpq)
 
-	return NewDistributedPriorityQueue[T](dq)
+	return NewDistributedPriorityQueue[T](dpq)
 }
 
 type errWorkerBinder[T any] struct {
@@ -289,6 +288,7 @@ func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
 
 func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
 	defer ewb.worker.start()
+
 	return newErrorQueue(ewb.worker, q)
 }
 
@@ -298,6 +298,7 @@ func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
 
 func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
 	defer ewb.worker.start()
+
 	return newErrorPriorityQueue(ewb.worker, pq)
 }
 
@@ -381,6 +382,7 @@ func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
 
 func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
 	defer rwb.worker.start()
+
 	return newResultQueue(rwb.worker, q)
 }
 
@@ -390,5 +392,6 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, 
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
 	defer rwb.worker.start()
+
 	return newResultPriorityQueue(rwb.worker, pq)
 }

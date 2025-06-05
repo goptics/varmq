@@ -1,6 +1,22 @@
 package varmq
 
-import "io"
+import (
+	"errors"
+	"io"
+
+	"github.com/goptics/varmq/internal/helpers"
+)
+
+type Strategy uint8
+
+const (
+	// Selects queues in a round-robin fashion
+	RoundRobin Strategy = iota
+	// Selects the queue with the most items
+	MaxLen
+	// Selects the queue with the fewest items
+	MinLen
+)
 
 // queue is the base implementation of the Queue interface
 // It contains an externalBaseQueue for worker management and an internalQueue for job storage
@@ -34,11 +50,11 @@ type Item[T any] struct {
 
 // newQueue creates a new queue with the given worker and internal queue implementation
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
-func newQueue[T any](worker *worker[T, iJob[T]], q IQueue) *queue[T] {
-	worker.setQueue(q)
+func newQueue[T any](w *worker[T, iJob[T]], q IQueue) *queue[T] {
+	w.queues.Register(q)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, worker),
+		externalBaseQueue: newExternalQueue(q, w),
 		internalQueue:     q,
 	}
 }
@@ -74,63 +90,6 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	return groupJob
 }
 
-type resultQueue[T, R any] struct {
-	*externalBaseQueue
-	internalQueue IQueue
-}
-
-type ResultQueue[T, R any] interface {
-	IExternalBaseQueue
-	// Worker returns the bound worker.
-	Worker() Worker
-	// Add adds a new Job to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
-	// Time complexity: O(1)
-	Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
-	// AddAll adds multiple Jobs to the queue and returns a EnqueuedResultGroupJob to handle the job with result receiving.
-	// Time complexity: O(n) where n is the number of Jobs added
-	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
-}
-
-func newResultQueue[T, R any](worker *worker[T, iResultJob[T, R]], q IQueue) *resultQueue[T, R] {
-	worker.setQueue(q)
-
-	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, worker),
-		internalQueue:     q,
-	}
-}
-
-func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
-	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
-
-	if ok := q.internalQueue.Enqueue(j); !ok {
-		j.Close()
-		return nil, false
-	}
-
-	j.changeStatus(queued)
-	q.w.notifyToPullNextJobs()
-
-	return j, true
-}
-
-func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
-	groupJob := newResultGroupJob[T, R](len(items))
-
-	for _, item := range items {
-		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
-		if ok := q.internalQueue.Enqueue(j); !ok {
-			j.Close()
-			continue
-		}
-
-		j.changeStatus(queued)
-		q.w.notifyToPullNextJobs()
-	}
-
-	return groupJob
-}
-
 type errorQueue[T any] struct {
 	*externalBaseQueue
 	internalQueue IQueue
@@ -149,11 +108,11 @@ type ErrQueue[T any] interface {
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }
 
-func newErrorQueue[T any](worker *worker[T, iErrorJob[T]], q IQueue) *errorQueue[T] {
-	worker.setQueue(q)
+func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue) *errorQueue[T] {
+	w.queues.Register(q)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, worker),
+		externalBaseQueue: newExternalQueue(q, w),
 		internalQueue:     q,
 	}
 }
@@ -174,6 +133,63 @@ func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, b
 
 func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
+
+	for _, item := range items {
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		if ok := q.internalQueue.Enqueue(j); !ok {
+			j.Close()
+			continue
+		}
+
+		j.changeStatus(queued)
+		q.w.notifyToPullNextJobs()
+	}
+
+	return groupJob
+}
+
+type resultQueue[T, R any] struct {
+	*externalBaseQueue
+	internalQueue IQueue
+}
+
+type ResultQueue[T, R any] interface {
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
+	// Add adds a new Job to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
+	// Time complexity: O(1)
+	Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
+	// AddAll adds multiple Jobs to the queue and returns a EnqueuedResultGroupJob to handle the job with result receiving.
+	// Time complexity: O(n) where n is the number of Jobs added
+	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
+}
+
+func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue) *resultQueue[T, R] {
+	w.queues.Register(q)
+
+	return &resultQueue[T, R]{
+		externalBaseQueue: newExternalQueue(q, w),
+		internalQueue:     q,
+	}
+}
+
+func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
+	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
+
+	if ok := q.internalQueue.Enqueue(j); !ok {
+		j.Close()
+		return nil, false
+	}
+
+	j.changeStatus(queued)
+	q.w.notifyToPullNextJobs()
+
+	return j, true
+}
+
+func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
+	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
@@ -231,4 +247,31 @@ func (eq *externalBaseQueue) Purge() {
 
 func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
+}
+
+// queueManager manages multiple queues bound to a worker and selects the appropriate queue
+// based on the configured strategy (RoundRobin, MaxLen, MinLen, or Priority)
+type queueManager struct {
+	helpers.Manager[IBaseQueue]
+	strategy Strategy
+}
+
+func createQueueManager(strategy Strategy) queueManager {
+	return queueManager{
+		Manager:  helpers.CreateManager[IBaseQueue](),
+		strategy: strategy,
+	}
+}
+
+func (qm *queueManager) next() (IBaseQueue, error) {
+	switch qm.strategy {
+	case RoundRobin:
+		return qm.GetRoundRobinItem()
+	case MaxLen:
+		return qm.GetMaxLenItem()
+	case MinLen:
+		return qm.GetMinLenItem()
+	default:
+		return nil, errors.New("invalid strategy")
+	}
 }

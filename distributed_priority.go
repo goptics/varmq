@@ -9,20 +9,20 @@ type DistributedPriorityQueue[T any] interface {
 }
 
 type distributedPriorityQueue[T any] struct {
-	internalQueue IDistributedPriorityQueue
+	IDistributedPriorityQueue
 }
 
 func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue) DistributedPriorityQueue[T] {
 	return &distributedPriorityQueue[T]{
-		internalQueue: internalQueue,
+		IDistributedPriorityQueue: internalQueue,
 	}
 }
 
-func (q *distributedPriorityQueue[T]) NumPending() int {
-	return q.internalQueue.Len()
+func (dpq *distributedPriorityQueue[T]) NumPending() int {
+	return dpq.Len()
 }
 
-func (q *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFunc) bool {
+func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFunc) bool {
 	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()
@@ -32,20 +32,10 @@ func (q *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFu
 		return false
 	}
 
-	if ok := q.internalQueue.Enqueue(jBytes, priority); !ok {
+	if ok := dpq.Enqueue(jBytes, priority); !ok {
 		j.Close()
 		return false
 	}
 
-	j.setInternalQueue(q.internalQueue)
-
 	return true
-}
-
-func (q *distributedPriorityQueue[T]) Purge() {
-	q.internalQueue.Purge()
-}
-
-func (q *distributedPriorityQueue[T]) Close() error {
-	return q.internalQueue.Close()
 }
