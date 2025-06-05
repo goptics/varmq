@@ -12,7 +12,6 @@ type persistentPriorityQueue[T any] struct {
 }
 
 func newPersistentPriorityQueue[T any](worker *worker[T, iJob[T]], pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
-	worker.setQueue(pq)
 	return &persistentPriorityQueue[T]{
 		priorityQueue: newPriorityQueue(worker, pq),
 	}

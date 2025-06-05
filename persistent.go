@@ -19,7 +19,6 @@ type persistentQueue[T any] struct {
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
 func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue) PersistentQueue[T] {
-	w.setQueue(pq)
 	return &persistentQueue[T]{queue: &queue[T]{
 		externalBaseQueue: newExternalQueue(pq, w),
 		internalQueue:     pq,

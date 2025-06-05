@@ -19,8 +19,6 @@ type PriorityQueue[T any] interface {
 
 // NewPriorityQueue creates a new priorityQueue with the specified concurrency and worker function.
 func newPriorityQueue[T any](worker *worker[T, iJob[T]], pq IPriorityQueue) *priorityQueue[T] {
-	worker.setQueue(pq)
-
 	return &priorityQueue[T]{
 		externalBaseQueue: newExternalQueue(pq, worker),
 		internalQueue:     pq,
@@ -77,8 +75,6 @@ type ResultPriorityQueue[T, R any] interface {
 }
 
 func newResultPriorityQueue[T, R any](worker *worker[T, iResultJob[T, R]], pq IPriorityQueue) *resultPriorityQueue[T, R] {
-	worker.setQueue(pq)
-
 	return &resultPriorityQueue[T, R]{
 		externalBaseQueue: newExternalQueue(pq, worker),
 		internalQueue:     pq,
@@ -135,8 +131,6 @@ type ErrPriorityQueue[T any] interface {
 }
 
 func newErrorPriorityQueue[T any](worker *worker[T, iErrorJob[T]], pq IPriorityQueue) *errorPriorityQueue[T] {
-	worker.setQueue(pq)
-
 	return &errorPriorityQueue[T]{
 		externalBaseQueue: newExternalQueue(pq, worker),
 		internalQueue:     pq,
