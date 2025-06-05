@@ -48,9 +48,3 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 func (q *persistentQueue[T]) Purge() {
 	q.queue.Purge()
 }
-
-// Close stops the worker and closes the underlying queue
-func (q *persistentQueue[T]) Close() error {
-	defer q.w.Stop()
-	return q.internalQueue.Close()
-}
