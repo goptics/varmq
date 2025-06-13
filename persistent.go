@@ -19,7 +19,8 @@ type persistentQueue[T any] struct {
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
 func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue) PersistentQueue[T] {
-	w.setQueue(pq)
+	w.queues.Register(pq)
+
 	return &persistentQueue[T]{queue: &queue[T]{
 		externalBaseQueue: newExternalQueue(pq, w),
 		internalQueue:     pq,
@@ -48,10 +49,4 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 // Purge removes all jobs from the queue
 func (q *persistentQueue[T]) Purge() {
 	q.queue.Purge()
-}
-
-// Close stops the worker and closes the underlying queue
-func (q *persistentQueue[T]) Close() error {
-	defer q.w.Stop()
-	return q.internalQueue.Close()
 }

@@ -41,6 +41,28 @@ func TestConfig(t *testing.T) {
 			}
 		})
 
+		t.Run("WithStrategy", func(t *testing.T) {
+			tests := []struct {
+				name            string
+				strategy        Strategy
+				expectedStrategy Strategy
+			}{
+				{"RoundRobin Strategy", RoundRobin, RoundRobin},
+				{"MaxLen Strategy", MaxLen, MaxLen},
+				{"MinLen Strategy", MinLen, MinLen},
+			}
+
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					configFunc := WithStrategy(tc.strategy)
+					c := newConfig()
+					configFunc(&c)
+
+					assert.Equal(t, tc.expectedStrategy, c.Strategy)
+				})
+			}
+		})
+
 		t.Run("WithSafeConcurrency", func(t *testing.T) {
 			tests := []struct {
 				name        string
