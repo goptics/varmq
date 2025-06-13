@@ -55,9 +55,16 @@ func (m *Manager[T]) UnregisterItem(itemToRemove T) {
 			lastIndex := len(m.items) - 1
 			m.items[i] = m.items[lastIndex]
 			m.items = m.items[:lastIndex]
+
+			// Reset the round robin index if it points to the removed item
+			if m.roundRobinIndex >= i {
+				m.roundRobinIndex = (m.roundRobinIndex + 1) % len(m.items)
+			}
+
 			return
 		}
 	}
+
 }
 
 // Len returns the total length of all items
@@ -135,12 +142,7 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	}
 
 	item := m.items[m.roundRobinIndex]
-
-	if m.roundRobinIndex == len(m.items)-1 {
-		m.roundRobinIndex = 0
-	} else {
-		m.roundRobinIndex++
-	}
+	m.roundRobinIndex = (m.roundRobinIndex + 1) % len(m.items)
 
 	return item, nil
 }
