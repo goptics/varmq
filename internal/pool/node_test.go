@@ -128,8 +128,6 @@ func TestPoolNode(t *testing.T) {
 	})
 
 	t.Run("ServeAndStop", func(t *testing.T) {
-		assert := assert.New(t)
-
 		node := CreateNode[string](5)
 
 		var wg sync.WaitGroup
@@ -156,13 +154,17 @@ func TestPoolNode(t *testing.T) {
 		select {
 		case <-done:
 			// Serve exited as expected
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			t.Fatalf("Serve did not exit after Stop() was called")
 		}
 
-		// Further sends should not block since Serve is no longer running; but channel still open
-		// Verify sentinel payload present
-		sentinel := <-node.ch
-		assert.False(sentinel.ok, "expected sentinel payload after Stop")
+		// At this point Serve has exited after consuming the sentinel.
+		// Additional checks: channel should still be open and writable.
+		select {
+		case node.ch <- Payload[string]{data: "extra", ok: true}:
+			// write succeeded, channel open
+		default:
+			t.Fatalf("channel should be open and writable after Serve exits")
+		}
 	})
 }
