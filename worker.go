@@ -472,8 +472,9 @@ func (w *worker[T, JobType]) Stop() error {
 
 	// remove all nodes from the list and close the pool nodes
 	for _, node := range w.pool.NodeSlice() {
-		node.Value.Stop()
 		w.pool.Remove(node)
+		node.Value.Stop()
+		w.poolNodeCache.Put(node)
 	}
 
 	return nil
