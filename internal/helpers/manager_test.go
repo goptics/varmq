@@ -80,6 +80,35 @@ func TestManager(t *testing.T) {
 			assert.Equal(item1, res)
 		})
 
+		t.Run("UnregisterUpdatesRoundRobinIndex", func(t *testing.T) {
+			assert := assert.New(t)
+			manager := CreateManager[*testItem]()
+			a := &testItem{id: "a", len: 1}
+			b := &testItem{id: "b", len: 1}
+			c := &testItem{id: "c", len: 1}
+			manager.Register(a)
+			manager.Register(b)
+			manager.Register(c)
+
+			// Advance index to point to b (index 1)
+			res, _ := manager.GetRoundRobinItem()
+			assert.Equal(a, res)
+
+			// Unregister the item currently pointed by roundRobinIndex (b)
+			manager.UnregisterItem(b)
+			assert.Equal(2, manager.Count())
+
+			// After unregister, next call should not error and should return a according to current logic
+			res, err := manager.GetRoundRobinItem()
+			assert.NoError(err)
+			assert.Equal(a, res)
+
+			// Following call should return c (the remaining item)
+			res, err = manager.GetRoundRobinItem()
+			assert.NoError(err)
+			assert.Equal(c, res)
+		})
+
 		t.Run("MaxLen", func(t *testing.T) {
 			assert := assert.New(t)
 			manager := CreateManager[*testItem]()

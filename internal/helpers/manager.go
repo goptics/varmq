@@ -58,7 +58,7 @@ func (m *Manager[T]) UnregisterItem(itemToRemove T) {
 
 			// Reset the round robin index if it points to the removed item
 			if m.roundRobinIndex >= i {
-				m.roundRobinIndex = (m.roundRobinIndex + 1) % len(m.items)
+				m.roundRobinIndex = 0
 			}
 
 			return
