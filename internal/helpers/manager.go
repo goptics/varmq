@@ -136,11 +136,8 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	// Zero value to return in case of error
-	var zero T
-
 	if len(m.items) == 0 {
-		return zero, ErrNoItemsRegistered
+		return *new(T), ErrNoItemsRegistered
 	}
 
 	item := m.items[m.roundRobinIndex]
