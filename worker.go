@@ -360,6 +360,7 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 				if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
 					!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
 					node.Value.Stop()
+					w.poolNodeCache.Put(node)
 					w.pool.Remove(node)
 				}
 			}
