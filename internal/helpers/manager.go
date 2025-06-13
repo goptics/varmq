@@ -78,11 +78,8 @@ func (m *Manager[T]) GetMaxLenItem() (T, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
-	// Zero value to return in case of error
-	var zero T
-
 	if len(m.items) == 0 {
-		return zero, ErrNoItemsRegistered
+		return *new(T), ErrNoItemsRegistered
 	}
 
 	var maxItem T
@@ -104,11 +101,8 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
-	// Zero value to return in case of error
-	var zero T
-
 	if len(m.items) == 0 {
-		return zero, ErrNoItemsRegistered
+		return *new(T), ErrNoItemsRegistered
 	}
 
 	var minItem T
