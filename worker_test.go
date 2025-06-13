@@ -31,7 +31,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(w.workerFunc, "worker function should not be nil")
 				assert.Equal(1, w.NumConcurrency(), "concurrency should match expected value")
 				assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
-				assert.NotNil(w.queues, "queues should not be nil, expected null queue")
+				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
 				assert.NotNil(w.waiters, "waiters slice should be initialized")
