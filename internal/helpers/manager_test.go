@@ -1,6 +1,8 @@
 package helpers
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,191 +18,162 @@ func (i *testItem) Len() int {
 	return i.len
 }
 
-func TestManagerBasicOperations(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
+// Grouped tests following project pattern
+func TestManager(t *testing.T) {
+	t.Run("BasicOperations", func(t *testing.T) {
+		assert := assert.New(t)
+		manager := CreateManager[*testItem]()
 
-	// Create test items
-	item1 := &testItem{id: "item1", len: 3}
-	item2 := &testItem{id: "item2", len: 5}
-	item3 := &testItem{id: "item3", len: 2}
+		// Create test items
+		item1 := &testItem{id: "item1", len: 3}
+		item2 := &testItem{id: "item2", len: 5}
+		item3 := &testItem{id: "item3", len: 2}
 
-	// Test initial state
-	assert.Equal(0, manager.Count(), "New manager should have zero items")
-	assert.Equal(0, manager.Len(), "New manager should have zero total length")
+		// Test initial state
+		assert.Equal(0, manager.Count())
+		assert.Equal(0, manager.Len())
 
-	// Test registering items
-	manager.Register(item1)
-	assert.Equal(1, manager.Count(), "Manager should have one item after registration")
-	assert.Equal(3, manager.Len(), "Manager total length should match the item length")
+		// Register items
+		manager.Register(item1)
+		assert.Equal(1, manager.Count())
+		assert.Equal(3, manager.Len())
 
-	manager.Register(item2)
-	manager.Register(item3)
-	assert.Equal(3, manager.Count(), "Manager should have three items after registration")
-	assert.Equal(10, manager.Len(), "Manager total length should match the sum of item lengths")
+		manager.Register(item2)
+		manager.Register(item3)
+		assert.Equal(3, manager.Count())
+		assert.Equal(10, manager.Len())
 
-	// Test unregistering items
-	manager.UnregisterItem(item2)
-	assert.Equal(2, manager.Count(), "Manager should have two items after unregistration")
-	assert.Equal(5, manager.Len(), "Manager total length should be updated after unregistration")
-}
+		// Unregister item2
+		manager.UnregisterItem(item2)
+		assert.Equal(2, manager.Count())
+		assert.Equal(5, manager.Len())
+	})
 
-func TestManagerRoundRobinStrategy(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
+	t.Run("Strategies", func(t *testing.T) {
+		t.Run("RoundRobin", func(t *testing.T) {
+			assert := assert.New(t)
+			manager := CreateManager[*testItem]()
+			item1 := &testItem{id: "item1", len: 1}
+			item2 := &testItem{id: "item2", len: 2}
+			item3 := &testItem{id: "item3", len: 3}
 
-	// Create test items
-	item1 := &testItem{id: "item1", len: 1}
-	item2 := &testItem{id: "item2", len: 2}
-	item3 := &testItem{id: "item3", len: 3}
+			// No items
+			_, err := manager.GetRoundRobinItem()
+			assert.Equal(ErrNoItemsRegistered, err)
 
-	// Test with no items
-	_, err := manager.GetRoundRobinItem()
-	assert.Error(err, "GetRoundRobinItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
+			// Register & test order
+			manager.Register(item1)
+			res, err := manager.GetRoundRobinItem()
+			assert.NoError(err)
+			assert.Equal(item1, res)
 
-	// Test with one item
-	manager.Register(item1)
-	result, err := manager.GetRoundRobinItem()
-	assert.NoError(err, "GetRoundRobinItem should not return error with registered items")
-	assert.Equal(item1, result, "First item should be returned")
+			manager.Register(item2)
+			manager.Register(item3)
 
-	// Adding more items and testing round-robin behavior
-	manager.Register(item2)
-	manager.Register(item3)
+			res, _ = manager.GetRoundRobinItem()
+			assert.Equal(item1, res)
+			res, _ = manager.GetRoundRobinItem()
+			assert.Equal(item2, res)
+			res, _ = manager.GetRoundRobinItem()
+			assert.Equal(item3, res)
+			res, _ = manager.GetRoundRobinItem()
+			assert.Equal(item1, res)
+		})
 
-	// First call should return item1 and move it to the end
-	result, err = manager.GetRoundRobinItem()
-	assert.NoError(err)
-	assert.Equal(item1, result, "First item should be returned first time")
+		t.Run("MaxLen", func(t *testing.T) {
+			assert := assert.New(t)
+			manager := CreateManager[*testItem]()
+			item1 := &testItem{id: "item1", len: 3}
+			item2 := &testItem{id: "item2", len: 5}
+			item3 := &testItem{id: "item3", len: 2}
+			item4 := &testItem{id: "item4", len: 7}
 
-	// Second call should return item2
-	result, err = manager.GetRoundRobinItem()
-	assert.NoError(err)
-	assert.Equal(item2, result, "Second item should be returned second time")
+			_, err := manager.GetMaxLenItem()
+			assert.Equal(ErrNoItemsRegistered, err)
 
-	// Third call should return item3
-	result, err = manager.GetRoundRobinItem()
-	assert.NoError(err)
-	assert.Equal(item3, result, "Third item should be returned third time")
+			manager.Register(item1)
+			manager.Register(item2)
+			manager.Register(item3)
+			manager.Register(item4)
 
-	// Fourth call should return item1 again (round-robin)
-	result, err = manager.GetRoundRobinItem()
-	assert.NoError(err)
-	assert.Equal(item1, result, "First item should be returned again in round-robin fashion")
-}
+			res, err := manager.GetMaxLenItem()
+			assert.NoError(err)
+			assert.Equal(item4, res)
+		})
 
-func TestManagerMaxLenStrategy(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
+		t.Run("MinLen", func(t *testing.T) {
+			assert := assert.New(t)
+			manager := CreateManager[*testItem]()
+			item1 := &testItem{id: "item1", len: 3}
+			item2 := &testItem{id: "item2", len: 5}
+			item3 := &testItem{id: "item3", len: 2}
+			item4 := &testItem{id: "item4", len: 0}
 
-	// Create test items with different lengths
-	item1 := &testItem{id: "item1", len: 3}
-	item2 := &testItem{id: "item2", len: 5}
-	item3 := &testItem{id: "item3", len: 2}
-	item4 := &testItem{id: "item4", len: 7}
+			_, err := manager.GetMinLenItem()
+			assert.Equal(ErrNoItemsRegistered, err)
 
-	// Test with no items
-	_, err := manager.GetMaxLenItem()
-	assert.Error(err, "GetMaxLenItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
+			manager.Register(item1)
+			manager.Register(item2)
+			manager.Register(item3)
+			res, _ := manager.GetMinLenItem()
+			assert.Equal(item3, res)
 
-	// Register items and test max len selection
-	manager.Register(item1)
-	manager.Register(item2)
-	manager.Register(item3)
-	manager.Register(item4)
+			manager.Register(item4)
+			res, _ = manager.GetMinLenItem()
+			assert.Equal(item3, res)
 
-	result, err := manager.GetMaxLenItem()
-	assert.NoError(err)
-	assert.Equal(item4, result, "Item with maximum length should be returned")
-}
+			// only empty
+			manager = CreateManager[*testItem]()
+			empty := &testItem{id: "empty", len: 0}
+			manager.Register(empty)
+			res, _ = manager.GetMinLenItem()
+			assert.Equal(empty, res)
+		})
+	})
 
-func TestManagerMinLenStrategy(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
+	t.Run("EmptyQueue", func(t *testing.T) {
+		assert := assert.New(t)
+		manager := CreateManager[*testItem]()
+		_, err := manager.GetRoundRobinItem()
+		assert.Equal(ErrNoItemsRegistered, err)
+		_, err = manager.GetMaxLenItem()
+		assert.Equal(ErrNoItemsRegistered, err)
+		_, err = manager.GetMinLenItem()
+		assert.Equal(ErrNoItemsRegistered, err)
+	})
 
-	// Create test items with different lengths
-	item1 := &testItem{id: "item1", len: 3}
-	item2 := &testItem{id: "item2", len: 5}
-	item3 := &testItem{id: "item3", len: 2}
-	item4 := &testItem{id: "item4", len: 0}
+	t.Run("ConcurrentOperations", func(t *testing.T) {
+		assert := assert.New(t)
+		manager := CreateManager[*testItem]()
+		manager.Register(&testItem{id: "item1", len: 3})
+		manager.Register(&testItem{id: "item2", len: 5})
 
-	// Test with no items
-	_, err := manager.GetMinLenItem()
-	assert.Error(err, "GetMinLenItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
-
-	// Register items and test min len selection
-	manager.Register(item1)
-	manager.Register(item2)
-	manager.Register(item3)
-
-	result, err := manager.GetMinLenItem()
-	assert.NoError(err)
-	assert.Equal(item3, result, "Item with minimum length (excluding zero) should be returned")
-
-	// Test with an empty item - should still return the minimum non-zero item
-	manager.Register(item4)
-	result, err = manager.GetMinLenItem()
-	assert.NoError(err)
-	assert.Equal(item3, result, "Item with minimum length (excluding zero) should be returned")
-
-	// Test with only empty items
-	manager = CreateManager[*testItem]()
-	emptyItem := &testItem{id: "empty", len: 0}
-	manager.Register(emptyItem)
-
-	result, err = manager.GetMinLenItem()
-	assert.NoError(err)
-	assert.Equal(emptyItem, result, "With only empty items, first item should be returned")
-}
-
-func TestManagerEmptyQueue(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
-
-	// Test operations on empty manager
-	_, err := manager.GetRoundRobinItem()
-	assert.Error(err, "GetRoundRobinItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
-
-	_, err = manager.GetMaxLenItem()
-	assert.Error(err, "GetMaxLenItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
-
-	_, err = manager.GetMinLenItem()
-	assert.Error(err, "GetMinLenItem should return error when no items registered")
-	assert.Equal(ErrNoItemsRegistered, err)
-}
-
-func TestManagerConcurrentOperations(t *testing.T) {
-	assert := assert.New(t)
-	manager := CreateManager[*testItem]()
-
-	// Create test items
-	item1 := &testItem{id: "item1", len: 3}
-	item2 := &testItem{id: "item2", len: 5}
-
-	// Register items
-	manager.Register(item1)
-	manager.Register(item2)
-
-	// Test concurrent access safety - this is more of a sanity check
-	// since we can't truly test concurrent safety in unit tests without races
-	go func() {
-		manager.Register(&testItem{id: "item3", len: 7})
-	}()
-
-	go func() {
-		manager.GetRoundRobinItem()
-	}()
-
-	go func() {
-		manager.GetMaxLenItem()
-	}()
-
-	// Wait for goroutines to complete
-	// This just verifies that the code doesn't panic under concurrent access
-	assert.True(true, "Concurrent operations should not cause panics")
+		var wg sync.WaitGroup
+		errChan := make(chan error, 30)
+		for i := range 10 {
+			wg.Add(3)
+			go func(id int) {
+				defer wg.Done()
+				manager.Register(&testItem{id: fmt.Sprintf("item%d", id), len: id})
+			}(i)
+			go func() {
+				defer wg.Done()
+				if _, err := manager.GetRoundRobinItem(); err != nil && err != ErrNoItemsRegistered {
+					errChan <- err
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				if _, err := manager.GetMaxLenItem(); err != nil && err != ErrNoItemsRegistered {
+					errChan <- err
+				}
+			}()
+		}
+		wg.Wait()
+		close(errChan)
+		for err := range errChan {
+			assert.NoError(err)
+		}
+		assert.Greater(manager.Count(), 2)
+	})
 }
