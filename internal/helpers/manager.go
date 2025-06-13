@@ -16,8 +16,9 @@ type Sizer interface {
 
 // Manager is a generic item manager that manages items implementing the Sizer interface
 type Manager[T Sizer] struct {
-	items []T
-	mx    sync.RWMutex
+	items           []T
+	roundRobinIndex int
+	mx              sync.RWMutex
 }
 
 // NewManager creates a new Manager with the specified strategy
@@ -142,15 +143,15 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 		return zero, ErrNoItemsRegistered
 	}
 
-	// Get the first item
-	firstItem := m.items[0]
+	item := m.items[m.roundRobinIndex]
 
-	// Move it to the back to implement round-robin
-	if len(m.items) > 1 {
-		m.items = append(m.items[1:], m.items[0])
+	if m.roundRobinIndex == len(m.items)-1 {
+		m.roundRobinIndex = 0
+	} else {
+		m.roundRobinIndex++
 	}
 
-	return firstItem, nil
+	return item, nil
 }
 
 // Count returns the number of registered items
