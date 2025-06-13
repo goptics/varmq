@@ -427,6 +427,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
 		if node := w.pool.PopBack(); node != nil {
 			node.Value.Stop()
+			w.poolNodeCache.Put(node)
 			w.pool.Remove(node)
 			shrinkPoolSize--
 		} else {
