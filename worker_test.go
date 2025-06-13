@@ -31,7 +31,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(w.workerFunc, "worker function should not be nil")
 				assert.Equal(1, w.NumConcurrency(), "concurrency should match expected value")
 				assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
-				assert.NotNil(w.Queue, "queue should not be nil, expected null queue")
+				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
 				assert.NotNil(w.waiters, "waiters slice should be initialized")
@@ -242,7 +242,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[string]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 				defer w.Stop()
 
 				// Verify IdleWorkerExpiryDuration is set
@@ -395,7 +395,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing using internal implementation
 				q := queues.NewQueue[iJob[int]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 
 				// Submit some jobs
 				for i := range 10 {
@@ -447,7 +447,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[int]]()
-				w.setQueue(q)
+				w.queues.Register(q)
 
 				// Submit some initial jobs
 				for i := range 50 {
