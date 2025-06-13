@@ -206,6 +206,7 @@ Available `ConfigFunc` options (defined in `config.go`):
 | `WithJobIdGenerator(fn func() string)`          | Provides a custom function to generate job IDs.                                                       | Returns `""` (empty string)                                                                         |
 | `WithIdleWorkerExpiryDuration(d time.Duration)` | Duration after which excess idle workers (beyond min ratio) are removed.                              | `0` (no expiry, keeps 1 idle)                                                                       |
 | `WithMinIdleWorkerRatio(p uint8)`               | Minimum percentage (1-100) of idle workers to maintain relative to max concurrency. Clamped to 1-100. | `1` (effectively keeps 1 idle worker by default, or more if `IdleWorkerExpiryDuration` is also set) |
+| `WithStrategy(s Strategy)`                      | Sets the queue-selection strategy when a worker is bound to multiple queues. Valid values: `RoundRobin` (default), `MaxLen`, `MinLen`. | `RoundRobin`                                                                                        |
 
 ## The `Worker` Interface
 
@@ -480,4 +481,3 @@ for res := range groupJob.Results() {
 // Note: Calling Results() automatically handles resource cleanup.
 // Only call Drain() if you need to abandon the job without reading its result.
 fmt.Println("All group jobs processed.")
-```
