@@ -3,6 +3,7 @@ package queues
 import (
 	"container/heap"
 	"sync"
+	"sync/atomic"
 )
 
 type enqItem[T any] struct {
@@ -16,6 +17,7 @@ type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
 	insertionCount int
 	mx             sync.RWMutex
+	closed         atomic.Bool
 }
 
 // newPriorityQueue initializes an empty priority queue.
@@ -48,6 +50,10 @@ func (q *PriorityQueue[T]) Values() []any {
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
 func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
+	if q.closed.Load() {
+		return false
+	}
+
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
@@ -90,6 +96,6 @@ func (q *PriorityQueue[T]) Purge() {
 
 // to satisfy the IQueue interface
 func (q *PriorityQueue[T]) Close() error {
-	q.Purge()
+	q.closed.Store(true)
 	return nil
 }
