@@ -112,10 +112,10 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 		return *new(T), ErrNoItemsRegistered
 	}
 
-	// First try to find the minimum length excluding empty items
 	var minItem T
 	minLen := -1
 
+	// First try to find the minimum length excluding empty items
 	for _, item := range m.items {
 		l := item.Len()
 		if l > 0 && (minLen == -1 || l < minLen) {
@@ -132,7 +132,7 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 	return minItem, nil
 }
 
-// GetRoundRobinItem returns the next item in round-robin order using popFront/pushBack approach
+// GetRoundRobinItem returns the next item in round-robin order
 func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -141,7 +141,6 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 		return *new(T), ErrNoItemsRegistered
 	}
 
-	// Advance until we find a non-empty item, at most len(m.items) iterations
 	start := m.roundRobinIndex
 
 	for {
@@ -152,7 +151,6 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 			return item, nil
 		}
 
-		// Looped through all items without finding data
 		if m.roundRobinIndex == start {
 			return *new(T), ErrAllItemsEmpty
 		}
