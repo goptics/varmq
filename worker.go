@@ -31,13 +31,13 @@ type worker[T any, JobType iJob[T]] struct {
 	pool            *linkedlist.List[pool.Node[JobType]]
 	poolNodeCache   sync.Pool
 	curProcessing   atomic.Uint32
+	queues          queueManager
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
 	Configs         configs
-	queues          queueManager
 }
 
 // Worker represents a worker that processes Jobs.

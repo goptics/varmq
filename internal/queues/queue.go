@@ -57,7 +57,11 @@ func (q *Queue[T]) Enqueue(item any) bool {
 		return false
 	}
 
-	typedItem := item.(T)
+	typedItem, ok := item.(T)
+
+	if !ok {
+		return false
+	}
 
 	q.mx.Lock()
 	defer q.mx.Unlock()
