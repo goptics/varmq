@@ -10,7 +10,7 @@ import (
 
 var (
 	initialBufferCapacity = 1024       // 1KB initial capacity
-	defaultMaxCapacity    = 100 * 1024 // 100KB max capacity
+	chunkMaxCapacity      = 100 * 1024 // 100KB max capacity
 )
 
 // Queue implements a FIFO queue using linked buffer chunks
@@ -33,7 +33,7 @@ func NewQueue[T any]() *Queue[T] {
 	return &Queue[T]{
 		readChunk:   chunk,
 		writeChunk:  chunk,
-		maxCapacity: defaultMaxCapacity,
+		maxCapacity: chunkMaxCapacity,
 	}
 }
 
