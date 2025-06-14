@@ -150,17 +150,27 @@ func TestManager(t *testing.T) {
 			manager.Register(item4)
 			res, _ = manager.GetMinLenItem()
 			assert.Equal(item3, res)
+		})
 
-			// only empty
-			manager = CreateManager[*testItem]()
-			empty := &testItem{id: "empty", len: 0}
-			manager.Register(empty)
-			res, _ = manager.GetMinLenItem()
-			assert.Equal(empty, res)
+		// All methods should return ErrAllItemsEmpty when only zero-length items are registered
+		t.Run("AllItemsEmpty", func(t *testing.T) {
+			assert := assert.New(t)
+			manager := CreateManager[*testItem]()
+			manager.Register(&testItem{id: "e1", len: 0})
+			manager.Register(&testItem{id: "e2", len: 0})
+
+			_, err := manager.GetRoundRobinItem()
+			assert.Equal(ErrAllItemsEmpty, err)
+
+			_, err = manager.GetMaxLenItem()
+			assert.Equal(ErrAllItemsEmpty, err)
+
+			_, err = manager.GetMinLenItem()
+			assert.Equal(ErrAllItemsEmpty, err)
 		})
 	})
 
-	t.Run("EmptyQueue", func(t *testing.T) {
+	t.Run("EmptyManager", func(t *testing.T) {
 		assert := assert.New(t)
 		manager := CreateManager[*testItem]()
 		_, err := manager.GetRoundRobinItem()
@@ -187,13 +197,13 @@ func TestManager(t *testing.T) {
 			}(i)
 			go func() {
 				defer wg.Done()
-				if _, err := manager.GetRoundRobinItem(); err != nil && err != ErrNoItemsRegistered {
+				if _, err := manager.GetRoundRobinItem(); err != nil && err != ErrNoItemsRegistered && err != ErrAllItemsEmpty {
 					errChan <- err
 				}
 			}()
 			go func() {
 				defer wg.Done()
-				if _, err := manager.GetMaxLenItem(); err != nil && err != ErrNoItemsRegistered {
+				if _, err := manager.GetMaxLenItem(); err != nil && err != ErrNoItemsRegistered && err != ErrAllItemsEmpty {
 					errChan <- err
 				}
 			}()
