@@ -104,11 +104,15 @@ func TestPriorityQueue(t *testing.T) {
 
 		err := pq.Close()
 		assert.NoError(err, "close should not return an error")
+		assert.Equal(2, pq.Len(), "queue should have length 2 after close")
 
-		assert.Equal(0, pq.Len(), "queue should be empty after close")
+		// Verify the queue wouldn't be usable after close
+		ok := pq.Enqueue(3, 1)
+		assert.False(ok, "enqueue should fail after close")
 
-		// Verify the queue is still usable after close
-		pq.Enqueue(3, 1)
-		assert.Equal(1, pq.Len(), "queue should have length 1 after adding to closed queue")
+		val, ok := pq.Dequeue()
+		assert.True(ok)
+		assert.Equal(2, val, "dequeue should return the first element")
+		assert.Equal(1, pq.Len(), "queue should have length 1 after dequeuing from closed queue")
 	})
 }

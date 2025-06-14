@@ -31,13 +31,13 @@ type worker[T any, JobType iJob[T]] struct {
 	pool            *linkedlist.List[pool.Node[JobType]]
 	poolNodeCache   sync.Pool
 	curProcessing   atomic.Uint32
+	queues          queueManager
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
 	Configs         configs
-	queues          queueManager
 }
 
 // Worker represents a worker that processes Jobs.
@@ -155,21 +155,28 @@ func (w *worker[T, JobType]) configs() configs {
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
-	// Check if we need to wait
-	// 1. If worker is paused or stopped and no jobs are processing, no need to wait
-	// 2. If worker is running but queue is empty and no jobs are processing, no need to wait
-	if !w.IsRunning() && w.curProcessing.Load() == 0 {
-		return
+	var condition func() bool
+
+	// if worker is running, wait until all jobs are processed
+	if w.IsRunning() {
+		condition = func() bool {
+			return w.queues.Len() > 0 || w.curProcessing.Load() > 0
+		}
 	}
 
-	if w.IsRunning() && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
-		return
+	// if worker is paused or stopped, wait until all ongoing processes are done
+	if w.IsPaused() || w.IsStopped() {
+		condition = func() bool {
+			return w.curProcessing.Load() > 0
+		}
 	}
 
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	w.waiters.Wait()
+	for condition() {
+		w.waiters.Wait()
+	}
 }
 
 func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
@@ -312,7 +319,7 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 	// it should not attempt to signal the event loop for new jobs.
 	// This check prevents a panic from sending on a closed eventLoopSignal
 	// during shutdown.
-	if w.status.Load() != running { // 'running' is an existing status constant
+	if w.status.Load() != running {
 		return
 	}
 

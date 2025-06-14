@@ -795,7 +795,7 @@ func TestExternalQueue(t *testing.T) {
 	})
 
 	t.Run("Close", func(t *testing.T) {
-		queue, worker, internalQueue := setupBasicQueue()
+		queue, worker, _ := setupBasicQueue()
 		assert := assert.New(t)
 
 		// Start the worker
@@ -812,8 +812,10 @@ func TestExternalQueue(t *testing.T) {
 		err = queue.Close()
 		assert.NoError(err, "Close should not return an error")
 
-		// After closing, should have no pending jobs and worker should be stopped
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after Close")
-		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after Close")
+		_, ok := queue.Add("test-data-6")
+		assert.False(ok, "Add should fail after Close")
+
+		worker.WaitUntilFinished()
+		assert.Equal(0, queue.NumPending(), "worker should process all pending jobs after close")
 	})
 }
