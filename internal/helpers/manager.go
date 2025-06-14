@@ -112,11 +112,20 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 		return *new(T), ErrNoItemsRegistered
 	}
 
-	minItem := slices.MinFunc(m.items, func(a, b T) int {
-		return a.Len() - b.Len()
-	})
+	// First try to find the minimum length excluding empty items
+	var minItem T
+	minLen := -1
 
-	if minItem.Len() == 0 {
+	for _, item := range m.items {
+		l := item.Len()
+		if l > 0 && (minLen == -1 || l < minLen) {
+			minLen = l
+			minItem = item
+		}
+	}
+
+	// If no non-empty items found, all items are empty
+	if minLen == -1 {
 		return *new(T), ErrAllItemsEmpty
 	}
 
