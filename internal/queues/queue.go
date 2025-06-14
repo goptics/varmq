@@ -118,16 +118,14 @@ func (q *Queue[T]) Dequeue() (any, bool) {
 // Values returns a slice of all values in the queue
 // Note: This creates a temporary slice for compatibility
 func (q *Queue[T]) Values() []any {
-	q.mx.RLock()
-	defer q.mx.RUnlock()
+	values := make([]any, 0)
 
-	length := q.Len()
-	if length == 0 {
-		return nil
+	if q.Len() == 0 {
+		return values
 	}
 
-	values := make([]any, 0, length)
-
+	q.mx.RLock()
+	defer q.mx.RUnlock()
 	// Iterate through all chunks starting from read chunk
 	for chunk := q.readChunk; chunk != nil; chunk = chunk.Next {
 		// Add unread items from this chunk
