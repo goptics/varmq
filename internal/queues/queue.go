@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	initialBufferCapacity = 1024      // 1KB initial capacity
-	defaultMaxCapacity    = 10 * 1024 // 10KB max capacity
+	initialBufferCapacity = 1024       // 1KB initial capacity
+	defaultMaxCapacity    = 100 * 1024 // 100KB max capacity
 )
 
 // Queue implements a FIFO queue using linked buffer chunks
@@ -68,7 +68,7 @@ func (q *Queue[T]) Enqueue(item any) bool {
 		return true
 	}
 
-	currentCap := len(q.writeChunk.Data)
+	currentCap := q.writeChunk.Cap()
 	newCapacity := min(currentCap+currentCap/2, q.maxCapacity)
 
 	newChunk := linkedbuffer.NewChunk[T](newCapacity)

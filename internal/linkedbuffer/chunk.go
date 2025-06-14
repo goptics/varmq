@@ -19,9 +19,13 @@ func (c *Chunk[T]) Len() int {
 	return c.NextWriteIndex - c.NextReadIndex
 }
 
+func (c *Chunk[T]) Cap() int {
+	return cap(c.Data)
+}
+
 // IsFull returns true if the chunk cannot accept more items
 func (c *Chunk[T]) IsFull() bool {
-	return c.NextWriteIndex >= len(c.Data)
+	return c.NextWriteIndex >= c.Cap()
 }
 
 // IsEmpty returns true if the chunk has no items to read
