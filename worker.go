@@ -155,11 +155,26 @@ func (w *worker[T, JobType]) configs() configs {
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
+	var condition func() bool
+
+	// if worker is running, wait until all jobs are processed
+	if w.IsRunning() {
+		condition = func() bool {
+			return w.queues.Len() > 0 || w.curProcessing.Load() > 0
+		}
+	}
+
+	// if worker is paused or stopped, wait until all ongoing processes are done
+	if w.IsPaused() || w.IsStopped() {
+		condition = func() bool {
+			return w.curProcessing.Load() > 0
+		}
+	}
+
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	// Wait while there's work to be done
-	for w.IsRunning() && (w.queues.Len() > 0 || w.curProcessing.Load() > 0) {
+	for condition() {
 		w.waiters.Wait()
 	}
 }
@@ -304,7 +319,7 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 	// it should not attempt to signal the event loop for new jobs.
 	// This check prevents a panic from sending on a closed eventLoopSignal
 	// during shutdown.
-	if w.status.Load() != running { // 'running' is an existing status constant
+	if w.status.Load() != running {
 		return
 	}
 
