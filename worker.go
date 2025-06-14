@@ -155,21 +155,13 @@ func (w *worker[T, JobType]) configs() configs {
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
-	// Check if we need to wait
-	// 1. If worker is paused or stopped and no jobs are processing, no need to wait
-	// 2. If worker is running but queue is empty and no jobs are processing, no need to wait
-	if !w.IsRunning() && w.curProcessing.Load() == 0 {
-		return
-	}
-
-	if w.IsRunning() && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
-		return
-	}
-
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	w.waiters.Wait()
+	// Wait while there's work to be done
+	for w.IsRunning() && (w.queues.Len() > 0 || w.curProcessing.Load() > 0) {
+		w.waiters.Wait()
+	}
 }
 
 func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
