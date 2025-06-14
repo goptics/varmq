@@ -214,7 +214,7 @@ type IExternalBaseQueue interface {
 	PendingTracker
 	// Purge removes all pending Jobs from the queue.
 	Purge()
-	// Close closes the queue and resets all internal states.
+	// Close closes the queue, no more jobs can be added to the queue after closing the queue.
 	Close() error
 }
 
