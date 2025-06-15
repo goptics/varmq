@@ -186,12 +186,10 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	}
 
 	// Only release waiters if worker is paused or if running with an empty queue
-	if shouldReleaseWaiters := w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0); !shouldReleaseWaiters {
-		return
+	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
+		// Broadcast to all waiters to signal they can continue
+		w.waiters.Broadcast()
 	}
-
-	// Broadcast to all waiters to signal they can continue
-	w.waiters.Broadcast()
 }
 
 // startEventLoop starts the event loop that processes pending jobs when workers become available
