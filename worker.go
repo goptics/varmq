@@ -90,14 +90,14 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }
@@ -114,14 +114,14 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }
@@ -138,14 +138,14 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }
@@ -264,7 +264,7 @@ func (w *worker[T, JobType]) processNextJob() {
 
 func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
 	// If worker timeout is enabled, update the last used time
-	enabledIdleWorkersRemover := w.Configs.IdleWorkerExpiryDuration > 0
+	enabledIdleWorkersRemover := w.Configs.idleWorkerExpiryDuration > 0
 
 	if enabledIdleWorkersRemover {
 		node.Value.UpdateLastUsed()
@@ -333,14 +333,14 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 
 // numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
 func (w *worker[T, JobType]) numMinIdleWorkers() int {
-	percentage := w.Configs.MinIdleWorkerRatio
+	percentage := w.Configs.minIdleWorkerRatio
 	concurrency := w.concurrency.Load()
 
 	return int(max((concurrency*uint32(percentage))/100, 1))
 }
 
 func (w *worker[T, JobType]) goRemoveIdleWorkers() {
-	interval := w.Configs.IdleWorkerExpiryDuration
+	interval := w.Configs.idleWorkerExpiryDuration
 
 	if interval == 0 {
 		return
@@ -422,7 +422,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 
 	// if idle worker expiry duration is set, then no need to shrink the pool size
 	// cause it will be removed by the idle worker remover
-	if w.Configs.IdleWorkerExpiryDuration != 0 {
+	if w.Configs.idleWorkerExpiryDuration != 0 {
 		return nil
 	}
 

@@ -13,9 +13,9 @@ func TestConfig(t *testing.T) {
 		c := newConfig()
 
 		// Test default values
-		assert.Equal(t, uint32(1), c.Concurrency)
-		assert.NotNil(t, c.JobIdGenerator)
-		assert.Equal(t, "", c.JobIdGenerator())
+		assert.Equal(t, uint32(1), c.concurrency)
+		assert.NotNil(t, c.jobIdGenerator)
+		assert.Equal(t, "", c.jobIdGenerator())
 	})
 
 	t.Run("ConfigOptions", func(t *testing.T) {
@@ -36,15 +36,15 @@ func TestConfig(t *testing.T) {
 					c := newConfig()
 					configFunc(&c)
 
-					assert.Equal(t, tc.expected, c.Concurrency)
+					assert.Equal(t, tc.expected, c.concurrency)
 				})
 			}
 		})
 
 		t.Run("WithStrategy", func(t *testing.T) {
 			tests := []struct {
-				name            string
-				strategy        Strategy
+				name             string
+				strategy         Strategy
 				expectedStrategy Strategy
 			}{
 				{"RoundRobin Strategy", RoundRobin, RoundRobin},
@@ -58,7 +58,7 @@ func TestConfig(t *testing.T) {
 					c := newConfig()
 					configFunc(&c)
 
-					assert.Equal(t, tc.expectedStrategy, c.Strategy)
+					assert.Equal(t, tc.expectedStrategy, c.strategy)
 				})
 			}
 		})
@@ -92,7 +92,7 @@ func TestConfig(t *testing.T) {
 			c := newConfig()
 			configFunc(&c)
 
-			assert.Equal(t, expectedId, c.JobIdGenerator())
+			assert.Equal(t, expectedId, c.jobIdGenerator())
 		})
 
 		t.Run("WithIdleWorkerExpiryDuration", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestConfig(t *testing.T) {
 			c := newConfig()
 			configFunc(&c)
 
-			assert.Equal(t, duration, c.IdleWorkerExpiryDuration)
+			assert.Equal(t, duration, c.idleWorkerExpiryDuration)
 		})
 
 		t.Run("WithMinIdleWorkerRatio", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestConfig(t *testing.T) {
 					c := newConfig()
 					configFunc(&c)
 
-					assert.Equal(t, tc.expectedRatio, c.MinIdleWorkerRatio)
+					assert.Equal(t, tc.expectedRatio, c.minIdleWorkerRatio)
 				})
 			}
 		})
@@ -134,11 +134,11 @@ func TestConfig(t *testing.T) {
 		t.Run("LoadConfigs", func(t *testing.T) {
 			// Test with no configs
 			c := loadConfigs()
-			assert.Equal(t, uint32(1), c.Concurrency)
+			assert.Equal(t, uint32(1), c.concurrency)
 
 			// Test with concurrency as int
 			c = loadConfigs(5)
-			assert.Equal(t, uint32(5), c.Concurrency)
+			assert.Equal(t, uint32(5), c.concurrency)
 
 			// Test with multiple config funcs
 			expectedId := "custom-id"
@@ -148,30 +148,30 @@ func TestConfig(t *testing.T) {
 				WithJobIdGenerator(func() string { return expectedId }),
 			)
 
-			assert.Equal(t, uint32(3), c.Concurrency)
-			assert.Equal(t, expectedId, c.JobIdGenerator())
+			assert.Equal(t, uint32(3), c.concurrency)
+			assert.Equal(t, expectedId, c.jobIdGenerator())
 
 			// Test with a mixture of int and config funcs
 			c = loadConfigs(
 				4,
 			)
 
-			assert.Equal(t, uint32(4), c.Concurrency)
+			assert.Equal(t, uint32(4), c.concurrency)
 		})
 
 		t.Run("MergeConfigs", func(t *testing.T) {
 			baseConfig := configs{
-				Concurrency:    1,
-				JobIdGenerator: func() string { return "" },
+				concurrency:    1,
+				jobIdGenerator: func() string { return "" },
 			}
 
 			// Test with no changes
 			c := mergeConfigs(baseConfig)
-			assert.Equal(t, baseConfig.Concurrency, c.Concurrency)
+			assert.Equal(t, baseConfig.concurrency, c.concurrency)
 
 			// Test with concurrency as int
 			c = mergeConfigs(baseConfig, 5)
-			assert.Equal(t, uint32(5), c.Concurrency)
+			assert.Equal(t, uint32(5), c.concurrency)
 
 			// Test with config funcs
 			c = mergeConfigs(
@@ -179,7 +179,7 @@ func TestConfig(t *testing.T) {
 				WithConcurrency(3),
 			)
 
-			assert.Equal(t, uint32(3), c.Concurrency)
+			assert.Equal(t, uint32(3), c.concurrency)
 		})
 	})
 
@@ -187,7 +187,7 @@ func TestConfig(t *testing.T) {
 		t.Run("loadJobConfigs", func(t *testing.T) {
 			// Test with default job ID generator
 			qConfig := configs{
-				JobIdGenerator: func() string { return "default-id" },
+				jobIdGenerator: func() string { return "default-id" },
 			}
 
 			// Test with no custom configs
@@ -220,4 +220,27 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, "original-id", jc.Id)
 		})
 	})
+}
+
+func TestClampPercentage(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    uint8
+		expected uint8
+	}{
+		{"Zero should return 1", 0, 1},
+		{"Valid percentage should return same value", 50, 50},
+		{"Min valid value should return same", 1, 1},
+		{"Max valid value should return same", 100, 100},
+		{"Over 100 should return 100", 150, 100},
+		{"Just over 100 should return 100", 101, 100},
+		{"Max uint8 should return 100", 255, 100},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := clampPercentage(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }
