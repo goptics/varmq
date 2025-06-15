@@ -10,20 +10,20 @@ import (
 type ConfigFunc func(*configs)
 
 type configs struct {
-	Concurrency              uint32
-	JobIdGenerator           func() string
-	IdleWorkerExpiryDuration time.Duration
-	MinIdleWorkerRatio       uint8
-	Strategy                 Strategy
+	concurrency              uint32
+	jobIdGenerator           func() string
+	idleWorkerExpiryDuration time.Duration
+	minIdleWorkerRatio       uint8
+	strategy                 Strategy
 }
 
 func newConfig() configs {
 	return configs{
-		Concurrency: 1,
-		JobIdGenerator: func() string {
+		concurrency: 1,
+		jobIdGenerator: func() string {
 			return ""
 		},
-		Strategy: RoundRobin,
+		strategy: RoundRobin,
 	}
 }
 
@@ -39,7 +39,7 @@ func mergeConfigs(c configs, cs ...any) configs {
 		case ConfigFunc:
 			config(&c)
 		case int:
-			c.Concurrency = withSafeConcurrency(config)
+			c.concurrency = withSafeConcurrency(config)
 		}
 	}
 
@@ -64,7 +64,7 @@ func mergeConfigs(c configs, cs ...any) configs {
 // removing excess idle workers according to this expiry duration setting.
 func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 	return func(c *configs) {
-		c.IdleWorkerExpiryDuration = duration
+		c.idleWorkerExpiryDuration = duration
 	}
 }
 
@@ -82,7 +82,7 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 // Default: If this option is not set, RoundRobin strategy will be used.
 func WithStrategy(s Strategy) ConfigFunc {
 	return func(c *configs) {
-		c.Strategy = s
+		c.strategy = s
 	}
 }
 
@@ -103,15 +103,8 @@ func WithStrategy(s Strategy) ConfigFunc {
 // Values outside the range 1-100 are automatically clamped (0 becomes 1, >100 becomes 100).
 // By default there is always at least one idle worker inside the pool.
 func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
-	// Clamp percentage between 1 and 100
-	if percentage == 0 {
-		percentage = 1
-	} else if percentage > 100 {
-		percentage = 100
-	}
-
 	return func(c *configs) {
-		c.MinIdleWorkerRatio = percentage
+		c.minIdleWorkerRatio = clampPercentage(percentage)
 	}
 }
 
@@ -120,7 +113,7 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 // If concurrency is less than 1, it defaults to number of CPU cores.
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
-		c.Concurrency = withSafeConcurrency(concurrency)
+		c.concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
@@ -128,7 +121,7 @@ func WithConcurrency(concurrency int) ConfigFunc {
 // If not set there wouldn't be any job id
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
-		c.JobIdGenerator = fn
+		c.jobIdGenerator = fn
 	}
 }
 
@@ -140,6 +133,18 @@ func withSafeConcurrency(concurrency int) uint32 {
 	return uint32(concurrency)
 }
 
+func clampPercentage(percentage uint8) uint8 {
+	if percentage == 0 {
+		return 1
+	}
+
+	if percentage > 100 {
+		return 100
+	}
+
+	return percentage
+}
+
 type JobConfigFunc func(*jobConfigs)
 
 type jobConfigs struct {
@@ -148,7 +153,7 @@ type jobConfigs struct {
 
 func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 	c := jobConfigs{
-		Id: qConfig.JobIdGenerator(),
+		Id: qConfig.jobIdGenerator(),
 	}
 
 	for _, config := range config {
