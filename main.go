@@ -1,6 +1,10 @@
 package varmq
 
-import "github.com/goptics/varmq/utils"
+import (
+	"errors"
+
+	"github.com/goptics/varmq/utils"
+)
 
 // NewWorker creates a worker that can be bound to standard, priority, and persistent and distributed queue types.
 // If concurrency in config is not provided, it defaults to 1.
@@ -97,6 +101,8 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 	}, config...))
 }
 
+var errNilFunction = errors.New("function is nil")
+
 // Func is a helper function that enables direct function submission to VarMQ workers.
 // Instead of creating custom data types and worker functions, you can pass functions directly.
 //
@@ -112,7 +118,12 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 // be serialized to JSON instead of passing functions directly.
 func Func() func(j Job[func()]) {
 	return func(j Job[func()]) {
-		j.Data()()
+		if fn := j.Data(); fn != nil {
+			fn()
+			return
+		}
+
+		panic(errNilFunction)
 	}
 }
 
@@ -134,7 +145,11 @@ func Func() func(j Job[func()]) {
 //	}
 func ErrFunc() func(j Job[func() error]) error {
 	return func(j Job[func() error]) error {
-		return j.Data()()
+		if fn := j.Data(); fn != nil {
+			return fn()
+		}
+
+		return errNilFunction
 	}
 }
 
@@ -162,6 +177,10 @@ func ErrFunc() func(j Job[func() error]) error {
 // The generic type parameter R specifies the return type of your function.
 func ResultFunc[R any]() func(j Job[func() (R, error)]) (R, error) {
 	return func(j Job[func() (R, error)]) (R, error) {
-		return j.Data()()
+		if fn := j.Data(); fn != nil {
+			return fn()
+		}
+
+		return *new(R), errNilFunction
 	}
 }
