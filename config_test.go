@@ -221,3 +221,26 @@ func TestConfig(t *testing.T) {
 		})
 	})
 }
+
+func TestClampPercentage(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    uint8
+		expected uint8
+	}{
+		{"Zero should return 1", 0, 1},
+		{"Valid percentage should return same value", 50, 50},
+		{"Min valid value should return same", 1, 1},
+		{"Max valid value should return same", 100, 100},
+		{"Over 100 should return 100", 150, 100},
+		{"Just over 100 should return 100", 101, 100},
+		{"Max uint8 should return 100", 255, 100},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := clampPercentage(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

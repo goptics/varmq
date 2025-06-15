@@ -136,7 +136,9 @@ func withSafeConcurrency(concurrency int) uint32 {
 func clampPercentage(percentage uint8) uint8 {
 	if percentage == 0 {
 		return 1
-	} else if percentage > 100 {
+	}
+
+	if percentage > 100 {
 		return 100
 	}
 
