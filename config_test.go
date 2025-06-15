@@ -82,13 +82,13 @@ func TestConfig(t *testing.T) {
 			}
 		})
 
-		t.Run("WithjobIdGenerator", func(t *testing.T) {
+		t.Run("WithJobIdGenerator", func(t *testing.T) {
 			expectedId := "test-job-id"
 			generator := func() string {
 				return expectedId
 			}
 
-			configFunc := WithjobIdGenerator(generator)
+			configFunc := WithJobIdGenerator(generator)
 			c := newConfig()
 			configFunc(&c)
 
@@ -102,7 +102,7 @@ func TestConfig(t *testing.T) {
 			c := newConfig()
 			configFunc(&c)
 
-			assert.Equal(t, duration, c.IdleWorkerExpiryDuration)
+			assert.Equal(t, duration, c.idleWorkerExpiryDuration)
 		})
 
 		t.Run("WithMinIdleWorkerRatio", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestConfig(t *testing.T) {
 					c := newConfig()
 					configFunc(&c)
 
-					assert.Equal(t, tc.expectedRatio, c.MinIdleWorkerRatio)
+					assert.Equal(t, tc.expectedRatio, c.minIdleWorkerRatio)
 				})
 			}
 		})
@@ -145,7 +145,7 @@ func TestConfig(t *testing.T) {
 
 			c = loadConfigs(
 				WithConcurrency(3),
-				WithjobIdGenerator(func() string { return expectedId }),
+				WithJobIdGenerator(func() string { return expectedId }),
 			)
 
 			assert.Equal(t, uint32(3), c.concurrency)

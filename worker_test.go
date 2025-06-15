@@ -55,7 +55,7 @@ func TestWorkers(t *testing.T) {
 				}
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
-				}, WithjobIdGenerator(customIdGenerator))
+				}, WithJobIdGenerator(customIdGenerator))
 				assert := assert.New(t)
 				assert.NotNil(w.Configs.jobIdGenerator, "job ID generator should be set")
 			})
@@ -245,9 +245,9 @@ func TestWorkers(t *testing.T) {
 				w.queues.Register(q)
 				defer w.Stop()
 
-				// Verify IdleWorkerExpiryDuration is set
-				assert.Equal(t, idleExpiryDuration, w.Configs.IdleWorkerExpiryDuration,
-					"IdleWorkerExpiryDuration should be set to specified value")
+				// Verify idleWorkerExpiryDuration is set
+				assert.Equal(t, idleExpiryDuration, w.Configs.idleWorkerExpiryDuration,
+					"idleWorkerExpiryDuration should be set to specified value")
 				assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(),
 					"Initial concurrency should be set correctly")
 
@@ -613,8 +613,8 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(w, "worker should not be nil")
 				assert.NotNil(w.workerFunc, "worker function should not be nil")
 				assert.Equal(customConcurrency, w.NumConcurrency(), "concurrency should be set to custom value")
-				assert.Equal(idleWorkerExpiryDuration, w.Configs.IdleWorkerExpiryDuration, "idle worker expiry duration should be set correctly")
-				assert.Equal(minIdleWorkerRatio, w.Configs.MinIdleWorkerRatio, "min idle worker ratio should be set correctly")
+				assert.Equal(idleWorkerExpiryDuration, w.Configs.idleWorkerExpiryDuration, "idle worker expiry duration should be set correctly")
+				assert.Equal(minIdleWorkerRatio, w.Configs.minIdleWorkerRatio, "min idle worker ratio should be set correctly")
 
 				expectedMinIdleWorkers := int(max((uint32(customConcurrency)*uint32(minIdleWorkerRatio))/100, 1))
 				actualMinIdleWorkers := w.numMinIdleWorkers()

@@ -9,19 +9,11 @@ import (
 // ConfigFunc is a function that configures a worker.
 type ConfigFunc func(*configs)
 
-type dynamicConcurrency struct {
-	enabled   bool
-	min       uint32
-	max       uint32
-	step      uint32
-	threshold uint32
-}
-
 type configs struct {
 	concurrency              uint32
 	jobIdGenerator           func() string
-	IdleWorkerExpiryDuration time.Duration
-	MinIdleWorkerRatio       uint8
+	idleWorkerExpiryDuration time.Duration
+	minIdleWorkerRatio       uint8
 	strategy                 Strategy
 }
 
@@ -72,7 +64,7 @@ func mergeConfigs(c configs, cs ...any) configs {
 // removing excess idle workers according to this expiry duration setting.
 func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 	return func(c *configs) {
-		c.IdleWorkerExpiryDuration = duration
+		c.idleWorkerExpiryDuration = duration
 	}
 }
 
@@ -111,15 +103,8 @@ func WithStrategy(s Strategy) ConfigFunc {
 // Values outside the range 1-100 are automatically clamped (0 becomes 1, >100 becomes 100).
 // By default there is always at least one idle worker inside the pool.
 func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
-	// Clamp percentage between 1 and 100
-	if percentage == 0 {
-		percentage = 1
-	} else if percentage > 100 {
-		percentage = 100
-	}
-
 	return func(c *configs) {
-		c.MinIdleWorkerRatio = percentage
+		c.minIdleWorkerRatio = clampPercentage(percentage)
 	}
 }
 
@@ -132,9 +117,9 @@ func WithConcurrency(concurrency int) ConfigFunc {
 	}
 }
 
-// WithjobIdGenerator sets the job ID generator function for the worker.
+// WithJobIdGenerator sets the job ID generator function for the worker.
 // If not set there wouldn't be any job id
-func WithjobIdGenerator(fn func() string) ConfigFunc {
+func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		c.jobIdGenerator = fn
 	}
@@ -146,6 +131,16 @@ func withSafeConcurrency(concurrency int) uint32 {
 		return utils.Cpus()
 	}
 	return uint32(concurrency)
+}
+
+func clampPercentage(percentage uint8) uint8 {
+	if percentage == 0 {
+		return 1
+	} else if percentage > 100 {
+		return 100
+	}
+
+	return percentage
 }
 
 type JobConfigFunc func(*jobConfigs)
