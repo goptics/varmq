@@ -90,14 +90,14 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }
@@ -114,14 +114,14 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }
@@ -138,14 +138,14 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 			},
 		},
 		concurrency:     atomic.Uint32{},
-		queues:          createQueueManager(c.Strategy),
+		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, 1),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
 
 	w.waiters = sync.NewCond(&w.mx)
-	w.concurrency.Store(c.Concurrency)
+	w.concurrency.Store(c.concurrency)
 
 	return w
 }

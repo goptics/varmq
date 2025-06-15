@@ -9,21 +9,29 @@ import (
 // ConfigFunc is a function that configures a worker.
 type ConfigFunc func(*configs)
 
+type dynamicConcurrency struct {
+	enabled   bool
+	min       uint32
+	max       uint32
+	step      uint32
+	threshold uint32
+}
+
 type configs struct {
-	Concurrency              uint32
-	JobIdGenerator           func() string
+	concurrency              uint32
+	jobIdGenerator           func() string
 	IdleWorkerExpiryDuration time.Duration
 	MinIdleWorkerRatio       uint8
-	Strategy                 Strategy
+	strategy                 Strategy
 }
 
 func newConfig() configs {
 	return configs{
-		Concurrency: 1,
-		JobIdGenerator: func() string {
+		concurrency: 1,
+		jobIdGenerator: func() string {
 			return ""
 		},
-		Strategy: RoundRobin,
+		strategy: RoundRobin,
 	}
 }
 
@@ -39,7 +47,7 @@ func mergeConfigs(c configs, cs ...any) configs {
 		case ConfigFunc:
 			config(&c)
 		case int:
-			c.Concurrency = withSafeConcurrency(config)
+			c.concurrency = withSafeConcurrency(config)
 		}
 	}
 
@@ -82,7 +90,7 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 // Default: If this option is not set, RoundRobin strategy will be used.
 func WithStrategy(s Strategy) ConfigFunc {
 	return func(c *configs) {
-		c.Strategy = s
+		c.strategy = s
 	}
 }
 
@@ -120,15 +128,15 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 // If concurrency is less than 1, it defaults to number of CPU cores.
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
-		c.Concurrency = withSafeConcurrency(concurrency)
+		c.concurrency = withSafeConcurrency(concurrency)
 	}
 }
 
-// WithJobIdGenerator sets the job ID generator function for the worker.
+// WithjobIdGenerator sets the job ID generator function for the worker.
 // If not set there wouldn't be any job id
-func WithJobIdGenerator(fn func() string) ConfigFunc {
+func WithjobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
-		c.JobIdGenerator = fn
+		c.jobIdGenerator = fn
 	}
 }
 
@@ -148,7 +156,7 @@ type jobConfigs struct {
 
 func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 	c := jobConfigs{
-		Id: qConfig.JobIdGenerator(),
+		Id: qConfig.jobIdGenerator(),
 	}
 
 	for _, config := range config {

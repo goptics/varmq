@@ -55,9 +55,9 @@ func TestWorkers(t *testing.T) {
 				}
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
-				}, WithJobIdGenerator(customIdGenerator))
+				}, WithjobIdGenerator(customIdGenerator))
 				assert := assert.New(t)
-				assert.NotNil(w.Configs.JobIdGenerator, "job ID generator should be set")
+				assert.NotNil(w.Configs.jobIdGenerator, "job ID generator should be set")
 			})
 
 			t.Run("with zero concurrency (should use CPU count)", func(t *testing.T) {
