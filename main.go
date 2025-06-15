@@ -1,6 +1,10 @@
 package varmq
 
-import "github.com/goptics/varmq/utils"
+import (
+	"errors"
+
+	"github.com/goptics/varmq/utils"
+)
 
 // NewWorker creates a worker that can be bound to standard, priority, and persistent and distributed queue types.
 // If concurrency in config is not provided, it defaults to 1.
@@ -95,4 +99,88 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 			ij.sendError(err)
 		}
 	}, config...))
+}
+
+var errNilFunction = errors.New("provided function is nil")
+
+// Func is a helper function that enables direct function submission to VarMQ workers.
+// Instead of creating custom data types and worker functions, you can pass functions directly.
+//
+// Usage:
+//
+//	queue := varmq.NewWorker(varmq.Func()).BindQueue()
+//	queue.Add(func() {
+//	    fmt.Println("Hello from worker!")
+//	})
+//
+// Note: Func does not support persistence or distribution since functions are not
+// serializable. For persistent or distributed job queues, use custom or primitive data types that can
+// be serialized to JSON instead of passing functions directly.
+func Func() func(j Job[func()]) {
+	return func(j Job[func()]) {
+		if fn := j.Data(); fn != nil {
+			fn()
+			return
+		}
+
+		panic(errNilFunction)
+	}
+}
+
+// ErrFunc is a helper function for functions that return errors.
+// It enables direct submission of functions that return error values.
+//
+// Usage:
+//
+//	queue := varmq.NewErrWorker(varmq.ErrFunc()).BindQueue()
+//	job, ok := queue.Add(func() error {
+//	    if err := doSomething(); err != nil {
+//	        return fmt.Errorf("failed to do something: %w", err)
+//	    }
+//	    return nil
+//	})
+//
+//	if err := job.Err(); err != nil {
+//	    log.Printf("Job failed: %v", err)
+//	}
+func ErrFunc() func(j Job[func() error]) error {
+	return func(j Job[func() error]) error {
+		if fn := j.Data(); fn != nil {
+			return fn()
+		}
+
+		return errNilFunction
+	}
+}
+
+// ResultFunc is a generic helper function for functions that return both a result and an error.
+// It enables direct submission of functions with return values of any type.
+//
+// Usage:
+//
+//	queue := varmq.NewResultWorker(varmq.ResultFunc[string]()).BindQueue()
+//	job, ok := queue.Add(func() (string, error) {
+//	    result, err := fetchData()
+//	    if err != nil {
+//	        return "", fmt.Errorf("failed to fetch: %w", err)
+//	    }
+//	    return result, nil
+//	})
+//
+//	result, err := job.Result()
+//	if err != nil {
+//	    log.Printf("Job failed: %v", err)
+//	} else {
+//	    fmt.Printf("Result: %s", result)
+//	}
+//
+// The generic type parameter R specifies the return type of your function.
+func ResultFunc[R any]() func(j Job[func() (R, error)]) (R, error) {
+	return func(j Job[func() (R, error)]) (R, error) {
+		if fn := j.Data(); fn != nil {
+			return fn()
+		}
+
+		return *new(R), errNilFunction
+	}
 }
