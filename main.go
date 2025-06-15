@@ -101,7 +101,7 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 	}, config...))
 }
 
-var errNilFunction = errors.New("function is nil")
+var errNilFunction = errors.New("provided function is nil")
 
 // Func is a helper function that enables direct function submission to VarMQ workers.
 // Instead of creating custom data types and worker functions, you can pass functions directly.
