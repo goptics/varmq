@@ -280,51 +280,60 @@ Why is `AddAll` faster than individual `Add` calls? Here's what makes the differ
 
 Generated using **[vizb](https://github.com/goptics/vizb)**
 
-#### `Add`
+### Benchmark Charts
 
-<details>
-<summary><strong>Execution Time (ns/op)</strong></summary>
-
-![VarMQ Add/Execute Benchmark Chart](diagrams/add_exe_bench_chart.png)
-
-</details>
-
-<details>
-<summary><strong>Memory Usage (B/op)</strong></summary>
-
-![VarMQ Add/Memory Benchmark Chart](diagrams/add_mem_bench_chart.png)
-
-</details>
-
-<details>
-<summary><strong>Allocations (allocs/op)</strong></summary>
-
-![VarMQ Add/Allocations Benchmark Chart](diagrams/add_alloc_bench_chart.png)
-
-</details>
-
-#### `AddAll`
-
-<details>
-<summary><strong>Execution Time (ms/op)</strong></summary>
-
-![VarMQ AddAll/Execute Benchmark Chart](diagrams/addall_exe_bench_chart.png)
-
-</details>
-
-<details>
-<summary><strong>Memory Usage (KB/op)</strong></summary>
-
-![VarMQ AddAll/Memory Benchmark Chart](diagrams/addall_mem_bench_chart.png)
-
-</details>
-
-<details>
-<summary><strong>Allocations (allocs/op)</strong></summary>
-
-![VarMQ AddAll/Allocations Benchmark Chart](diagrams/addall_alloc_bench_chart.png)
-
-</details>
+<table>
+<tr>
+  <th>Metric</th>
+  <th><code>Add</code> Operation</th>
+  <th><code>AddAll</code> Operation</th>
+</tr>
+<tr>
+  <td><strong>Execution Time</strong></td>
+  <td>
+    <details>
+      <summary><strong>Time (ns/op)</strong></summary>
+      <img src="diagrams/add_exe_bench_chart.png" alt="VarMQ Add/Execute Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Time (ms/op)</strong></summary>
+      <img src="diagrams/addall_exe_bench_chart.png" alt="VarMQ AddAll/Execute Benchmark Chart">
+    </details>
+  </td>
+</tr>
+<tr>
+  <td><strong>Memory Usage</strong></td>
+  <td>
+    <details>
+      <summary><strong>Memory (B/op)</strong></summary>
+      <img src="diagrams/add_mem_bench_chart.png" alt="VarMQ Add/Memory Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Memory (KB/op)</strong></summary>
+      <img src="diagrams/addall_mem_bench_chart.png" alt="VarMQ AddAll/Memory Benchmark Chart">
+    </details>
+  </td>
+</tr>
+<tr>
+  <td><strong>Allocations</strong></td>
+  <td>
+    <details>
+      <summary><strong>Allocations (allocs/op)</strong></summary>
+      <img src="diagrams/add_alloc_bench_chart.png" alt="VarMQ Add/Allocations Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Allocations (allocs/op)</strong></summary>
+      <img src="diagrams/addall_alloc_bench_chart.png" alt="VarMQ AddAll/Allocations Benchmark Chart">
+    </details>
+  </td>
+</tr>
+</table>
 
 ## API Reference
 
