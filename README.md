@@ -280,8 +280,6 @@ Why is `AddAll` faster than individual `Add` calls? Here's what makes the differ
 
 Generated using **[vizb](https://github.com/goptics/vizb)**
 
-### Benchmark Charts
-
 <table>
 <tr>
   <th>Metric</th>
