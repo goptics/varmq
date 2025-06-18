@@ -236,37 +236,37 @@ pkg: github.com/goptics/varmq
 cpu: 13th Gen Intel(R) Core(TM) i7-13700
 ```
 
-### Add Operation
+### `Add` Operation
 
 Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
 > Why use -cpu=1? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
 
-| Benchmark Operation               | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| --------------------------------- | ------------ | ------------- | ----------------------- |
-| Queue Add (NewWorker)             | 918.6        | 128           | 3                       |
-| Priority Add                      | 952.7        | 144           | 4                       |
-| ErrQueue Add (NewErrWorker)       | 1017         | 305           | 6                       |
-| ErrPriority Add                   | 1006         | 320           | 7                       |
-| ResultQueue Add (NewResultWorker) | 1026         | 353           | 6                       |
-| ResultPriority Add                | 1039         | 368           | 7                       |
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 918.6        | 128           | 3                       |
+|                  | Priority       | 952.7        | 144           | 4                       |
+| **ErrWorker**    | ErrQueue       | 1017         | 305           | 6                       |
+|                  | ErrPriority    | 1006         | 320           | 7                       |
+| **ResultWorker** | ResultQueue    | 1026         | 353           | 6                       |
+|                  | ResultPriority | 1039         | 368           | 7                       |
 
-### AddAll Operation
+### `AddAll` Operation
 
 Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
-| Benchmark Operation (1000 items)     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ------------------------------------ | ------------ | ------------- | ----------------------- |
-| Queue AddAll (NewWorker)             | 635,186      | 146,841       | 4,002                   |
-| Priority AddAll                      | 755,276      | 162,144       | 5,002                   |
-| ErrQueue AddAll (NewErrWorker)       | 673,912      | 171,090       | 4,505                   |
-| ErrPriority AddAll                   | 766,043      | 186,663       | 5,505                   |
-| ResultQueue AddAll (NewResultWorker) | 675,420      | 187,897       | 4,005                   |
-| ResultPriority AddAll                | 777,680      | 203,263       | 5,005                   |
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 635,186      | 146,841       | 4,002                   |
+|                  | Priority       | 755,276      | 162,144       | 5,002                   |
+| **ErrWorker**    | ErrQueue       | 673,912      | 171,090       | 4,505                   |
+|                  | ErrPriority    | 766,043      | 186,663       | 5,505                   |
+| **ResultWorker** | ResultQueue    | 675,420      | 187,897       | 4,005                   |
+|                  | ResultPriority | 777,680      | 203,263       | 5,005                   |
 
 > [!Note]
 >
-> `AddAll` benchmarks use a batch of 1000 items per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
+> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
 > e.g. for `Queue AddAll`, the average time per item is approximately **635ns**.
 
 Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
