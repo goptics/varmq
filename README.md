@@ -9,15 +9,13 @@
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Using Go generics, it provides type safety without sacrificing performance.
+`VarMQ` is a high-performance message queue and pool system for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Through Go generics, it provides type safety without sacrificing performance.
 
-With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
-
-This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](#built-in-adapters) that extends its capabilities beyond simple in-memory queues.
+With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using [adapter system](#built-in-adapters). All through a clean, intuitive API that feels natural to Go developers.
 
 ## ✨ Features
 
-- **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load
+- **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load. [see benchmarks](#benchmarks)
 - **🛠️ Variants of queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
@@ -31,7 +29,7 @@ This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
-- **🧩 Extensible**: Build your own storage adapters by implementing VarMQ's [internal queue interfaces](./diagrams/interface.drawio.png)
+- **🧩 Extensible**: Build your own storage adapters by implementing VarMQ's [internal queue interfaces](./assets/diagrams/interface.drawio.png)
 
 ## Quick Start
 
@@ -71,7 +69,7 @@ func main() {
 
 ### Priority Queue
 
-You can use priority queue to prioritize jobs based on their priority. Lower number = higher priority.
+You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
 
 ```go
 // just bind priority queue
@@ -112,7 +110,8 @@ See complete working examples in the [examples directory](./examples):
 
 Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
-> Note: Before testing examples, make sure to start the Redis server using `docker compose up -d`.
+> [!Note]
+> Before testing examples, make sure to start the Redis server using `docker compose up -d`.
 
 #### Built-in adapters
 
@@ -225,7 +224,8 @@ for i := range 100 {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/YO4vOu3sg9f)**
 
-> **Note:** Function helpers don't support persistence or distribution since functions cannot be serialized.
+> [!Important]
+> Function helpers don't support persistence or distribution since functions cannot be serialized.
 
 ## Benchmarks
 
@@ -240,7 +240,7 @@ cpu: 13th Gen Intel(R) Core(TM) i7-13700
 
 Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
-> Why use -cpu=1? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
+> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
@@ -267,18 +267,16 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 > [!Note]
 >
 > `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
-> e.g. for `Queue AddAll`, the average time per item is approximately **635ns**.
+> e.g. for default `Queue`, the average time per item is approximately **635ns**.
 
 Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
 
 1. **Batch Processing**: Uses a single group job to process multiple items, reducing per-item overhead
 2. **Shared Resources**: Utilizes a single result channel for all items in the batch
-3. **Reduced Allocations**: Amortizes job creation costs across multiple items
-4. **Efficient Memory Usage**: Requires less memory per item when processing in batches
 
 ### Charts
 
-Generated using **[vizb](https://github.com/goptics/vizb)**
+Generated by **[vizb](https://github.com/goptics/vizb)**
 
 <table>
 <tr>
@@ -291,13 +289,13 @@ Generated using **[vizb](https://github.com/goptics/vizb)**
   <td>
     <details>
       <summary><strong>Time (ns/op)</strong></summary>
-      <img src="diagrams/add_exe_bench_chart.png" alt="VarMQ Add/Execute Benchmark Chart">
+      <img src="assets/bench-charts/add_exe_bench_chart.png" alt="VarMQ Add/Execute Benchmark Chart">
     </details>
   </td>
   <td>
     <details>
       <summary><strong>Time (ms/op)</strong></summary>
-      <img src="diagrams/addall_exe_bench_chart.png" alt="VarMQ AddAll/Execute Benchmark Chart">
+      <img src="assets/bench-charts/addall_exe_bench_chart.png" alt="VarMQ AddAll/Execute Benchmark Chart">
     </details>
   </td>
 </tr>
@@ -306,13 +304,13 @@ Generated using **[vizb](https://github.com/goptics/vizb)**
   <td>
     <details>
       <summary><strong>Memory (B/op)</strong></summary>
-      <img src="diagrams/add_mem_bench_chart.png" alt="VarMQ Add/Memory Benchmark Chart">
+      <img src="assets/bench-charts/add_mem_bench_chart.png" alt="VarMQ Add/Memory Benchmark Chart">
     </details>
   </td>
   <td>
     <details>
       <summary><strong>Memory (KB/op)</strong></summary>
-      <img src="diagrams/addall_mem_bench_chart.png" alt="VarMQ AddAll/Memory Benchmark Chart">
+      <img src="assets/bench-charts/addall_mem_bench_chart.png" alt="VarMQ AddAll/Memory Benchmark Chart">
     </details>
   </td>
 </tr>
@@ -321,17 +319,19 @@ Generated using **[vizb](https://github.com/goptics/vizb)**
   <td>
     <details>
       <summary><strong>Allocations (allocs/op)</strong></summary>
-      <img src="diagrams/add_alloc_bench_chart.png" alt="VarMQ Add/Allocations Benchmark Chart">
+      <img src="assets/bench-charts/add_alloc_bench_chart.png" alt="VarMQ Add/Allocations Benchmark Chart">
     </details>
   </td>
   <td>
     <details>
       <summary><strong>Allocations (allocs/op)</strong></summary>
-      <img src="diagrams/addall_alloc_bench_chart.png" alt="VarMQ AddAll/Allocations Benchmark Chart">
+      <img src="assets/bench-charts/addall_alloc_bench_chart.png" alt="VarMQ AddAll/Allocations Benchmark Chart">
     </details>
   </td>
 </tr>
 </table>
+
+### Comparison with other packages
 
 ## API Reference
 
@@ -347,8 +347,10 @@ Workers operate independently - they process jobs and immediately signal back wh
 
 The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
-![varmq architecture](./diagrams/varmq.excalidraw.png)
+![varmq architecture](./assets/diagrams/varmq.excalidraw.png)
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+Please note that this project has a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project, you agree to abide by its terms.
