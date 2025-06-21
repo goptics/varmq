@@ -1,5 +1,57 @@
 # Changelog
 
+## [v1.3.0] (2025-06-21)
+
+### ✨ What's New in v1.3.0
+
+- **Multi-Queue Binding**:
+
+  - Single worker can now bind to multiple queues with configurable selection strategies.
+  - `WithStrategy(strategy Strategy)` configuration option for queue selection behavior.
+  - Built-in strategies: RoundRobin, MaxLen and MinLen for flexible job processing patterns.
+
+- **Function Helper Methods**:
+
+  - `Func()`: Direct function submission for synchronous execution without return values.
+  - `ErrFunc()`: Error-returning function submission with propagated error handling.
+  - `ResultFunc[R]()`: Generic result-returning function submission with type-safe results.
+
+- **Enhanced Queue Implementation**:
+  - Implemented LinkedBufferQueue with dynamic, chunk-based buffer structure (up to 70% low mem uses on high load).
+  - Automatic chunk management with optimized growth strategy (inspired by pond v2).
+
+### 📊 Performance Improvements
+
+- **Memory Usage Optimization**:
+
+  - _LinkedBufferQueue vs SliceQueue_: 62% fewer bytes allocated (82KB/op vs 217KB/op)
+  - _Operation Speed_: ~46% faster queue operations (238ns/op vs 442ns/op)
+  - Zero memory copy when reading across chunk boundaries
+
+- **Reduced Allocations**:
+  - Sync pool implementation for worker nodes
+  - Optimized memory reuse pattern for job processing
+  - Enhanced job management through controlled termination
+
+### 📈 Improvements
+
+- **Queue Management**:
+
+  - Improved closing behavior allowing existing items to be processed
+  - Better synchronization between workers and queues
+
+- **Worker Synchronization**:
+  - Enhanced `WaitUntilFinished()` implementation with proper condition checks
+  - Eliminated redundant notifications to waiting processes
+  - Improved worker state management during queue transitions
+
+### 📚 Documentation Updates
+
+- Added comprehensive benchmark comparisons and charts
+- Improved API reference clarity and organization
+- Enhanced README with clearer descriptions and examples
+- Added documentation for multi-queue binding and function helpers
+
 ## [v1.2.0] (2025-05-29)
 
 ### ✨ What's New in v1.2.0

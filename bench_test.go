@@ -21,9 +21,9 @@ func errTask(j Job[int]) error {
 	return nil
 }
 
-// BenchmarkQueue_Operations benchmarks the operations of Queue.
-func BenchmarkQueue_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
+// BenchmarkAdd benchmarks the Add operation across different queue types.
+func BenchmarkAdd(b *testing.B) {
+	b.Run("Queue", func(b *testing.B) {
 		// Create a worker with the double function
 		worker := NewWorker(task)
 		// Bind the worker to a standard queue
@@ -37,28 +37,7 @@ func BenchmarkQueue_Operations(b *testing.B) {
 		}
 	})
 
-	b.Run("AddAll", func(b *testing.B) {
-		// Create a worker with the double function
-		worker := NewWorker(task)
-		// Bind the worker to a standard queue
-		q := worker.BindQueue()
-		defer worker.WaitAndStop()
-
-		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
-		for i := range data {
-			data[i] = Item[int]{Data: i}
-		}
-
-		b.ResetTimer()
-		for b.Loop() {
-			q.AddAll(data).Wait()
-		}
-	})
-}
-
-// BenchmarkPriorityQueue_Operations benchmarks the operations of PriorityQueue.
-func BenchmarkPriorityQueue_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
+	b.Run("Priority", func(b *testing.B) {
 		// Create a worker with the double function
 		worker := NewWorker(task)
 		// Bind the worker to a priority queue
@@ -73,7 +52,88 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 		}
 	})
 
-	b.Run("AddAll", func(b *testing.B) {
+	b.Run("ErrQueue", func(b *testing.B) {
+		// Create an error worker
+		worker := NewErrWorker(errTask)
+		// Bind the worker to a standard queue
+		q := worker.BindQueue()
+		defer worker.WaitAndStop()
+
+		b.ResetTimer()
+		for j := range b.N {
+			if job, ok := q.Add(j); ok {
+				job.Err()
+			}
+		}
+	})
+
+	b.Run("ErrPriority", func(b *testing.B) {
+		// Create an error worker
+		worker := NewErrWorker(errTask)
+		// Bind the worker to a priority queue
+		q := worker.BindPriorityQueue()
+		defer worker.WaitAndStop()
+
+		b.ResetTimer()
+		for i := range b.N {
+			if job, ok := q.Add(i, i%10); ok {
+				job.Err()
+			}
+		}
+	})
+
+	b.Run("ResultQueue", func(b *testing.B) {
+		// Create a result worker
+		worker := NewResultWorker(resultTask)
+		// Bind the worker to a standard queue
+		q := worker.BindQueue()
+		defer worker.WaitAndStop()
+
+		b.ResetTimer()
+		for j := range b.N {
+			if job, ok := q.Add(j); ok {
+				job.Result()
+			}
+		}
+	})
+
+	b.Run("ResultPriority", func(b *testing.B) {
+		// Create a result worker
+		worker := NewResultWorker(resultTask)
+		// Bind the worker to a priority queue
+		q := worker.BindPriorityQueue()
+		defer worker.WaitAndStop()
+
+		b.ResetTimer()
+		for i := range b.N {
+			if job, ok := q.Add(i, i%10); ok {
+				job.Result()
+			}
+		}
+	})
+}
+
+// BenchmarkAddAll benchmarks the AddAll operation across different queue types.
+func BenchmarkAddAll(b *testing.B) {
+	b.Run("Queue", func(b *testing.B) {
+		// Create a worker with the double function
+		worker := NewWorker(task)
+		// Bind the worker to a standard queue
+		q := worker.BindQueue()
+		defer worker.WaitAndStop()
+
+		data := make([]Item[int], 1000) // Using a constant size of 1000 for testing
+		for i := range data {
+			data[i] = Item[int]{Data: i}
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			q.AddAll(data).Wait()
+		}
+	})
+
+	b.Run("Priority", func(b *testing.B) {
 		// Create a worker with the double function
 		worker := NewWorker(task)
 		// Bind the worker to a priority queue
@@ -90,26 +150,8 @@ func BenchmarkPriorityQueue_Operations(b *testing.B) {
 			q.AddAll(data).Wait()
 		}
 	})
-}
 
-// BenchmarkErrWorker_Operations benchmarks operations with an ErrWorker.
-func BenchmarkErrWorker_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
-		// Create an error worker
-		worker := NewErrWorker(errTask)
-		// Bind the worker to a standard queue
-		q := worker.BindQueue()
-		defer worker.WaitAndStop()
-
-		b.ResetTimer()
-		for j := range b.N {
-			if job, ok := q.Add(j); ok {
-				job.Err()
-			}
-		}
-	})
-
-	b.Run("AddAll", func(b *testing.B) {
+	b.Run("ErrQueue", func(b *testing.B) {
 		// Create an error worker
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a standard queue
@@ -126,26 +168,8 @@ func BenchmarkErrWorker_Operations(b *testing.B) {
 			q.AddAll(data).Wait()
 		}
 	})
-}
 
-// BenchmarkErrPriorityQueue_Operations benchmarks the operations of ErrPriorityQueue.
-func BenchmarkErrPriorityQueue_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
-		// Create an error worker
-		worker := NewErrWorker(errTask)
-		// Bind the worker to a priority queue
-		q := worker.BindPriorityQueue()
-		defer worker.WaitAndStop()
-
-		b.ResetTimer()
-		for i := range b.N {
-			if job, ok := q.Add(i, i%10); ok {
-				job.Err()
-			}
-		}
-	})
-
-	b.Run("AddAll", func(b *testing.B) {
+	b.Run("ErrPriority", func(b *testing.B) {
 		// Create an error worker
 		worker := NewErrWorker(errTask)
 		// Bind the worker to a priority queue
@@ -162,26 +186,8 @@ func BenchmarkErrPriorityQueue_Operations(b *testing.B) {
 			q.AddAll(data).Wait()
 		}
 	})
-}
 
-// BenchmarkResultWorker_Operations benchmarks operations with a ResultWorker.
-func BenchmarkResultWorker_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
-		// Create a result worker
-		worker := NewResultWorker(resultTask)
-		// Bind the worker to a standard queue
-		q := worker.BindQueue()
-		defer worker.WaitAndStop()
-
-		b.ResetTimer()
-		for j := range b.N {
-			if job, ok := q.Add(j); ok {
-				job.Result()
-			}
-		}
-	})
-
-	b.Run("AddAll", func(b *testing.B) {
+	b.Run("ResultQueue", func(b *testing.B) {
 		// Create a result worker
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a standard queue
@@ -198,26 +204,8 @@ func BenchmarkResultWorker_Operations(b *testing.B) {
 			q.AddAll(data).Wait()
 		}
 	})
-}
 
-// BenchmarkResultPriorityQueue_Operations benchmarks the operations of ResultPriorityQueue.
-func BenchmarkResultPriorityQueue_Operations(b *testing.B) {
-	b.Run("Add", func(b *testing.B) {
-		// Create a result worker
-		worker := NewResultWorker(resultTask)
-		// Bind the worker to a priority queue
-		q := worker.BindPriorityQueue()
-		defer worker.WaitAndStop()
-
-		b.ResetTimer()
-		for i := range b.N {
-			if job, ok := q.Add(i, i%10); ok {
-				job.Result()
-			}
-		}
-	})
-
-	b.Run("AddAll", func(b *testing.B) {
+	b.Run("ResultPriority", func(b *testing.B) {
 		// Create a result worker
 		worker := NewResultWorker(resultTask)
 		// Bind the worker to a priority queue

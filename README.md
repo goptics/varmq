@@ -4,20 +4,18 @@
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-goptics%2Fvarmq-blue.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAyCAYAAAAnWDnqAAAAAXNSR0IArs4c6QAAA05JREFUaEPtmUtyEzEQhtWTQyQLHNak2AB7ZnyXZMEjXMGeK/AIi+QuHrMnbChYY7MIh8g01fJoopFb0uhhEqqcbWTp06/uv1saEDv4O3n3dV60RfP947Mm9/SQc0ICFQgzfc4CYZoTPAswgSJCCUJUnAAoRHOAUOcATwbmVLWdGoH//PB8mnKqScAhsD0kYP3j/Yt5LPQe2KvcXmGvRHcDnpxfL2zOYJ1mFwrryWTz0advv1Ut4CJgf5uhDuDj5eUcAUoahrdY/56ebRWeraTjMt/00Sh3UDtjgHtQNHwcRGOC98BJEAEymycmYcWwOprTgcB6VZ5JK5TAJ+fXGLBm3FDAmn6oPPjR4rKCAoJCal2eAiQp2x0vxTPB3ALO2CRkwmDy5WohzBDwSEFKRwPbknEggCPB/imwrycgxX2NzoMCHhPkDwqYMr9tRcP5qNrMZHkVnOjRMWwLCcr8ohBVb1OMjxLwGCvjTikrsBOiA6fNyCrm8V1rP93iVPpwaE+gO0SsWmPiXB+jikdf6SizrT5qKasx5j8ABbHpFTx+vFXp9EnYQmLx02h1QTTrl6eDqxLnGjporxl3NL3agEvXdT0WmEost648sQOYAeJS9Q7bfUVoMGnjo4AZdUMQku50McDcMWcBPvr0SzbTAFDfvJqwLzgxwATnCgnp4wDl6Aa+Ax283gghmj+vj7feE2KBBRMW3FzOpLOADl0Isb5587h/U4gGvkt5v60Z1VLG8BhYjbzRwyQZemwAd6cCR5/XFWLYZRIMpX39AR0tjaGGiGzLVyhse5C9RKC6ai42ppWPKiBagOvaYk8lO7DajerabOZP46Lby5wKjw1HCRx7p9sVMOWGzb/vA1hwiWc6jm3MvQDTogQkiqIhJV0nBQBTU+3okKCFDy9WwferkHjtxib7t3xIUQtHxnIwtx4mpg26/HfwVNVDb4oI9RHmx5WGelRVlrtiw43zboCLaxv46AZeB3IlTkwouebTr1y2NjSpHz68WNFjHvupy3q8TFn3Hos2IAk4Ju5dCo8B3wP7VPr/FGaKiG+T+v+TQqIrOqMTL1VdWV1DdmcbO8KXBz6esmYWYKPwDL5b5FA1a0hwapHiom0r/cKaoqr+27/XcrS5UwSMbQAAAABJRU5ErkJggg==)](https://deepwiki.com/goptics/varmq)
 [![Playground](https://img.shields.io/badge/Go_Playground-blue.svg)](https://go.dev/play/p/gx-Q8Qf7BWd)
 [![Go Report Card](https://goreportcard.com/badge/github.com/goptics/varmq)](https://goreportcard.com/report/github.com/goptics/varmq)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
 [![CI](https://github.com/goptics/varmq/actions/workflows/go.yml/badge.svg)](https://github.com/goptics/varmq/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/goptics/varmq/)
+[![Codecov](https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/goptics/varmq)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-**VarMQ** is a high-performance message queue for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Using Go generics, it provides type safety without sacrificing performance.
+A high-performance message queue and pool system for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Through Go generics, it provides type safety without sacrificing performance.
 
-With VarMQ, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems when needed. All through a clean, intuitive API that feels natural to Go developers.
-
-This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose as a lightweight, in-process message queue with strong worker management. For persistence and distribution, it offers a flexible [adapter system](#built-in-adapters) that extends its capabilities beyond simple in-memory queues.
+With `VarMQ`, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using [adapters](#built-in-adapters). All through a clean, intuitive API that feels natural to Go developers.
 
 ## ✨ Features
 
-- **⚡ High performance**: Optimized for throughput control with minimal overhead
+- **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load. [see benchmarks](#benchmarks)
 - **🛠️ Variants of queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
@@ -28,9 +26,10 @@ This isn't meant to replace RabbitMQ or Kafka - VarMQ serves a different purpose
   - `NewErrWorker` - Returns only error (when result isn't needed)
   - `NewResultWorker` - Returns result and error
 - **🚦 Concurrency control**: Fine-grained control over worker pool size, dynamic tuning and idle workers management
+- **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
-- **🧩 Extensible**: Build your own storage adapters by implementing simple interfaces
+- **🧩 Extensible**: Build your own storage adapters by implementing VarMQ's [internal queue interfaces](./assets/diagrams/interface.drawio.png)
 
 ## Quick Start
 
@@ -53,22 +52,40 @@ import (
 )
 
 func main() {
-  w := varmq.NewWorker(func(j varmq.Job[int]) {
+  worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Printf("Processing %d\n", j.Data())
-    time.Sleep(1 * time.Second)
+    time.Sleep(500 * time.Millisecond)
   }, 10) // with concurrency 10
-  defer w.WaitUntilFinished()
-  q := w.BindQueue()
+  defer worker.WaitUntilFinished()
+  queue := worker.BindQueue()
 
   for i := range 100 {
-    q.Add(i)
+    queue.Add(i)
   }
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/gx-Q8Qf7BWd)**
+↗️ **[Run it on Playground](https://go.dev/play/p/XugpmYb9Dal)**
 
-## Persistent and Distributed Queues
+### Priority Queue
+
+You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
+
+```go
+// just bind priority queue
+queue := worker.BindPriorityQueue()
+
+// add jobs to priority queue
+for i := range 10 {
+    queue.Add(i, i%2) // prioritize even tasks
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/w_RuYKv-VxB)**
+
+## 💡 Highlighted Features
+
+### Persistent and Distributed Queues
 
 VarMQ supports both persistent and distributed queue processing through adapter interfaces:
 
@@ -93,22 +110,122 @@ See complete working examples in the [examples directory](./examples):
 
 Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
-> Note: Before testing examples, make sure to start the Redis server using `docker compose up -d`.
+> [!Note]
+> Before testing examples, make sure to start the Redis server using `docker compose up -d`.
 
-## Advanced Features
+#### Built-in adapters
 
-### Priority Queues
+- ⚡ Redis: [redisq](https://github.com/goptics/redisq)
+- 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
+- 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
+- 🐘 PostgreSQL: 🔄 Upcoming
 
-Process important jobs first:
+### Multi Queue Binds
+
+Bind multiple queues to a single worker, enabling efficient processing of jobs from different sources with configurable strategies. The worker supports three strategies:
+
+1. **RoundRobin** (default - cycles through queues equally)
+2. **MaxLen** (prioritizes queues with more jobs)
+3. **MinLen** (prioritizes queues with fewer jobs)
 
 ```go
-// Create a standard priority queue
-queue := worker.BindPriorityQueue()
+worker := varmq.NewWorker(func(j varmq.Job[string]) {
+  fmt.Println("Processing:", j.Data())
+  time.Sleep(500 * time.Millisecond) // Simulate work
+}) // change strategy through using varmq.WithStrategy
+defer worker.WaitUntilFinished()
 
-// Add jobs with priorities (lower number = higher priority)
-queue.Add("High priority", 1)
-queue.Add("Low priority", 10)
+// Bind to a standard queues
+q1 := worker.BindQueue()
+q2 := worker.BindQueue()
+pq := worker.BindPriorityQueue()
+
+for i := range 10 {
+  q1.Add(fmt.Sprintf("Task queue 1 %d", i))
+}
+
+for i := range 15 {
+  q2.Add(fmt.Sprintf("Task queue 2 %d", i))
+}
+
+for i := range 10 {
+  pq.Add(fmt.Sprintf("Task priority queue %d", i), i%2) // prioritize even tasks
+}
 ```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/_j_ZDLZqvtX)**
+
+It will process jobs from all queues in a `round-robin` fashion.
+
+### Result and Error Worker
+
+VarMQ provides a `NewResultWorker` that returns both the result and error for each job processed. This is useful when you need to handle both success and failure cases.
+
+```go
+worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
+ fmt.Println("Processing:", j.Data())
+ time.Sleep(500 * time.Millisecond) // Simulate work
+ data := j.Data()
+
+ if data == "error" {
+  return 0, errors.New("error occurred")
+ }
+
+ return len(data), nil
+})
+defer worker.WaitUntilFinished()
+queue := worker.BindQueue()
+
+// Add jobs to the queue (non-blocking)
+if job, ok := queue.Add("The length of this string is 31"); ok {
+ fmt.Println("Job 1 added to queue.")
+
+ go func() {
+  result, _ := job.Result()
+  fmt.Println("Result:", result)
+ }()
+}
+
+if job, ok := queue.Add("error"); ok {
+ fmt.Println("Job 2 added to queue.")
+
+ go func() {
+  _, err := job.Result()
+  fmt.Println("Result:", err)
+ }()
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/W8Pi_QrzTHe)**
+
+`NewErrWorker` is similar to `NewResultWorker` but it only returns error.
+
+### Function Helpers
+
+VarMQ provides helper functions that enable direct function submission similar to the `Submit()` pattern in other pool packages like [Pond](https://github.com/alitto/pond) or [Ants](https://github.com/panjf2000/ants)
+
+- **`Func()`**: For basic functions with no return values - use with `NewWorker`
+- **`ErrFunc()`**: For functions that return errors - use with `NewErrWorker`
+- **`ResultFunc[R]()`**: For functions that return a result and error - use with `NewResultWorker`
+
+```go
+worker := varmq.NewWorker(varmq.Func(), 10)
+defer worker.WaitUntilFinished()
+
+queue := worker.BindQueue()
+
+for i := range 100 {
+    queue.Add(func() {
+        time.Sleep(500 * time.Millisecond)
+        fmt.Println("Processing", i)
+    })
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/YO4vOu3sg9f)**
+
+> [!Important]
+> Function helpers don't support persistence or distribution since functions cannot be serialized.
 
 ## Benchmarks
 
@@ -116,39 +233,105 @@ queue.Add("Low priority", 10)
 goos: linux
 goarch: amd64
 pkg: github.com/goptics/varmq
-cpu: AMD EPYC 7763 64-Core Processor
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
 ```
 
-| Benchmark Operation                         | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| :------------------------------------------ | :----------- | :------------ | :---------------------- |
-| Queue Add                                   | 1217         | 112           | 3                       |
-| **Queue AddAll (1000 items)**               | 810354       | 130185        | 4002                    |
-| PriorityQueue Add                           | 1296         | 144           | 4                       |
-| **PriorityQueue AddAll (1000 items)**       | 1078373      | 162177        | 5002                    |
-| ErrWorker Add                               | 1391         | 288           | 6                       |
-| **ErrWorker AddAll (1000 items)**           | 881515       | 154713        | 4505                    |
-| ErrPriorityQueue Add                        | 1452         | 320           | 7                       |
-| **ErrPriorityQueue AddAll (1000 items)**    | 1182968      | 186706        | 5505                    |
-| ResultWorker Add                            | 1354         | 336           | 6                       |
-| **ResultWorker AddAll (1000 items)**        | 864143       | 171320        | 4005                    |
-| ResultPriorityQueue Add                     | 1450         | 368           | 7                       |
-| **ResultPriorityQueue AddAll (1000 items)** | 1151502      | 203314        | 5005                    |
+### `Add` Operation
 
-**Note:** `AddAll` benchmarks were performed by adding 1000 items in a single call. The reported `ns/op`, `B/op`, and `allocs/op` for `AddAll` are for the entire batch operation. To estimate per-item metrics for an `AddAll` operation, divide the table values by 1000 (e.g., for Queue AddAll, the average time per item is approximately 810 ns).
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
-## WhyVarMQ?
+> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
 
-- **Simple API**: Clean, intuitive interface that doesn't get in your way
-- **Minimal Dependencies**: Core library has no external dependencies
-- **Production Ready**: Built for real-world scenarios and high-load applications
-- **Highly Extensible**: Create your own storage adapters by implementing VarMQ's [internal queue interfaces](./diagrams/interface.drawio.png)
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 918.6        | 128           | 3                       |
+|                  | Priority       | 952.7        | 144           | 4                       |
+| **ErrWorker**    | ErrQueue       | 1017         | 305           | 6                       |
+|                  | ErrPriority    | 1006         | 320           | 7                       |
+| **ResultWorker** | ResultQueue    | 1026         | 353           | 6                       |
+|                  | ResultPriority | 1039         | 368           | 7                       |
 
-### Built-in adapters
+### `AddAll` Operation
 
-- ⚡ Redis: [redisq](https://github.com/goptics/redisq)
-- 🗃️ SQLite: [sqliteq](https://github.com/goptics/sqliteq)
-- 🦆 DuckDB: [duckq](https://github.com/goptics/duckq)
-- 🐘 PostgreSQL: 🔄 Upcoming
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
+
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 635,186      | 146,841       | 4,002                   |
+|                  | Priority       | 755,276      | 162,144       | 5,002                   |
+| **ErrWorker**    | ErrQueue       | 673,912      | 171,090       | 4,505                   |
+|                  | ErrPriority    | 766,043      | 186,663       | 5,505                   |
+| **ResultWorker** | ResultQueue    | 675,420      | 187,897       | 4,005                   |
+|                  | ResultPriority | 777,680      | 203,263       | 5,005                   |
+
+> [!Note]
+>
+> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
+> e.g. for default `Queue`, the average time per item is approximately **635ns**.
+
+Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
+
+1. **Batch Processing**: Uses a single group job to process multiple items, reducing per-item overhead
+2. **Shared Resources**: Utilizes a single result channel for all items in the batch
+
+### Charts
+
+<table>
+<tr>
+  <th>Metric</th>
+  <th><code>Add</code> Operation</th>
+  <th><code>AddAll</code> Operation</th>
+</tr>
+<tr>
+  <td><strong>Execution Time</strong></td>
+  <td>
+    <details>
+      <summary><strong>Time (ns/op)</strong></summary>
+      <img src="assets/bench-charts/add_exe_bench_chart.png" alt="VarMQ Add/Execute Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Time (ms/op)</strong></summary>
+      <img src="assets/bench-charts/addall_exe_bench_chart.png" alt="VarMQ AddAll/Execute Benchmark Chart">
+    </details>
+  </td>
+</tr>
+<tr>
+  <td><strong>Memory Usage</strong></td>
+  <td>
+    <details>
+      <summary><strong>Memory (B/op)</strong></summary>
+      <img src="assets/bench-charts/add_mem_bench_chart.png" alt="VarMQ Add/Memory Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Memory (KB/op)</strong></summary>
+      <img src="assets/bench-charts/addall_mem_bench_chart.png" alt="VarMQ AddAll/Memory Benchmark Chart">
+    </details>
+  </td>
+</tr>
+<tr>
+  <td><strong>Allocations</strong></td>
+  <td>
+    <details>
+      <summary><strong>Allocations (allocs/op)</strong></summary>
+      <img src="assets/bench-charts/add_alloc_bench_chart.png" alt="VarMQ Add/Allocations Benchmark Chart">
+    </details>
+  </td>
+  <td>
+    <details>
+      <summary><strong>Allocations (allocs/op)</strong></summary>
+      <img src="assets/bench-charts/addall_alloc_bench_chart.png" alt="VarMQ AddAll/Allocations Benchmark Chart">
+    </details>
+  </td>
+</tr>
+</table>
+
+Chart images is been generated using **[Vizb](https://github.com/goptics/vizb)**
+
+### Comparison with other packages
 
 ## API Reference
 
@@ -156,22 +339,18 @@ For detailed API documentation, see the **[API Reference](./docs/API_REFERENCE.m
 
 ## The Concurrency Architecture
 
-VarMQ primarily uses its own Event-Loop internally to handle concurrency.
+VarMQ's concurrency model is built around a smart event loop that keeps everything running smoothly.
 
-This event loop checks if there are any pending jobs in the queue and if any workers are available in the worker pool. If there are, it distributes jobs to all available workers and then goes back into sleep mode.
+The event loop continuously monitors for pending jobs in queues and available workers in the pool. When both conditions are met, jobs get distributed to workers instantly. When there's no work to distribute, the system enters a low-power wait state.
 
-When a worker becomes free, it then send pull job request to the event loop.
+Workers operate independently - they process jobs and immediately signal back when they're ready for more work. This triggers the event loop to check for new jobs and distribute them right away.
 
-The event loop then checks again if there are any pending jobs in the queue. If there are, it continues to distribute them to the workers. otherwise, the idle workers been removed from the pool automatically or stay based on `WorkerConfig`.
+The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
-![varmq architecture](./diagrams/varmq.excalidraw.png)
+![varmq architecture](./assets/diagrams/varmq.excalidraw.png)
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request or open an issue.
 
-## 👤 Author
-
-- GitHub: [@fahimfaisaal](https://github.com/fahimfaisaal)
-- LinkedIn: [in/fahimfaisaal](https://www.linkedin.com/in/fahimfaisaal/)
-- Twitter: [@FahimFaisaal](https://twitter.com/FahimFaisaal)
+Please note that this project has a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project, you agree to abide by its terms.
