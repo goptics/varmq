@@ -19,6 +19,11 @@ const (
 	stopped
 )
 
+const (
+	poolChanCap        = 1
+	eventLoopSignalCap = 1
+)
+
 var (
 	errRunningWorker    = errors.New("worker is already running")
 	errNotRunningWorker = errors.New("worker is not running")
@@ -86,12 +91,12 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		pool:       linkedlist.New[pool.Node[iJob[T]]](),
 		poolNodeCache: sync.Pool{
 			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iJob[T]](1))
+				return linkedlist.NewNode(pool.CreateNode[iJob[T]](poolChanCap))
 			},
 		},
 		concurrency:     atomic.Uint32{},
 		queues:          createQueueManager(c.strategy),
-		eventLoopSignal: make(chan struct{}, 1),
+		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
@@ -110,12 +115,12 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		pool:       linkedlist.New[pool.Node[iErrorJob[T]]](),
 		poolNodeCache: sync.Pool{
 			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iErrorJob[T]](1))
+				return linkedlist.NewNode(pool.CreateNode[iErrorJob[T]](poolChanCap))
 			},
 		},
 		concurrency:     atomic.Uint32{},
 		queues:          createQueueManager(c.strategy),
-		eventLoopSignal: make(chan struct{}, 1),
+		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
@@ -134,12 +139,12 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		pool:       linkedlist.New[pool.Node[iResultJob[T, R]]](),
 		poolNodeCache: sync.Pool{
 			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iResultJob[T, R]](1))
+				return linkedlist.NewNode(pool.CreateNode[iResultJob[T, R]](poolChanCap))
 			},
 		},
 		concurrency:     atomic.Uint32{},
 		queues:          createQueueManager(c.strategy),
-		eventLoopSignal: make(chan struct{}, 1),
+		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
