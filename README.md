@@ -331,7 +331,19 @@ Why is `AddAll` faster than individual `Add` calls? Here's what makes the differ
 
 Chart images is been generated using **[Vizb](https://github.com/goptics/vizb)**
 
-### Comparison with other packages
+### Comparison with Other Packages
+
+We conducted comprehensive benchmarking between VarMQ and [Pond v2](https://github.com/alitto/pond), as both packages provide similar worker pool functionalities. While VarMQ draws inspiration from some of Pond's design patterns, it offers unique advantages in queue management and persistence capabilities.
+
+**Key Differences:**
+
+- **Queue Types**: VarMQ provides multiple queue variants (standard, priority, persistent, distributed) vs Pond's single pool type
+- **Multi-Queue Management**: VarMQ supports binding multiple queues to a single worker with configurable strategies (RoundRobin, MaxLen, MinLen)
+
+For detailed performance comparisons and benchmarking results, visit:
+
+- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
+- 📈 **[Interactive Charts](https://varmq-benchmarks.netlify.app/)** - Visual performance comparisons
 
 ## API Reference
 
@@ -348,6 +360,10 @@ Workers operate independently - they process jobs and immediately signal back wh
 The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ![varmq architecture](./assets/diagrams/varmq.excalidraw.png)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=goptics/varmq&type=Date)](https://www.star-history.com/#goptics/varmq&Date)
 
 ## Contributing
 
