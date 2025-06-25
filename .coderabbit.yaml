@@ -3,9 +3,8 @@ early_access: false
 
 reviews:
   profile: "chill"
-  poem: true
   request_changes_workflow: false
-  high_level_summary: true
+  high_level_summary: false
   review_status: true
   collapse_walkthrough: false
   auto_review:
