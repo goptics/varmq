@@ -627,7 +627,7 @@ func TestWorkers(t *testing.T) {
 // TestWorkerBinders tests the worker binder implementations
 func TestWorkerBinders(t *testing.T) {
 	// Test standard worker binder
-	t.Run("WorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("BindQueue", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -646,7 +646,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("WorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("BindPriorityQueue", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -665,7 +665,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("WorkerBinder_HasDistributedQueueMethod", func(t *testing.T) {
+	t.Run("HasDistributedQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -683,7 +683,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("WorkerBinder_HasPersistentQueueMethod", func(t *testing.T) {
+	t.Run("HasPersistentQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -701,7 +701,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("ResultWorkerBinder_HasQueueMethods", func(t *testing.T) {
+	t.Run("ResultHasQueueMethods", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -730,7 +730,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("ErrWorkerBinder_HasQueueMethods", func(t *testing.T) {
+	t.Run("ErrHasQueueMethods", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
@@ -760,7 +760,7 @@ func TestWorkerBinders(t *testing.T) {
 	})
 
 	// Test result worker binder
-	t.Run("ResultWorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("ResultBindQueue", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -781,7 +781,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("ResultWorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("ResultBindPriorityQueue", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -803,7 +803,7 @@ func TestWorkerBinders(t *testing.T) {
 	})
 
 	// Test error worker binder
-	t.Run("ErrWorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("ErrBindQueue", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
@@ -824,7 +824,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("ErrWorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("ErrBindPriorityQueue", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
