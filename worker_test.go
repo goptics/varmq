@@ -553,6 +553,312 @@ func TestWorkers(t *testing.T) {
 					"Number of idle workers should be equal to min idle workers")
 			})
 		})
+
+		// Group 6: Edge cases and error handling tests
+		t.Run("EdgeCases", func(t *testing.T) {
+			t.Run("processNextJob with IAcknowledgeable queue", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create a persistent queue that implements IAcknowledgeable
+				persistentQueue := newMockPersistentQueue()
+				w.queues.Register(persistentQueue)
+				job := newJob("test-data", loadJobConfigs(w.configs()))
+				persistentQueue.Enqueue(job)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle queue
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+
+				assert.Equal(t, 0, persistentQueue.Len(), "Item should be processed from queue")
+			})
+
+			t.Run("processNextJob with byte data parsing", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create a queue with byte data
+				job := newJob("test-data", loadJobConfigs(w.configs()))
+				jobBytes, _ := job.Json()
+
+				testQueue := queues.NewQueue[any]()
+				testQueue.Enqueue(jobBytes)
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle byte parsing
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+
+				assert.Equal(t, 0, testQueue.Len(), "Byte data should be parsed and processed")
+			})
+
+			t.Run("processNextJob with closed job", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create a closed job
+				job := newJob("test-data", loadJobConfigs(w.configs()))
+				job.Close()
+
+				testQueue := queues.NewQueue[any]()
+				testQueue.Enqueue(job)
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should skip closed job
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+
+				assert.Equal(t, 0, testQueue.Len(), "Closed job should be dequeued but not processed")
+			})
+
+			t.Run("processNextJob with invalid byte data", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create invalid byte data
+				testQueue := queues.NewQueue[any]()
+				testQueue.Enqueue([]byte("invalid json"))
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle invalid byte data gracefully
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+
+				assert.Equal(t, 0, testQueue.Len(), "Invalid byte data should be dequeued")
+			})
+
+			t.Run("processNextJob with invalid type", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create invalid type data
+				testQueue := queues.NewQueue[any]()
+				testQueue.Enqueue(123) // Invalid type
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle invalid type gracefully
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+
+				assert.Equal(t, 0, testQueue.Len(), "Invalid type should be dequeued")
+			})
+
+			t.Run("freePoolNode with worker stopping", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				}, WithConcurrency(1))
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Create many idle workers to trigger stopping
+				for range 5 {
+					node := w.initPoolNode()
+					w.pool.PushNode(node)
+				}
+
+				// This should trigger the worker stopping branch in freePoolNode
+				node := w.pool.PopBack()
+				w.freePoolNode(node)
+
+				// The node should be stopped and put back in cache
+				assert.Greater(t, w.pool.Len(), 0, "Some workers should remain in pool")
+			})
+
+			t.Run("TunePool shrinking without idle expiry", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				}, WithConcurrency(5))
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Add workers to the pool
+				for range 4 {
+					node := w.initPoolNode()
+					w.pool.PushNode(node)
+				}
+
+				initialPoolSize := w.pool.Len()
+
+				// Shrink concurrency - should trigger pool shrinking
+				err = w.TunePool(2)
+				assert.NoError(t, err, "TunePool should not error")
+
+				// Pool should be shrunk
+				assert.Less(t, w.pool.Len(), initialPoolSize, "Pool should be shrunk")
+			})
+
+			t.Run("Pause when not running", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				err := w.Pause()
+				assert.ErrorIs(t, err, errNotRunningWorker, "Pause should return error when worker not running")
+			})
+
+			t.Run("Stop when not running", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				err := w.Stop()
+				assert.ErrorIs(t, err, errNotRunningWorker, "Stop should return error when worker not running")
+			})
+
+			t.Run("Resume from initiated state", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				assert.Equal(t, initiated, w.status.Load(), "Worker should be in initiated state")
+
+				err := w.Resume()
+				assert.NoError(t, err, "Resume should start worker from initiated state")
+				assert.True(t, w.IsRunning(), "Worker should be running after Resume from initiated")
+
+				w.Stop()
+			})
+
+			t.Run("Resume when already running", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				err = w.Resume()
+				assert.ErrorIs(t, err, errRunningWorker, "Resume should return error when already running")
+			})
+
+			t.Run("PauseAndWait with error", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// PauseAndWait should return error when worker not running
+				err := w.PauseAndWait()
+				assert.ErrorIs(t, err, errNotRunningWorker, "PauseAndWait should return error when worker not running")
+			})
+
+			t.Run("processNextJob with empty queue", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create an empty queue
+				testQueue := queues.NewQueue[any]()
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle empty queue gracefully
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+			})
+
+			t.Run("processNextJob with byte parsing that creates wrong job type", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				// Create a job with different type that would cause type assertion to fail
+				job := newJob(123, loadJobConfigs(w.configs())) // int instead of string
+				jobBytes, _ := job.Json()
+
+				testQueue := queues.NewQueue[any]()
+				testQueue.Enqueue(jobBytes)
+				w.queues.Register(testQueue)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Process should handle type mismatch gracefully
+				w.processNextJob()
+				time.Sleep(10 * time.Millisecond)
+			})
+
+			t.Run("TunePool edge case with empty pool", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				}, WithConcurrency(5))
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Clear the pool
+				for w.pool.Len() > 0 {
+					if node := w.pool.PopBack(); node != nil {
+						node.Value.Stop()
+					}
+				}
+
+				// Shrink concurrency with empty pool
+				err = w.TunePool(2)
+				assert.NoError(t, err, "TunePool should handle empty pool")
+			})
+
+			t.Run("goRemoveIdleWorkers edge cases", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				},
+					WithConcurrency(10),
+					WithIdleWorkerExpiryDuration(10*time.Millisecond),
+					WithMinIdleWorkerRatio(50),
+				)
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+				defer w.Stop()
+
+				// Add nodes that are both in list and not in list to test edge cases
+				for range 8 {
+					node := w.initPoolNode()
+					node.Value.UpdateLastUsed()
+					w.pool.PushNode(node)
+				}
+
+				// Wait for idle worker removal to kick in
+				time.Sleep(30 * time.Millisecond)
+
+				// Should have cleaned up some workers
+				assert.LessOrEqual(t, w.pool.Len(), w.numMinIdleWorkers()+1, "Pool should be cleaned up")
+			})
+		})
 	})
 
 	t.Run("ResultWorker", func(t *testing.T) {
@@ -627,7 +933,7 @@ func TestWorkers(t *testing.T) {
 // TestWorkerBinders tests the worker binder implementations
 func TestWorkerBinders(t *testing.T) {
 	// Test standard worker binder
-	t.Run("WorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("BindQueue", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -646,7 +952,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("WorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("BindPriorityQueue", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -665,7 +971,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("WorkerBinder_HasDistributedQueueMethod", func(t *testing.T) {
+	t.Run("HasDistributedQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -683,7 +989,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("WorkerBinder_HasPersistentQueueMethod", func(t *testing.T) {
+	t.Run("HasPersistentQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
 
@@ -701,7 +1007,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("ResultWorkerBinder_HasQueueMethods", func(t *testing.T) {
+	t.Run("ResultHasQueueMethods", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -730,7 +1036,7 @@ func TestWorkerBinders(t *testing.T) {
 		// No need to clean up as worker wasn't started
 	})
 
-	t.Run("ErrWorkerBinder_HasQueueMethods", func(t *testing.T) {
+	t.Run("ErrHasQueueMethods", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
@@ -760,7 +1066,7 @@ func TestWorkerBinders(t *testing.T) {
 	})
 
 	// Test result worker binder
-	t.Run("ResultWorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("ResultBindQueue", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -781,7 +1087,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("ResultWorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("ResultBindPriorityQueue", func(t *testing.T) {
 		// Create a result worker
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
@@ -803,7 +1109,7 @@ func TestWorkerBinders(t *testing.T) {
 	})
 
 	// Test error worker binder
-	t.Run("ErrWorkerBinder_BindQueue", func(t *testing.T) {
+	t.Run("ErrBindQueue", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
@@ -824,7 +1130,7 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 
-	t.Run("ErrWorkerBinder_BindPriorityQueue", func(t *testing.T) {
+	t.Run("ErrBindPriorityQueue", func(t *testing.T) {
 		// Create an error worker
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)

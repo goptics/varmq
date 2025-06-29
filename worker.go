@@ -32,11 +32,10 @@ var (
 
 type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
-	concurrency     atomic.Uint32
-	pool            *linkedlist.List[pool.Node[JobType]]
-	poolNodeCache   sync.Pool
-	curProcessing   atomic.Uint32
+	pool            *pool.Pool[JobType]
 	queues          queueManager
+	concurrency     atomic.Uint32
+	curProcessing   atomic.Uint32
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	waiters         *sync.Cond
@@ -87,14 +86,9 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	c := loadConfigs(configs...)
 
 	w := &worker[T, iJob[T]]{
-		workerFunc: wf,
-		pool:       linkedlist.New[pool.Node[iJob[T]]](),
-		poolNodeCache: sync.Pool{
-			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iJob[T]](poolChanCap))
-			},
-		},
 		concurrency:     atomic.Uint32{},
+		workerFunc:      wf,
+		pool:            pool.NewPool[iJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -111,14 +105,9 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	c := loadConfigs(configs...)
 
 	w := &worker[T, iErrorJob[T]]{
-		workerFunc: wf,
-		pool:       linkedlist.New[pool.Node[iErrorJob[T]]](),
-		poolNodeCache: sync.Pool{
-			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iErrorJob[T]](poolChanCap))
-			},
-		},
 		concurrency:     atomic.Uint32{},
+		workerFunc:      wf,
+		pool:            pool.NewPool[iErrorJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -135,14 +124,9 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	c := loadConfigs(configs...)
 
 	w := &worker[T, iResultJob[T, R]]{
-		workerFunc: wf,
-		pool:       linkedlist.New[pool.Node[iResultJob[T, R]]](),
-		poolNodeCache: sync.Pool{
-			New: func() any {
-				return linkedlist.NewNode(pool.CreateNode[iResultJob[T, R]](poolChanCap))
-			},
-		},
 		concurrency:     atomic.Uint32{},
+		workerFunc:      wf,
+		pool:            pool.NewPool[iResultJob[T, R]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -283,7 +267,7 @@ func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobTyp
 
 	// Otherwise stop the worker to reduce idle workers
 	node.Value.Stop()
-	w.poolNodeCache.Put(node)
+	w.pool.Cache.Put(node)
 }
 
 // sendToNextChannel sends the job to the next available channel for processing.
@@ -300,7 +284,7 @@ func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
 }
 
 func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := w.poolNodeCache.Get().(*linkedlist.Node[pool.Node[JobType]])
+	node := w.pool.Cache.Get().(*linkedlist.Node[pool.Node[JobType]])
 
 	// Start a worker goroutine to process jobs from this nodes channel
 	go node.Value.Serve(func(j JobType) {
@@ -371,7 +355,7 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 					!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
 					w.pool.Remove(node)
 					node.Value.Stop()
-					w.poolNodeCache.Put(node)
+					w.pool.Cache.Put(node)
 				}
 			}
 		}
@@ -438,7 +422,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 		if node := w.pool.PopBack(); node != nil {
 			w.pool.Remove(node)
 			node.Value.Stop()
-			w.poolNodeCache.Put(node)
+			w.pool.Cache.Put(node)
 			shrinkPoolSize--
 		} else {
 			break
@@ -484,7 +468,7 @@ func (w *worker[T, JobType]) Stop() error {
 	for _, node := range w.pool.NodeSlice() {
 		w.pool.Remove(node)
 		node.Value.Stop()
-		w.poolNodeCache.Put(node)
+		w.pool.Cache.Put(node)
 	}
 
 	return nil
