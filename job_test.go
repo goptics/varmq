@@ -7,13 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goptics/varmq/internal/queues"
 	"github.com/stretchr/testify/assert"
 )
-
-// mockQueue is a no-op implementation of IQueue interface
-type mockQueue struct {
-	len atomic.Int64
-}
 
 // Initialize a default mockQueue instance
 var defaultMockQueue IQueue
@@ -22,37 +18,10 @@ var once sync.Once
 // getMockQueue returns a singleton instance of mockQueue
 func getMockQueue() IQueue {
 	once.Do(func() {
-		defaultMockQueue = &mockQueue{}
+		defaultMockQueue = queues.NewQueue[any]()
 	})
 
 	return defaultMockQueue
-}
-
-func (nq *mockQueue) Dequeue() (any, bool) {
-	nq.len.Add(-1)
-	return nil, false
-}
-
-func (nq *mockQueue) Enqueue(item any) bool {
-	nq.len.Add(1)
-	return false
-}
-
-func (nq *mockQueue) Len() int {
-	return int(nq.len.Load())
-}
-
-func (nq *mockQueue) Values() []any {
-	return []any{}
-}
-
-func (nq *mockQueue) Purge() {
-	nq.len.Store(0)
-}
-
-func (nq *mockQueue) Close() error {
-	nq.Purge()
-	return nil
 }
 
 func TestJob(t *testing.T) {
