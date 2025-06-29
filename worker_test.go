@@ -562,7 +562,7 @@ func TestWorkers(t *testing.T) {
 				})
 
 				// Create a persistent queue that implements IAcknowledgeable
-				persistentQueue := queues.NewQueue[any]()
+				persistentQueue := mockPersistentQueue{}
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
 				w.queues.Register(persistentQueue)
