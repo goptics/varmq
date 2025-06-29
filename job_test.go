@@ -11,19 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Initialize a default mockQueue instance
-var defaultMockQueue IQueue
-var once sync.Once
-
-// getMockQueue returns a singleton instance of mockQueue
-func getMockQueue() IQueue {
-	once.Do(func() {
-		defaultMockQueue = queues.NewQueue[any]()
-	})
-
-	return defaultMockQueue
-}
-
 func TestJob(t *testing.T) {
 	t.Run("job creation with newJob", func(t *testing.T) {
 		// Create a new job
@@ -53,7 +40,7 @@ func TestJob(t *testing.T) {
 		// We can't directly assert j.ackId since it's private, but we can test it indirectly through other methods
 
 		// Test setInternalQueue
-		mockQueue := getMockQueue()
+		mockQueue := queues.NewQueue[any]()
 		j.setInternalQueue(mockQueue)
 		// We can't directly assert j.queue since it's private, but we can test it indirectly through other methods
 
@@ -229,7 +216,7 @@ func TestJob(t *testing.T) {
 		// Test 3: Queue doesn't implement IAcknowledgeable
 		j3 := newJob("test data", jobConfigs{Id: "job-ack-no-impl"})
 		j3.setAckId("some-ack-id")
-		j3.setInternalQueue(getMockQueue()) // Null queue doesn't implement IAcknowledgeable
+		j3.setInternalQueue(queues.NewQueue[any]()) // Null queue doesn't implement IAcknowledgeable
 		err = j3.ack()
 		assert.Error(err, "ack should fail with queue not implementing IAcknowledgeable")
 		assert.Contains(err.Error(), "not acknowledgeable", "error should mention not acknowledgeable")
