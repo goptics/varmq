@@ -562,10 +562,10 @@ func TestWorkers(t *testing.T) {
 				})
 
 				// Create a persistent queue that implements IAcknowledgeable
-				persistentQueue := mockPersistentQueue{}
+				persistentQueue := newMockPersistentQueue()
+				w.queues.Register(persistentQueue)
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
-				w.queues.Register(persistentQueue)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
