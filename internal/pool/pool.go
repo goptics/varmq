@@ -11,7 +11,7 @@ type Pool[T any] struct {
 	Cache sync.Pool
 }
 
-func NewPool[T any](cap int) *Pool[T] {
+func New[T any](cap int) *Pool[T] {
 	return &Pool[T]{
 		List: linkedlist.New[Node[T]](),
 		Cache: sync.Pool{
