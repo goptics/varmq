@@ -1,5 +1,41 @@
 # Changelog
 
+## [v1.3.1] (2025-06-30)
+
+### 🔧 Refactoring and Code Quality
+
+- **Pool Structure Enhancement**:
+  - Renamed constructor function of Pool for better naming consistency (#48)
+  - Updated worker implementation to use new pool structure (#47)
+  - Replaced mockQueue with NewQueue to reduce redundant code and improve maintainability (#46)
+
+### 🧪 Testing Improvements
+
+- **Enhanced Test Coverage**:
+  - Added comprehensive distributed and persistent queue tests with edge cases (#44)
+  - Updated assertions in worker binder tests for better validation of pending jobs
+
+### 📚 Documentation and Assets
+
+- **Performance Documentation**:
+
+  - Enhanced README with detailed benchmarking information and comparison with Pond v2 (#45)
+  - Added interactive charts and benchmark repository links for performance analysis
+
+- **Asset Optimization**:
+  - Compressed architecture diagram image size to 3MB for better loading performance
+  - Reduced arch diagram image size for improved repository efficiency
+
+### 🛠️ Project Configuration
+
+- **Development Workflow**:
+  - Updated project configuration and added GitHub issue templates
+  - Improved contributor experience with better issue reporting structure
+
+### 📈 Impact Summary
+
+This patch release focuses on code quality improvements, enhanced testing coverage, and better documentation. The refactoring efforts improve maintainability while the expanded test suite ensures reliability of distributed and persistent queue functionality.
+
 ## [v1.3.0] (2025-06-21)
 
 ### ✨ What's New in v1.3.0
