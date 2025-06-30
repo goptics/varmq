@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewPool(t *testing.T) {
+func TestPool(t *testing.T) {
 	t.Run("creates pool with correct initialization", func(t *testing.T) {
-		pool := NewPool[string](10)
+		pool := New[string](10)
 
 		assert.NotNil(t, pool, "pool should not be nil")
 		assert.NotNil(t, pool.List, "pool.List should not be nil")
@@ -28,7 +28,7 @@ func TestNewPool(t *testing.T) {
 	})
 
 	t.Run("verifies cache functionality", func(t *testing.T) {
-		pool := NewPool[string](10)
+		pool := New[string](10)
 
 		// Get a node, verify it's the correct type and functional
 		node1 := pool.Cache.Get()
@@ -48,7 +48,7 @@ func TestNewPool(t *testing.T) {
 	})
 
 	t.Run("handles zero capacity", func(t *testing.T) {
-		pool := NewPool[string](0)
+		pool := New[string](0)
 		assert.NotNil(t, pool, "pool should handle zero capacity")
 
 		node := pool.Cache.Get()
