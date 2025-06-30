@@ -88,7 +88,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w := &worker[T, iJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.NewPool[iJob[T]](poolChanCap),
+		pool:            pool.New[iJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -107,7 +107,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w := &worker[T, iErrorJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.NewPool[iErrorJob[T]](poolChanCap),
+		pool:            pool.New[iErrorJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -126,7 +126,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w := &worker[T, iResultJob[T, R]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.NewPool[iResultJob[T, R]](poolChanCap),
+		pool:            pool.New[iResultJob[T, R]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
