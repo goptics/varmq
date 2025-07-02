@@ -4,9 +4,21 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "docs/**"
+      - "assets/**"
+      - "LICENSE"
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "docs/**"
+      - "assets/**"
+      - "LICENSE"
 
 jobs:
   build:
