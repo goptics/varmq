@@ -21,18 +21,12 @@ on:
       - "LICENSE"
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "^1.24"
-          cache: true
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
 
       - name: Run tests with coverage
         run: |
@@ -45,7 +39,12 @@ jobs:
         with:
           files: ./coverage.txt
           verbose: true
+  bench:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
 
       - name: Run benchmark tests
-        run: |
-          go test -bench=. -benchmem
+        run: go test -bench=. -benchmem
