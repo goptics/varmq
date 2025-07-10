@@ -94,7 +94,7 @@ func TestWorkers(t *testing.T) {
 				assert := assert.New(t)
 				node := w.initPoolNode()
 				assert.NotNil(node, "initPoolNode should return a valid node")
-				assert.NotNil(node.Value, "node value should not be nil")
+				assert.NotNil(node, "node value should not be nil")
 			})
 		})
 
@@ -542,7 +542,7 @@ func TestWorkers(t *testing.T) {
 
 				for range 9 {
 					node := w.initPoolNode()
-					node.Value.UpdateLastUsed()
+					node.UpdateLastUsed()
 					w.pool.PushNode(node)
 				}
 
@@ -823,7 +823,7 @@ func TestWorkers(t *testing.T) {
 				// Clear the pool
 				for w.pool.Len() > 0 {
 					if node := w.pool.PopBack(); node != nil {
-						node.Value.Stop()
+						node.Stop()
 					}
 				}
 
@@ -848,7 +848,7 @@ func TestWorkers(t *testing.T) {
 				// Add nodes that are both in list and not in list to test edge cases
 				for range 8 {
 					node := w.initPoolNode()
-					node.Value.UpdateLastUsed()
+					node.UpdateLastUsed()
 					w.pool.PushNode(node)
 				}
 

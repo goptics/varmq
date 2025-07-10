@@ -15,8 +15,8 @@ type Node[T any] struct {
 	lastUsed atomic.Value
 }
 
-func CreateNode[T any](bufferSize int) Node[T] {
-	node := Node[T]{
+func NewNode[T any](bufferSize int) *Node[T] {
+	node := &Node[T]{
 		ch: make(chan Payload[T], bufferSize),
 	}
 
