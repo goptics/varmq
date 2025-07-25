@@ -11,10 +11,10 @@ type ConfigFunc func(*configs)
 
 type configs struct {
 	concurrency              uint32
+	strategy                 Strategy
+	minIdleWorkerRatio       uint8
 	jobIdGenerator           func() string
 	idleWorkerExpiryDuration time.Duration
-	minIdleWorkerRatio       uint8
-	strategy                 Strategy
 }
 
 func newConfig() configs {
