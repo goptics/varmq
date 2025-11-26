@@ -152,9 +152,7 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, expectedId, c.jobIdGenerator())
 
 			// Test with a mixture of int and config funcs
-			c = loadConfigs(
-				4,
-			)
+			c = loadConfigs(4)
 
 			assert.Equal(t, uint32(4), c.concurrency)
 		})
