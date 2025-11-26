@@ -26,13 +26,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: "^1.24"
           cache: true
+
+      - name: Install dependencies
+        run: go mod download
 
       - name: Run tests with coverage
         run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
@@ -49,13 +52,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: "^1.24"
           cache: true
+
+      - name: Install dependencies
+        run: go mod download
 
       - name: Run benchmark tests
         run: go test -bench=. -benchmem
