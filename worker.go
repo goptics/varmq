@@ -200,9 +200,11 @@ func (w *worker[T, JobType]) processNextJob() {
 		return
 	}
 
-	var v any
-	var ok bool
-	var ackId string
+	var (
+		v     any
+		ok    bool
+		ackId string
+	)
 
 	switch q := queue.(type) {
 	case IAcknowledgeable:

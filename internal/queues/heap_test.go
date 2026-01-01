@@ -22,7 +22,7 @@ func TestHeapQueue(t *testing.T) {
 
 	t.Run("Less", func(t *testing.T) {
 		assert := assert.New(t)
-		
+
 		t.Run("Different priorities", func(t *testing.T) {
 			hq := &heapQueue[int]{
 				items: make([]*enqItem[int], 0),

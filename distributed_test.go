@@ -253,10 +253,10 @@ func TestDistributedPriorityQueue(t *testing.T) {
 		// Dequeue and verify priority ordering (highest priority first)
 		item1, ok1 := mockQueue.Dequeue()
 		assert.True(t, ok1, "Should dequeue first item")
-		
+
 		item2, ok2 := mockQueue.Dequeue()
 		assert.True(t, ok2, "Should dequeue second item")
-		
+
 		item3, ok3 := mockQueue.Dequeue()
 		assert.True(t, ok3, "Should dequeue third item")
 
@@ -407,4 +407,4 @@ func TestDistributedPriorityQueueEdgeCases(t *testing.T) {
 		assert.False(t, ok, "Job should not be added to closed queue")
 		assert.Equal(t, 0, len(subscriptionCalls), "No subscription calls should be made for failed enqueue")
 	})
-} 
+}
