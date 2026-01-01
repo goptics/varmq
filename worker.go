@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
 )
 
@@ -19,10 +18,7 @@ const (
 	stopped
 )
 
-const (
-	poolChanCap        = 1
-	eventLoopSignalCap = 1
-)
+const eventLoopSignalCap = 1
 
 var (
 	errRunningWorker    = errors.New("worker is already running")
@@ -88,7 +84,6 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w := &worker[T, iJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.New[iJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -97,6 +92,9 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
+	minIdleWorkers := w.numMinIdleWorkers()
+
+	w.pool = pool.New[iJob[T]](minIdleWorkers, w.NumConcurrency()-minIdleWorkers)
 
 	return w
 }
@@ -107,7 +105,6 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w := &worker[T, iErrorJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.New[iErrorJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -116,6 +113,9 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
+	minIdleWorkers := w.numMinIdleWorkers()
+
+	w.pool = pool.New[iErrorJob[T]](minIdleWorkers, w.NumConcurrency()-minIdleWorkers)
 
 	return w
 }
@@ -126,7 +126,6 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w := &worker[T, iResultJob[T, R]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
-		pool:            pool.New[iResultJob[T, R]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
@@ -135,6 +134,8 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
+	minIdleWorkers := w.numMinIdleWorkers()
+	w.pool = pool.New[iResultJob[T, R]](minIdleWorkers, w.NumConcurrency()-minIdleWorkers)
 
 	return w
 }
@@ -250,15 +251,15 @@ func (w *worker[T, JobType]) processNextJob() {
 	j.setAckId(ackId)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
-	w.sendToNextChannel(j)
+	w.sendToNextNode(j)
 }
 
-func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
+func (w *worker[T, JobType]) freePoolNode(node *pool.Node[JobType]) {
 	// If worker timeout is enabled, update the last used time
 	enabledIdleWorkersRemover := w.Configs.idleWorkerExpiryDuration > 0
 
 	if enabledIdleWorkersRemover {
-		node.Value.UpdateLastUsed()
+		node.UpdateLastUsed()
 	}
 
 	// If queue length is high or we're under our idle worker target, keep this worker
@@ -268,28 +269,28 @@ func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobTyp
 	}
 
 	// Otherwise stop the worker to reduce idle workers
-	node.Value.Stop()
+	node.Stop()
 	w.pool.Cache.Put(node)
 }
 
-// sendToNextChannel sends the job to the next available channel for processing.
+// sendToNextNode sends the job to the next available channel for processing.
 // Time complexity: O(1)
-func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
+func (w *worker[T, JobType]) sendToNextNode(j JobType) {
 	// pop the last free node
 	if node := w.pool.PopBack(); node != nil {
-		node.Value.Send(j)
+		node.Send(j)
 		return
 	}
 
 	// if the pool is empty, create a new node and spawn a worker
-	w.initPoolNode().Value.Send(j)
+	w.initPoolNode().Send(j)
 }
 
-func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := w.pool.Cache.Get().(*linkedlist.Node[pool.Node[JobType]])
+func (w *worker[T, JobType]) initPoolNode() *pool.Node[JobType] {
+	node := w.pool.Cache.Get().(*pool.Node[JobType])
 
 	// Start a worker goroutine to process jobs from this nodes channel
-	go node.Value.Serve(func(j JobType) {
+	go node.Serve(func(j JobType) {
 		w.workerFunc(j)
 
 		j.changeStatus(finished)
@@ -342,23 +343,13 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 
 	go func() {
 		for range ticker.C {
-			// Calculate the target number of idle workers
-			targetIdleWorkers := w.numMinIdleWorkers()
+			// Use the RemoveExpired method with binary search
+			removedNodes := w.pool.RemoveExpired(interval)
 
-			// if the number of idle workers is less than or equal to the target, continue
-			if w.pool.Len() <= targetIdleWorkers {
-				continue
-			}
-
-			nodes := w.pool.NodeSlice()
-			// If we have more nodes than our target, close the excess ones
-			for _, node := range nodes[targetIdleWorkers:] {
-				if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
-					!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
-					w.pool.Remove(node)
-					node.Value.Stop()
-					w.pool.Cache.Put(node)
-				}
+			// Stop and cache the removed nodes
+			for _, node := range removedNodes {
+				node.Stop()
+				w.pool.Cache.Put(node)
 			}
 		}
 	}()
@@ -403,6 +394,9 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	}
 
 	w.concurrency.Store(safeConcurrency)
+	minIdleWorkers := w.numMinIdleWorkers()
+
+	w.pool.ChangeCapacities(minIdleWorkers, w.NumConcurrency()-minIdleWorkers)
 
 	// if new concurrency is greater than the old concurrency, then notify to pull next jobs
 	// cause it will be extended by the event loop when it needs
@@ -417,13 +411,12 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 		return nil
 	}
 
-	shrinkPoolSize, minIdleWorkers := oldConcurrency-safeConcurrency, w.numMinIdleWorkers()
+	shrinkPoolSize := oldConcurrency - safeConcurrency
 
 	// if current concurrency is greater than the safe concurrency, shrink the pool size
 	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
 		if node := w.pool.PopBack(); node != nil {
-			w.pool.Remove(node)
-			node.Value.Stop()
+			node.Stop()
 			w.pool.Cache.Put(node)
 			shrinkPoolSize--
 		} else {
@@ -466,10 +459,13 @@ func (w *worker[T, JobType]) Stop() error {
 	close(w.eventLoopSignal)
 	w.mx.Unlock()
 
-	// remove all nodes from the list and close the pool nodes
-	for _, node := range w.pool.NodeSlice() {
-		w.pool.Remove(node)
-		node.Value.Stop()
+	// remove all nodes from the pool and close them
+	for {
+		node := w.pool.PopBack()
+		if node == nil {
+			break
+		}
+		node.Stop()
 		w.pool.Cache.Put(node)
 	}
 

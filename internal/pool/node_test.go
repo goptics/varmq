@@ -13,7 +13,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Check initial lastUsed time is zero
 		assert.True(node.GetLastUsed().IsZero(), "lastUsed time should be zero for a newly created node")
@@ -26,7 +26,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Initial time should be zero
 		assert.True(node.GetLastUsed().IsZero(), "lastUsed time should initially be zero")
@@ -48,7 +48,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Initial time should be zero
 		initialTime := node.GetLastUsed()
@@ -65,7 +65,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new poolNode using the factory function
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Call Stop to send the sentinel payload
 		node.Stop()
@@ -79,7 +79,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new node with buffer size 1
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Send a value using the Send method
 		expectedValue := "test-value"
@@ -95,7 +95,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new node with buffer size 1
-		node := CreateNode[string](1)
+		node := NewNode[string](1)
 
 		// Send a value using the Send method
 		expectedValue := "test-value"
@@ -111,7 +111,7 @@ func TestPoolNode(t *testing.T) {
 		assert := assert.New(t)
 
 		// Create a new node with buffer size 5
-		node := CreateNode[string](5)
+		node := NewNode[string](5)
 
 		// Send multiple values
 		expectedValues := []string{"value1", "value2", "value3"}
@@ -128,7 +128,7 @@ func TestPoolNode(t *testing.T) {
 	})
 
 	t.Run("ServeAndStop", func(t *testing.T) {
-		node := CreateNode[string](5)
+		node := NewNode[string](5)
 
 		var wg sync.WaitGroup
 		processed := make(chan struct{})
