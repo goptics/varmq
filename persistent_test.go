@@ -173,10 +173,10 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Dequeue and verify priority ordering (highest priority first)
 		item1, ok1 := mockQueue.Dequeue()
 		assert.True(t, ok1, "Should dequeue first item")
-		
+
 		item2, ok2 := mockQueue.Dequeue()
 		assert.True(t, ok2, "Should dequeue second item")
-		
+
 		item3, ok3 := mockQueue.Dequeue()
 		assert.True(t, ok3, "Should dequeue third item")
 
@@ -261,8 +261,7 @@ func TestPersistentPriorityQueueEdgeCases(t *testing.T) {
 		assert.True(t, ok, "Job with very high priority number should be added successfully")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
-} 
-
+}
 
 // Mock implementations for testing
 

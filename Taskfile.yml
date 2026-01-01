@@ -1,0 +1,36 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  init:
+    desc: Install all dependencies
+    cmds:
+      - go mod tidy
+      - go mod vendor
+
+  test:
+    desc: Run all tests (no cache)
+    cmds:
+      - go test -count=1 -v ./...
+
+  format:
+    desc: Format codes
+    cmds:
+      - gofmt -w .
+
+  release:
+    desc: Create and push a new tag to trigger release
+    prompt: This will create and push a new release tag. Continue?
+    vars:
+      VERSION: "{{.CLI_ARGS}}"
+    cmds:
+      - task: release:check
+      - task: release:snapshot
+      - echo "Creating tag {{.VERSION}}..."
+      - git tag -s {{.VERSION}} -m "Release {{.VERSION}}"
+      - git push origin {{.VERSION}}
+      - echo "Tag {{.VERSION}} pushed. GitHub Actions will create the release."
