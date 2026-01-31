@@ -34,6 +34,7 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 		return false
 	}
 
+	q.w.Metrics().incSubmitted()
 	q.w.notifyToPullNextJobs()
 
 	return true

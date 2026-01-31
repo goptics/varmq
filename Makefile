@@ -16,7 +16,7 @@ init:
 
 # Run all tests (no cache)
 test:
-	go test -count=1 -v ./...
+	go test -race -count=1 -v ./...
 
 # Format codes
 format:
