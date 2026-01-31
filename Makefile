@@ -1,0 +1,34 @@
+.PHONY: help init test format release
+
+# Default target - list available targets
+help:
+	@echo "Available targets:"
+	@echo "  help     - List available targets"
+	@echo "  init     - Install all dependencies"
+	@echo "  test     - Run all tests (no cache)"
+	@echo "  format   - Format codes"
+	@echo "  release  - Create and push a new tag to trigger release (usage: make release VERSION=v1.0.0)"
+
+# Install all dependencies
+init:
+	go mod tidy
+	go mod vendor
+
+# Run all tests (no cache)
+test:
+	go test -count=1 -v ./...
+
+# Format codes
+format:
+	gofmt -w .
+
+# Create and push a new tag to trigger release
+release:
+ifndef VERSION
+	$(error VERSION is required. Usage: make release VERSION=v1.0.0)
+endif
+	@echo "This will create and push a new release tag. Continue? [y/N]" && read ans && [ $${ans:-N} = y ]
+	@echo "Creating tag $(VERSION)..."
+	git tag -s $(VERSION) -m "Release $(VERSION)"
+	git push origin $(VERSION)
+	@echo "Tag $(VERSION) pushed. GitHub Actions will create the release."
