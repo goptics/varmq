@@ -34,6 +34,7 @@ type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
 	pool            *pool.Pool[JobType]
 	queues          queueManager
+	metrics         Metrics
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32
 	status          atomic.Uint32
@@ -56,10 +57,14 @@ type Worker interface {
 	Status() string
 	// NumProcessing returns the number of Jobs currently being processed by the worker.
 	NumProcessing() int
+	// NumPending returns the number of tasks waiting to be processed.
+	NumPending() int
 	// NumConcurrency returns the current concurrency or pool size of the worker.
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
 	NumIdleWorkers() int
+	// Metrics returns the metrics for the worker.
+	Metrics() Metrics
 	// TunePool tunes (increase or decrease) the pool size of the worker.
 	TunePool(concurrency int) error
 	// Pause pauses the worker.
@@ -90,6 +95,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		workerFunc:      wf,
 		pool:            pool.New[iJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
+		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
@@ -109,6 +115,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		workerFunc:      wf,
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
+		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
@@ -128,6 +135,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		workerFunc:      wf,
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
 		queues:          createQueueManager(c.strategy),
+		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
@@ -141,6 +149,10 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 
 func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
+}
+
+func (w *worker[T, JobType]) Metrics() Metrics {
+	return w.metrics
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
@@ -296,6 +308,7 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 		j.Close()
 		w.freePoolNode(node)
 		w.releaseWaiters(w.curProcessing.Add(^uint32(0)))
+		w.metrics.incCompleted()
 		w.notifyToPullNextJobs()
 	})
 
@@ -474,6 +487,10 @@ func (w *worker[T, JobType]) Stop() error {
 	}
 
 	return nil
+}
+
+func (w *worker[T, JobType]) NumPending() int {
+	return w.queues.Len()
 }
 
 func (w *worker[T, JobType]) Restart() error {

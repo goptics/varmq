@@ -41,6 +41,7 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 		return false
 	}
 
+	q.w.Metrics().incSubmitted()
 	q.w.notifyToPullNextJobs()
 
 	return true
