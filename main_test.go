@@ -147,6 +147,24 @@ func TestHelperFunctions(t *testing.T) {
 			assert.Equal(t, expectedError, err, "should return the exact error")
 		})
 
+		t.Run("integration with error worker - success", func(t *testing.T) {
+			worker := NewErrWorker(ErrFunc())
+			queue := worker.BindQueue()
+
+			defer worker.Stop()
+
+			// Add function that returns nil error
+			job, ok := queue.Add(func() error {
+				return nil
+			})
+
+			assert.True(t, ok, "job should be added successfully")
+			assert.NotNil(t, job, "job should not be nil")
+
+			worker.WaitUntilFinished()
+			assert.Equal(t, uint64(1), worker.Metrics().Successful(), "should have 1 successful task")
+		})
+
 		t.Run("nil function handling", func(t *testing.T) {
 			t.Run("returns error on nil function", func(t *testing.T) {
 				// Create mock job with nil function

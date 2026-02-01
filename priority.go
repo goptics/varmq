@@ -35,6 +35,7 @@ func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (
 		return nil, false
 	}
 
+	q.w.Metrics().incSubmitted()
 	j.changeStatus(queued)
 	q.w.notifyToPullNextJobs()
 
@@ -52,6 +53,7 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 			continue
 		}
 
+		q.w.Metrics().incSubmitted()
 		j.changeStatus(queued)
 		q.w.notifyToPullNextJobs()
 	}
@@ -93,6 +95,7 @@ func (q *resultPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConf
 		return nil, false
 	}
 
+	q.w.Metrics().incSubmitted()
 	j.changeStatus(queued)
 	q.w.notifyToPullNextJobs()
 
@@ -110,6 +113,7 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 			continue
 		}
 
+		q.w.Metrics().incSubmitted()
 		j.changeStatus(queued)
 		q.w.notifyToPullNextJobs()
 	}
@@ -151,6 +155,7 @@ func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFu
 		return nil, false
 	}
 
+	q.w.Metrics().incSubmitted()
 	j.changeStatus(queued)
 	q.w.notifyToPullNextJobs()
 
@@ -168,6 +173,7 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 			continue
 		}
 
+		q.w.Metrics().incSubmitted()
 		j.changeStatus(queued)
 		q.w.notifyToPullNextJobs()
 	}

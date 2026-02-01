@@ -490,7 +490,44 @@ func TestWorkers(t *testing.T) {
 			})
 		})
 
-		// Group 5: Pool management tests
+		// Group 5: Status checks
+		t.Run("StatusChecks", func(t *testing.T) {
+			t.Run("NumPending", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(10 * time.Millisecond)
+				})
+				assert := assert.New(t)
+
+				// Create a queue
+				q := queues.NewQueue[iJob[string]]()
+				w.queues.Register(q)
+
+				// Initial check
+				assert.Equal(0, w.NumPending(), "NumPending should be 0 initially")
+
+				// Add jobs
+				jobCount := 5
+				for i := 0; i < jobCount; i++ {
+					q.Enqueue(newJob("job"+strconv.Itoa(i), loadJobConfigs(w.configs())))
+				}
+
+				// Check NumPending reflects the queue length
+				assert.Equal(jobCount, w.NumPending(), "NumPending should reflect the number of jobs in the queue")
+
+				// Start worker to process jobs
+				err := w.start()
+				assert.NoError(err, "Worker should start without error")
+				defer w.Stop()
+
+				// Wait for processing
+				w.WaitUntilFinished()
+
+				// Check NumPending is 0
+				assert.Equal(0, w.NumPending(), "NumPending should be 0 after processing")
+			})
+		})
+
+		// Group 6: Pool management tests
 		t.Run("PoolManagement", func(t *testing.T) {
 			t.Run("numMinIdleWorkers calculation", func(t *testing.T) {
 				testCases := []struct {
@@ -554,7 +591,7 @@ func TestWorkers(t *testing.T) {
 			})
 		})
 
-		// Group 6: Edge cases and error handling tests
+		// Group 7: Edge cases and error handling tests
 		t.Run("EdgeCases", func(t *testing.T) {
 			t.Run("processNextJob with IAcknowledgeable queue", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {

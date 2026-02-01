@@ -23,12 +23,22 @@ import (
 //	persistentQueue := worker.BindPersistentQueue(myPersistentQueue) // Bind to persistent queue
 //	distQueue := worker.BindDistributedQueue(myDistributedQueue) // Bind to distributed queue
 func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
-	return newQueues(newWorker(func(ij iJob[T]) {
+	var w *worker[T, iJob[T]]
+	w = newWorker(func(ij iJob[T]) {
 		// TODO: The panic error will be passed through inside logger in future
-		utils.WithSafe("worker", func() {
+		panicErr := utils.WithSafe("worker", func() {
 			wf(ij)
 		})
-	}, config...))
+
+		// Track failed if panic occurred
+		if panicErr != nil {
+			w.metrics.incFailed()
+		} else {
+			w.metrics.incSuccessful()
+		}
+	}, config...)
+
+	return newQueues(w)
 }
 
 // NewErrWorker creates a worker for operations that only return errors (no result value).
@@ -49,7 +59,8 @@ func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 //	queue := worker.BindQueue() // Bind to standard queue
 //	priorityQueue := worker.BindPriorityQueue() // Bind to priority queue
 func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinder[T] {
-	return newErrQueues(newErrWorker(func(ij iErrorJob[T]) {
+	var w *worker[T, iErrorJob[T]]
+	w = newErrWorker(func(ij iErrorJob[T]) {
 		var panicErr error
 		var err error
 
@@ -60,9 +71,13 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 		// send error if any
 		if err := utils.SelectError(panicErr, err); err != nil {
 			ij.sendError(err)
+			w.metrics.incFailed()
+		} else {
+			w.metrics.incSuccessful()
 		}
+	}, config...)
 
-	}, config...))
+	return newErrQueues(w)
 }
 
 // NewResultWorker creates a worker for operations that return a result value and error.
@@ -81,7 +96,8 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 //	queue := worker.BindQueue() // Bind to standard queue
 //	priorityQueue := worker.BindPriorityQueue() // Bind to priority queue
 func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IResultWorkerBinder[T, R] {
-	return newResultQueues(newResultWorker(func(ij iResultJob[T, R]) {
+	var w *worker[T, iResultJob[T, R]]
+	w = newResultWorker(func(ij iResultJob[T, R]) {
 		var panicErr error
 		var err error
 
@@ -97,8 +113,13 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 		// send error if any
 		if err := utils.SelectError(panicErr, err); err != nil {
 			ij.sendError(err)
+			w.metrics.incFailed()
+		} else {
+			w.metrics.incSuccessful()
 		}
-	}, config...))
+	}, config...)
+
+	return newResultQueues(w)
 }
 
 var errNilFunction = errors.New("provided function is nil")
