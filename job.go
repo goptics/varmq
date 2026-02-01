@@ -24,6 +24,8 @@ const (
 	closed
 )
 
+var notAcknowledgeableError = errors.New("job is not acknowledgeable")
+
 // Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {
 	JobId string
@@ -231,19 +233,23 @@ func (j *job[T]) Close() error {
 		return err
 	}
 
-	j.ack()
+	if err := j.ack(); err != notAcknowledgeableError {
+		return err
+	}
+
 	j.status.Store(closed)
 	j.wg.Done()
+
 	return nil
 }
 
 func (j *job[T]) ack() error {
 	if j.ackId == "" || j.IsClosed() {
-		return errors.New("job is not acknowledgeable")
+		return notAcknowledgeableError
 	}
 
 	if _, ok := j.queue.(IAcknowledgeable); !ok {
-		return errors.New("job is not acknowledgeable")
+		return notAcknowledgeableError
 	}
 
 	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
@@ -304,8 +310,7 @@ func (ej *errorJob[T]) Close() error {
 		return err
 	}
 
-	ej.Response.Close()
-	return nil
+	return ej.Response.Close()
 }
 
 type iResultJob[T, R any] interface {
@@ -366,6 +371,5 @@ func (rj *resultJob[T, R]) Close() error {
 		return err
 	}
 
-	rj.Response.Close()
-	return nil
+	return rj.Response.Close()
 }

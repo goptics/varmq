@@ -25,7 +25,6 @@ import (
 func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 	var w *worker[T, iJob[T]]
 	w = newWorker(func(ij iJob[T]) {
-		// TODO: The panic error will be passed through inside logger in future
 		panicErr := utils.WithSafe("worker", func() {
 			wf(ij)
 		})
@@ -33,6 +32,7 @@ func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 		// Track failed if panic occurred
 		if panicErr != nil {
 			w.metrics.incFailed()
+			w.sendError(panicErr)
 		} else {
 			w.metrics.incSuccessful()
 		}
@@ -71,6 +71,7 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 		// send error if any
 		if err := utils.SelectError(panicErr, err); err != nil {
 			ij.sendError(err)
+			w.sendError(err)
 			w.metrics.incFailed()
 		} else {
 			w.metrics.incSuccessful()
@@ -113,6 +114,7 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 		// send error if any
 		if err := utils.SelectError(panicErr, err); err != nil {
 			ij.sendError(err)
+			w.sendError(err)
 			w.metrics.incFailed()
 		} else {
 			w.metrics.incSuccessful()
