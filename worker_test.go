@@ -492,7 +492,7 @@ func TestWorkers(t *testing.T) {
 
 		// Group 5: Status checks
 		t.Run("StatusChecks", func(t *testing.T) {
-			t.Run("NumWaiting", func(t *testing.T) {
+			t.Run("NumPending", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
@@ -503,7 +503,7 @@ func TestWorkers(t *testing.T) {
 				w.queues.Register(q)
 
 				// Initial check
-				assert.Equal(0, w.NumWaiting(), "NumWaiting should be 0 initially")
+				assert.Equal(0, w.NumPending(), "NumPending should be 0 initially")
 
 				// Add jobs
 				jobCount := 5
@@ -511,8 +511,8 @@ func TestWorkers(t *testing.T) {
 					q.Enqueue(newJob("job"+strconv.Itoa(i), loadJobConfigs(w.configs())))
 				}
 
-				// Check NumWaiting reflects the queue length
-				assert.Equal(jobCount, w.NumWaiting(), "NumWaiting should reflect the number of jobs in the queue")
+				// Check NumPending reflects the queue length
+				assert.Equal(jobCount, w.NumPending(), "NumPending should reflect the number of jobs in the queue")
 
 				// Start worker to process jobs
 				err := w.start()
@@ -522,8 +522,8 @@ func TestWorkers(t *testing.T) {
 				// Wait for processing
 				w.WaitUntilFinished()
 
-				// Check NumWaiting is 0
-				assert.Equal(0, w.NumWaiting(), "NumWaiting should be 0 after processing")
+				// Check NumPending is 0
+				assert.Equal(0, w.NumPending(), "NumPending should be 0 after processing")
 			})
 		})
 

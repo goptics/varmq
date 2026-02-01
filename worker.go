@@ -57,8 +57,8 @@ type Worker interface {
 	Status() string
 	// NumProcessing returns the number of Jobs currently being processed by the worker.
 	NumProcessing() int
-	// NumWaiting returns the number of tasks waiting to be processed.
-	NumWaiting() int
+	// NumPending returns the number of tasks waiting to be processed.
+	NumPending() int
 	// NumConcurrency returns the current concurrency or pool size of the worker.
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
@@ -489,7 +489,7 @@ func (w *worker[T, JobType]) Stop() error {
 	return nil
 }
 
-func (w *worker[T, JobType]) NumWaiting() int {
+func (w *worker[T, JobType]) NumPending() int {
 	return w.queues.Len()
 }
 

@@ -88,7 +88,7 @@ func registerMetrics(w varmq.Worker, namespace string) {
 				Help:      "Number of tasks waiting to be processed",
 			},
 			func() float64 {
-				return float64(w.NumWaiting())
+				return float64(w.NumPending())
 			}),
 	)
 
