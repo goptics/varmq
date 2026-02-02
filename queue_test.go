@@ -745,7 +745,7 @@ func TestQueueManagerNext(t *testing.T) {
 		queue, err := qm.next()
 		assert.Error(t, err, "Should return error for invalid strategy")
 		assert.Nil(t, queue, "Should return nil queue for invalid strategy")
-		assert.Equal(t, "invalid strategy", err.Error(), "Error message should indicate invalid strategy")
+		assert.Equal(t, "invalid strategy type", err.Error(), "Error message should indicate invalid strategy")
 	})
 }
 
