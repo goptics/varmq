@@ -18,7 +18,7 @@ func main() {
 
 	redisQueue := redisq.New("redis://localhost:6375")
 	defer redisQueue.Close()
-	rq := redisQueue.NewDistributedQueue("scraping_queue")
+	rq := redisQueue.NewDistributedQueue("distributed_queue")
 	pq := varmq.NewDistributedQueue[[]string](rq)
 	defer pq.Close()
 
