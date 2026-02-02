@@ -12,7 +12,7 @@ func main() {
 	rdb := redisq.New("redis://localhost:6375")
 	defer rdb.Close()
 
-	pq := rdb.NewQueue("scraping_queue")
+	pq := rdb.NewQueue("persistent_queue")
 	defer pq.Close()
 
 	// bind with persistent queue
