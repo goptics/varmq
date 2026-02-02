@@ -3,7 +3,7 @@ module github.com/goptics/varmq/examples/redis-persistent
 go 1.24.1
 
 require (
-	github.com/goptics/redisq v1.3.1
+	github.com/goptics/redisq v1.4.0
 	github.com/goptics/varmq v1.0.1
 )
 
