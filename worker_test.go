@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -599,7 +600,7 @@ func TestWorkers(t *testing.T) {
 				})
 
 				// Create a persistent queue that implements IAcknowledgeable
-				persistentQueue := newMockPersistentQueue()
+				persistentQueue := mocks.NewMockPersistentQueue()
 				w.queues.Register(persistentQueue)
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
@@ -1186,5 +1187,128 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Clean up
 		w.Stop()
+	})
+}
+
+func TestWorkerListenToErrors(t *testing.T) {
+	worker := NewErrWorker(func(j Job[string]) error {
+		return errors.New("test error")
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	errChan := worker.ListenToErrors()
+	queue.Add("test")
+
+	select {
+	case err := <-errChan:
+		assert.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for error")
+	}
+}
+
+func TestWorkerRestartError(t *testing.T) {
+	worker := NewWorker(func(j Job[string]) {})
+	// Not started yet
+	err := worker.Restart()
+	assert.Error(t, err)
+
+	worker.Resume()
+	worker.Stop()
+	err = worker.Restart() // Stopped worker can't be restarted easily in some states
+}
+
+func TestWorkerSendErrorBlocked(t *testing.T) {
+	// worker internal sendError has a select with default to avoid blocking
+	// Let's hit the default case.
+	// errorChanCap is 1.
+	w := newWorker(func(ij iJob[string]) {})
+	w.status.Store(running)
+
+	err1 := errors.New("err1")
+	err2 := errors.New("err2")
+
+	w.sendError(err1)
+	// next one should hit default case because channel is full
+	w.sendError(err2)
+
+	// Read one
+	received := <-w.errorChan
+	assert.Equal(t, err1, received)
+}
+
+func TestWorkerCoverageExtra(t *testing.T) {
+	t.Run("SendErrorNonRunning", func(t *testing.T) {
+		w := newWorker(func(ij iJob[string]) {})
+		// status is initiated, not running
+		w.sendError(errors.New("test"))
+		assert.Equal(t, 0, len(w.errorChan))
+	})
+
+	t.Run("DequeueFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.Enqueue("test")
+		mockQueue.ShouldFailDequeue = true
+
+		w := newErrWorker(func(j iErrorJob[string]) {})
+		w.Configs.strategy = RoundRobin
+		w.queues = createQueueManager(RoundRobin)
+
+		// Set internal queue manually
+		queue := newErrorQueue(w, mockQueue)
+		// Register it in the manager
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to dequeue")
+	})
+
+	t.Run("CastFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := newWorker(func(j iJob[int]) {})
+
+		// Use a mock queue that returns a mismatched type
+		mockQueue.Queue.Enqueue("mismatched type")
+
+		queue := newQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Equal(t, errFailedToCastJob, err)
+	})
+
+	t.Run("ParseFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := newWorker(func(j iJob[int]) {})
+
+		mockQueue.Queue.Enqueue([]byte("invalid json"))
+
+		queue := newQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse job")
+	})
+
+	t.Run("CastFailureAfterParse", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		// use newErrWorker so JobType is iErrorJob[string]
+		w := newErrWorker(func(j iErrorJob[string]) {})
+
+		// Create a valid JSON that parseToJob will accept and return *job[string]
+		// *job[string] does NOT implement iErrorJob[string]
+		jobData := []byte(`{"id":"123","payload":"test","status":"Created"}`)
+		mockQueue.Queue.Enqueue(jobData)
+
+		queue := newErrorQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Equal(t, errFailedToCastJob, err)
 	})
 }

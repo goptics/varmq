@@ -18,6 +18,9 @@ init:
 test:
 	go test -race -count=1 -v ./...
 
+bench:
+	go test -bench=. -benchmem
+
 # Format codes
 format:
 	gofmt -w .

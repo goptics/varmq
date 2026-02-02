@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,12 +23,15 @@ const (
 const (
 	poolChanCap        = 1
 	eventLoopSignalCap = 1
+	errorChanCap       = 1
 )
 
 var (
 	errRunningWorker    = errors.New("worker is already running")
 	errNotRunningWorker = errors.New("worker is not running")
 	errSameConcurrency  = errors.New("worker already has the same concurrency")
+	errFailedToDequeue  = errors.New("failed to dequeue job")
+	errFailedToCastJob  = errors.New("failed to cast job")
 )
 
 type worker[T any, JobType iJob[T]] struct {
@@ -39,6 +43,7 @@ type worker[T any, JobType iJob[T]] struct {
 	curProcessing   atomic.Uint32
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
+	errorChan       chan error
 	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
@@ -63,6 +68,8 @@ type Worker interface {
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
 	NumIdleWorkers() int
+	// ListenToErrors returns a read-only channel that receives all errors from the worker.
+	ListenToErrors() <-chan error
 	// Metrics returns the metrics for the worker.
 	Metrics() Metrics
 	// TunePool tunes (increase or decrease) the pool size of the worker.
@@ -97,6 +104,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		queues:          createQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
+		errorChan:       make(chan error, errorChanCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
@@ -117,6 +125,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		queues:          createQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
+		errorChan:       make(chan error, errorChanCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
@@ -137,6 +146,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		queues:          createQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
+		errorChan:       make(chan error, errorChanCap),
 		tickers:         make([]*time.Ticker, 0),
 		Configs:         c,
 	}
@@ -149,6 +159,32 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 
 func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
+}
+
+func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
+	// Early return if there's still processing happening
+	if processing != 0 {
+		return
+	}
+
+	// Only release waiters if worker is paused or if running with an empty queue
+	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
+		// Broadcast to all waiters to signal they can continue
+		w.waiters.Broadcast()
+	}
+}
+
+func (w *worker[T, JobType]) sendError(err error) {
+	if w.status.Load() != running {
+		return
+	}
+
+	w.mx.RLock()
+	select {
+	case w.errorChan <- err:
+	default:
+	}
+	w.mx.RUnlock()
 }
 
 func (w *worker[T, JobType]) Metrics() Metrics {
@@ -175,22 +211,17 @@ func (w *worker[T, JobType]) WaitUntilFinished() {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
+	if condition == nil {
+		return
+	}
+
 	for condition() {
 		w.waiters.Wait()
 	}
 }
 
-func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
-	// Early return if there's still processing happening
-	if processing != 0 {
-		return
-	}
-
-	// Only release waiters if worker is paused or if running with an empty queue
-	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
-		// Broadcast to all waiters to signal they can continue
-		w.waiters.Broadcast()
-	}
+func (w *worker[T, JobType]) ListenToErrors() <-chan error {
+	return w.errorChan
 }
 
 // startEventLoop starts the event loop that processes pending jobs when workers become available
@@ -199,17 +230,19 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 func (w *worker[T, JobType]) startEventLoop() {
 	for range w.eventLoopSignal {
 		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
-			w.processNextJob()
+			if err := w.processNextJob(); err != nil {
+				w.sendError(err)
+			}
 		}
 	}
 }
 
 // processNextJob processes the next Job in the queue.
-func (w *worker[T, JobType]) processNextJob() {
+func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
 
 	if err != nil {
-		return
+		return err
 	}
 
 	var (
@@ -226,7 +259,7 @@ func (w *worker[T, JobType]) processNextJob() {
 	}
 
 	if !ok {
-		return
+		return errFailedToDequeue
 	}
 
 	var j JobType
@@ -239,22 +272,22 @@ func (w *worker[T, JobType]) processNextJob() {
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
-			return
+			return fmt.Errorf("failed to parse job: %w", err)
 		}
 
 		if j, ok = v.(JobType); !ok {
 			w.processNextJob()
-			return
+			return errFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
-		return
+		return errFailedToCastJob
 	}
 
 	if j.IsClosed() {
 		w.processNextJob()
-		return
+		return nil
 	}
 
 	w.curProcessing.Add(1)
@@ -263,6 +296,8 @@ func (w *worker[T, JobType]) processNextJob() {
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
+
+	return nil
 }
 
 func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
@@ -305,7 +340,9 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 		w.workerFunc(j)
 
 		j.changeStatus(finished)
-		j.Close()
+		if err := j.Close(); err != nil {
+			w.sendError(err)
+		}
 		w.freePoolNode(node)
 		w.releaseWaiters(w.curProcessing.Add(^uint32(0)))
 		w.metrics.incCompleted()
@@ -477,6 +514,7 @@ func (w *worker[T, JobType]) Stop() error {
 
 	w.mx.Lock()
 	close(w.eventLoopSignal)
+	close(w.errorChan)
 	w.mx.Unlock()
 
 	// remove all nodes from the list and close the pool nodes
@@ -496,10 +534,13 @@ func (w *worker[T, JobType]) NumPending() int {
 func (w *worker[T, JobType]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the pool nodes if any.
-	w.PauseAndWait()
+	if err := w.PauseAndWait(); err != nil {
+		return err
+	}
 
 	w.mx.Lock()
-	w.eventLoopSignal = make(chan struct{}, 1)
+	w.eventLoopSignal = make(chan struct{}, eventLoopSignalCap)
+	w.errorChan = make(chan error, errorChanCap)
 	w.mx.Unlock()
 
 	if err := w.start(); err != nil {

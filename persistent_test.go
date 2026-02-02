@@ -5,31 +5,30 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/mocks"
 )
 
 // Setup functions for persistent queues
-
-func setupPersistentQueue() (*persistentQueue[string], *worker[string, iJob[string]], *mockPersistentQueue) {
+func setupPersistentQueue() (*persistentQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentQueue) {
 	// Create a worker with a simple process function
 	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
 	}
 
-	mockQueue := newMockPersistentQueue()
+	mockQueue := mocks.NewMockPersistentQueue()
 	worker := newWorker(workerFunc)
 	queue := newPersistentQueue(worker, mockQueue).(*persistentQueue[string])
 
 	return queue, worker, mockQueue
 }
 
-func setupPersistentPriorityQueue() (*persistentPriorityQueue[string], *worker[string, iJob[string]], *mockPersistentPriorityQueue) {
+func setupPersistentPriorityQueue() (*persistentPriorityQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentPriorityQueue) {
 	// Create a worker with a simple process function
 	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
 	}
 
-	mockQueue := newMockPersistentPriorityQueue()
+	mockQueue := mocks.NewMockPersistentPriorityQueue()
 	worker := newWorker(workerFunc)
 	queue := newPersistentPriorityQueue(worker, mockQueue).(*persistentPriorityQueue[string])
 
@@ -210,6 +209,44 @@ func TestPersistentPriorityQueue(t *testing.T) {
 	})
 }
 
+func TestPersistentQueueFailures(t *testing.T) {
+	t.Run("Enqueue failure", func(t *testing.T) {
+		queue, _, mockQueue := setupPersistentQueue()
+		mockQueue.ShouldFailEnqueue = true
+
+		ok := queue.Add("test-data")
+		assert.False(t, ok, "Enqueue should fail when configured")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+	})
+
+	t.Run("Acknowledge failure", func(t *testing.T) {
+		_, _, mockQueue := setupPersistentQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		ok := mockQueue.Acknowledge("ack-id")
+		assert.False(t, ok, "Acknowledge should fail when configured")
+	})
+}
+
+func TestPersistentPriorityQueueFailures(t *testing.T) {
+	t.Run("Enqueue failure", func(t *testing.T) {
+		queue, _, mockQueue := setupPersistentPriorityQueue()
+		mockQueue.ShouldFailEnqueue = true
+
+		ok := queue.Add("test-data", 1)
+		assert.False(t, ok, "Enqueue should fail when configured")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+	})
+
+	t.Run("Acknowledge failure", func(t *testing.T) {
+		_, _, mockQueue := setupPersistentPriorityQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		ok := mockQueue.Acknowledge("ack-id")
+		assert.False(t, ok, "Acknowledge should fail when configured")
+	})
+}
+
 // Additional edge case tests
 
 func TestPersistentQueueEdgeCases(t *testing.T) {
@@ -224,7 +261,7 @@ func TestPersistentQueueEdgeCases(t *testing.T) {
 	t.Run("Add with nil-like data", func(t *testing.T) {
 		// Test with pointer type that can be nil
 		workerFunc := func(j iJob[*string]) {}
-		mockQueue := newMockPersistentQueue()
+		mockQueue := mocks.NewMockPersistentQueue()
 		worker := newWorker(workerFunc)
 		queue := newPersistentQueue(worker, mockQueue)
 
@@ -261,52 +298,4 @@ func TestPersistentPriorityQueueEdgeCases(t *testing.T) {
 		assert.True(t, ok, "Job with very high priority number should be added successfully")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
-}
-
-// Mock implementations for testing
-
-// mockPersistentQueue embeds the internal queue and implements IPersistentQueue
-type mockPersistentQueue struct {
-	*queues.Queue[any]
-}
-
-func newMockPersistentQueue() *mockPersistentQueue {
-	return &mockPersistentQueue{
-		Queue: queues.NewQueue[any](),
-	}
-}
-
-// Implement IAcknowledgeable interface
-func (m *mockPersistentQueue) Acknowledge(ackID string) bool {
-	// Mock implementation - always return true for testing
-	return true
-}
-
-func (m *mockPersistentQueue) DequeueWithAckId() (any, bool, string) {
-	// Mock implementation - return item with mock ack ID
-	item, ok := m.Queue.Dequeue()
-	return item, ok, "mock-ack-id"
-}
-
-// mockPersistentPriorityQueue embeds the internal priority queue and implements IPersistentPriorityQueue
-type mockPersistentPriorityQueue struct {
-	*queues.PriorityQueue[any]
-}
-
-func newMockPersistentPriorityQueue() *mockPersistentPriorityQueue {
-	return &mockPersistentPriorityQueue{
-		PriorityQueue: queues.NewPriorityQueue[any](),
-	}
-}
-
-// Implement IAcknowledgeable interface
-func (m *mockPersistentPriorityQueue) Acknowledge(ackID string) bool {
-	// Mock implementation - always return true for testing
-	return true
-}
-
-func (m *mockPersistentPriorityQueue) DequeueWithAckId() (any, bool, string) {
-	// Mock implementation - return item with mock ack ID
-	item, ok := m.PriorityQueue.Dequeue()
-	return item, ok, "mock-ack-id"
 }

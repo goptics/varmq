@@ -9,6 +9,8 @@ import (
 
 type Strategy uint8
 
+var errInvalidStrategyType = errors.New("invalid strategy type")
+
 const (
 	// Selects queues in a round-robin fashion
 	RoundRobin Strategy = iota
@@ -278,6 +280,6 @@ func (qm *queueManager) next() (IBaseQueue, error) {
 	case MinLen:
 		return qm.GetMinLenItem()
 	default:
-		return nil, errors.New("invalid strategy")
+		return nil, errInvalidStrategyType
 	}
 }
