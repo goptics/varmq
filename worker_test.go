@@ -1189,3 +1189,51 @@ func TestWorkerBinders(t *testing.T) {
 		w.Stop()
 	})
 }
+
+func TestWorkerListenToErrors(t *testing.T) {
+	worker := NewErrWorker(func(j Job[string]) error {
+		return errors.New("test error")
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	errChan := worker.ListenToErrors()
+	queue.Add("test")
+
+	select {
+	case err := <-errChan:
+		assert.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for error")
+	}
+}
+
+func TestWorkerRestartError(t *testing.T) {
+	worker := NewWorker(func(j Job[string]) {})
+	// Not started yet
+	err := worker.Restart()
+	assert.Error(t, err)
+
+	worker.Resume()
+	worker.Stop()
+	err = worker.Restart() // Stopped worker can't be restarted easily in some states
+}
+
+func TestWorkerSendErrorBlocked(t *testing.T) {
+	// worker internal sendError has a select with default to avoid blocking
+	// Let's hit the default case.
+	// errorChanCap is 1.
+	w := newWorker(func(ij iJob[string]) {})
+	w.status.Store(running)
+
+	err1 := errors.New("err1")
+	err2 := errors.New("err2")
+
+	w.sendError(err1)
+	// next one should hit default case because channel is full
+	w.sendError(err2)
+
+	// Read one
+	received := <-w.errorChan
+	assert.Equal(t, err1, received)
+}

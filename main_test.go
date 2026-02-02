@@ -371,3 +371,45 @@ func TestHelperFunctions(t *testing.T) {
 		})
 	})
 }
+
+func TestWorkerPanicCoverage(t *testing.T) {
+	worker := NewWorker(func(j Job[string]) {
+		panic("test panic")
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	queue.Add("test")
+	worker.WaitUntilFinished()
+
+	assert.Equal(t, uint64(1), worker.Metrics().Failed())
+}
+
+func TestErrWorkerPanicCoverage(t *testing.T) {
+	worker := NewErrWorker(func(j Job[string]) error {
+		panic("test panic")
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	job, _ := queue.Add("test")
+	worker.WaitUntilFinished()
+
+	assert.Equal(t, uint64(1), worker.Metrics().Failed())
+	assert.Error(t, job.Err())
+}
+
+func TestResultWorkerPanicCoverage(t *testing.T) {
+	worker := NewResultWorker(func(j Job[string]) (string, error) {
+		panic("test panic")
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	job, _ := queue.Add("test")
+	worker.WaitUntilFinished()
+
+	assert.Equal(t, uint64(1), worker.Metrics().Failed())
+	_, err := job.Result()
+	assert.Error(t, err)
+}

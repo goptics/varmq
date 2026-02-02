@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -363,5 +364,48 @@ func TestErrorJob(t *testing.T) {
 		err = j2.Close()
 		assert.Error(err, "closing an already closed job should fail")
 		assert.Contains(err.Error(), "already closed", "error should indicate job is already closed")
+	})
+}
+
+func TestJobCloseEdgeCases(t *testing.T) {
+	t.Run("Close processing job", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {
+			err := j.Close()
+			assert.Error(t, err, "Should not be able to close processing job")
+			assert.Contains(t, err.Error(), "job is processing")
+		}
+
+		mockQueue := mocks.NewMockPersistentQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentQueue(worker, mockQueue)
+
+		worker.Resume()
+		queue.Add("test")
+		worker.WaitUntilFinished()
+	})
+
+	t.Run("Close already closed job", func(t *testing.T) {
+		job := newJob("test", jobConfigs{})
+		err := job.Close()
+		assert.NoError(t, err)
+
+		err = job.Close()
+		assert.Error(t, err, "Should not be able to close already closed job")
+		assert.Contains(t, err.Error(), "job is already closed")
+	})
+}
+
+func TestJobAckFailure(t *testing.T) {
+	t.Run("Ack failure from queue", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		job := newJob("test", jobConfigs{})
+		job.setInternalQueue(mockQueue)
+		job.setAckId("ack-1")
+
+		err := job.ack()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to acknowledge")
 	})
 }

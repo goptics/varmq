@@ -208,6 +208,10 @@ func (w *worker[T, JobType]) WaitUntilFinished() {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
+	if condition == nil {
+		return
+	}
+
 	for condition() {
 		w.waiters.Wait()
 	}
@@ -527,7 +531,9 @@ func (w *worker[T, JobType]) NumPending() int {
 func (w *worker[T, JobType]) Restart() error {
 	// first pause the queue to avoid routine leaks or deadlocks
 	// wait until all ongoing processes are done to gracefully close the pool nodes if any.
-	w.PauseAndWait()
+	if err := w.PauseAndWait(); err != nil {
+		return err
+	}
 
 	w.mx.Lock()
 	w.eventLoopSignal = make(chan struct{}, eventLoopSignalCap)
