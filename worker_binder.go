@@ -154,6 +154,7 @@ func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
 func (wb *workerBinder[T]) handleQueueSubscription(action string) {
 	switch action {
 	case "enqueued":
+		wb.worker.Metrics().incSubmitted()
 		wb.worker.notifyToPullNextJobs()
 	}
 }
