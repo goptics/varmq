@@ -24,7 +24,11 @@ const (
 	closed
 )
 
-var notAcknowledgeableError = errors.New("job is not acknowledgeable")
+var (
+	errJobNotAcknowledgeable = errors.New("job is not acknowledgeable")
+	errJobProcessing         = errors.New("job is processing, you can't close processing job")
+	errJobAlreadyClosed      = errors.New("job is already closed")
+)
 
 // Result represents the result of a job, containing the data and any error that occurred.
 type Result[T any] struct {
@@ -218,9 +222,9 @@ func parseToJob[T any](data []byte) (any, error) {
 func (j *job[T]) isCloseable() error {
 	switch j.status.Load() {
 	case processing:
-		return errors.New("job is processing, you can't close processing job")
+		return errJobProcessing
 	case closed:
-		return errors.New("job is already closed")
+		return errJobAlreadyClosed
 	}
 
 	return nil
@@ -233,7 +237,7 @@ func (j *job[T]) Close() error {
 		return err
 	}
 
-	if err := j.ack(); err != notAcknowledgeableError {
+	if err := j.ack(); err != errJobNotAcknowledgeable {
 		return err
 	}
 
@@ -245,11 +249,11 @@ func (j *job[T]) Close() error {
 
 func (j *job[T]) ack() error {
 	if j.ackId == "" || j.IsClosed() {
-		return notAcknowledgeableError
+		return errJobNotAcknowledgeable
 	}
 
 	if _, ok := j.queue.(IAcknowledgeable); !ok {
-		return notAcknowledgeableError
+		return errJobNotAcknowledgeable
 	}
 
 	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {

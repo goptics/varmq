@@ -1237,3 +1237,54 @@ func TestWorkerSendErrorBlocked(t *testing.T) {
 	received := <-w.errorChan
 	assert.Equal(t, err1, received)
 }
+
+func TestWorkerCoverageExtra(t *testing.T) {
+	t.Run("SendErrorNonRunning", func(t *testing.T) {
+		w := newWorker(func(ij iJob[string]) {})
+		// status is initiated, not running
+		w.sendError(errors.New("test"))
+		assert.Equal(t, 0, len(w.errorChan))
+	})
+
+	t.Run("WaitUntilFinishedInitiated", func(t *testing.T) {
+		w := newWorker(func(ij iJob[string]) {})
+		// worker is initiated, condition will be nil
+		w.WaitUntilFinished()
+		assert.True(t, true, "WaitUntilFinished should return immediately")
+	})
+
+	t.Run("DequeueFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.Enqueue("test")
+		mockQueue.ShouldFailDequeue = true
+
+		w := newErrWorker(func(j iErrorJob[string]) {})
+		w.Configs.strategy = RoundRobin
+		w.queues = createQueueManager(RoundRobin)
+
+		// Set internal queue manually
+		queue := newErrorQueue(w, mockQueue)
+		// Register it in the manager
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to dequeue")
+	})
+
+	t.Run("CastFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+
+		w := newWorker(func(j iJob[int]) {})
+
+		// Use a mock queue that returns a mismatched type
+		mockQueue.Queue.Enqueue("string instead of int")
+
+		queue := newQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to cast job")
+	})
+}

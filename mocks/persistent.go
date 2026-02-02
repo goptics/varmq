@@ -9,6 +9,7 @@ type MockPersistentQueue struct {
 	*queues.Queue[any]
 	ShouldFailEnqueue     bool
 	ShouldFailAcknowledge bool
+	ShouldFailDequeue     bool
 }
 
 func NewMockPersistentQueue() *MockPersistentQueue {
@@ -35,6 +36,9 @@ func (m *MockPersistentQueue) Enqueue(item any) bool {
 }
 
 func (m *MockPersistentQueue) DequeueWithAckId() (any, bool, string) {
+	if m.ShouldFailDequeue {
+		return nil, false, ""
+	}
 	// Mock implementation - return item with mock ack ID
 	item, ok := m.Queue.Dequeue()
 	return item, ok, "mock-ack-id"
@@ -45,6 +49,7 @@ type MockPersistentPriorityQueue struct {
 	*queues.PriorityQueue[any]
 	ShouldFailEnqueue     bool
 	ShouldFailAcknowledge bool
+	ShouldFailDequeue     bool
 }
 
 func NewMockPersistentPriorityQueue() *MockPersistentPriorityQueue {
@@ -71,6 +76,9 @@ func (m *MockPersistentPriorityQueue) Enqueue(item any, priority int) bool {
 }
 
 func (m *MockPersistentPriorityQueue) DequeueWithAckId() (any, bool, string) {
+	if m.ShouldFailDequeue {
+		return nil, false, ""
+	}
 	// Mock implementation - return item with mock ack ID
 	item, ok := m.PriorityQueue.Dequeue()
 	return item, ok, "mock-ack-id"

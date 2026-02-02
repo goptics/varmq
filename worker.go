@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,8 @@ var (
 	errRunningWorker    = errors.New("worker is already running")
 	errNotRunningWorker = errors.New("worker is not running")
 	errSameConcurrency  = errors.New("worker already has the same concurrency")
+	errFailedToDequeue  = errors.New("failed to dequeue job")
+	errFailedToCastJob  = errors.New("failed to cast job")
 )
 
 type worker[T any, JobType iJob[T]] struct {
@@ -256,7 +259,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if !ok {
-		return errors.New("failed to dequeue job")
+		return errFailedToDequeue
 	}
 
 	var j JobType
@@ -269,17 +272,17 @@ func (w *worker[T, JobType]) processNextJob() error {
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
-			return err
+			return fmt.Errorf("failed to parse job: %w", err)
 		}
 
 		if j, ok = v.(JobType); !ok {
 			w.processNextJob()
-			return errors.New("failed to cast job")
+			return errFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
-		return errors.New("failed to cast job")
+		return errFailedToCastJob
 	}
 
 	if j.IsClosed() {
