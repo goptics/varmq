@@ -1246,13 +1246,6 @@ func TestWorkerCoverageExtra(t *testing.T) {
 		assert.Equal(t, 0, len(w.errorChan))
 	})
 
-	t.Run("WaitUntilFinishedInitiated", func(t *testing.T) {
-		w := newWorker(func(ij iJob[string]) {})
-		// worker is initiated, condition will be nil
-		w.WaitUntilFinished()
-		assert.True(t, true, "WaitUntilFinished should return immediately")
-	})
-
 	t.Run("DequeueFailure", func(t *testing.T) {
 		mockQueue := mocks.NewMockPersistentQueue()
 		mockQueue.Enqueue("test")
@@ -1274,17 +1267,48 @@ func TestWorkerCoverageExtra(t *testing.T) {
 
 	t.Run("CastFailure", func(t *testing.T) {
 		mockQueue := mocks.NewMockPersistentQueue()
-
 		w := newWorker(func(j iJob[int]) {})
 
 		// Use a mock queue that returns a mismatched type
-		mockQueue.Queue.Enqueue("string instead of int")
+		mockQueue.Queue.Enqueue("mismatched type")
 
 		queue := newQueue(w, mockQueue)
 		w.queues.Register(queue.internalQueue)
 
 		err := w.processNextJob()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to cast job")
+		assert.Equal(t, errFailedToCastJob, err)
+	})
+
+	t.Run("ParseFailure", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := newWorker(func(j iJob[int]) {})
+
+		mockQueue.Queue.Enqueue([]byte("invalid json"))
+
+		queue := newQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse job")
+	})
+
+	t.Run("CastFailureAfterParse", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		// use newErrWorker so JobType is iErrorJob[string]
+		w := newErrWorker(func(j iErrorJob[string]) {})
+
+		// Create a valid JSON that parseToJob will accept and return *job[string]
+		// *job[string] does NOT implement iErrorJob[string]
+		jobData := []byte(`{"id":"123","payload":"test","status":"Created"}`)
+		mockQueue.Queue.Enqueue(jobData)
+
+		queue := newErrorQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.Equal(t, errFailedToCastJob, err)
 	})
 }
