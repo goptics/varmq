@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/goptics/varmq/mocks"
 )
 
 // Additional tests for Worker Binder functions with 0% coverage
@@ -17,7 +19,7 @@ func TestWorkerBinderPersistentMethods(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock persistent queue
-		mockQueue := newMockPersistentQueue()
+		mockQueue := mocks.NewMockPersistentQueue()
 
 		// Test WithPersistentQueue
 		persistentQueue := worker.WithPersistentQueue(mockQueue)
@@ -45,7 +47,7 @@ func TestWorkerBinderPersistentMethods(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock persistent priority queue
-		mockQueue := newMockPersistentPriorityQueue()
+		mockQueue := mocks.NewMockPersistentPriorityQueue()
 
 		// Test WithPersistentPriorityQueue
 		persistentPriorityQueue := worker.WithPersistentPriorityQueue(mockQueue)
@@ -74,7 +76,7 @@ func TestWorkerBinderDistributedMethods(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock distributed queue
-		mockQueue := newMockDistributedQueue()
+		mockQueue := mocks.NewMockDistributedQueue()
 
 		// Test WithDistributedQueue
 		distributedQueue := worker.WithDistributedQueue(mockQueue)
@@ -100,7 +102,7 @@ func TestWorkerBinderDistributedMethods(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock distributed priority queue
-		mockQueue := newMockDistributedPriorityQueue()
+		mockQueue := mocks.NewMockDistributedPriorityQueue()
 
 		// Test WithDistributedPriorityQueue
 		distributedPriorityQueue := worker.WithDistributedPriorityQueue(mockQueue)
@@ -155,11 +157,11 @@ func TestHandleQueueSubscription(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock distributed queue
-		mockQueue := newMockDistributedQueue()
+		mockQueue := mocks.NewMockDistributedQueue()
 
 		// Track subscription calls
 		var subscriptionCalls []string
-		originalSubscribers := mockQueue.subscribers
+		originalSubscribers := mockQueue.Subscribers
 
 		// Add our tracking alongside the worker's subscription
 		mockQueue.Subscribe(func(action string) {
@@ -183,7 +185,7 @@ func TestHandleQueueSubscription(t *testing.T) {
 
 		// Verify that the worker's subscription was also registered
 		// (We can't directly test this, but the fact that the queue works indicates it was set up correctly)
-		assert.True(t, len(mockQueue.subscribers) > len(originalSubscribers), "Worker subscription should be added")
+		assert.True(t, len(mockQueue.Subscribers) > len(originalSubscribers), "Worker subscription should be added")
 
 		// Clean up
 		worker.Stop()
@@ -197,7 +199,7 @@ func TestHandleQueueSubscription(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create a mock distributed priority queue
-		mockQueue := newMockDistributedPriorityQueue()
+		mockQueue := mocks.NewMockDistributedPriorityQueue()
 
 		// Track subscription calls
 		var subscriptionCalls []string
@@ -235,8 +237,8 @@ func TestWorkerBinderEdgeCases(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create multiple mock distributed queues
-		mockQueue1 := newMockDistributedQueue()
-		mockQueue2 := newMockDistributedQueue()
+		mockQueue1 := mocks.NewMockDistributedQueue()
+		mockQueue2 := mocks.NewMockDistributedQueue()
 
 		// Bind both queues to the same worker
 		distributedQueue1 := worker.WithDistributedQueue(mockQueue1)
@@ -265,8 +267,8 @@ func TestWorkerBinderEdgeCases(t *testing.T) {
 		worker := NewWorker(workerFunc)
 
 		// Create both persistent and distributed queues
-		mockPersistentQueue := newMockPersistentQueue()
-		mockDistributedQueue := newMockDistributedQueue()
+		mockPersistentQueue := mocks.NewMockPersistentQueue()
+		mockDistributedQueue := mocks.NewMockDistributedQueue()
 
 		// Bind both types to the same worker
 		persistentQueue := worker.WithPersistentQueue(mockPersistentQueue)

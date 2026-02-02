@@ -4,81 +4,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/goptics/varmq/mocks"
 )
 
-// Mock implementations for testing distributed queues
-
-// mockDistributedQueue inherits from mockPersistentQueue and implements IDistributedQueue
-type mockDistributedQueue struct {
-	*mockPersistentQueue
-	subscribers []func(action string)
-}
-
-func newMockDistributedQueue() *mockDistributedQueue {
-	return &mockDistributedQueue{
-		mockPersistentQueue: newMockPersistentQueue(),
-		subscribers:         make([]func(action string), 0),
-	}
-}
-
-// Implement ISubscribable interface
-func (m *mockDistributedQueue) Subscribe(fn func(action string)) {
-	m.subscribers = append(m.subscribers, fn)
-}
-
-// Override Enqueue to notify subscribers
-func (m *mockDistributedQueue) Enqueue(item any) bool {
-	ok := m.mockPersistentQueue.Enqueue(item)
-	if ok {
-		// Notify all subscribers about the enqueue action
-		for _, subscriber := range m.subscribers {
-			subscriber("enqueued")
-		}
-	}
-	return ok
-}
-
-// mockDistributedPriorityQueue inherits from mockPersistentPriorityQueue and implements IDistributedPriorityQueue
-type mockDistributedPriorityQueue struct {
-	*mockPersistentPriorityQueue
-	subscribers []func(action string)
-}
-
-func newMockDistributedPriorityQueue() *mockDistributedPriorityQueue {
-	return &mockDistributedPriorityQueue{
-		mockPersistentPriorityQueue: newMockPersistentPriorityQueue(),
-		subscribers:                 make([]func(action string), 0),
-	}
-}
-
-// Implement ISubscribable interface
-func (m *mockDistributedPriorityQueue) Subscribe(fn func(action string)) {
-	m.subscribers = append(m.subscribers, fn)
-}
-
-// Override Enqueue to notify subscribers
-func (m *mockDistributedPriorityQueue) Enqueue(item any, priority int) bool {
-	ok := m.mockPersistentPriorityQueue.Enqueue(item, priority)
-	if ok {
-		// Notify all subscribers about the enqueue action
-		for _, subscriber := range m.subscribers {
-			subscriber("enqueued")
-		}
-	}
-	return ok
-}
-
-// Setup functions for distributed queues
-
-func setupDistributedQueue() (*distributedQueue[string], *mockDistributedQueue) {
-	mockQueue := newMockDistributedQueue()
+func setupDistributedQueue() (*distributedQueue[string], *mocks.MockDistributedQueue) {
+	mockQueue := mocks.NewMockDistributedQueue()
 	queue := NewDistributedQueue[string](mockQueue).(*distributedQueue[string])
 
 	return queue, mockQueue
 }
 
-func setupDistributedPriorityQueue() (*distributedPriorityQueue[string], *mockDistributedPriorityQueue) {
-	mockQueue := newMockDistributedPriorityQueue()
+func setupDistributedPriorityQueue() (*distributedPriorityQueue[string], *mocks.MockDistributedPriorityQueue) {
+	mockQueue := mocks.NewMockDistributedPriorityQueue()
 	queue := NewDistributedPriorityQueue[string](mockQueue).(*distributedPriorityQueue[string])
 
 	return queue, mockQueue
@@ -322,6 +260,58 @@ func TestDistributedPriorityQueue(t *testing.T) {
 	})
 }
 
+func TestDistributedQueueFailures(t *testing.T) {
+	t.Run("Enqueue failure", func(t *testing.T) {
+		queue, mockQueue := setupDistributedQueue()
+		mockQueue.ShouldFailEnqueue = true
+
+		// Track subscriptions to ensure none are called on failure
+		var subscriptionCalls []string
+		mockQueue.Subscribe(func(action string) {
+			subscriptionCalls = append(subscriptionCalls, action)
+		})
+
+		ok := queue.Add("test-data")
+		assert.False(t, ok, "Enqueue should fail when configured")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, len(subscriptionCalls), "No subscription calls should be made")
+	})
+
+	t.Run("Acknowledge failure", func(t *testing.T) {
+		_, mockQueue := setupDistributedQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		ok := mockQueue.Acknowledge("ack-id")
+		assert.False(t, ok, "Acknowledge should fail when configured")
+	})
+}
+
+func TestDistributedPriorityQueueFailures(t *testing.T) {
+	t.Run("Enqueue failure", func(t *testing.T) {
+		queue, mockQueue := setupDistributedPriorityQueue()
+		mockQueue.ShouldFailEnqueue = true
+
+		// Track subscriptions to ensure none are called on failure
+		var subscriptionCalls []string
+		mockQueue.Subscribe(func(action string) {
+			subscriptionCalls = append(subscriptionCalls, action)
+		})
+
+		ok := queue.Add("test-data", 1)
+		assert.False(t, ok, "Enqueue should fail when configured")
+		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, len(subscriptionCalls), "No subscription calls should be made")
+	})
+
+	t.Run("Acknowledge failure", func(t *testing.T) {
+		_, mockQueue := setupDistributedPriorityQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		ok := mockQueue.Acknowledge("ack-id")
+		assert.False(t, ok, "Acknowledge should fail when configured")
+	})
+}
+
 // Additional edge case tests
 
 func TestDistributedQueueEdgeCases(t *testing.T) {
@@ -335,7 +325,7 @@ func TestDistributedQueueEdgeCases(t *testing.T) {
 
 	t.Run("Add with nil-like data", func(t *testing.T) {
 		// Test with pointer type that can be nil
-		mockQueue := newMockDistributedQueue()
+		mockQueue := mocks.NewMockDistributedQueue()
 		queue := NewDistributedQueue[*string](mockQueue)
 
 		var nilString *string

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -599,7 +600,7 @@ func TestWorkers(t *testing.T) {
 				})
 
 				// Create a persistent queue that implements IAcknowledgeable
-				persistentQueue := newMockPersistentQueue()
+				persistentQueue := mocks.NewMockPersistentQueue()
 				w.queues.Register(persistentQueue)
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
