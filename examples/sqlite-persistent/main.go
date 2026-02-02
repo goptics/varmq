@@ -34,5 +34,4 @@ func main() {
 	for i := range 10 {
 		queue.Add(fmt.Sprintf("Task %d", i))
 	}
-
 }
