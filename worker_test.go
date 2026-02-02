@@ -489,6 +489,45 @@ func TestWorkers(t *testing.T) {
 				// Clean up
 				w.Stop()
 			})
+
+			t.Run("restart after stop", func(t *testing.T) {
+				w := newWorker(func(j iJob[int]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+				assert := assert.New(t)
+
+				// Start and stop
+				err := w.start()
+				assert.NoError(err)
+				w.Stop()
+				assert.True(w.IsStopped())
+
+				// Restart
+				err = w.Restart()
+				assert.NoError(err, "Restarting a stopped worker should succeed")
+				assert.True(w.IsRunning(), "Worker should be running after restart")
+
+				// Cleanup
+				w.Stop()
+			})
+
+			t.Run("stop after pause", func(t *testing.T) {
+				w := newWorker(func(j iJob[int]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+				assert := assert.New(t)
+
+				// Start and pause
+				err := w.start()
+				assert.NoError(err)
+				w.Pause()
+				assert.True(w.IsPaused())
+
+				// Stop
+				err = w.Stop()
+				assert.NoError(err, "Stopping a paused worker should succeed")
+				assert.True(w.IsStopped(), "Worker should be stopped")
+			})
 		})
 
 		// Group 5: Status checks
@@ -1212,11 +1251,12 @@ func TestWorkerRestartError(t *testing.T) {
 	worker := NewWorker(func(j Job[string]) {})
 	// Not started yet
 	err := worker.Restart()
-	assert.Error(t, err)
+	assert.NoError(t, err, "Restart on initiated worker should work")
 
 	worker.Resume()
 	worker.Stop()
-	err = worker.Restart() // Stopped worker can't be restarted easily in some states
+	err = worker.Restart()
+	assert.NoError(t, err, "Restarting a stopped worker should work")
 }
 
 func TestWorkerSendErrorBlocked(t *testing.T) {
