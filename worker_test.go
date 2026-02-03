@@ -669,8 +669,8 @@ func TestWorkers(t *testing.T) {
 				w.status.Store(running)
 
 				// Define a local mock job that fails on Close
-				mj := &mockJobForCoverage{
-					job: *newJob("test", loadJobConfigs(w.configs())),
+				mj := &mockJob{
+					job: newJob("test", loadJobConfigs(w.configs())),
 				}
 				mj.shouldFailClose = true
 
@@ -1198,12 +1198,12 @@ func TestWorkers(t *testing.T) {
 	})
 }
 
-type mockJobForCoverage struct {
-	job[string]
+type mockJob struct {
+	*job[string]
 	shouldFailClose bool
 }
 
-func (m *mockJobForCoverage) Close() error {
+func (m *mockJob) Close() error {
 	if m.shouldFailClose {
 		return errors.New("close failure")
 	}
