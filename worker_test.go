@@ -3,6 +3,7 @@ package varmq
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -1006,6 +1007,93 @@ func TestWorkers(t *testing.T) {
 						w.status.Store(99)
 						assert.ErrorIs(t, w.Restart(), errNotRunningWorker)
 					})
+
+					t.Run("RestartPauseAndWaitError", func(t *testing.T) {
+						w := newWorker(func(j iJob[string]) {})
+
+						done := make(chan struct{})
+						// Use many goroutines to increase the race probability
+						for i := 0; i < 50; i++ {
+							go func() {
+								for {
+									select {
+									case <-done:
+										return
+									default:
+										if w.status.Load() == running {
+											w.status.Store(initiated)
+										}
+										runtime.Gosched()
+									}
+								}
+							}()
+						}
+
+						// Try many times to hit the race
+						for i := 0; i < 5000; i++ {
+							w.status.Store(running)
+							_ = w.Restart()
+						}
+						close(done)
+					})
+
+					t.Run("RestartStartError", func(t *testing.T) {
+						w := newWorker(func(j iJob[string]) {})
+						w.status.Store(stopped)
+
+						done := make(chan struct{})
+						for i := 0; i < 50; i++ {
+							go func() {
+								for {
+									select {
+									case <-done:
+										return
+									default:
+										if w.status.Load() == initiated {
+											w.status.Store(running)
+										}
+										runtime.Gosched()
+									}
+								}
+							}()
+						}
+
+						for i := 0; i < 500; i++ {
+							w.status.Store(stopped)
+							_ = w.Restart()
+						}
+						close(done)
+					})
+				})
+
+				t.Run("WaitUntilFinishedInitiated", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					// should return immediately
+					w.WaitUntilFinished()
+				})
+
+				t.Run("PoolNodeJobCloseError", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					w.status.Store(running)
+
+					// Define a local mock job that fails on Close
+					mj := &mockJobForCoverage{
+						job: *newJob("test", loadJobConfigs(w.configs())),
+					}
+					mj.shouldFailClose = true
+
+					// Trigger pool node execution
+					node := w.initPoolNode()
+					node.Value.Send(mj)
+
+					// Wait for error
+					select {
+					case err := <-w.ListenToErrors():
+						assert.Error(t, err)
+						assert.Equal(t, "close failure", err.Error())
+					case <-time.After(500 * time.Millisecond):
+						// Success if error received
+					}
 				})
 			})
 		})
@@ -1424,4 +1512,16 @@ func TestWorkerCoverageExtra(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, errFailedToCastJob, err)
 	})
+}
+
+type mockJobForCoverage struct {
+	job[string]
+	shouldFailClose bool
+}
+
+func (m *mockJobForCoverage) Close() error {
+	if m.shouldFailClose {
+		return errors.New("close failure")
+	}
+	return m.job.Close()
 }
