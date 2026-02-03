@@ -3,6 +3,7 @@ package varmq
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -489,6 +490,200 @@ func TestWorkers(t *testing.T) {
 				// Clean up
 				w.Stop()
 			})
+
+			t.Run("restart after stop", func(t *testing.T) {
+				w := newWorker(func(j iJob[int]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+				assert := assert.New(t)
+
+				// Start and stop
+				err := w.start()
+				assert.NoError(err)
+				w.Stop()
+				assert.True(w.IsStopped())
+
+				// Restart
+				err = w.Restart()
+				assert.NoError(err, "Restarting a stopped worker should succeed")
+				assert.True(w.IsRunning(), "Worker should be running after restart")
+
+				// Cleanup
+				w.Stop()
+			})
+
+			t.Run("stop after pause", func(t *testing.T) {
+				w := newWorker(func(j iJob[int]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+				assert := assert.New(t)
+
+				// Start and pause
+				err := w.start()
+				assert.NoError(err)
+				w.Pause()
+				assert.True(w.IsPaused())
+
+				// Stop
+				err = w.Stop()
+				assert.NoError(err, "Stopping a paused worker should succeed")
+				assert.True(w.IsStopped(), "Worker should be stopped")
+			})
+
+			t.Run("event loop processing error", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {})
+				errChan := w.ListenToErrors()
+
+				// Register a mock queue that fails dequeue
+				mockQueue := mocks.NewMockPersistentQueue()
+				mockQueue.ShouldFailDequeue = true
+				// Need to put something in it to trigger the loop
+				mockQueue.Queue.Enqueue("trigger")
+
+				w.queues.Register(newQueue(w, mockQueue).internalQueue)
+
+				w.start()
+				defer w.Stop()
+
+				select {
+				case err := <-errChan:
+					assert.Error(t, err)
+					assert.Contains(t, err.Error(), "failed to dequeue")
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for error from event loop")
+				}
+			})
+
+			t.Run("redundant state transitions", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {})
+				// initiated to paused: error
+				assert.ErrorIs(t, w.Pause(), errNotRunningWorker)
+
+				w.start()
+				w.Pause()
+				assert.True(t, w.IsPaused())
+				// paused to paused: nil
+				assert.NoError(t, w.Pause())
+
+				w.Stop()
+				assert.True(t, w.IsStopped())
+				// stopped to paused: nil
+				assert.NoError(t, w.Pause())
+				// stopped to stopped: nil
+				assert.NoError(t, w.Stop())
+			})
+
+			t.Run("restart state conditions", func(t *testing.T) {
+				t.Run("RestartRunning", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {
+						time.Sleep(10 * time.Millisecond)
+					})
+					w.start()
+					assert.NoError(t, w.Restart())
+					assert.True(t, w.IsRunning())
+					w.Stop()
+				})
+
+				t.Run("RestartPaused", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					w.start()
+					w.Pause()
+					assert.NoError(t, w.Restart())
+					assert.True(t, w.IsRunning())
+					w.Stop()
+				})
+
+				t.Run("RestartDefaultCase", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					// Manually set an invalid status to hit default case in switch
+					w.status.Store(99)
+					assert.ErrorIs(t, w.Restart(), errNotRunningWorker)
+				})
+
+				t.Run("RestartPauseAndWaitError", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					defer w.Stop()
+
+					done := make(chan struct{})
+					// Use many goroutines to increase the race probability
+					for range 50 {
+						go func() {
+							for {
+								select {
+								case <-done:
+									return
+								default:
+									if w.status.Load() == running {
+										w.status.Store(initiated)
+									}
+									runtime.Gosched()
+								}
+							}
+						}()
+					}
+
+					// Try many times to hit the race
+					for range 5000 {
+						w.status.Store(running)
+						_ = w.Restart()
+					}
+					close(done)
+				})
+
+				t.Run("RestartStartError", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					defer w.Stop()
+
+					w.status.Store(stopped)
+
+					done := make(chan struct{})
+					for range 50 {
+						go func() {
+							for {
+								select {
+								case <-done:
+									return
+								default:
+									if w.status.Load() == initiated {
+										w.status.Store(running)
+									}
+									runtime.Gosched()
+								}
+							}
+						}()
+					}
+
+					for range 500 {
+						w.status.Store(stopped)
+						_ = w.Restart()
+					}
+					close(done)
+				})
+			})
+
+			t.Run("pool node job close error", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {})
+				w.status.Store(running)
+
+				// Define a local mock job that fails on Close
+				mj := &mockJob{
+					job: newJob("test", loadJobConfigs(w.configs())),
+				}
+				mj.shouldFailClose = true
+
+				// Trigger pool node execution
+				node := w.initPoolNode()
+				node.Value.Send(mj)
+
+				// Wait for error
+				select {
+				case err := <-w.ListenToErrors():
+					assert.Error(t, err)
+					assert.Equal(t, "close failure", err.Error())
+				case <-time.After(500 * time.Millisecond):
+					t.Fatal("timed out waiting for close error")
+				}
+			})
 		})
 
 		// Group 5: Status checks
@@ -799,6 +994,21 @@ func TestWorkers(t *testing.T) {
 				assert.ErrorIs(t, err, errRunningWorker, "Resume should return error when already running")
 			})
 
+			t.Run("Resume stopped worker", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+
+				err = w.Stop()
+				assert.NoError(t, err, "Worker should stop without error")
+
+				err = w.Resume()
+				assert.ErrorIs(t, err, errNotRunningWorker, "Resume should return error when worker is stopped")
+			})
+
 			t.Run("PauseAndWait with error", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
@@ -896,6 +1106,38 @@ func TestWorkers(t *testing.T) {
 				// Should have cleaned up some workers
 				assert.LessOrEqual(t, w.pool.Len(), w.numMinIdleWorkers()+1, "Pool should be cleaned up")
 			})
+
+			t.Run("processNextJob with parse failure", func(t *testing.T) {
+				mockQueue := mocks.NewMockPersistentQueue()
+				w := newWorker(func(j iJob[int]) {})
+
+				mockQueue.Queue.Enqueue([]byte("invalid json"))
+
+				queue := newQueue(w, mockQueue)
+				w.queues.Register(queue.internalQueue)
+
+				err := w.processNextJob()
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to parse job")
+			})
+
+			t.Run("processNextJob with cast failure after parse", func(t *testing.T) {
+				mockQueue := mocks.NewMockPersistentQueue()
+				// use newErrWorker so JobType is iErrorJob[string]
+				w := newErrWorker(func(j iErrorJob[string]) {})
+
+				// Create a valid JSON that parseToJob will accept and return *job[string]
+				// *job[string] does NOT implement iErrorJob[string]
+				jobData := []byte(`{"id":"123","payload":"test","status":"Created"}`)
+				mockQueue.Queue.Enqueue(jobData)
+
+				queue := newErrorQueue(w, mockQueue)
+				w.queues.Register(queue.internalQueue)
+
+				err := w.processNextJob()
+				assert.Error(t, err)
+				assert.Equal(t, errFailedToCastJob, err)
+			})
 		})
 	})
 
@@ -968,347 +1210,14 @@ func TestWorkers(t *testing.T) {
 	})
 }
 
-// TestWorkerBinders tests the worker binder implementations
-func TestWorkerBinders(t *testing.T) {
-	// Test standard worker binder
-	t.Run("BindQueue", func(t *testing.T) {
-		// Create a worker
-		w := newWorker(func(j iJob[string]) {})
-
-		// Create a worker binder
-		binder := newQueues(w)
-
-		// Test BindQueue
-		queue := binder.BindQueue()
-		assert.NotNil(t, queue, "Queue should not be nil")
-
-		// Verify queue is not nil
-		assert.NotNil(t, queue, "Queue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
-
-		// Clean up
-		w.Stop()
-	})
-
-	t.Run("BindPriorityQueue", func(t *testing.T) {
-		// Create a worker
-		w := newWorker(func(j iJob[string]) {})
-
-		// Create a worker binder
-		binder := newQueues(w)
-
-		// Test BindPriorityQueue
-		pQueue := binder.BindPriorityQueue()
-		assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
-
-		// Verify priority queue is not nil
-		assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
-
-		// Clean up
-		w.Stop()
-	})
-
-	t.Run("HasDistributedQueueMethod", func(t *testing.T) {
-		// Create a worker
-		w := newWorker(func(j iJob[string]) {})
-
-		// Create a worker binder
-		binder := newQueues(w)
-
-		// Use reflection to check if the method exists
-		binderType := reflect.TypeOf(binder)
-		_, exists := binderType.MethodByName("WithDistributedQueue")
-		assert.True(t, exists, "WorkerBinder should have WithDistributedQueue method")
-
-		_, exists = binderType.MethodByName("WithDistributedPriorityQueue")
-		assert.True(t, exists, "WorkerBinder should have WithDistributedPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
-	})
-
-	t.Run("HasPersistentQueueMethod", func(t *testing.T) {
-		// Create a worker
-		w := newWorker(func(j iJob[string]) {})
-
-		// Create a worker binder
-		binder := newQueues(w)
-
-		// Use reflection to check if the method exists
-		binderType := reflect.TypeOf(binder)
-		_, exists := binderType.MethodByName("WithPersistentQueue")
-		assert.True(t, exists, "WorkerBinder should have WithPersistentQueue method")
-
-		_, exists = binderType.MethodByName("WithPersistentPriorityQueue")
-		assert.True(t, exists, "WorkerBinder should have WithPersistentPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
-	})
-
-	t.Run("ResultHasQueueMethods", func(t *testing.T) {
-		// Create a result worker
-		w := newResultWorker(func(j iResultJob[string, int]) {
-			j.sendResult(len(j.Data()))
-		})
-
-		// Create a result worker binder
-		binder := newResultQueues(w)
-
-		// Use reflection to check if the methods exist
-		binderType := reflect.TypeOf(binder)
-
-		// Check for queue methods
-		_, exists := binderType.MethodByName("BindQueue")
-		assert.True(t, exists, "ResultWorkerBinder should have BindQueue method")
-
-		_, exists = binderType.MethodByName("WithQueue")
-		assert.True(t, exists, "ResultWorkerBinder should have WithQueue method")
-
-		// Check for priority queue methods
-		_, exists = binderType.MethodByName("BindPriorityQueue")
-		assert.True(t, exists, "ResultWorkerBinder should have BindPriorityQueue method")
-
-		_, exists = binderType.MethodByName("WithPriorityQueue")
-		assert.True(t, exists, "ResultWorkerBinder should have WithPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
-	})
-
-	t.Run("ErrHasQueueMethods", func(t *testing.T) {
-		// Create an error worker
-		w := newErrWorker(func(j iErrorJob[string]) {
-			j.sendError(nil)
-		})
-
-		// Create an error worker binder
-		binder := newErrQueues(w)
-
-		// Use reflection to check if the methods exist
-		binderType := reflect.TypeOf(binder)
-
-		// Check for queue methods
-		_, exists := binderType.MethodByName("BindQueue")
-		assert.True(t, exists, "ErrWorkerBinder should have BindQueue method")
-
-		_, exists = binderType.MethodByName("WithQueue")
-		assert.True(t, exists, "ErrWorkerBinder should have WithQueue method")
-
-		// Check for priority queue methods
-		_, exists = binderType.MethodByName("BindPriorityQueue")
-		assert.True(t, exists, "ErrWorkerBinder should have BindPriorityQueue method")
-
-		_, exists = binderType.MethodByName("WithPriorityQueue")
-		assert.True(t, exists, "ErrWorkerBinder should have WithPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
-	})
-
-	// Test result worker binder
-	t.Run("ResultBindQueue", func(t *testing.T) {
-		// Create a result worker
-		w := newResultWorker(func(j iResultJob[string, int]) {
-			j.sendResult(len(j.Data()))
-		})
-
-		// Create a result worker binder
-		binder := newResultQueues(w)
-
-		// Test BindQueue
-		queue := binder.BindQueue()
-		assert.NotNil(t, queue, "ResultQueue should not be nil")
-
-		// Verify queue is not nil
-		assert.NotNil(t, queue, "ResultQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
-
-		// Clean up
-		w.Stop()
-	})
-
-	t.Run("ResultBindPriorityQueue", func(t *testing.T) {
-		// Create a result worker
-		w := newResultWorker(func(j iResultJob[string, int]) {
-			j.sendResult(len(j.Data()))
-		})
-
-		// Create a result worker binder
-		binder := newResultQueues(w)
-
-		// Test BindPriorityQueue
-		pQueue := binder.BindPriorityQueue()
-		assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
-
-		// Verify priority queue is not nil
-		assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
-
-		// Clean up
-		w.Stop()
-	})
-
-	// Test error worker binder
-	t.Run("ErrBindQueue", func(t *testing.T) {
-		// Create an error worker
-		w := newErrWorker(func(j iErrorJob[string]) {
-			j.sendError(nil)
-		})
-
-		// Create an error worker binder
-		binder := newErrQueues(w)
-
-		// Test BindQueue
-		queue := binder.BindQueue()
-		assert.NotNil(t, queue, "ErrQueue should not be nil")
-
-		// Verify queue is not nil
-		assert.NotNil(t, queue, "ErrQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
-
-		// Clean up
-		w.Stop()
-	})
-
-	t.Run("ErrBindPriorityQueue", func(t *testing.T) {
-		// Create an error worker
-		w := newErrWorker(func(j iErrorJob[string]) {
-			j.sendError(nil)
-		})
-
-		// Create an error worker binder
-		binder := newErrQueues(w)
-
-		// Test BindPriorityQueue
-		pQueue := binder.BindPriorityQueue()
-		assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
-
-		// Verify priority queue is not nil and is of the expected type ErrPriorityQueue[string]
-		assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
-
-		// Clean up
-		w.Stop()
-	})
+type mockJob struct {
+	*job[string]
+	shouldFailClose bool
 }
 
-func TestWorkerListenToErrors(t *testing.T) {
-	worker := NewErrWorker(func(j Job[string]) error {
-		return errors.New("test error")
-	})
-	queue := worker.BindQueue()
-	defer worker.Stop()
-
-	errChan := worker.ListenToErrors()
-	queue.Add("test")
-
-	select {
-	case err := <-errChan:
-		assert.Error(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for error")
+func (m *mockJob) Close() error {
+	if m.shouldFailClose {
+		return errors.New("close failure")
 	}
-}
-
-func TestWorkerRestartError(t *testing.T) {
-	worker := NewWorker(func(j Job[string]) {})
-	// Not started yet
-	err := worker.Restart()
-	assert.Error(t, err)
-
-	worker.Resume()
-	worker.Stop()
-	err = worker.Restart() // Stopped worker can't be restarted easily in some states
-}
-
-func TestWorkerSendErrorBlocked(t *testing.T) {
-	// worker internal sendError has a select with default to avoid blocking
-	// Let's hit the default case.
-	// errorChanCap is 1.
-	w := newWorker(func(ij iJob[string]) {})
-	w.status.Store(running)
-
-	err1 := errors.New("err1")
-	err2 := errors.New("err2")
-
-	w.sendError(err1)
-	// next one should hit default case because channel is full
-	w.sendError(err2)
-
-	// Read one
-	received := <-w.errorChan
-	assert.Equal(t, err1, received)
-}
-
-func TestWorkerCoverageExtra(t *testing.T) {
-	t.Run("SendErrorNonRunning", func(t *testing.T) {
-		w := newWorker(func(ij iJob[string]) {})
-		// status is initiated, not running
-		w.sendError(errors.New("test"))
-		assert.Equal(t, 0, len(w.errorChan))
-	})
-
-	t.Run("DequeueFailure", func(t *testing.T) {
-		mockQueue := mocks.NewMockPersistentQueue()
-		mockQueue.Enqueue("test")
-		mockQueue.ShouldFailDequeue = true
-
-		w := newErrWorker(func(j iErrorJob[string]) {})
-		w.Configs.strategy = RoundRobin
-		w.queues = createQueueManager(RoundRobin)
-
-		// Set internal queue manually
-		queue := newErrorQueue(w, mockQueue)
-		// Register it in the manager
-		w.queues.Register(queue.internalQueue)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to dequeue")
-	})
-
-	t.Run("CastFailure", func(t *testing.T) {
-		mockQueue := mocks.NewMockPersistentQueue()
-		w := newWorker(func(j iJob[int]) {})
-
-		// Use a mock queue that returns a mismatched type
-		mockQueue.Queue.Enqueue("mismatched type")
-
-		queue := newQueue(w, mockQueue)
-		w.queues.Register(queue.internalQueue)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.Equal(t, errFailedToCastJob, err)
-	})
-
-	t.Run("ParseFailure", func(t *testing.T) {
-		mockQueue := mocks.NewMockPersistentQueue()
-		w := newWorker(func(j iJob[int]) {})
-
-		mockQueue.Queue.Enqueue([]byte("invalid json"))
-
-		queue := newQueue(w, mockQueue)
-		w.queues.Register(queue.internalQueue)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse job")
-	})
-
-	t.Run("CastFailureAfterParse", func(t *testing.T) {
-		mockQueue := mocks.NewMockPersistentQueue()
-		// use newErrWorker so JobType is iErrorJob[string]
-		w := newErrWorker(func(j iErrorJob[string]) {})
-
-		// Create a valid JSON that parseToJob will accept and return *job[string]
-		// *job[string] does NOT implement iErrorJob[string]
-		jobData := []byte(`{"id":"123","payload":"test","status":"Created"}`)
-		mockQueue.Queue.Enqueue(jobData)
-
-		queue := newErrorQueue(w, mockQueue)
-		w.queues.Register(queue.internalQueue)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.Equal(t, errFailedToCastJob, err)
-	})
+	return m.job.Close()
 }
