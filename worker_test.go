@@ -684,7 +684,7 @@ func TestWorkers(t *testing.T) {
 					assert.Error(t, err)
 					assert.Equal(t, "close failure", err.Error())
 				case <-time.After(500 * time.Millisecond):
-					// Success if error received
+					t.Fatal("timed out waiting for close error")
 				}
 			})
 		})
@@ -995,6 +995,21 @@ func TestWorkers(t *testing.T) {
 
 				err = w.Resume()
 				assert.ErrorIs(t, err, errRunningWorker, "Resume should return error when already running")
+			})
+
+			t.Run("Resume stopped worker", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(5 * time.Millisecond)
+				})
+
+				err := w.start()
+				assert.NoError(t, err, "Worker should start without error")
+
+				err = w.Stop()
+				assert.NoError(t, err, "Worker should stop without error")
+
+				err = w.Resume()
+				assert.ErrorIs(t, err, errNotRunningWorker, "Resume should return error when worker is stopped")
 			})
 
 			t.Run("PauseAndWait with error", func(t *testing.T) {

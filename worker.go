@@ -619,6 +619,10 @@ func (w *worker[T, JobType]) NumProcessing() int {
 }
 
 func (w *worker[T, JobType]) Resume() error {
+	if w.IsStopped() {
+		return errNotRunningWorker
+	}
+
 	if w.status.Load() == initiated {
 		return w.start()
 	}
