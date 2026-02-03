@@ -227,8 +227,8 @@ func (w *worker[T, JobType]) ListenToErrors() <-chan error {
 // startEventLoop starts the event loop that processes pending jobs when workers become available
 // It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
 // When all conditions are met, it processes the next job in the queue
-func (w *worker[T, JobType]) startEventLoop() {
-	for range w.eventLoopSignal {
+func (w *worker[T, JobType]) startEventLoop(signal <-chan struct{}) {
+	for range signal {
 		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 			if err := w.processNextJob(); err != nil {
 				w.sendError(err)
@@ -388,7 +388,9 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 	}
 
 	ticker := time.NewTicker(interval)
+	w.mx.Lock()
 	w.tickers = append(w.tickers, ticker)
+	w.mx.Unlock()
 
 	go func() {
 		for range ticker.C {
@@ -415,11 +417,28 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 }
 
 func (w *worker[T, JobType]) stopTickers() {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+
 	for _, ticker := range w.tickers {
 		ticker.Stop()
 	}
 
 	w.tickers = make([]*time.Ticker, 0)
+}
+
+func (w *worker[T, JobType]) closeChannels() {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+
+	if w.eventLoopSignal != nil {
+		close(w.eventLoopSignal)
+		w.eventLoopSignal = nil
+	}
+	if w.errorChan != nil {
+		close(w.errorChan)
+		w.errorChan = nil
+	}
 }
 
 func (w *worker[T, JobType]) start() error {
@@ -430,7 +449,7 @@ func (w *worker[T, JobType]) start() error {
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
-	go w.startEventLoop()
+	go w.startEventLoop(w.eventLoopSignal)
 
 	w.goRemoveIdleWorkers()
 
@@ -493,29 +512,34 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 }
 
 func (w *worker[T, JobType]) Pause() error {
-	if !w.IsRunning() {
+	switch s := w.status.Load(); s {
+	case running:
+		w.status.Store(paused)
+	case paused, stopped:
+		return nil
+	default:
 		return errNotRunningWorker
 	}
 
-	w.status.Store(paused)
 	return nil
 }
 
 func (w *worker[T, JobType]) Stop() error {
-	if !w.IsRunning() {
+	switch s := w.status.Load(); s {
+	case stopped:
+		return nil
+	case running:
+		w.PauseAndWait()
+	case paused:
+		w.WaitUntilFinished()
+	default:
 		return errNotRunningWorker
 	}
 
 	defer w.status.Store(stopped)
 
-	// wait until all ongoing processes are done to gracefully close the pool nodes
-	w.PauseAndWait()
 	w.stopTickers()
-
-	w.mx.Lock()
-	close(w.eventLoopSignal)
-	close(w.errorChan)
-	w.mx.Unlock()
+	w.closeChannels()
 
 	// remove all nodes from the list and close the pool nodes
 	for _, node := range w.pool.NodeSlice() {
@@ -532,16 +556,29 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) Restart() error {
-	// first pause the queue to avoid routine leaks or deadlocks
-	// wait until all ongoing processes are done to gracefully close the pool nodes if any.
-	if err := w.PauseAndWait(); err != nil {
-		return err
+	// If worker is running, pause and wait for ongoing processes
+	switch w.status.Load() {
+	case running:
+		if err := w.PauseAndWait(); err != nil {
+			return err
+		}
+	case paused:
+		w.WaitUntilFinished()
+	case stopped, initiated:
+		// proceed to restart
+	default:
+		return errNotRunningWorker
 	}
+
+	w.closeChannels()
 
 	w.mx.Lock()
 	w.eventLoopSignal = make(chan struct{}, eventLoopSignalCap)
 	w.errorChan = make(chan error, errorChanCap)
 	w.mx.Unlock()
+
+	// Reset status to initiated to allow start() to proceed
+	w.status.Store(initiated)
 
 	if err := w.start(); err != nil {
 		return err
@@ -582,6 +619,10 @@ func (w *worker[T, JobType]) NumProcessing() int {
 }
 
 func (w *worker[T, JobType]) Resume() error {
+	if w.IsStopped() {
+		return errNotRunningWorker
+	}
+
 	if w.status.Load() == initiated {
 		return w.start()
 	}

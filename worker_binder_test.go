@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -287,5 +288,227 @@ func TestWorkerBinderEdgeCases(t *testing.T) {
 
 		// Clean up
 		worker.Stop()
+	})
+}
+
+// TestWorkerBinders tests the worker binder implementations
+func TestWorkerBinders(t *testing.T) {
+	// Test standard worker binder
+	t.Run("BindQueue", func(t *testing.T) {
+		// Create a worker
+		w := newWorker(func(j iJob[string]) {})
+
+		// Create a worker binder
+		binder := newQueues(w)
+
+		// Test BindQueue
+		queue := binder.BindQueue()
+		assert.NotNil(t, queue, "Queue should not be nil")
+
+		// Verify queue is not nil
+		assert.NotNil(t, queue, "Queue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+
+		// Clean up
+		w.Stop()
+	})
+
+	t.Run("BindPriorityQueue", func(t *testing.T) {
+		// Create a worker
+		w := newWorker(func(j iJob[string]) {})
+
+		// Create a worker binder
+		binder := newQueues(w)
+
+		// Test BindPriorityQueue
+		pQueue := binder.BindPriorityQueue()
+		assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
+
+		// Verify priority queue is not nil
+		assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+
+		// Clean up
+		w.Stop()
+	})
+
+	t.Run("HasDistributedQueueMethod", func(t *testing.T) {
+		// Create a worker
+		w := newWorker(func(j iJob[string]) {})
+
+		// Create a worker binder
+		binder := newQueues(w)
+
+		// Use reflection to check if the method exists
+		binderType := reflect.TypeOf(binder)
+		_, exists := binderType.MethodByName("WithDistributedQueue")
+		assert.True(t, exists, "WorkerBinder should have WithDistributedQueue method")
+
+		_, exists = binderType.MethodByName("WithDistributedPriorityQueue")
+		assert.True(t, exists, "WorkerBinder should have WithDistributedPriorityQueue method")
+
+		// No need to clean up as worker wasn't started
+	})
+
+	t.Run("HasPersistentQueueMethod", func(t *testing.T) {
+		// Create a worker
+		w := newWorker(func(j iJob[string]) {})
+
+		// Create a worker binder
+		binder := newQueues(w)
+
+		// Use reflection to check if the method exists
+		binderType := reflect.TypeOf(binder)
+		_, exists := binderType.MethodByName("WithPersistentQueue")
+		assert.True(t, exists, "WorkerBinder should have WithPersistentQueue method")
+
+		_, exists = binderType.MethodByName("WithPersistentPriorityQueue")
+		assert.True(t, exists, "WorkerBinder should have WithPersistentPriorityQueue method")
+
+		// No need to clean up as worker wasn't started
+	})
+
+	t.Run("ResultHasQueueMethods", func(t *testing.T) {
+		// Create a result worker
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
+		})
+
+		// Create a result worker binder
+		binder := newResultQueues(w)
+
+		// Use reflection to check if the methods exist
+		binderType := reflect.TypeOf(binder)
+
+		// Check for queue methods
+		_, exists := binderType.MethodByName("BindQueue")
+		assert.True(t, exists, "ResultWorkerBinder should have BindQueue method")
+
+		_, exists = binderType.MethodByName("WithQueue")
+		assert.True(t, exists, "ResultWorkerBinder should have WithQueue method")
+
+		// Check for priority queue methods
+		_, exists = binderType.MethodByName("BindPriorityQueue")
+		assert.True(t, exists, "ResultWorkerBinder should have BindPriorityQueue method")
+
+		_, exists = binderType.MethodByName("WithPriorityQueue")
+		assert.True(t, exists, "ResultWorkerBinder should have WithPriorityQueue method")
+
+		// No need to clean up as worker wasn't started
+	})
+
+	t.Run("ErrHasQueueMethods", func(t *testing.T) {
+		// Create an error worker
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
+		})
+
+		// Create an error worker binder
+		binder := newErrQueues(w)
+
+		// Use reflection to check if the methods exist
+		binderType := reflect.TypeOf(binder)
+
+		// Check for queue methods
+		_, exists := binderType.MethodByName("BindQueue")
+		assert.True(t, exists, "ErrWorkerBinder should have BindQueue method")
+
+		_, exists = binderType.MethodByName("WithQueue")
+		assert.True(t, exists, "ErrWorkerBinder should have WithQueue method")
+
+		// Check for priority queue methods
+		_, exists = binderType.MethodByName("BindPriorityQueue")
+		assert.True(t, exists, "ErrWorkerBinder should have BindPriorityQueue method")
+
+		_, exists = binderType.MethodByName("WithPriorityQueue")
+		assert.True(t, exists, "ErrWorkerBinder should have WithPriorityQueue method")
+
+		// No need to clean up as worker wasn't started
+	})
+
+	// Test result worker binder
+	t.Run("ResultBindQueue", func(t *testing.T) {
+		// Create a result worker
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
+		})
+
+		// Create a result worker binder
+		binder := newResultQueues(w)
+
+		// Test BindQueue
+		queue := binder.BindQueue()
+		assert.NotNil(t, queue, "ResultQueue should not be nil")
+
+		// Verify queue is not nil
+		assert.NotNil(t, queue, "ResultQueue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+
+		// Clean up
+		w.Stop()
+	})
+
+	t.Run("ResultBindPriorityQueue", func(t *testing.T) {
+		// Create a result worker
+		w := newResultWorker(func(j iResultJob[string, int]) {
+			j.sendResult(len(j.Data()))
+		})
+
+		// Create a result worker binder
+		binder := newResultQueues(w)
+
+		// Test BindPriorityQueue
+		pQueue := binder.BindPriorityQueue()
+		assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
+
+		// Verify priority queue is not nil
+		assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+
+		// Clean up
+		w.Stop()
+	})
+
+	// Test error worker binder
+	t.Run("ErrBindQueue", func(t *testing.T) {
+		// Create an error worker
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
+		})
+
+		// Create an error worker binder
+		binder := newErrQueues(w)
+
+		// Test BindQueue
+		queue := binder.BindQueue()
+		assert.NotNil(t, queue, "ErrQueue should not be nil")
+
+		// Verify queue is not nil
+		assert.NotNil(t, queue, "ErrQueue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+
+		// Clean up
+		w.Stop()
+	})
+
+	t.Run("ErrBindPriorityQueue", func(t *testing.T) {
+		// Create an error worker
+		w := newErrWorker(func(j iErrorJob[string]) {
+			j.sendError(nil)
+		})
+
+		// Create an error worker binder
+		binder := newErrQueues(w)
+
+		// Test BindPriorityQueue
+		pQueue := binder.BindPriorityQueue()
+		assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
+
+		// Verify priority queue is not nil and is of the expected type ErrPriorityQueue[string]
+		assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
+		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+
+		// Clean up
+		w.Stop()
 	})
 }
