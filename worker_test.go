@@ -935,6 +935,79 @@ func TestWorkers(t *testing.T) {
 				// Should have cleaned up some workers
 				assert.LessOrEqual(t, w.pool.Len(), w.numMinIdleWorkers()+1, "Pool should be cleaned up")
 			})
+
+			t.Run("CoverageGaps", func(t *testing.T) {
+				t.Run("EventLoopProcessNextJobError", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					errChan := w.ListenToErrors()
+
+					// Register a mock queue that fails dequeue
+					mockQueue := mocks.NewMockPersistentQueue()
+					mockQueue.ShouldFailDequeue = true
+					// Need to put something in it to trigger the loop
+					mockQueue.Queue.Enqueue("trigger")
+
+					w.queues.Register(newQueue(w, mockQueue).internalQueue)
+
+					w.start()
+					defer w.Stop()
+
+					select {
+					case err := <-errChan:
+						assert.Error(t, err)
+						assert.Contains(t, err.Error(), "failed to dequeue")
+					case <-time.After(time.Second):
+						t.Fatal("timed out waiting for error from event loop")
+					}
+				})
+
+				t.Run("RedundantStateTransitions", func(t *testing.T) {
+					w := newWorker(func(j iJob[string]) {})
+					// initiated to paused: error
+					assert.ErrorIs(t, w.Pause(), errNotRunningWorker)
+
+					w.start()
+					w.Pause()
+					assert.True(t, w.IsPaused())
+					// paused to paused: nil
+					assert.NoError(t, w.Pause())
+
+					w.Stop()
+					assert.True(t, w.IsStopped())
+					// stopped to paused: nil
+					assert.NoError(t, w.Pause())
+					// stopped to stopped: nil
+					assert.NoError(t, w.Stop())
+				})
+
+				t.Run("RestartStates", func(t *testing.T) {
+					t.Run("RestartRunning", func(t *testing.T) {
+						w := newWorker(func(j iJob[string]) {
+							time.Sleep(10 * time.Millisecond)
+						})
+						w.start()
+						assert.NoError(t, w.Restart())
+						assert.True(t, w.IsRunning())
+						w.Stop()
+					})
+
+					t.Run("RestartPaused", func(t *testing.T) {
+						w := newWorker(func(j iJob[string]) {})
+						w.start()
+						w.Pause()
+						assert.NoError(t, w.Restart())
+						assert.True(t, w.IsRunning())
+						w.Stop()
+					})
+
+					t.Run("RestartDefaultCase", func(t *testing.T) {
+						w := newWorker(func(j iJob[string]) {})
+						// Manually set an invalid status to hit default case in switch
+						w.status.Store(99)
+						assert.ErrorIs(t, w.Restart(), errNotRunningWorker)
+					})
+				})
+			})
 		})
 	})
 
