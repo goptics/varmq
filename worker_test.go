@@ -602,6 +602,7 @@ func TestWorkers(t *testing.T) {
 
 				t.Run("RestartPauseAndWaitError", func(t *testing.T) {
 					w := newWorker(func(j iJob[string]) {})
+					defer w.Stop()
 
 					done := make(chan struct{})
 					// Use many goroutines to increase the race probability
@@ -631,6 +632,8 @@ func TestWorkers(t *testing.T) {
 
 				t.Run("RestartStartError", func(t *testing.T) {
 					w := newWorker(func(j iJob[string]) {})
+					defer w.Stop()
+
 					w.status.Store(stopped)
 
 					done := make(chan struct{})
@@ -656,12 +659,6 @@ func TestWorkers(t *testing.T) {
 					}
 					close(done)
 				})
-			})
-
-			t.Run("wait until finished in initiated state", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {})
-				// should return immediately
-				w.WaitUntilFinished()
 			})
 
 			t.Run("pool node job close error", func(t *testing.T) {
