@@ -25,9 +25,8 @@ const (
 )
 
 var (
-	errJobNotAcknowledgeable = errors.New("job is not acknowledgeable")
-	errJobProcessing         = errors.New("job is processing, you can't close processing job")
-	errJobAlreadyClosed      = errors.New("job is already closed")
+	errJobProcessing    = errors.New("job is processing, you can't close processing job")
+	errJobAlreadyClosed = errors.New("job is already closed")
 )
 
 // Result represents the result of a job, containing the data and any error that occurred.
@@ -237,7 +236,7 @@ func (j *job[T]) Close() error {
 		return err
 	}
 
-	if err := j.ack(); err != errJobNotAcknowledgeable {
+	if err := j.ack(); err != nil {
 		return err
 	}
 
@@ -249,11 +248,11 @@ func (j *job[T]) Close() error {
 
 func (j *job[T]) ack() error {
 	if j.ackId == "" || j.IsClosed() {
-		return errJobNotAcknowledgeable
+		return nil
 	}
 
 	if _, ok := j.queue.(IAcknowledgeable); !ok {
-		return errJobNotAcknowledgeable
+		return nil
 	}
 
 	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
