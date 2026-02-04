@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"runtime"
@@ -1137,6 +1138,78 @@ func TestWorkers(t *testing.T) {
 				err := w.processNextJob()
 				assert.Error(t, err)
 				assert.Equal(t, errFailedToCastJob, err)
+			})
+		})
+
+		// Group 8: Context-related tests
+		t.Run("Context", func(t *testing.T) {
+			t.Run("returns nil when no context configured", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {})
+				assert.Nil(t, w.Context(), "Context should be nil when not configured")
+			})
+
+			t.Run("returns context when configured with WithContext", func(t *testing.T) {
+				ctx := context.Background()
+				w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+				assert.NotNil(t, w.Context(), "Context should not be nil when configured")
+			})
+
+			t.Run("worker stops when context is cancelled", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				w := newWorker(func(j iJob[string]) {
+					time.Sleep(10 * time.Millisecond)
+				}, WithContext(ctx))
+
+				assert := assert.New(t)
+				err := w.start()
+				assert.NoError(err)
+				assert.True(w.IsRunning())
+
+				// Cancel the context
+				cancel()
+
+				// Wait for the worker to stop
+				time.Sleep(50 * time.Millisecond)
+				assert.True(w.IsStopped(), "Worker should be stopped after context cancellation")
+			})
+
+			t.Run("restart recreates context", func(t *testing.T) {
+				ctx := t.Context()
+
+				w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+
+				assert := assert.New(t)
+				err := w.start()
+				assert.NoError(err)
+
+				// Verify context exists
+				assert.NotNil(w.Context())
+
+				// Stop and restart cleanly to avoid race with goListenToContext
+				err = w.Stop()
+				assert.NoError(err)
+
+				err = w.Restart()
+				assert.NoError(err)
+
+				// After restart, context should still exist and be valid
+				newCtx := w.Context()
+				assert.NotNil(newCtx, "Context should exist after restart")
+				assert.NoError(newCtx.Err(), "New context should not be cancelled")
+
+				w.Stop()
+			})
+
+			t.Run("newErrWorker with context", func(t *testing.T) {
+				ctx := context.Background()
+				w := newErrWorker(func(j iErrorJob[string]) {}, WithContext(ctx))
+				assert.NotNil(t, w.Context(), "ErrWorker context should not be nil when configured")
+			})
+
+			t.Run("newResultWorker with context", func(t *testing.T) {
+				ctx := context.Background()
+				w := newResultWorker(func(j iResultJob[string, int]) {}, WithContext(ctx))
+				assert.NotNil(t, w.Context(), "ResultWorker context should not be nil when configured")
 			})
 		})
 	})

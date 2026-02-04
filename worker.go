@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -47,6 +48,8 @@ type worker[T any, JobType iJob[T]] struct {
 	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
+	ctx             context.Context
+	cancel          context.CancelFunc
 	Configs         configs
 }
 
@@ -70,6 +73,8 @@ type Worker interface {
 	NumIdleWorkers() int
 	// ListenToErrors returns a read-only channel that receives all errors from the worker.
 	ListenToErrors() <-chan error
+	// Context returns the context of the worker.
+	Context() context.Context
 	// Metrics returns the metrics for the worker.
 	Metrics() Metrics
 	// TunePool tunes (increase or decrease) the pool size of the worker.
@@ -112,6 +117,10 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 
+	if c.ctx != nil {
+		w.ctx, w.cancel = context.WithCancel(c.ctx)
+	}
+
 	return w
 }
 
@@ -133,6 +142,10 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 
+	if c.ctx != nil {
+		w.ctx, w.cancel = context.WithCancel(c.ctx)
+	}
+
 	return w
 }
 
@@ -153,6 +166,10 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
+
+	if c.ctx != nil {
+		w.ctx, w.cancel = context.WithCancel(c.ctx)
+	}
 
 	return w
 }
@@ -192,28 +209,19 @@ func (w *worker[T, JobType]) Metrics() Metrics {
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
-	var condition func() bool
-
-	// if worker is running, wait until all jobs are processed
-	if w.IsRunning() {
-		condition = func() bool {
+	condition := func() bool {
+		switch w.status.Load() {
+		case running:
 			return w.queues.Len() > 0 || w.curProcessing.Load() > 0
-		}
-	}
-
-	// if worker is paused or stopped, wait until all ongoing processes are done
-	if w.IsPaused() || w.IsStopped() {
-		condition = func() bool {
+		case paused, stopped:
 			return w.curProcessing.Load() > 0
+		default:
+			return false
 		}
 	}
 
 	w.mx.Lock()
 	defer w.mx.Unlock()
-
-	if condition == nil {
-		return
-	}
 
 	for condition() {
 		w.waiters.Wait()
@@ -224,25 +232,12 @@ func (w *worker[T, JobType]) ListenToErrors() <-chan error {
 	return w.errorChan
 }
 
-// startEventLoop starts the event loop that processes pending jobs when workers become available
-// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
-// When all conditions are met, it processes the next job in the queue
-func (w *worker[T, JobType]) startEventLoop(signal <-chan struct{}) {
-	for range signal {
-		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
-			if err := w.processNextJob(); err != nil {
-				w.sendError(err)
-			}
-		}
-	}
-}
-
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get next queue: %w", err)
 	}
 
 	var (
@@ -416,6 +411,34 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 	}()
 }
 
+func (w *worker[T, JobType]) goListenToContext() {
+	if w.ctx == nil {
+		return
+	}
+
+	// Capture context locally to avoid race with Restart() modifying w.ctx
+	go func(c context.Context) {
+		<-c.Done()
+
+		w.Stop()
+	}(w.ctx)
+}
+
+// starts the event loop that processes pending jobs when workers become available
+// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
+// When all conditions are met, it processes the next job in the queue
+func (w *worker[T, JobType]) goEventLoop() {
+	go func(signal <-chan struct{}) {
+		for range signal {
+			for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
+				if err := w.processNextJob(); err != nil {
+					w.sendError(err)
+				}
+			}
+		}
+	}(w.eventLoopSignal)
+}
+
 func (w *worker[T, JobType]) stopTickers() {
 	w.mx.Lock()
 	defer w.mx.Unlock()
@@ -441,6 +464,15 @@ func (w *worker[T, JobType]) closeChannels() {
 	}
 }
 
+// stopAndRemoveAllWorkers removes all nodes from the list and closes the pool nodes
+func (w *worker[T, JobType]) stopAndRemoveAllWorkers() {
+	for _, node := range w.pool.NodeSlice() {
+		w.pool.Remove(node)
+		node.Value.Stop()
+		w.pool.Cache.Put(node)
+	}
+}
+
 func (w *worker[T, JobType]) start() error {
 	if w.IsRunning() {
 		return errRunningWorker
@@ -449,9 +481,9 @@ func (w *worker[T, JobType]) start() error {
 	defer w.notifyToPullNextJobs()
 	defer w.status.Store(running)
 
-	go w.startEventLoop(w.eventLoopSignal)
-
+	w.goEventLoop()
 	w.goRemoveIdleWorkers()
+	w.goListenToContext()
 
 	// init the first worker by default
 	w.pool.PushNode(w.initPoolNode())
@@ -536,17 +568,15 @@ func (w *worker[T, JobType]) Stop() error {
 		return errNotRunningWorker
 	}
 
+	if w.cancel != nil {
+		defer w.cancel()
+	}
 	defer w.status.Store(stopped)
 
 	w.stopTickers()
 	w.closeChannels()
 
-	// remove all nodes from the list and close the pool nodes
-	for _, node := range w.pool.NodeSlice() {
-		w.pool.Remove(node)
-		node.Value.Stop()
-		w.pool.Cache.Put(node)
-	}
+	w.stopAndRemoveAllWorkers()
 
 	return nil
 }
@@ -562,8 +592,12 @@ func (w *worker[T, JobType]) Restart() error {
 		if err := w.PauseAndWait(); err != nil {
 			return err
 		}
+		// to remove idle workers if any
+		w.stopAndRemoveAllWorkers()
 	case paused:
 		w.WaitUntilFinished()
+		// to remove idle workers if any
+		w.stopAndRemoveAllWorkers()
 	case stopped, initiated:
 		// proceed to restart
 	default:
@@ -575,6 +609,11 @@ func (w *worker[T, JobType]) Restart() error {
 	w.mx.Lock()
 	w.eventLoopSignal = make(chan struct{}, eventLoopSignalCap)
 	w.errorChan = make(chan error, errorChanCap)
+
+	if w.ctx != nil {
+		w.cancel()
+		w.ctx, w.cancel = context.WithCancel(w.Configs.ctx)
+	}
 	w.mx.Unlock()
 
 	// Reset status to initiated to allow start() to proceed
@@ -635,6 +674,10 @@ func (w *worker[T, JobType]) Resume() error {
 	w.notifyToPullNextJobs()
 
 	return nil
+}
+
+func (w *worker[T, JobType]) Context() context.Context {
+	return w.ctx
 }
 
 func (w *worker[T, JobType]) PauseAndWait() error {
