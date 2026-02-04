@@ -232,19 +232,6 @@ func (w *worker[T, JobType]) ListenToErrors() <-chan error {
 	return w.errorChan
 }
 
-// startEventLoop starts the event loop that processes pending jobs when workers become available
-// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
-// When all conditions are met, it processes the next job in the queue
-func (w *worker[T, JobType]) startEventLoop(signal <-chan struct{}) {
-	for range signal {
-		for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
-			if err := w.processNextJob(); err != nil {
-				w.sendError(err)
-			}
-		}
-	}
-}
-
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
@@ -429,15 +416,27 @@ func (w *worker[T, JobType]) goListenToContext() {
 		return
 	}
 
-	go func() {
-		<-w.ctx.Done()
+	// Capture context locally to avoid race with Restart() modifying w.ctx
+	go func(c context.Context) {
+		<-c.Done()
 
 		w.Stop()
-	}()
+	}(w.ctx)
 }
 
+// starts the event loop that processes pending jobs when workers become available
+// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
+// When all conditions are met, it processes the next job in the queue
 func (w *worker[T, JobType]) goEventLoop() {
-	go w.startEventLoop(w.eventLoopSignal)
+	go func(signal <-chan struct{}) {
+		for range signal {
+			for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
+				if err := w.processNextJob(); err != nil {
+					w.sendError(err)
+				}
+			}
+		}
+	}(w.eventLoopSignal)
 }
 
 func (w *worker[T, JobType]) stopTickers() {
