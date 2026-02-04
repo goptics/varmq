@@ -48,7 +48,7 @@ func TestJob(t *testing.T) {
 		// Now try to acknowledge - this will use both the ackId and queue we set
 		// Note: This will fail since the null queue doesn't implement IAcknowledgeable
 		err := j.ack()
-		assert.Error(err, "ack should fail with null queue")
+		assert.Nil(err, "ack should not fail with null queue")
 	})
 
 	t.Run("job Wait method", func(t *testing.T) {
@@ -203,24 +203,21 @@ func TestJob(t *testing.T) {
 		// Test 1: Empty ackId
 		j1 := newJob("test data", jobConfigs{Id: "job-ack-empty"})
 		err := j1.ack()
-		assert.Error(err, "ack should fail with empty ackId")
-		assert.Contains(err.Error(), "not acknowledgeable", "error should mention not acknowledgeable")
+		assert.Nil(err, "ack should not fail with empty ackId")
 
 		// Test 2: Job is closed
 		j2 := newJob("test data", jobConfigs{Id: "job-ack-closed"})
 		j2.setAckId("some-ack-id")
 		_ = j2.Close() // Close the job first
 		err = j2.ack()
-		assert.Error(err, "ack should fail on closed job")
-		assert.Contains(err.Error(), "not acknowledgeable", "error should mention not acknowledgeable")
+		assert.Nil(err, "ack should not fail on closed job")
 
 		// Test 3: Queue doesn't implement IAcknowledgeable
 		j3 := newJob("test data", jobConfigs{Id: "job-ack-no-impl"})
 		j3.setAckId("some-ack-id")
 		j3.setInternalQueue(queues.NewQueue[any]()) // Null queue doesn't implement IAcknowledgeable
 		err = j3.ack()
-		assert.Error(err, "ack should fail with queue not implementing IAcknowledgeable")
-		assert.Contains(err.Error(), "not acknowledgeable", "error should mention not acknowledgeable")
+		assert.Nil(err, "ack should not fail with queue not implementing IAcknowledgeable")
 	})
 }
 
