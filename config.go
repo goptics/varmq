@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"time"
 
 	"github.com/goptics/varmq/utils"
@@ -15,6 +16,7 @@ type configs struct {
 	minIdleWorkerRatio       uint8
 	jobIdGenerator           func() string
 	idleWorkerExpiryDuration time.Duration
+	ctx                      context.Context
 }
 
 func newConfig() configs {
@@ -122,6 +124,22 @@ func WithConcurrency(concurrency int) ConfigFunc {
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		c.jobIdGenerator = fn
+	}
+}
+
+// WithContext configures the context for the worker.
+//
+// Each worker is associated with a context that is used to stop all goroutines when
+// the worker is stopped. You can create a custom context and pass it to the worker
+// to stop all workers when the context is cancelled.
+//
+// Parameters:
+//   - ctx: The context to use
+//
+// Default: If this option is not set, the default is nil context.
+func WithContext(ctx context.Context) ConfigFunc {
+	return func(c *configs) {
+		c.ctx = ctx
 	}
 }
 
