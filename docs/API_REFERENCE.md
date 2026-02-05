@@ -205,6 +205,7 @@ Available `ConfigFunc` options (defined in `config.go`):
 | `WithIdleWorkerExpiryDuration(d time.Duration)` | Duration after which excess idle workers (beyond min ratio) are removed.                                                               | `0` (no expiry, keeps 1 idle)                                                                       |
 | `WithMinIdleWorkerRatio(p uint8)`               | Minimum percentage (1-100) of idle workers to maintain relative to max concurrency. Clamped to 1-100.                                  | `1` (effectively keeps 1 idle worker by default, or more if `IdleWorkerExpiryDuration` is also set) |
 | `WithStrategy(s Strategy)`                      | Sets the queue-selection strategy when a worker is bound to multiple queues. Valid values: `RoundRobin` (default), `MaxLen`, `MinLen`. | `RoundRobin`                                                                                        |
+| `WithContext(ctx context.Context)`              | Sets the context for the worker. When the context is cancelled, all worker goroutines will be stopped gracefully.                      | `nil` (no context)                                                                                  |
 
 ## The `Worker` Interface
 
@@ -226,8 +227,12 @@ Key methods of the `Worker` interface (defined in `worker.go`):
   - `IsRunning() bool`: Returns `true` if the worker pool is active (not paused or stopped).
   - `Status() string`: Returns the current status (e.g., "Initiated", "Running", "Paused", "Stopped").
   - `NumProcessing() int`: Number of jobs currently being processed.
+  - `NumPending() int`: Number of jobs waiting in the queue to be processed.
   - `NumConcurrency() int`: Current maximum concurrency (pool size).
   - `NumIdleWorkers() int`: Number of idle workers in the pool.
+  - `Errs() <-chan error`: Returns a read-only channel that receives all errors from the worker during job processing.
+  - `Context() context.Context`: Returns the context associated with the worker (if configured via `WithContext`).
+  - `Metrics() Metrics`: Returns the metrics for the worker, including completed and submitted job counts.
 
 - **Control Methods:**
   - `TunePool(concurrency int) error`: Dynamically adjusts the worker pool size. Returns error if not running or if concurrency is the same.

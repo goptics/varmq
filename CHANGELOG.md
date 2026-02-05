@@ -1,5 +1,71 @@
 # Changelog
 
+## [v1.4.0] (2026-02-05)
+
+### ✨ New Features
+
+- **Public Sentinel Errors** (#61):
+
+  - Exported all internal errors for better error handling by end users
+  - Users can now use `errors.Is()` to detect specific error types
+
+  **Worker Errors:**
+  - `ErrRunningWorker` - returned when attempting to start an already running worker
+  - `ErrNotRunningWorker` - returned when attempting operations on a non-running worker
+  - `ErrSameConcurrency` - returned when tuning pool to the same concurrency value
+  - `ErrFailedToDequeue` - returned when dequeue operation fails
+  - `ErrFailedToCastJob` - returned when job type casting fails
+  - `ErrGetNextQueue` - returned when getting next queue fails (wraps underlying error)
+  - `ErrParseJob` - returned when job parsing fails (wraps underlying error)
+
+  **Job Errors:**
+  - `ErrJobProcessing` - returned when attempting to close a processing job
+  - `ErrJobAlreadyClosed` - returned when attempting to close an already closed job
+  - `ErrAcknowledgeJob` - returned when queue acknowledgement fails (wraps context)
+
+  **Example Usage:**
+  ```go
+  err := worker.TunePool(5)
+  if errors.Is(err, varmq.ErrNotRunningWorker) {
+      // Handle worker not running
+  }
+  ```
+
+- **Worker Context Configuration** (#60):
+
+  - Added `WithContext(ctx context.Context)` configuration option for workers
+  - Workers can now be stopped gracefully when the parent context is cancelled
+  - Enables integration with application lifecycle management and graceful shutdown patterns
+
+- **Worker Error Listener** (#58):
+
+  - Added `Errs() <-chan error` method to the `Worker` interface
+  - Provides a read-only channel to listen to all internal errors during job processing
+  - Initialized static errors at compile time to reduce over allocations
+
+- **Worker Metrics** (#57):
+
+  - Added `Metrics() Metrics` method to track worker statistics
+  - Includes `Completed()` and `Submitted()` counters for job tracking
+  - Added new `NumPending() int` method to provide the number of pending tasks
+  - Added Prometheus example to demonstrate how to integrate VarMQ with monitoring systems
+
+### 🐛 Bug Fixes
+
+- **Worker Lifecycle Management** (#59):
+
+  - Resolved worker restart issue and related methods
+  - Refined `Stop()`, `Pause()`, and `Restart()` behavior for better reliability
+  - Improved overall test coverage for lifecycle methods
+
+- **Metrics & Acknowledgment Fixes**:
+  - Fixed submitted metrics increment for distributed queues
+  - Consider job acknowledgment error as nil to prevent false error propagation
+
+- **Memory Optimization** (#54):
+  - Removed extra 1-byte memory padding from configs struct
+
+
 ## [v1.3.1] (2025-06-30)
 
 ### 🔧 Refactoring and Code Quality
