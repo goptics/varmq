@@ -243,12 +243,12 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 918.6        | 128           | 3                       |
-|                  | Priority       | 952.7        | 144           | 4                       |
-| **ErrWorker**    | ErrQueue       | 1017         | 305           | 6                       |
-|                  | ErrPriority    | 1006         | 320           | 7                       |
-| **ResultWorker** | ResultQueue    | 1026         | 353           | 6                       |
-|                  | ResultPriority | 1039         | 368           | 7                       |
+| **Worker**       | Queue          | 889.6        | 112           | 2                       |
+|                  | Priority       | 965.7        | 128           | 3                       |
+| **ErrWorker**    | ErrQueue       | 977.8        | 288           | 5                       |
+|                  | ErrPriority    | 1063         | 304           | 6                       |
+| **ResultWorker** | ResultQueue    | 977.3        | 337           | 5                       |
+|                  | ResultPriority | 1061         | 352           | 6                       |
 
 ### `AddAll` Operation
 
@@ -256,79 +256,22 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 635,186      | 146,841       | 4,002                   |
-|                  | Priority       | 755,276      | 162,144       | 5,002                   |
-| **ErrWorker**    | ErrQueue       | 673,912      | 171,090       | 4,505                   |
-|                  | ErrPriority    | 766,043      | 186,663       | 5,505                   |
-| **ResultWorker** | ResultQueue    | 675,420      | 187,897       | 4,005                   |
-|                  | ResultPriority | 777,680      | 203,263       | 5,005                   |
+| **Worker**       | Queue          | 580,399      | 130,760       | 3,002                   |
+|                  | Priority       | 716,784      | 146,136       | 4,002                   |
+| **ErrWorker**    | ErrQueue       | 617,236      | 155,276       | 3,505                   |
+|                  | ErrPriority    | 753,532      | 170,657       | 4,505                   |
+| **ResultWorker** | ResultQueue    | 608,826      | 171,848       | 3,005                   |
+|                  | ResultPriority | 742,789      | 187,258       | 4,005                   |
 
 > [!Note]
 >
 > `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
-> e.g. for default `Queue`, the average time per item is approximately **635ns**.
+> e.g. for default `Queue`, the average time per item is approximately **580ns**.
 
 Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
 
 1. **Batch Processing**: Uses a single group job to process multiple items, reducing per-item overhead
 2. **Shared Resources**: Utilizes a single result channel for all items in the batch
-
-### Charts
-
-<table>
-<tr>
-  <th>Metric</th>
-  <th><code>Add</code> Operation</th>
-  <th><code>AddAll</code> Operation</th>
-</tr>
-<tr>
-  <td><strong>Execution Time</strong></td>
-  <td>
-    <details>
-      <summary><strong>Time (ns/op)</strong></summary>
-      <img src="assets/bench-charts/add_exe_bench_chart.png" alt="VarMQ Add/Execute Benchmark Chart">
-    </details>
-  </td>
-  <td>
-    <details>
-      <summary><strong>Time (ms/op)</strong></summary>
-      <img src="assets/bench-charts/addall_exe_bench_chart.png" alt="VarMQ AddAll/Execute Benchmark Chart">
-    </details>
-  </td>
-</tr>
-<tr>
-  <td><strong>Memory Usage</strong></td>
-  <td>
-    <details>
-      <summary><strong>Memory (B/op)</strong></summary>
-      <img src="assets/bench-charts/add_mem_bench_chart.png" alt="VarMQ Add/Memory Benchmark Chart">
-    </details>
-  </td>
-  <td>
-    <details>
-      <summary><strong>Memory (KB/op)</strong></summary>
-      <img src="assets/bench-charts/addall_mem_bench_chart.png" alt="VarMQ AddAll/Memory Benchmark Chart">
-    </details>
-  </td>
-</tr>
-<tr>
-  <td><strong>Allocations</strong></td>
-  <td>
-    <details>
-      <summary><strong>Allocations (allocs/op)</strong></summary>
-      <img src="assets/bench-charts/add_alloc_bench_chart.png" alt="VarMQ Add/Allocations Benchmark Chart">
-    </details>
-  </td>
-  <td>
-    <details>
-      <summary><strong>Allocations (allocs/op)</strong></summary>
-      <img src="assets/bench-charts/addall_alloc_bench_chart.png" alt="VarMQ AddAll/Allocations Benchmark Chart">
-    </details>
-  </td>
-</tr>
-</table>
-
-Chart images is been generated using **[Vizb](https://github.com/goptics/vizb)**
 
 ### Comparison with Other Packages
 
