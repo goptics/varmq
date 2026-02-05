@@ -28,11 +28,13 @@ const (
 )
 
 var (
-	errRunningWorker    = errors.New("worker is already running")
-	errNotRunningWorker = errors.New("worker is not running")
-	errSameConcurrency  = errors.New("worker already has the same concurrency")
-	errFailedToDequeue  = errors.New("failed to dequeue job")
-	errFailedToCastJob  = errors.New("failed to cast job")
+	ErrRunningWorker    = errors.New("worker is already running")
+	ErrNotRunningWorker = errors.New("worker is not running")
+	ErrSameConcurrency  = errors.New("worker already has the same concurrency")
+	ErrFailedToDequeue  = errors.New("failed to dequeue job")
+	ErrFailedToCastJob  = errors.New("failed to cast job")
+	ErrGetNextQueue     = errors.New("failed to get next queue")
+	ErrParseJob         = errors.New("failed to parse job")
 )
 
 type worker[T any, JobType iJob[T]] struct {
@@ -71,8 +73,8 @@ type Worker interface {
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle workers in the pool.
 	NumIdleWorkers() int
-	// ListenToErrors returns a read-only channel that receives all errors from the worker.
-	ListenToErrors() <-chan error
+	// Errs returns a read-only channel that receives all errors from the worker.
+	Errs() <-chan error
 	// Context returns the context of the worker.
 	Context() context.Context
 	// Metrics returns the metrics for the worker.
@@ -228,7 +230,7 @@ func (w *worker[T, JobType]) WaitUntilFinished() {
 	}
 }
 
-func (w *worker[T, JobType]) ListenToErrors() <-chan error {
+func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
@@ -237,7 +239,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
 
 	if err != nil {
-		return fmt.Errorf("failed to get next queue: %w", err)
+		return fmt.Errorf("%w: %w", ErrGetNextQueue, err)
 	}
 
 	var (
@@ -254,7 +256,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if !ok {
-		return errFailedToDequeue
+		return ErrFailedToDequeue
 	}
 
 	var j JobType
@@ -267,17 +269,17 @@ func (w *worker[T, JobType]) processNextJob() error {
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
-			return fmt.Errorf("failed to parse job: %w", err)
+			return err
 		}
 
 		if j, ok = v.(JobType); !ok {
 			w.processNextJob()
-			return errFailedToCastJob
+			return ErrFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
-		return errFailedToCastJob
+		return ErrFailedToCastJob
 	}
 
 	if j.IsClosed() {
@@ -475,7 +477,7 @@ func (w *worker[T, JobType]) stopAndRemoveAllWorkers() {
 
 func (w *worker[T, JobType]) start() error {
 	if w.IsRunning() {
-		return errRunningWorker
+		return ErrRunningWorker
 	}
 
 	defer w.notifyToPullNextJobs()
@@ -493,14 +495,14 @@ func (w *worker[T, JobType]) start() error {
 
 func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	if w.status.Load() != running {
-		return errNotRunningWorker
+		return ErrNotRunningWorker
 	}
 
 	oldConcurrency := w.concurrency.Load()
 	safeConcurrency := withSafeConcurrency(concurrency)
 
 	if oldConcurrency == safeConcurrency {
-		return errSameConcurrency
+		return ErrSameConcurrency
 	}
 
 	w.concurrency.Store(safeConcurrency)
@@ -550,7 +552,7 @@ func (w *worker[T, JobType]) Pause() error {
 	case paused, stopped:
 		return nil
 	default:
-		return errNotRunningWorker
+		return ErrNotRunningWorker
 	}
 
 	return nil
@@ -565,7 +567,7 @@ func (w *worker[T, JobType]) Stop() error {
 	case paused:
 		w.WaitUntilFinished()
 	default:
-		return errNotRunningWorker
+		return ErrNotRunningWorker
 	}
 
 	if w.cancel != nil {
@@ -601,7 +603,7 @@ func (w *worker[T, JobType]) Restart() error {
 	case stopped, initiated:
 		// proceed to restart
 	default:
-		return errNotRunningWorker
+		return ErrNotRunningWorker
 	}
 
 	w.closeChannels()
@@ -659,7 +661,7 @@ func (w *worker[T, JobType]) NumProcessing() int {
 
 func (w *worker[T, JobType]) Resume() error {
 	if w.IsStopped() {
-		return errNotRunningWorker
+		return ErrNotRunningWorker
 	}
 
 	if w.status.Load() == initiated {
@@ -667,7 +669,7 @@ func (w *worker[T, JobType]) Resume() error {
 	}
 
 	if w.IsRunning() {
-		return errRunningWorker
+		return ErrRunningWorker
 	}
 
 	w.status.Store(running)

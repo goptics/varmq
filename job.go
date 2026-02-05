@@ -25,8 +25,9 @@ const (
 )
 
 var (
-	errJobProcessing    = errors.New("job is processing, you can't close processing job")
-	errJobAlreadyClosed = errors.New("job is already closed")
+	ErrJobProcessing    = errors.New("job is processing, you can't close processing job")
+	ErrJobAlreadyClosed = errors.New("job is already closed")
+	ErrAcknowledgeJob   = errors.New("queue failed to acknowledge job")
 )
 
 // Result represents the result of a job, containing the data and any error that occurred.
@@ -192,7 +193,7 @@ func (j *job[T]) Json() ([]byte, error) {
 func parseToJob[T any](data []byte) (any, error) {
 	var view jobView[T]
 	if err := json.Unmarshal(data, &view); err != nil {
-		return nil, fmt.Errorf("failed to parse job: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrParseJob, err)
 	}
 
 	j := newJob(view.Payload, jobConfigs{
@@ -221,9 +222,9 @@ func parseToJob[T any](data []byte) (any, error) {
 func (j *job[T]) isCloseable() error {
 	switch j.status.Load() {
 	case processing:
-		return errJobProcessing
+		return ErrJobProcessing
 	case closed:
-		return errJobAlreadyClosed
+		return ErrJobAlreadyClosed
 	}
 
 	return nil
@@ -256,7 +257,7 @@ func (j *job[T]) ack() error {
 	}
 
 	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
-		return fmt.Errorf("queue failed to acknowledge job %s (ackId=%s)", j.id, j.ackId)
+		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, j.ackId)
 	}
 
 	return nil
