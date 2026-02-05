@@ -275,12 +275,12 @@ Why is `AddAll` faster than individual `Add` calls? Here's what makes the differ
 
 ### Comparison with Other Packages
 
-We conducted comprehensive benchmarking between VarMQ and [Pond v2](https://github.com/alitto/pond), as both packages provide similar worker pool functionalities. While VarMQ draws inspiration from some of Pond's design patterns, it offers unique advantages in queue management and persistence capabilities.
+We conducted comprehensive benchmarking between `VarMQ` and [Pond v2](https://github.com/alitto/pond), as both packages provide similar worker pool functionalities. While `VarMQ` draws inspiration from some of Pond's design patterns, `VarMQ` offers unique advantages in queue management and persistence capabilities.
 
 **Key Differences:**
 
-- **Queue Types**: VarMQ provides multiple queue variants (standard, priority, persistent, distributed) vs Pond's single pool type
-- **Multi-Queue Management**: VarMQ supports binding multiple queues to a single worker with configurable strategies (RoundRobin, MaxLen, MinLen)
+- **Queue Types**: `VarMQ` provides multiple queue variants (standard, priority, persistent, distributed) vs Pond's single pool type
+- **Multi-Queue Management**: `VarMQ` supports binding multiple queues to a single worker with configurable strategies (RoundRobin, MaxLen, MinLen)
 
 For detailed performance comparisons and benchmarking results, visit:
 
