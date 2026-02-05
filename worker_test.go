@@ -146,7 +146,7 @@ func TestWorkers(t *testing.T) {
 				}, WithConcurrency(2))
 				err := w.TunePool(4)
 				assert.Error(t, err, "TunePool should return error when worker is not running")
-				assert.Equal(t, errNotRunningWorker, err, "Should return specific 'worker not running' error")
+				assert.Equal(t, ErrNotRunningWorker, err, "Should return specific 'worker not running' error")
 			})
 
 			t.Run("increase concurrency", func(t *testing.T) {
@@ -228,7 +228,7 @@ func TestWorkers(t *testing.T) {
 
 				assert.Equal(t, uint32(initialConcurrency), w.concurrency.Load(), "Initial concurrency should be set correctly")
 				err = w.TunePool(initialConcurrency)
-				assert.ErrorIs(t, err, errSameConcurrency, "TunePool should return error when concurrency is the same")
+				assert.ErrorIs(t, err, ErrSameConcurrency, "TunePool should return error when concurrency is the same")
 				assert.Equal(t, initialConcurrency, w.NumConcurrency(), "Concurrency should remain unchanged when set to same value")
 			})
 
@@ -352,7 +352,7 @@ func TestWorkers(t *testing.T) {
 				assert.True(w.IsRunning(), "Worker should be running after start")
 
 				err = w.start()
-				assert.ErrorIs(err, errRunningWorker, "Starting an already running worker should error")
+				assert.ErrorIs(err, ErrRunningWorker, "Starting an already running worker should error")
 
 				w.Pause()
 				assert.Equal(paused, w.status.Load(), "Status after pause should be 'paused'")
@@ -367,7 +367,7 @@ func TestWorkers(t *testing.T) {
 				assert.True(w.IsRunning(), "Worker should be running after Resume()")
 
 				err = w.Resume()
-				assert.ErrorIs(err, errRunningWorker, "Resuming an already running worker should error")
+				assert.ErrorIs(err, ErrRunningWorker, "Resuming an already running worker should error")
 
 				w.Stop()
 				assert.Equal(stopped, w.status.Load(), "Status after stop should be 'stopped'")
@@ -533,7 +533,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("event loop processing error", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {})
-				errChan := w.ListenToErrors()
+				errChan := w.Errs()
 
 				// Register a mock queue that fails dequeue
 				mockQueue := mocks.NewMockPersistentQueue()
@@ -548,8 +548,7 @@ func TestWorkers(t *testing.T) {
 
 				select {
 				case err := <-errChan:
-					assert.Error(t, err)
-					assert.Contains(t, err.Error(), "failed to dequeue")
+					assert.ErrorIs(t, err, ErrFailedToDequeue)
 				case <-time.After(time.Second):
 					t.Fatal("timed out waiting for error from event loop")
 				}
@@ -558,7 +557,7 @@ func TestWorkers(t *testing.T) {
 			t.Run("redundant state transitions", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {})
 				// initiated to paused: error
-				assert.ErrorIs(t, w.Pause(), errNotRunningWorker)
+				assert.ErrorIs(t, w.Pause(), ErrNotRunningWorker)
 
 				w.start()
 				w.Pause()
@@ -598,7 +597,7 @@ func TestWorkers(t *testing.T) {
 					w := newWorker(func(j iJob[string]) {})
 					// Manually set an invalid status to hit default case in switch
 					w.status.Store(99)
-					assert.ErrorIs(t, w.Restart(), errNotRunningWorker)
+					assert.ErrorIs(t, w.Restart(), ErrNotRunningWorker)
 				})
 
 				t.Run("RestartPauseAndWaitError", func(t *testing.T) {
@@ -678,7 +677,7 @@ func TestWorkers(t *testing.T) {
 
 				// Wait for error
 				select {
-				case err := <-w.ListenToErrors():
+				case err := <-w.Errs():
 					assert.Error(t, err)
 					assert.Equal(t, "close failure", err.Error())
 				case <-time.After(500 * time.Millisecond):
@@ -956,7 +955,7 @@ func TestWorkers(t *testing.T) {
 				})
 
 				err := w.Pause()
-				assert.ErrorIs(t, err, errNotRunningWorker, "Pause should return error when worker not running")
+				assert.ErrorIs(t, err, ErrNotRunningWorker, "Pause should return error when worker not running")
 			})
 
 			t.Run("Stop when not running", func(t *testing.T) {
@@ -965,7 +964,7 @@ func TestWorkers(t *testing.T) {
 				})
 
 				err := w.Stop()
-				assert.ErrorIs(t, err, errNotRunningWorker, "Stop should return error when worker not running")
+				assert.ErrorIs(t, err, ErrNotRunningWorker, "Stop should return error when worker not running")
 			})
 
 			t.Run("Resume from initiated state", func(t *testing.T) {
@@ -992,7 +991,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				err = w.Resume()
-				assert.ErrorIs(t, err, errRunningWorker, "Resume should return error when already running")
+				assert.ErrorIs(t, err, ErrRunningWorker, "Resume should return error when already running")
 			})
 
 			t.Run("Resume stopped worker", func(t *testing.T) {
@@ -1007,7 +1006,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(t, err, "Worker should stop without error")
 
 				err = w.Resume()
-				assert.ErrorIs(t, err, errNotRunningWorker, "Resume should return error when worker is stopped")
+				assert.ErrorIs(t, err, ErrNotRunningWorker, "Resume should return error when worker is stopped")
 			})
 
 			t.Run("PauseAndWait with error", func(t *testing.T) {
@@ -1017,7 +1016,7 @@ func TestWorkers(t *testing.T) {
 
 				// PauseAndWait should return error when worker not running
 				err := w.PauseAndWait()
-				assert.ErrorIs(t, err, errNotRunningWorker, "PauseAndWait should return error when worker not running")
+				assert.ErrorIs(t, err, ErrNotRunningWorker, "PauseAndWait should return error when worker not running")
 			})
 
 			t.Run("processNextJob with empty queue", func(t *testing.T) {
@@ -1119,7 +1118,7 @@ func TestWorkers(t *testing.T) {
 
 				err := w.processNextJob()
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "failed to parse job")
+				assert.ErrorIs(t, err, ErrParseJob, "should return ErrParseJob sentinel")
 			})
 
 			t.Run("processNextJob with cast failure after parse", func(t *testing.T) {
@@ -1137,7 +1136,7 @@ func TestWorkers(t *testing.T) {
 
 				err := w.processNextJob()
 				assert.Error(t, err)
-				assert.Equal(t, errFailedToCastJob, err)
+				assert.Equal(t, ErrFailedToCastJob, err)
 			})
 		})
 
@@ -1280,6 +1279,38 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(expectedMinIdleWorkers, actualMinIdleWorkers, "numMinIdleWorkers should return the expected value")
 			})
 		})
+	})
+}
+
+func TestPublicWorkerErrors(t *testing.T) {
+	t.Run("ErrGetNextQueue can be detected with errors.Is", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		// Set an invalid strategy to trigger the error
+		w.queues.strategy = Strategy(99) // Invalid strategy
+
+		// Register a queue with some data to attempt processing
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.Queue.Enqueue("test")
+		w.queues.Register(mockQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrGetNextQueue, "should return ErrGetNextQueue sentinel")
+	})
+
+	t.Run("ErrParseJob can be detected with errors.Is", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := newWorker(func(j iJob[int]) {})
+
+		mockQueue.Queue.Enqueue([]byte("invalid json"))
+
+		queue := newQueue(w, mockQueue)
+		w.queues.Register(queue.internalQueue)
+
+		err := w.processNextJob()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrParseJob, "should return ErrParseJob sentinel")
 	})
 }
 

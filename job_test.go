@@ -403,6 +403,57 @@ func TestJobAckFailure(t *testing.T) {
 
 		err := job.ack()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to acknowledge")
+		assert.ErrorIs(t, err, ErrAcknowledgeJob, "should return ErrAcknowledgeJob sentinel")
+	})
+}
+
+func TestPublicErrors(t *testing.T) {
+	t.Run("ErrJobProcessing can be detected with errors.Is", func(t *testing.T) {
+		job := newJob("test", jobConfigs{})
+		job.changeStatus(processing)
+
+		err := job.Close()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrJobProcessing, "should return ErrJobProcessing when closing a processing job")
+	})
+
+	t.Run("ErrJobAlreadyClosed can be detected with errors.Is", func(t *testing.T) {
+		job := newJob("test", jobConfigs{})
+		err := job.Close()
+		assert.NoError(t, err)
+
+		err = job.Close()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrJobAlreadyClosed, "should return ErrJobAlreadyClosed when closing an already closed job")
+	})
+
+	t.Run("ErrAcknowledgeJob can be detected with errors.Is", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		job := newJob("test", jobConfigs{Id: "test-job"})
+		job.setInternalQueue(mockQueue)
+		job.setAckId("test-ack-id")
+
+		err := job.ack()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrAcknowledgeJob, "should return ErrAcknowledgeJob when acknowledgement fails")
+		// Also verify the wrapped error contains useful context
+		assert.Contains(t, err.Error(), "test-job", "error should contain job ID")
+		assert.Contains(t, err.Error(), "test-ack-id", "error should contain ack ID")
+	})
+
+	t.Run("Close returns ErrAcknowledgeJob when ack fails", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.ShouldFailAcknowledge = true
+
+		job := newJob("test", jobConfigs{Id: "close-ack-test"})
+		job.setInternalQueue(mockQueue)
+		job.setAckId("test-ack-id")
+
+		// Call Close() which internally calls ack()
+		err := job.Close()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrAcknowledgeJob, "Close should return ErrAcknowledgeJob when ack fails")
 	})
 }
