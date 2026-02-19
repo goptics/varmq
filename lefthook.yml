@@ -1,0 +1,29 @@
+# Lefthook - Git hooks manager
+# https://github.com/evilmartians/lefthook
+# Install: go install github.com/evilmartians/lefthook@latest
+
+pre-commit:
+  commands:
+    check-file-size:
+      glob: "*.{png,jpg,jpeg,gif,svg,mp4,zip,tar,gz,bin,exe,wasm}"
+      run: |
+        max_size=3145728  # 3 MB in bytes
+        failed=0
+        for file in {staged_files}; do
+          size=$(wc -c < "$file" 2>/dev/null || echo 0)
+          if [ "$size" -gt "$max_size" ]; then
+            echo "❌ REJECTED: $file ($(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size} bytes") > 3 MB)"
+            failed=1
+          fi
+        done
+        if [ "$failed" -eq 1 ]; then
+          echo ""
+          echo "💡 Compress images before committing, or use GitHub Releases for large assets."
+          exit 1
+        fi
+        echo "✅ All staged files are within the 3 MB limit."
+
+pre-push:
+  commands:
+    run-tests:
+      run: go test -race -count=1 ./...
