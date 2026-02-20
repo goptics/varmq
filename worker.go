@@ -273,7 +273,6 @@ func (w *worker[T, JobType]) processNextJob() error {
 		}
 
 		if j, ok = v.(JobType); !ok {
-			w.processNextJob()
 			return ErrFailedToCastJob
 		}
 
@@ -283,7 +282,6 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if j.IsClosed() {
-		w.processNextJob()
 		return nil
 	}
 
