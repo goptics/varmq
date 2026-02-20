@@ -76,7 +76,7 @@ func TestPersistentQueue(t *testing.T) {
 		queue, _, mockQueue := setupPersistentQueue()
 
 		// Add multiple jobs
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			ok := queue.Add("test-data-" + string(rune(i)))
 			assert.True(t, ok, "Job %d should be added successfully", i)
 		}

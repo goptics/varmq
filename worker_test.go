@@ -703,7 +703,7 @@ func TestWorkers(t *testing.T) {
 
 				// Add jobs
 				jobCount := 5
-				for i := 0; i < jobCount; i++ {
+				for i := range jobCount {
 					q.Enqueue(newJob("job"+strconv.Itoa(i), loadJobConfigs(w.configs())))
 				}
 

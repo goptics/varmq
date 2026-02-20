@@ -208,7 +208,7 @@ func TestResultGroupJob(t *testing.T) {
 		}
 
 		// Complete all pending jobs
-		for i := 0; i < bufferSize; i++ {
+		for range bufferSize {
 			rgj.wgc.Done()
 		}
 
@@ -365,7 +365,7 @@ func TestErrorGroupJob(t *testing.T) {
 		}
 
 		// Complete all pending jobs
-		for i := 0; i < bufferSize; i++ {
+		for range bufferSize {
 			egj.wgc.Done()
 		}
 
