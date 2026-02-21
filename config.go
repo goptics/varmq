@@ -19,14 +19,40 @@ type configs struct {
 	ctx                      context.Context
 }
 
+var defaultConfig = configs{
+	concurrency: 1,
+	jobIdGenerator: func() string {
+		return ""
+	},
+	strategy: RoundRobin,
+}
+
+func DefaultConcurrency(concurrency int) {
+	defaultConfig.concurrency = withSafeConcurrency(concurrency)
+}
+
+func DefaultStrategy(s Strategy) {
+	defaultConfig.strategy = s
+
+}
+func DefaultMinIdleWorkRatio(percentage uint8) {
+	defaultConfig.minIdleWorkerRatio = clampPercentage(percentage)
+}
+
+func DefaultJobIdGenerator(fn func() string) {
+	defaultConfig.jobIdGenerator = fn
+}
+
+func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
+	defaultConfig.idleWorkerExpiryDuration = duration
+
+}
+func DefaultCtx(ctx context.Context) {
+	defaultConfig.ctx = ctx
+}
+
 func newConfig() configs {
-	return configs{
-		concurrency: 1,
-		jobIdGenerator: func() string {
-			return ""
-		},
-		strategy: RoundRobin,
-	}
+	return defaultConfig
 }
 
 func loadConfigs(config ...any) configs {
