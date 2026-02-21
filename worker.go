@@ -194,10 +194,6 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 }
 
 func (w *worker[T, JobType]) sendError(err error) {
-	if w.status.Load() != running {
-		return
-	}
-
 	w.mx.RLock()
 	select {
 	case w.errorChan <- err:
@@ -349,14 +345,6 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	// If worker is not in a running state (e.g., it's pausing or stopped),
-	// it should not attempt to signal the event loop for new jobs.
-	// This check prevents a panic from sending on a closed eventLoopSignal
-	// during shutdown.
-	if w.status.Load() != running {
-		return
-	}
-
 	w.mx.RLock()
 	select {
 	case w.eventLoopSignal <- struct{}{}:
