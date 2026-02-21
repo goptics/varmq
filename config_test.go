@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -241,4 +242,153 @@ func TestClampPercentage(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+func TestDefaultConfig(t *testing.T) {
+	original := defaultConfig
+	defer func() { defaultConfig = original }()
+
+	t.Run("DefaultConcurrency", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			concurrency int
+			expected    uint32
+		}{
+			{"Positive value sets concurrency", 5, 5},
+			{"Large value sets concurrency", 100, 100},
+			{"One sets concurrency", 1, 1},
+			{"Zero uses CPU count", 0, utils.Cpus()},
+			{"Negative uses CPU count", -1, utils.Cpus()},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				defaultConfig = original
+				DefaultConcurrency(tc.concurrency)
+				assert.Equal(t, tc.expected, defaultConfig.concurrency)
+			})
+		}
+	})
+
+	t.Run("DefaultStrategy", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			strategy Strategy
+		}{
+			{"Sets RoundRobin", RoundRobin},
+			{"Sets MaxLen", MaxLen},
+			{"Sets MinLen", MinLen},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				defaultConfig = original
+				DefaultStrategy(tc.strategy)
+				assert.Equal(t, tc.strategy, defaultConfig.strategy)
+			})
+		}
+	})
+
+	t.Run("DefaultMinIdleWorkRatio", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			percentage uint8
+			expected   uint8
+		}{
+			{"Valid percentage is set", 50, 50},
+			{"Min valid value", 1, 1},
+			{"Max valid value", 100, 100},
+			{"Zero is clamped to 1", 0, 1},
+			{"Over 100 is clamped to 100", 150, 100},
+			{"Max uint8 is clamped to 100", 255, 100},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				defaultConfig = original
+				DefaultMinIdleWorkRatio(tc.percentage)
+				assert.Equal(t, tc.expected, defaultConfig.minIdleWorkerRatio)
+			})
+		}
+	})
+
+	t.Run("DefaultJobIdGenerator", func(t *testing.T) {
+		t.Run("Sets custom generator", func(t *testing.T) {
+			defaultConfig = original
+			generator := func() string { return "custom-id" }
+			DefaultJobIdGenerator(generator)
+			assert.Equal(t, "custom-id", defaultConfig.jobIdGenerator())
+		})
+
+		t.Run("Sets generator returning empty string", func(t *testing.T) {
+			defaultConfig = original
+			generator := func() string { return "" }
+			DefaultJobIdGenerator(generator)
+			assert.Equal(t, "", defaultConfig.jobIdGenerator())
+		})
+
+		t.Run("Sets generator with counter", func(t *testing.T) {
+			defaultConfig = original
+			counter := 0
+			generator := func() string {
+				counter++
+				return "id-" + string(rune('0'+counter))
+			}
+			DefaultJobIdGenerator(generator)
+			first := defaultConfig.jobIdGenerator()
+			second := defaultConfig.jobIdGenerator()
+			assert.NotEqual(t, first, second, "generator should produce unique IDs")
+		})
+	})
+
+	t.Run("DefaultIdleWorkerExpiryDuration", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			duration time.Duration
+		}{
+			{"Sets seconds duration", 30 * time.Second},
+			{"Sets minute duration", 5 * time.Minute},
+			{"Sets zero duration", 0},
+			{"Sets large duration", 24 * time.Hour},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				defaultConfig = original
+				DefaultIdleWorkerExpiryDuration(tc.duration)
+				assert.Equal(t, tc.duration, defaultConfig.idleWorkerExpiryDuration)
+			})
+		}
+	})
+
+	t.Run("DefaultCtx", func(t *testing.T) {
+		t.Run("Sets background context", func(t *testing.T) {
+			defaultConfig = original
+			ctx := context.Background()
+			DefaultCtx(ctx)
+			assert.Equal(t, ctx, defaultConfig.ctx)
+		})
+
+		t.Run("Sets context with cancel", func(t *testing.T) {
+			defaultConfig = original
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			DefaultCtx(ctx)
+			assert.Equal(t, ctx, defaultConfig.ctx)
+		})
+
+		t.Run("Sets context with timeout", func(t *testing.T) {
+			defaultConfig = original
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			DefaultCtx(ctx)
+			assert.Equal(t, ctx, defaultConfig.ctx)
+		})
+
+		t.Run("Sets TODO context", func(t *testing.T) {
+			defaultConfig = original
+			DefaultCtx(context.TODO())
+			assert.NotNil(t, defaultConfig.ctx)
+		})
+	})
 }
