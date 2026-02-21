@@ -4,15 +4,18 @@
 help:
 	@echo "Available targets:"
 	@echo "  help     - List available targets"
-	@echo "  init     - Install all dependencies"
+	@echo "  init     - Install dependencies and setup git hooks"
 	@echo "  test     - Run all tests (no cache)"
 	@echo "  format   - Format codes"
 	@echo "  release  - Create and push a new tag to trigger release (usage: make release VERSION=v1.0.0)"
 
-# Install all dependencies
+# Install dependencies and setup git hooks
 init:
+	go install github.com/evilmartians/lefthook@latest
 	go mod tidy
 	go mod vendor
+	lefthook install
+	@echo "✅ Dependencies installed and git hooks activated via lefthook"
 
 # Run all tests (no cache)
 test:
