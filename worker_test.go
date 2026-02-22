@@ -3,6 +3,7 @@ package varmq
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -245,7 +246,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[string]]()
-				w.queues.Register(q)
+				w.queues.Register(q, math.MaxInt)
 				defer w.Stop()
 
 				// Verify idleWorkerExpiryDuration is set
@@ -398,7 +399,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing using internal implementation
 				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q)
+				w.queues.Register(q, math.MaxInt)
 
 				// Submit some jobs
 				for i := range 10 {
@@ -450,7 +451,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q)
+				w.queues.Register(q, math.MaxInt)
 
 				// Submit some initial jobs
 				for i := range 50 {
@@ -541,7 +542,7 @@ func TestWorkers(t *testing.T) {
 				// Need to put something in it to trigger the loop
 				mockQueue.Queue.Enqueue("trigger")
 
-				w.queues.Register(newQueue(w, mockQueue).internalQueue)
+				w.queues.Register(newQueue(w, mockQueue).internalQueue, math.MaxInt)
 
 				w.start()
 				defer w.Stop()
@@ -696,7 +697,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue
 				q := queues.NewQueue[iJob[string]]()
-				w.queues.Register(q)
+				w.queues.Register(q, math.MaxInt)
 
 				// Initial check
 				assert.Equal(0, w.NumPending(), "NumPending should be 0 initially")
@@ -796,7 +797,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a persistent queue that implements IAcknowledgeable
 				persistentQueue := mocks.NewMockPersistentQueue()
-				w.queues.Register(persistentQueue)
+				w.queues.Register(persistentQueue, math.MaxInt)
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
 
@@ -822,7 +823,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(jobBytes)
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -846,7 +847,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(job)
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -867,7 +868,7 @@ func TestWorkers(t *testing.T) {
 				// Create invalid byte data
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue([]byte("invalid json"))
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -888,7 +889,7 @@ func TestWorkers(t *testing.T) {
 				// Create invalid type data
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(123) // Invalid type
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -1026,7 +1027,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create an empty queue
 				testQueue := queues.NewQueue[any]()
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -1048,7 +1049,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(jobBytes)
-				w.queues.Register(testQueue)
+				w.queues.Register(testQueue, math.MaxInt)
 
 				err := w.start()
 				assert.NoError(t, err, "Worker should start without error")
@@ -1114,7 +1115,7 @@ func TestWorkers(t *testing.T) {
 				mockQueue.Queue.Enqueue([]byte("invalid json"))
 
 				queue := newQueue(w, mockQueue)
-				w.queues.Register(queue.internalQueue)
+				w.queues.Register(queue.internalQueue, math.MaxInt)
 
 				err := w.processNextJob()
 				assert.Error(t, err)
@@ -1132,7 +1133,7 @@ func TestWorkers(t *testing.T) {
 				mockQueue.Queue.Enqueue(jobData)
 
 				queue := newErrorQueue(w, mockQueue)
-				w.queues.Register(queue.internalQueue)
+				w.queues.Register(queue.internalQueue, math.MaxInt)
 
 				err := w.processNextJob()
 				assert.Error(t, err)
@@ -1292,7 +1293,7 @@ func TestPublicWorkerErrors(t *testing.T) {
 		// Register a queue with some data to attempt processing
 		mockQueue := mocks.NewMockPersistentQueue()
 		mockQueue.Queue.Enqueue("test")
-		w.queues.Register(mockQueue)
+		w.queues.Register(mockQueue, math.MaxInt)
 
 		err := w.processNextJob()
 		assert.Error(t, err)
@@ -1306,7 +1307,7 @@ func TestPublicWorkerErrors(t *testing.T) {
 		mockQueue.Queue.Enqueue([]byte("invalid json"))
 
 		queue := newQueue(w, mockQueue)
-		w.queues.Register(queue.internalQueue)
+		w.queues.Register(queue.internalQueue, math.MaxInt)
 
 		err := w.processNextJob()
 		assert.Error(t, err)

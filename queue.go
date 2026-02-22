@@ -1,24 +1,6 @@
 package varmq
 
-import (
-	"errors"
-	"io"
-
-	"github.com/goptics/varmq/internal/helpers"
-)
-
-type Strategy uint8
-
-var errInvalidStrategyType = errors.New("invalid strategy type")
-
-const (
-	// Selects queues in a round-robin fashion
-	RoundRobin Strategy = iota
-	// Selects the queue with the most items
-	MaxLen
-	// Selects the queue with the fewest items
-	MinLen
-)
+import "io"
 
 // queue is the base implementation of the Queue interface
 // It contains an externalBaseQueue for worker management and an internalQueue for job storage
@@ -52,8 +34,9 @@ type Item[T any] struct {
 
 // newQueue creates a new queue with the given worker and internal queue implementation
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
-func newQueue[T any](w *worker[T, iJob[T]], q IQueue) *queue[T] {
-	w.queues.Register(q)
+func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc) *queue[T] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(q, c.Priority)
 
 	return &queue[T]{
 		externalBaseQueue: newExternalQueue(q, w),
@@ -112,8 +95,9 @@ type ErrQueue[T any] interface {
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }
 
-func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue) *errorQueue[T] {
-	w.queues.Register(q)
+func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...QueueConfigFunc) *errorQueue[T] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(q, c.Priority)
 
 	return &errorQueue[T]{
 		externalBaseQueue: newExternalQueue(q, w),
@@ -171,8 +155,9 @@ type ResultQueue[T, R any] interface {
 	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
 }
 
-func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue) *resultQueue[T, R] {
-	w.queues.Register(q)
+func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs ...QueueConfigFunc) *resultQueue[T, R] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(q, c.Priority)
 
 	return &resultQueue[T, R]{
 		externalBaseQueue: newExternalQueue(q, w),
@@ -255,31 +240,4 @@ func (eq *externalBaseQueue) Purge() {
 
 func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
-}
-
-// queueManager manages multiple queues bound to a worker and selects the appropriate queue
-// based on the configured strategy (RoundRobin, MaxLen, MinLen, or Priority)
-type queueManager struct {
-	helpers.Manager[IBaseQueue]
-	strategy Strategy
-}
-
-func createQueueManager(strategy Strategy) queueManager {
-	return queueManager{
-		Manager:  helpers.CreateManager[IBaseQueue](),
-		strategy: strategy,
-	}
-}
-
-func (qm *queueManager) next() (IBaseQueue, error) {
-	switch qm.strategy {
-	case RoundRobin:
-		return qm.GetRoundRobinItem()
-	case MaxLen:
-		return qm.GetMaxLenItem()
-	case MinLen:
-		return qm.GetMinLenItem()
-	default:
-		return nil, errInvalidStrategyType
-	}
 }

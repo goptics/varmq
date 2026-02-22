@@ -24,7 +24,7 @@ type IWorkerBinder[T any] interface {
 	// Example usage:
 	//   queue := worker.BindQueue()
 	//   queue.Add(data) // Enqueues a job that will be processed by the worker
-	BindQueue() Queue[T]
+	BindQueue(configs ...QueueConfigFunc) Queue[T]
 
 	// WithQueue binds the worker to a custom Queue implementation.
 	// This method allows you to use your own queue implementation as long as it
@@ -40,7 +40,7 @@ type IWorkerBinder[T any] interface {
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
 	//   queue := worker.WithQueue(customQueue)
-	WithQueue(q IQueue) Queue[T]
+	WithQueue(q IQueue, configs ...QueueConfigFunc) Queue[T]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects the worker to it.
@@ -52,7 +52,7 @@ type IWorkerBinder[T any] interface {
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
 	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
-	BindPriorityQueue() PriorityQueue[T]
+	BindPriorityQueue(configs ...QueueConfigFunc) PriorityQueue[T]
 
 	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
 	// This method allows you to use your own priority queue implementation as long as it
@@ -68,7 +68,7 @@ type IWorkerBinder[T any] interface {
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
-	WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T]
+	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) PriorityQueue[T]
 
 	// WithPersistentQueue binds the worker to a PersistentQueue.
 	// PersistentQueue provides durability guarantees for jobs, ensuring they are not lost
@@ -83,7 +83,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Example usage:
 	//   persistentQueue := worker.WithPersistentQueue(redisQueue)
-	WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T]
+	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
 
 	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
 	// This combines the benefits of persistence with priority-based processing. Jobs are
@@ -98,7 +98,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Example usage:
 	//   persistentPriorityQueue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
-	WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T]
+	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
 
 	// WithDistributedQueue binds the void worker to a DistributedQueue implementation.
 	// Distributed queues allow job processing to be spread across multiple instances or processes,
@@ -116,7 +116,7 @@ type IWorkerBinder[T any] interface {
 	//   dq := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
 	//   distributedQueue := voidWorker.WithDistributedQueue(dq)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
-	WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T]
+	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
 
 	// WithDistributedPriorityQueue binds the void worker to a DistributedPriorityQueue implementation.
 	// This combines distributed processing with priority-based job ordering. Jobs are distributed
@@ -137,7 +137,7 @@ type IWorkerBinder[T any] interface {
 	//   priorityQueue := NewDistributedPriorityQueue() // satisfies IDistributedPriorityQueue interface, might be backed by Redis or other systems
 	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
 	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
-	WithDistributedPriorityQueue(dq IDistributedPriorityQueue) DistributedPriorityQueue[T]
+	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 }
 
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
@@ -161,52 +161,54 @@ func (wb *workerBinder[T]) handleQueueSubscription(action string) {
 
 // BindQueue creates and binds a new standard queue to the worker
 // It returns a Queue interface that can be used to add jobs to the queue
-func (wb *workerBinder[T]) BindQueue() Queue[T] {
-	return wb.WithQueue(queues.NewQueue[iJob[T]]())
+func (wb *workerBinder[T]) BindQueue(configs ...QueueConfigFunc) Queue[T] {
+	return wb.WithQueue(queues.NewQueue[iJob[T]](), configs...)
 }
 
 // WithQueue binds an existing queue implementation to the worker
 // It starts the worker and returns a Queue interface to interact with the queue
-func (wb *workerBinder[T]) WithQueue(q IQueue) Queue[T] {
+func (wb *workerBinder[T]) WithQueue(q IQueue, configs ...QueueConfigFunc) Queue[T] {
 	defer wb.start()
 
-	return newQueue(wb.worker, q)
+	return newQueue(wb.worker, q, configs...)
 }
 
-func (wb *workerBinder[T]) BindPriorityQueue() PriorityQueue[T] {
-	return wb.WithPriorityQueue(queues.NewPriorityQueue[iJob[T]]())
+func (wb *workerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) PriorityQueue[T] {
+	return wb.WithPriorityQueue(queues.NewPriorityQueue[iJob[T]](), configs...)
 }
 
-func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue) PriorityQueue[T] {
+func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) PriorityQueue[T] {
 	defer wb.start()
 
-	return newPriorityQueue(wb.worker, pq)
+	return newPriorityQueue(wb.worker, pq, configs...)
 }
 
-func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue) PersistentQueue[T] {
+func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	defer wb.start()
 
-	return newPersistentQueue(wb.worker, pq)
+	return newPersistentQueue(wb.worker, pq, configs...)
 }
 
-func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
+func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
 	defer wb.start()
 
-	return newPersistentPriorityQueue(wb.worker, pq)
+	return newPersistentPriorityQueue(wb.worker, pq, configs...)
 }
 
-func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue) DistributedQueue[T] {
+func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	c := loadQueueConfigs(configs...)
 	defer dq.Subscribe(wb.handleQueueSubscription)
 	defer wb.start()
-	defer wb.queues.Register(dq)
+	defer wb.queues.Register(dq, c.Priority)
 
 	return NewDistributedQueue[T](dq)
 }
 
-func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue) DistributedPriorityQueue[T] {
+func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	c := loadQueueConfigs(configs...)
 	defer dpq.Subscribe(wb.handleQueueSubscription)
 	defer wb.start()
-	defer wb.queues.Register(dpq)
+	defer wb.queues.Register(dpq, c.Priority)
 
 	return NewDistributedPriorityQueue[T](dpq)
 }
@@ -229,7 +231,7 @@ type IErrWorkerBinder[T any] interface {
 	// Example usage:
 	//   errQueue := errWorker.BindQueue()
 	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
-	BindQueue() ErrQueue[T]
+	BindQueue(configs ...QueueConfigFunc) ErrQueue[T]
 	// WithQueue binds the worker to a custom Queue implementation.
 	// This method allows you to use your own queue implementation as long as it
 	// satisfies the IQueue interface. This is useful when you need specialized
@@ -245,7 +247,7 @@ type IErrWorkerBinder[T any] interface {
 	//   customQueue := NewCustomQueue()
 	//   errQueue := errWorker.WithQueue(customQueue)
 	//   errJob, ok := errQueue.Add(data)  // Enqueues a job that will be processed by the error worker
-	WithQueue(q IQueue) ErrQueue[T]
+	WithQueue(q IQueue, configs ...QueueConfigFunc) ErrQueue[T]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects with the worker.
@@ -257,7 +259,7 @@ type IErrWorkerBinder[T any] interface {
 	// Example usage:
 	//   errPriorityQueue := errWorker.BindPriorityQueue()
 	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
-	BindPriorityQueue() ErrPriorityQueue[T]
+	BindPriorityQueue(configs ...QueueConfigFunc) ErrPriorityQueue[T]
 
 	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
 	// This method allows you to use your own priority queue implementation as long as it
@@ -274,7 +276,7 @@ type IErrWorkerBinder[T any] interface {
 	//   customPriorityQueue := NewCustomPriorityQueue()
 	//   errPriorityQueue := errWorker.WithPriorityQueue(customPriorityQueue)
 	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
-	WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T]
+	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T]
 }
 
 func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
@@ -283,24 +285,24 @@ func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
 	}
 }
 
-func (ewb *errWorkerBinder[T]) BindQueue() ErrQueue[T] {
-	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]]())
+func (ewb *errWorkerBinder[T]) BindQueue(configs ...QueueConfigFunc) ErrQueue[T] {
+	return ewb.WithQueue(queues.NewQueue[iErrorJob[T]](), configs...)
 }
 
-func (ewb *errWorkerBinder[T]) WithQueue(q IQueue) ErrQueue[T] {
+func (ewb *errWorkerBinder[T]) WithQueue(q IQueue, configs ...QueueConfigFunc) ErrQueue[T] {
 	defer ewb.worker.start()
 
-	return newErrorQueue(ewb.worker, q)
+	return newErrorQueue(ewb.worker, q, configs...)
 }
 
-func (ewb *errWorkerBinder[T]) BindPriorityQueue() ErrPriorityQueue[T] {
-	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]]())
+func (ewb *errWorkerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) ErrPriorityQueue[T] {
+	return ewb.WithPriorityQueue(queues.NewPriorityQueue[iErrorJob[T]](), configs...)
 }
 
-func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue) ErrPriorityQueue[T] {
+func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T] {
 	defer ewb.worker.start()
 
-	return newErrorPriorityQueue(ewb.worker, pq)
+	return newErrorPriorityQueue(ewb.worker, pq, configs...)
 }
 
 type resultWorkerBinder[T, R any] struct {
@@ -324,7 +326,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   queue := worker.BindQueue()
 	//   queue.Add(data) // Enqueues a job that will be processed by the worker
-	BindQueue() ResultQueue[T, R]
+	BindQueue(configs ...QueueConfigFunc) ResultQueue[T, R]
 
 	// WithQueue binds the worker to a custom Queue implementation.
 	// This method allows you to use your own queue implementation as long as it
@@ -340,7 +342,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
 	//   queue := worker.WithQueue(customQueue)
-	WithQueue(q IQueue) ResultQueue[T, R]
+	WithQueue(q IQueue, configs ...QueueConfigFunc) ResultQueue[T, R]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects the worker to it.
@@ -352,7 +354,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   priorityQueue := worker.BindPriorityQueue() // satisfies IPriorityQueue interface
 	//   priorityQueue.Add(data, 5) // Enqueue with priority 5
-	BindPriorityQueue() ResultPriorityQueue[T, R]
+	BindPriorityQueue(configs ...QueueConfigFunc) ResultPriorityQueue[T, R]
 
 	// WithPriorityQueue binds the worker to a custom PriorityQueue implementation.
 	// This method allows you to use your own priority queue implementation as long as it
@@ -368,7 +370,7 @@ type IResultWorkerBinder[T, R any] interface {
 	// Example usage:
 	//   customPriorityQueue := NewCustomPriorityQueue()
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
-	WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R]
+	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R]
 }
 
 func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
@@ -377,22 +379,22 @@ func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorke
 	}
 }
 
-func (rwb *resultWorkerBinder[T, R]) BindQueue() ResultQueue[T, R] {
-	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]]())
+func (rwb *resultWorkerBinder[T, R]) BindQueue(configs ...QueueConfigFunc) ResultQueue[T, R] {
+	return rwb.WithQueue(queues.NewQueue[iResultJob[T, R]](), configs...)
 }
 
-func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue) ResultQueue[T, R] {
+func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue, configs ...QueueConfigFunc) ResultQueue[T, R] {
 	defer rwb.worker.start()
 
-	return newResultQueue(rwb.worker, q)
+	return newResultQueue(rwb.worker, q, configs...)
 }
 
-func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue() ResultPriorityQueue[T, R] {
-	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]]())
+func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue(configs ...QueueConfigFunc) ResultPriorityQueue[T, R] {
+	return rwb.WithPriorityQueue(queues.NewPriorityQueue[iResultJob[T, R]](), configs...)
 }
 
-func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue) ResultPriorityQueue[T, R] {
+func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R] {
 	defer rwb.worker.start()
 
-	return newResultPriorityQueue(rwb.worker, pq)
+	return newResultPriorityQueue(rwb.worker, pq, configs...)
 }
