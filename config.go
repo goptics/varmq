@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/goptics/varmq/utils"
@@ -25,7 +26,7 @@ func newConfig() configs {
 		jobIdGenerator: func() string {
 			return ""
 		},
-		strategy: RoundRobin,
+		strategy: Priority,
 	}
 }
 
@@ -74,14 +75,15 @@ func WithIdleWorkerExpiryDuration(duration time.Duration) ConfigFunc {
 //
 // The worker uses this strategy to determine which queue to pull jobs from when multiple queues are registered.
 // Available strategies are:
-//   - RoundRobin: Selects queues in a round-robin fashion (default)
+//   - Priority: Selects the queue with the highest priority (default)
+//   - RoundRobin: Selects queues in a round-robin fashion
 //   - MaxLen: Selects the queue with the most items
 //   - MinLen: Selects the queue with the fewest items
 //
 // Parameters:
-//   - strategy: The strategy to use (RoundRobin, MaxLen or  MinLen)
+//   - strategy: The strategy to use (Priority, RoundRobin, MaxLen or MinLen)
 //
-// Default: If this option is not set, RoundRobin strategy will be used.
+// Default: If this option is not set, Priority strategy will be used.
 func WithStrategy(s Strategy) ConfigFunc {
 	return func(c *configs) {
 		c.strategy = s
@@ -188,5 +190,43 @@ func WithJobId(id string) JobConfigFunc {
 			return
 		}
 		c.Id = id
+	}
+}
+
+type QueueConfigFunc func(*QueueConfig)
+
+type QueueConfig struct {
+	Priority int
+}
+
+func loadQueueConfigs(configs ...QueueConfigFunc) QueueConfig {
+	c := QueueConfig{
+		Priority: math.MaxInt,
+	}
+	for _, config := range configs {
+		config(&c)
+	}
+	return c
+}
+
+// WithQueuePriority configures the priority level of a queue when binding it to a worker.
+//
+// The worker uses this priority to determine which queue to process jobs from first.
+// Queues with a higher priority (lower integer values) will be processed before
+// queues with a lower priority. In the case of ties, insertion order is preserved.
+//
+// Parameters:
+//   - priority: An integer representing the priority level. A lower number indicates
+//     a higher priority. For example, priority 1 is processed before priority 5.
+//
+// Examples:
+//   - worker.BindQueue(varmq.WithQueuePriority(1)): Assigns a high priority to the queue.
+//   - worker.BindQueue(varmq.WithQueuePriority(10)): Assigns a lower priority to the queue.
+//
+// Default behavior: If this option is not set, the queue implicitly receives the lowest
+// possible priority (math.MaxInt).
+func WithQueuePriority(priority int) QueueConfigFunc {
+	return func(c *QueueConfig) {
+		c.Priority = priority
 	}
 }
