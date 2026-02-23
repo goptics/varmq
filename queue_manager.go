@@ -37,14 +37,14 @@ func newQueueManager(strategy Strategy) *queueManager {
 
 func (qm *queueManager) next() (IBaseQueue, error) {
 	switch qm.strategy {
+	case Priority:
+		return qm.GetPriorityItem()
 	case RoundRobin:
 		return qm.GetRoundRobinItem()
 	case MaxLen:
 		return qm.GetMaxLenItem()
 	case MinLen:
 		return qm.GetMinLenItem()
-	case Priority:
-		return qm.GetPriorityItem()
 	default:
 		return nil, errInvalidStrategyType
 	}

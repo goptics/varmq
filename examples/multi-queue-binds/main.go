@@ -11,7 +11,7 @@ func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[string]) {
 		fmt.Println("Processing:", j.Data())
 		time.Sleep(500 * time.Millisecond) // Simulate work
-	}) // change strategy through using varmq.WithStrategy default is varmq.RoundRobin
+	}) // change strategy through using varmq.WithStrategy default is varmq.Priority
 	defer worker.WaitUntilFinished()
 
 	// Bind to a standard queues
