@@ -20,14 +20,14 @@ func main() {
 	pq := worker.BindPriorityQueue()
 
 	for i := range 10 {
-		q1.Add(fmt.Sprintf("Task queue 1 %d", i))
+		q1.Add(fmt.Sprintf("Task queue-1 %d", i))
 	}
 
 	for i := range 15 {
-		q2.Add(fmt.Sprintf("Task queue 2 %d", i))
+		q2.Add(fmt.Sprintf("Task queue-2 %d", i))
 	}
 
 	for i := range 10 {
-		pq.Add(fmt.Sprintf("Task priority queue %d", i), i%2) // prioritize even tasks
+		pq.Add(fmt.Sprintf("Task priority-queue %d", i), i%2) // prioritize even tasks
 	}
 }
