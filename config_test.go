@@ -333,7 +333,7 @@ func TestDefaultConfig(t *testing.T) {
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
 				defaultConfig = original
-				DefaultMinIdleWorkRatio(tc.percentage)
+				DefaultMinIdleWorkerRatio(tc.percentage)
 				assert.Equal(t, tc.expected, defaultConfig.minIdleWorkerRatio)
 			})
 		}

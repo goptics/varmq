@@ -35,12 +35,15 @@ func DefaultConcurrency(concurrency int) {
 func DefaultStrategy(s Strategy) {
 	defaultConfig.strategy = s
 }
-func DefaultMinIdleWorkRatio(percentage uint8) {
+func DefaultMinIdleWorkerRatio(percentage uint8) {
 	defaultConfig.minIdleWorkerRatio = clampPercentage(percentage)
 }
 
 func DefaultJobIdGenerator(fn func() string) {
 	defaultConfig.jobIdGenerator = fn
+	if fn == nil {
+		return
+	}
 }
 
 func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
@@ -150,6 +153,9 @@ func WithConcurrency(concurrency int) ConfigFunc {
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		c.jobIdGenerator = fn
+		if fn == nil {
+			return
+		}
 	}
 }
 
