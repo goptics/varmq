@@ -28,17 +28,57 @@ var defaultConfig = configs{
 	strategy: Priority,
 }
 
+// DefaultConcurrency sets the default concurrency level for all newly created workers.
+// If concurrency is less than 1, it defaults to the number of CPU cores.
+//
+// Parameters:
+//   - concurrency: The number of concurrent workers to use.
+//     A value less than 1 will default to the number of CPU cores.
+//
+// Default: 1
 func DefaultConcurrency(concurrency int) {
 	defaultConfig.concurrency = withSafeConcurrency(concurrency)
 }
 
+// DefaultStrategy sets the default queue selection strategy for all newly created workers.
+//
+// Available strategies are:
+//   - Priority: Selects the queue with the highest priority (default)
+//   - RoundRobin: Selects queues in a round-robin fashion
+//   - MaxLen: Selects the queue with the most items
+//   - MinLen: Selects the queue with the fewest items
+//
+// Parameters:
+//   - s: The strategy to use
+//
+// Default: Priority
 func DefaultStrategy(s Strategy) {
 	defaultConfig.strategy = s
 }
+
+// DefaultMinIdleWorkerRatio sets the default minimum percentage of idle workers to maintain
+// in the pool as a proportion of the total concurrency level for all newly created workers.
+//
+// Maintaining some idle workers allows the system to respond quickly to incoming jobs
+// without the overhead of creating new worker goroutines.
+//
+// Parameters:
+//   - percentage: An integer between 1-100 representing the percentage of workers to keep idle.
+//     Values outside the range 1-100 are automatically clamped (0 becomes 1, >100 becomes 100).
+//
+// Default: At least one idle worker is always maintained in the pool.
 func DefaultMinIdleWorkerRatio(percentage uint8) {
 	defaultConfig.minIdleWorkerRatio = clampPercentage(percentage)
 }
 
+// DefaultJobIdGenerator sets the default job ID generator function for all newly created workers.
+// The provided function will be called to generate a unique ID for each job.
+// If fn is nil, the call is a no-op.
+//
+// Parameters:
+//   - fn: A function that returns a unique string ID.
+//
+// Default: A no-op generator that returns an empty string (no job ID).
 func DefaultJobIdGenerator(fn func() string) {
 	if fn == nil {
 		return
@@ -46,10 +86,28 @@ func DefaultJobIdGenerator(fn func() string) {
 	defaultConfig.jobIdGenerator = fn
 }
 
+// DefaultIdleWorkerExpiryDuration sets the default time period after which idle workers are
+// automatically removed from the worker pool for all newly created workers.
+//
+// This helps optimize resource usage by removing unnecessary idle workers when
+// the system experiences prolonged periods of low activity.
+//
+// Parameters:
+//   - duration: The time period a worker can remain idle before being removed
+//     (e.g., 30*time.Second, 5*time.Minute)
+//
+// Default: Not set — exactly one idle worker is always maintained in the pool.
 func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
 	defaultConfig.idleWorkerExpiryDuration = duration
 }
 
+// DefaultCtx sets the default context for all newly created workers.
+// The context can be used to stop all worker goroutines when cancelled.
+//
+// Parameters:
+//   - ctx: The context to use
+//
+// Default: nil (no context)
 func DefaultCtx(ctx context.Context) {
 	defaultConfig.ctx = ctx
 }
