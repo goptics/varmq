@@ -1,5 +1,28 @@
 # Changelog
 
+## [v1.5.0] (2026-02-24)
+
+### 🔄 Behavioral Changes
+
+- **Default Queue Strategy**: The default multi-queue binding selection strategy has changed from `RoundRobin` to `Priority`. Queues binded to a worker will now process based on Priority rather than alternating evenly by default.
+
+### ✨ New Features
+
+- **Queue Priority Configuration** (#66): 
+  - Introduced `QueueConfig` and `QueueConfigFunc` to allow configuring queue attributes when binding them to workers. 
+  - Added `WithQueuePriority` to let users assign processing priorities to individual standard, priority, persistent, and distributed queues.
+  - Updated `Bind*` and `With*` methods across worker interfaces to accept variadic `QueueConfigFunc` arguments.
+- **Default Configuration Modifiers** (#65): Added predefined standalone functions (`DefaultConcurrency`, `DefaultStrategy`, `DefaultMinIdleWorkerRatio`, `DefaultJobIdGenerator`, `DefaultIdleWorkerExpiryDuration`, `DefaultCtx`) to explicitly and globally modify default configurations for all newly created workers.
+
+### 🐛 Bug Fixes
+
+- **Worker Event Loop Fix** (#64): Removed redundant recursive `processNextJob` calls inside workers. The event loop already retries processing properly, so removing the recursion prevents potential and silent error swallowing.
+
+### 🔧 Refactoring and Code Quality
+
+- **Panic-Safety in Worker Shutdown**: Removed redundant status checks in workers. The reliance on nil channel behaviors, `mutex` locks, and `select` default cases provides streamlined, safe shutdown event handling without explicit and extra condition checks.
+
+
 ## [v1.4.0] (2026-02-05)
 
 ### ✨ New Features
