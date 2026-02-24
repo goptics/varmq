@@ -40,10 +40,10 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 }
 
 func DefaultJobIdGenerator(fn func() string) {
-	defaultConfig.jobIdGenerator = fn
 	if fn == nil {
 		return
 	}
+	defaultConfig.jobIdGenerator = fn
 }
 
 func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
@@ -152,10 +152,10 @@ func WithConcurrency(concurrency int) ConfigFunc {
 // If not set there wouldn't be any job id
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
-		c.jobIdGenerator = fn
 		if fn == nil {
 			return
 		}
+		c.jobIdGenerator = fn
 	}
 }
 

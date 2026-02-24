@@ -382,8 +382,9 @@ func TestDefaultConfig(t *testing.T) {
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
 				defaultConfig = original
-				DefaultIdleWorkerExpiryDuration(tc.duration)
-				assert.Equal(t, tc.duration, defaultConfig.idleWorkerExpiryDuration)
+				ctx := context.TODO()
+				DefaultCtx(ctx)
+				assert.Equal(t, ctx, defaultConfig.ctx)
 			})
 		}
 	})
