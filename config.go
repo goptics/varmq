@@ -20,14 +20,41 @@ type configs struct {
 	ctx                      context.Context
 }
 
-func newConfig() configs {
-	return configs{
-		concurrency: 1,
-		jobIdGenerator: func() string {
-			return ""
-		},
-		strategy: Priority,
+var defaultConfig = configs{
+	concurrency: 1,
+	jobIdGenerator: func() string {
+		return ""
+	},
+	strategy: Priority,
+}
+
+func DefaultConcurrency(concurrency int) {
+	defaultConfig.concurrency = withSafeConcurrency(concurrency)
+}
+
+func DefaultStrategy(s Strategy) {
+	defaultConfig.strategy = s
+}
+func DefaultMinIdleWorkerRatio(percentage uint8) {
+	defaultConfig.minIdleWorkerRatio = clampPercentage(percentage)
+}
+
+func DefaultJobIdGenerator(fn func() string) {
+	if fn == nil {
+		return
 	}
+	defaultConfig.jobIdGenerator = fn
+}
+
+func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
+	defaultConfig.idleWorkerExpiryDuration = duration
+}
+func DefaultCtx(ctx context.Context) {
+	defaultConfig.ctx = ctx
+}
+
+func newConfig() configs {
+	return defaultConfig
 }
 
 func loadConfigs(config ...any) configs {
@@ -125,6 +152,9 @@ func WithConcurrency(concurrency int) ConfigFunc {
 // If not set there wouldn't be any job id
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
+		if fn == nil {
+			return
+		}
 		c.jobIdGenerator = fn
 	}
 }
