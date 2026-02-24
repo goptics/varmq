@@ -129,33 +129,32 @@ Bind multiple queues to a single worker, enabling efficient processing of jobs f
 4. **MinLen** (prioritizes queues with fewer jobs)
 
 ```go
-worker := varmq.NewWorker(func(j varmq.Job[string]) {
-  fmt.Println("Processing:", j.Data())
-  time.Sleep(500 * time.Millisecond) // Simulate work
-}) // change strategy through using varmq.WithStrategy
-defer worker.WaitUntilFinished()
+	worker := varmq.NewWorker(func(j varmq.Job[string]) {
+		fmt.Println("Processing:", j.Data())
+		time.Sleep(500 * time.Millisecond) // Simulate work
+	}) // change strategy through using varmq.WithStrategy default is varmq.Priority
+	defer worker.WaitUntilFinished()
 
-// Bind to a standard queues
-q1 := worker.BindQueue()
-q2 := worker.BindQueue()
-pq := worker.BindPriorityQueue()
+	// Bind to a standard queues with coronological priorities
+	// You can change queue priority using varmq.WithQueuePriority function
+	q1 := worker.BindQueue()         // highest
+	q2 := worker.BindQueue()         // medium
+	pq := worker.BindPriorityQueue() // lowest
 
-for i := range 10 {
-  q1.Add(fmt.Sprintf("Task queue 1 %d", i))
-}
+	for i := range 15 {
+		q2.Add(fmt.Sprintf("Task queue-2 %d", i))
+	}
 
-for i := range 15 {
-  q2.Add(fmt.Sprintf("Task queue 2 %d", i))
-}
+	for i := range 10 {
+		pq.Add(fmt.Sprintf("Task priority-queue %d", i), i%2) // prioritize even tasks
+	}
 
-for i := range 10 {
-  pq.Add(fmt.Sprintf("Task priority queue %d", i), i%2) // prioritize even tasks
-}
+	for i := range 10 {
+		q1.Add(fmt.Sprintf("Task queue-1 %d", i))
+	}
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/_j_ZDLZqvtX)**
-
-It will process jobs from all queues in a `round-robin` fashion.
+↗️ **[Run it on Playground](https://go.dev/play/p/tVC3D5QLNg4)**
 
 ### Result and Error Worker
 

@@ -14,14 +14,11 @@ func main() {
 	}) // change strategy through using varmq.WithStrategy default is varmq.Priority
 	defer worker.WaitUntilFinished()
 
-	// Bind to a standard queues
-	q1 := worker.BindQueue()
-	q2 := worker.BindQueue()
-	pq := worker.BindPriorityQueue()
-
-	for i := range 10 {
-		q1.Add(fmt.Sprintf("Task queue-1 %d", i))
-	}
+	// Bind to a standard queues with coronological priorities
+	// You can change queue priority using varmq.WithQueuePriority function
+	q1 := worker.BindQueue()         // highest
+	q2 := worker.BindQueue()         // medium
+	pq := worker.BindPriorityQueue() // lowest
 
 	for i := range 15 {
 		q2.Add(fmt.Sprintf("Task queue-2 %d", i))
@@ -29,5 +26,9 @@ func main() {
 
 	for i := range 10 {
 		pq.Add(fmt.Sprintf("Task priority-queue %d", i), i%2) // prioritize even tasks
+	}
+
+	for i := range 10 {
+		q1.Add(fmt.Sprintf("Task queue-1 %d", i))
 	}
 }
