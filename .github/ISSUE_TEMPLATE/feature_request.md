@@ -6,34 +6,14 @@ labels: enhancement
 assignees: ""
 ---
 
-## Feature Description
+## Problem / Use Case
 
-A clear and concise description of the feature you'd like to see.
-
-## Use Case
-
-Describe the problem this feature would solve or the use case it would enable.
+Describe the problem or use case this feature will solve.
 
 ## Proposed Solution
 
-A clear description of what you want to happen.
-
-## Alternative Solutions
-
-Describe any alternative solutions or features you've considered.
-
-## Implementation Ideas
-
-If you have ideas about how this could be implemented, please share them.
-
-## Impact
-
-- [ ] Performance improvement
-- [ ] API enhancement
-- [ ] Documentation
-- [ ] Testing
-- [ ] Other:
+Describe what you want to happen or the feature you'd like to see built.
 
 ## Additional Context
 
-Add any other context, mockups, or examples about the feature request here.
+Add any other context, alternative solutions, mockups, or examples here.

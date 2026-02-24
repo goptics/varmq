@@ -6,46 +6,24 @@ labels: bug
 assignees: ""
 ---
 
-## Bug Description
+## Description
 
-A clear and concise description of what the bug is.
+A clear and concise description of what the bug is and what actually happened.
 
 ## To Reproduce
 
-Steps to reproduce the behavior:
-
-1.
-2.
-3.
+Steps to reproduce the behavior, or a minimal code example:
+```go
+// code here
+```
 
 ## Expected Behavior
 
 A clear and concise description of what you expected to happen.
 
-## Actual Behavior
-
-A clear and concise description of what actually happened.
-
-## Code Example
-
-```go
-// Please provide a minimal, reproducible code example
-```
-
-## Environment
+## Environment & Context
 
 - VarMQ version:
 - Go version:
-- OS:
-- Architecture:
-
-## Queue Type
-
-- [ ] Standard Queue
-- [ ] Priority Queue
-- [ ] Persistent Queue
-- [ ] Distributed Queue
-
-## Additional Context
-
-Add any other context about the problem here (logs, screenshots, etc.).
+- Queue Type (Standard/Priority/Persistent/Distributed):
+- Any other context (logs, screenshots, etc.):
