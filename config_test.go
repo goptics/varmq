@@ -97,6 +97,14 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, expectedId, c.jobIdGenerator())
 		})
 
+		t.Run("WithJobIdGenerator not nil", func(t *testing.T) {
+			configFunc := WithJobIdGenerator(nil)
+			c := newConfig()
+			configFunc(&c)
+
+			assert.Equal(t, "", c.jobIdGenerator())
+		})
+
 		t.Run("WithIdleWorkerExpiryDuration", func(t *testing.T) {
 			duration := 10 * time.Minute
 			configFunc := WithIdleWorkerExpiryDuration(duration)
@@ -365,6 +373,11 @@ func TestDefaultConfig(t *testing.T) {
 			first := defaultConfig.jobIdGenerator()
 			second := defaultConfig.jobIdGenerator()
 			assert.NotEqual(t, first, second, "generator should produce unique IDs")
+		})
+		t.Run("Sets generator with nil", func(t *testing.T) {
+			defaultConfig = original
+			DefaultJobIdGenerator(nil)
+			assert.NotNil(t, defaultConfig.jobIdGenerator)
 		})
 	})
 

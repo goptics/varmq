@@ -49,6 +49,7 @@ func DefaultJobIdGenerator(fn func() string) {
 func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
 	defaultConfig.idleWorkerExpiryDuration = duration
 }
+
 func DefaultCtx(ctx context.Context) {
 	defaultConfig.ctx = ctx
 }
