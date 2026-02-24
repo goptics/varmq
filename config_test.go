@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -217,6 +218,32 @@ func TestConfig(t *testing.T) {
 			jc = jobConfigs{Id: "original-id"}
 			configFunc(&jc)
 			assert.Equal(t, "original-id", jc.Id)
+		})
+	})
+
+	t.Run("QueueConfig", func(t *testing.T) {
+		t.Run("loadQueueConfigs", func(t *testing.T) {
+			// Test default priority
+			c := loadQueueConfigs()
+			assert.Equal(t, math.MaxInt, c.Priority)
+
+			// Test with custom priority
+			c = loadQueueConfigs(WithQueuePriority(10))
+			assert.Equal(t, 10, c.Priority)
+
+			// Test with multiple configs (should apply in order)
+			c = loadQueueConfigs(
+				WithQueuePriority(10),
+				WithQueuePriority(5),
+			)
+			assert.Equal(t, 5, c.Priority)
+		})
+
+		t.Run("WithQueuePriority", func(t *testing.T) {
+			configFunc := WithQueuePriority(1)
+			c := QueueConfig{Priority: 100}
+			configFunc(&c)
+			assert.Equal(t, 1, c.Priority)
 		})
 	})
 }

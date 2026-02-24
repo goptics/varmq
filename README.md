@@ -121,11 +121,12 @@ Create your own adapters by implementing the `IPersistentQueue` or `IDistributed
 
 ### Multi Queue Binds
 
-Bind multiple queues to a single worker, enabling efficient processing of jobs from different sources with configurable strategies. The worker supports three strategies:
+Bind multiple queues to a single worker, enabling efficient processing of jobs from different sources with configurable strategies. The worker supports four strategies:
 
-1. **RoundRobin** (default - cycles through queues equally)
-2. **MaxLen** (prioritizes queues with more jobs)
-3. **MinLen** (prioritizes queues with fewer jobs)
+1. **Priority** (default - prioritizes jobs based on their priority)
+2. **RoundRobin** (cycles through queues equally)
+3. **MaxLen** (prioritizes queues with more jobs)
+4. **MinLen** (prioritizes queues with fewer jobs)
 
 ```go
 worker := varmq.NewWorker(func(j varmq.Job[string]) {
@@ -280,7 +281,7 @@ We conducted comprehensive benchmarking between `VarMQ` and [Pond v2](https://gi
 **Key Differences:**
 
 - **Queue Types**: `VarMQ` provides multiple queue variants (standard, priority, persistent, distributed) vs Pond's single pool type
-- **Multi-Queue Management**: `VarMQ` supports binding multiple queues to a single worker with configurable strategies (RoundRobin, MaxLen, MinLen)
+- **Multi-Queue Management**: `VarMQ` supports binding multiple queues to a single worker with configurable strategies (Priority, RoundRobin, MaxLen, MinLen)
 
 For detailed performance comparisons and benchmarking results, visit:
 

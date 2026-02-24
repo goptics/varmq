@@ -17,27 +17,48 @@ type Sizer interface {
 	Len() int
 }
 
+type registered[T Sizer] struct {
+	item     T
+	priority int
+}
+
 // Manager is a generic item manager that manages items implementing the Sizer interface
 type Manager[T Sizer] struct {
-	items           []T
+	items           []registered[T]
 	roundRobinIndex int
 	mx              sync.RWMutex
 }
 
-// NewManager creates a new Manager with the specified strategy
-func CreateManager[T Sizer]() Manager[T] {
-	return Manager[T]{
-		items: make([]T, 0),
+// NewManager creates a new Manager
+func NewManager[T Sizer]() *Manager[T] {
+	return &Manager[T]{
+		items: make([]registered[T], 0),
 	}
 }
 
-// Register adds a new item to the manager
-func (m *Manager[T]) Register(item T) {
+// Register adds a new item to the manager.
+// Optional priorities can be provided. The lowest number means highest priority and will be placed at the
+// beginning of the list. Default priority is math.MaxInt.
+func (m *Manager[T]) Register(item T, priority int) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	// Store the item with its priority
-	m.items = append(m.items, item)
+	r := registered[T]{
+		item:     item,
+		priority: priority,
+	}
+
+	// Insert into the right position to maintain priority (ascending order: lower number = higher priority)
+	// and preserve insertion order for same priorities
+	insertIdx := len(m.items)
+	for i, existing := range m.items {
+		if priority < existing.priority {
+			insertIdx = i
+			break
+		}
+	}
+
+	m.items = slices.Insert(m.items, insertIdx, r)
 }
 
 // UnregisterItem removes an item from the manager
@@ -49,17 +70,15 @@ func (m *Manager[T]) UnregisterItem(itemToRemove T) {
 	// Using pointer identity to find and remove the item
 	itemToRemovePtr := reflect.ValueOf(itemToRemove).Pointer()
 
-	for i, item := range m.items {
-		itemValuePtr := reflect.ValueOf(item).Pointer()
+	for i, r := range m.items {
+		itemValuePtr := reflect.ValueOf(r.item).Pointer()
 
 		// Compare memory addresses for reliable equality check
 		if itemToRemovePtr == itemValuePtr {
-			// Remove by swapping with the last element and then truncating
-			lastIndex := len(m.items) - 1
-			m.items[i] = m.items[lastIndex]
-			m.items = m.items[:lastIndex]
+			// Remove using slices.Delete to maintain priority ordering
+			m.items = slices.Delete(m.items, i, i+1)
 
-			// Reset the round robin index if it points to the removed item
+			// Reset the round robin index if it points to or after the removed item
 			if m.roundRobinIndex >= i {
 				m.roundRobinIndex = 0
 			}
@@ -67,7 +86,6 @@ func (m *Manager[T]) UnregisterItem(itemToRemove T) {
 			return
 		}
 	}
-
 }
 
 // Len returns the total length of all items
@@ -76,8 +94,8 @@ func (m *Manager[T]) Len() int {
 	defer m.mx.RUnlock()
 
 	totalLen := 0
-	for _, item := range m.items {
-		totalLen += item.Len()
+	for _, r := range m.items {
+		totalLen += r.item.Len()
 	}
 
 	return totalLen
@@ -92,15 +110,15 @@ func (m *Manager[T]) GetMaxLenItem() (T, error) {
 		return *new(T), ErrNoItemsRegistered
 	}
 
-	maxItem := slices.MaxFunc(m.items, func(a, b T) int {
-		return a.Len() - b.Len()
+	maxItem := slices.MaxFunc(m.items, func(a, b registered[T]) int {
+		return a.item.Len() - b.item.Len()
 	})
 
-	if maxItem.Len() == 0 {
+	if maxItem.item.Len() == 0 {
 		return *new(T), ErrAllItemsEmpty
 	}
 
-	return maxItem, nil
+	return maxItem.item, nil
 }
 
 // GetMinLenItem returns the item with the minimum length (excluding empty items unless all are empty)
@@ -116,11 +134,11 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 	minLen := -1
 
 	// First try to find the minimum length excluding empty items
-	for _, item := range m.items {
-		l := item.Len()
+	for _, r := range m.items {
+		l := r.item.Len()
 		if l > 0 && (minLen == -1 || l < minLen) {
 			minLen = l
-			minItem = item
+			minItem = r.item
 		}
 	}
 
@@ -130,6 +148,25 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 	}
 
 	return minItem, nil
+}
+
+// GetPriorityItem returns the first item with length > 0 based on priority (highest priority first).
+// Since items are inherently stored sorted by priority (lowest number first), it simply returns the first non-empty item.
+func (m *Manager[T]) GetPriorityItem() (T, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	if len(m.items) == 0 {
+		return *new(T), ErrNoItemsRegistered
+	}
+
+	for _, r := range m.items {
+		if r.item.Len() > 0 {
+			return r.item, nil
+		}
+	}
+
+	return *new(T), ErrAllItemsEmpty
 }
 
 // GetRoundRobinItem returns the next item in round-robin order
@@ -144,11 +181,11 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 	start := m.roundRobinIndex
 
 	for {
-		item := m.items[m.roundRobinIndex]
+		r := m.items[m.roundRobinIndex]
 		m.roundRobinIndex = (m.roundRobinIndex + 1) % len(m.items)
 
-		if item.Len() > 0 {
-			return item, nil
+		if r.item.Len() > 0 {
+			return r.item, nil
 		}
 
 		if m.roundRobinIndex == start {

@@ -14,11 +14,9 @@ type persistentPriorityQueue[T any] struct {
 	*priorityQueue[T]
 }
 
-func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPersistentPriorityQueue) PersistentPriorityQueue[T] {
-	w.queues.Register(pq)
-
+func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
 	return &persistentPriorityQueue[T]{
-		priorityQueue: newPriorityQueue(w, pq),
+		priorityQueue: newPriorityQueue(w, pq, configs...),
 	}
 }
 

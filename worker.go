@@ -40,7 +40,7 @@ var (
 type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
 	pool            *pool.Pool[JobType]
-	queues          queueManager
+	queues          *queueManager
 	metrics         Metrics
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32
@@ -108,7 +108,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iJob[T]](poolChanCap),
-		queues:          createQueueManager(c.strategy),
+		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -133,7 +133,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
-		queues:          createQueueManager(c.strategy),
+		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -158,7 +158,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
-		queues:          createQueueManager(c.strategy),
+		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -194,10 +194,6 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 }
 
 func (w *worker[T, JobType]) sendError(err error) {
-	if w.status.Load() != running {
-		return
-	}
-
 	w.mx.RLock()
 	select {
 	case w.errorChan <- err:
@@ -349,14 +345,6 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 
 // notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
 func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	// If worker is not in a running state (e.g., it's pausing or stopped),
-	// it should not attempt to signal the event loop for new jobs.
-	// This check prevents a panic from sending on a closed eventLoopSignal
-	// during shutdown.
-	if w.status.Load() != running {
-		return
-	}
-
 	w.mx.RLock()
 	select {
 	case w.eventLoopSignal <- struct{}{}:

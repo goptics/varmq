@@ -18,8 +18,9 @@ type PriorityQueue[T any] interface {
 }
 
 // NewPriorityQueue creates a new priorityQueue with the specified concurrency and worker function.
-func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue) *priorityQueue[T] {
-	w.queues.Register(pq)
+func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) *priorityQueue[T] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(pq, c.Priority)
 
 	return &priorityQueue[T]{
 		externalBaseQueue: newExternalQueue(pq, w),
@@ -78,8 +79,9 @@ type ResultPriorityQueue[T, R any] interface {
 	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
 }
 
-func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriorityQueue) *resultPriorityQueue[T, R] {
-	w.queues.Register(pq)
+func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriorityQueue, configs ...QueueConfigFunc) *resultPriorityQueue[T, R] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(pq, c.Priority)
 
 	return &resultPriorityQueue[T, R]{
 		externalBaseQueue: newExternalQueue(pq, w),
@@ -138,8 +140,9 @@ type ErrPriorityQueue[T any] interface {
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }
 
-func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue) *errorPriorityQueue[T] {
-	w.queues.Register(pq)
+func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) *errorPriorityQueue[T] {
+	c := loadQueueConfigs(configs...)
+	w.queues.Register(pq, c.Priority)
 
 	return &errorPriorityQueue[T]{
 		externalBaseQueue: newExternalQueue(pq, w),
