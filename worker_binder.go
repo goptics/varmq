@@ -18,6 +18,9 @@ type IWorkerBinder[T any] interface {
 	// It creates a new Queue with default settings and connects the worker to it.
 	// This is the simplest way to get a standard FIFO queue working with this worker.
 	//
+	// Parameters:
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
+	//
 	// Returns:
 	//   - Queue[T]: A fully configured Queue that automatically processes jobs using this worker.
 	//
@@ -33,6 +36,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - Queue[T]: A Queue that uses the provided implementation and processes jobs with this worker.
@@ -45,6 +49,9 @@ type IWorkerBinder[T any] interface {
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects the worker to it.
 	// Use this when you need to process jobs based on priority rather than FIFO order.
+	//
+	// Parameters:
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - PriorityQueue[T]: A fully configured PriorityQueue that processes jobs using this worker.
@@ -61,6 +68,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Parameters:
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - PriorityQueue[T]: A PriorityQueue that uses the provided implementation and processes jobs with this worker.
@@ -76,7 +84,8 @@ type IWorkerBinder[T any] interface {
 	// workloads where job completion must be guaranteed.
 	//
 	// Parameters:
-	//   - pq IQueue: A queue implementation that provides persistence capabilities.
+	//   - pq IPersistentQueue: A queue implementation that provides persistence capabilities.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - PersistentQueue[T, any]: A persistent queue that ensures jobs are not lost and processes them with the worker.
@@ -91,6 +100,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Parameters:
 	//   - pq IPersistentPriorityQueue: A priority queue implementation that provides persistence capabilities.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - PersistentPriorityQueue[T, any]: A persistent priority queue that processes jobs based on priority
@@ -100,14 +110,15 @@ type IWorkerBinder[T any] interface {
 	//   persistentPriorityQueue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
 	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
 
-	// WithDistributedQueue binds the void worker to a DistributedQueue implementation.
+	// WithDistributedQueue binds the worker to a DistributedQueue implementation.
 	// Distributed queues allow job processing to be spread across multiple instances or processes,
 	// enabling horizontal scaling of workers. Since void workers don't need to return results,
 	// they are perfect for distributed processing scenarios.
 	//
 	// Parameters:
 	//   - dq IDistributedQueue: A distributed queue implementation that satisfies the IDistributedQueue interface.
-	//     This could be backed by Redis, RabbitMQ, Kafka, or any other distributed messaging system.
+	//     This could be backed by Redis or any other distributed messaging system.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - DistributedQueue[T, any]: A distributed queue that can distribute jobs across multiple workers or instances.
@@ -118,7 +129,7 @@ type IWorkerBinder[T any] interface {
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
 	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
 
-	// WithDistributedPriorityQueue binds the void worker to a DistributedPriorityQueue implementation.
+	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue implementation.
 	// This combines distributed processing with priority-based job ordering. Jobs are distributed
 	// across multiple instances but processed according to priority within each instance.
 	// This is ideal for scenarios where some jobs are more urgent than others, but still need
@@ -128,6 +139,7 @@ type IWorkerBinder[T any] interface {
 	//   - dq IDistributedPriorityQueue: A distributed priority queue implementation that satisfies
 	//     the IDistributedPriorityQueue interface. This could be backed by Redis or other
 	//     distributed messaging systems that support priority-based message ordering.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - DistributedPriorityQueue[T, any]: A distributed priority queue that can distribute jobs
@@ -225,6 +237,10 @@ type IErrWorkerBinder[T any] interface {
 
 	// BindQueue binds the worker to a standard Queue implementation.
 	// It creates a new Queue with default settings and connects with the worker.
+	//
+	// Parameters:
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
+	//
 	// Returns:
 	//   - ErrQueue[T]: A fully configured ErrQueue that automatically processes jobs using this worker.
 	//
@@ -239,6 +255,7 @@ type IErrWorkerBinder[T any] interface {
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - ErrQueue[T]: A fully configured ErrQueue that uses the provided implementation and processes jobs with this worker.
@@ -268,6 +285,7 @@ type IErrWorkerBinder[T any] interface {
 	//
 	// Parameters:
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - ErrPriorityQueue[T]: A fully configured ErrPriorityQueue that uses the provided implementation and processes jobs with this worker.
@@ -320,6 +338,9 @@ type IResultWorkerBinder[T, R any] interface {
 	// It creates a new Queue with default settings and connects the worker to it.
 	// This is the simplest way to get a standard FIFO queue working with this worker.
 	//
+	// Parameters:
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
+	//
 	// Returns:
 	//   - ResultQueue[T, R]: A fully configured Result Queue that automatically processes jobs using this worker.
 	//
@@ -335,6 +356,7 @@ type IResultWorkerBinder[T, R any] interface {
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - ResultQueue[T, R]: A Result Queue that uses the provided implementation and processes jobs with this worker.
@@ -347,6 +369,9 @@ type IResultWorkerBinder[T, R any] interface {
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
 	// It creates a new PriorityQueue with default settings and connects the worker to it.
 	// Use this when you need to process jobs based on priority rather than FIFO order.
+	//
+	// Parameters:
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - ResultPriorityQueue[T, R]: A fully configured ResultPriorityQueue that processes jobs using this worker.
@@ -363,6 +388,7 @@ type IResultWorkerBinder[T, R any] interface {
 	//
 	// Parameters:
 	//   - pq IPriorityQueue: A custom priority queue implementation that satisfies the IPriorityQueue interface.
+	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
 	//
 	// Returns:
 	//   - ResultPriorityQueue[T, R]: A Result PriorityQueue that uses the provided implementation and processes jobs with this worker.
