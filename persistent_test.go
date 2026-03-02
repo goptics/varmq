@@ -299,3 +299,73 @@ func TestPersistentPriorityQueueEdgeCases(t *testing.T) {
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 }
+
+func TestPersistentQueueCapacity(t *testing.T) {
+	t.Run("Add returns false when at capacity", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2)).(*persistentQueue[string])
+
+		ok1 := queue.Add("item-1")
+		assert.True(t, ok1, "First item should be added successfully")
+
+		ok2 := queue.Add("item-2")
+		assert.True(t, ok2, "Second item should be added successfully")
+
+		ok3 := queue.Add("item-3")
+		assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+		assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+	})
+
+	t.Run("IsFull returns correct state", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2)).(*persistentQueue[string])
+
+		assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+		queue.Add("item-1")
+		assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+		queue.Add("item-2")
+		assert.True(t, queue.IsFull(), "Queue at capacity should be full")
+	})
+}
+
+func TestPersistentPriorityQueueCapacity(t *testing.T) {
+	t.Run("Add returns false when at capacity", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentPriorityQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2)).(*persistentPriorityQueue[string])
+
+		ok1 := queue.Add("high", 1)
+		assert.True(t, ok1, "First item should be added successfully")
+
+		ok2 := queue.Add("medium", 5)
+		assert.True(t, ok2, "Second item should be added successfully")
+
+		ok3 := queue.Add("low", 10)
+		assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+		assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+	})
+
+	t.Run("IsFull returns correct state", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentPriorityQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2)).(*persistentPriorityQueue[string])
+
+		assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+		queue.Add("item-1", 1)
+		assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+		queue.Add("item-2", 2)
+		assert.True(t, queue.IsFull(), "Queue at capacity should be full")
+	})
+}
