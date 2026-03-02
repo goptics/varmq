@@ -282,15 +282,16 @@ func WithJobId(id string) JobConfigFunc {
 	}
 }
 
-type QueueConfigFunc func(*QueueConfig)
+type QueueConfigFunc func(*queueConfig)
 
-type QueueConfig struct {
-	Priority int
+type queueConfig struct {
+	priority int
+	capacity int
 }
 
-func loadQueueConfigs(configs ...QueueConfigFunc) QueueConfig {
-	c := QueueConfig{
-		Priority: math.MaxInt,
+func loadQueueConfigs(configs ...QueueConfigFunc) queueConfig {
+	c := queueConfig{
+		priority: math.MaxInt,
 	}
 	for _, config := range configs {
 		config(&c)
@@ -315,7 +316,24 @@ func loadQueueConfigs(configs ...QueueConfigFunc) QueueConfig {
 // Default behavior: If this option is not set, the queue implicitly receives the lowest
 // possible priority (math.MaxInt).
 func WithQueuePriority(priority int) QueueConfigFunc {
-	return func(c *QueueConfig) {
-		c.Priority = priority
+	return func(c *queueConfig) {
+		c.priority = priority
+	}
+}
+
+// WithQueueCapacity configures the maximum number of pending items a queue can hold.
+//
+// When the queue reaches its capacity, subsequent Add calls will return false,
+// indicating the item was not enqueued. This allows callers to implement
+// backpressure or overflow handling.
+//
+// Parameters:
+//   - capacity: The maximum number of items the queue can hold.
+//     Values less than 1 are treated as 0, meaning unlimited capacity.
+//
+// Default behavior: If this option is not set, the queue has unlimited capacity (0).
+func WithQueueCapacity(capacity int) QueueConfigFunc {
+	return func(c *queueConfig) {
+		c.capacity = max(0, capacity)
 	}
 }

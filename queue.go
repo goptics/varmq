@@ -36,15 +36,19 @@ type Item[T any] struct {
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
 func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc) *queue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
 
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
+	if q.IsFull() {
+		return nil, false
+	}
+
 	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -63,6 +67,10 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
+		if q.IsFull() {
+			continue
+		}
+
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -97,15 +105,19 @@ type ErrQueue[T any] interface {
 
 func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...QueueConfigFunc) *errorQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
 
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
+	if q.IsFull() {
+		return nil, false
+	}
+
 	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -124,6 +136,10 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
 	for _, item := range items {
+		if q.IsFull() {
+			continue
+		}
+
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -157,15 +173,19 @@ type ResultQueue[T, R any] interface {
 
 func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs ...QueueConfigFunc) *resultQueue[T, R] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
+	if q.IsFull() {
+		return nil, false
+	}
+
 	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -184,6 +204,10 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
+		if q.IsFull() {
+			continue
+		}
+
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -199,23 +223,32 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 }
 
 type externalBaseQueue struct {
-	w Worker
-	q IBaseQueue
+	w      Worker
+	q      IBaseQueue
+	config queueConfig
 }
 
 type IExternalBaseQueue interface {
 	PendingTracker
+	// IsFull returns true if the queue has reached its configured capacity.
+	// If no capacity is set, it always returns false.
+	IsFull() bool
 	// Purge removes all pending Jobs from the queue.
 	Purge()
 	// Close closes the queue, no more jobs can be added to the queue after closing the queue.
 	Close() error
 }
 
-func newExternalQueue(q IBaseQueue, worker Worker) *externalBaseQueue {
+func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig) *externalBaseQueue {
 	return &externalBaseQueue{
-		w: worker,
-		q: q,
+		w:      worker,
+		q:      q,
+		config: config,
 	}
+}
+
+func (eq *externalBaseQueue) IsFull() bool {
+	return eq.config.capacity > 0 && eq.q.Len() >= eq.config.capacity
 }
 
 func (eq *externalBaseQueue) NumPending() int {

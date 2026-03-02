@@ -21,6 +21,10 @@ func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue,
 }
 
 func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) bool {
+	if q.IsFull() {
+		return false
+	}
+
 	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 	val, err := j.Json()
 
@@ -36,8 +40,4 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 	q.w.notifyToPullNextJobs()
 
 	return true
-}
-
-func (q *persistentPriorityQueue[T]) Purge() {
-	q.priorityQueue.Purge()
 }

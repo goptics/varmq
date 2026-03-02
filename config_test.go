@@ -233,25 +233,53 @@ func TestConfig(t *testing.T) {
 		t.Run("loadQueueConfigs", func(t *testing.T) {
 			// Test default priority
 			c := loadQueueConfigs()
-			assert.Equal(t, math.MaxInt, c.Priority)
+			assert.Equal(t, math.MaxInt, c.priority)
+			assert.Equal(t, 0, c.capacity)
 
 			// Test with custom priority
 			c = loadQueueConfigs(WithQueuePriority(10))
-			assert.Equal(t, 10, c.Priority)
+			assert.Equal(t, 10, c.priority)
 
 			// Test with multiple configs (should apply in order)
 			c = loadQueueConfigs(
 				WithQueuePriority(10),
 				WithQueuePriority(5),
 			)
-			assert.Equal(t, 5, c.Priority)
+			assert.Equal(t, 5, c.priority)
+
+			// Test with capacity
+			c = loadQueueConfigs(WithQueueCapacity(100))
+			assert.Equal(t, 100, c.capacity)
+			assert.Equal(t, math.MaxInt, c.priority)
 		})
 
 		t.Run("WithQueuePriority", func(t *testing.T) {
 			configFunc := WithQueuePriority(1)
-			c := QueueConfig{Priority: 100}
+			c := queueConfig{priority: 100}
 			configFunc(&c)
-			assert.Equal(t, 1, c.Priority)
+			assert.Equal(t, 1, c.priority)
+		})
+
+		t.Run("WithQueueCapacity", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				input    int
+				expected int
+			}{
+				{"Positive capacity", 10, 10},
+				{"Zero capacity means unlimited", 0, 0},
+				{"Negative capacity clamped to 0", -5, 0},
+				{"Large capacity", 10000, 10000},
+			}
+
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					configFunc := WithQueueCapacity(tc.input)
+					c := queueConfig{}
+					configFunc(&c)
+					assert.Equal(t, tc.expected, c.capacity)
+				})
+			}
 		})
 	})
 }

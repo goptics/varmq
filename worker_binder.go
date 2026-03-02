@@ -199,18 +199,18 @@ func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ..
 	c := loadQueueConfigs(configs...)
 	defer dq.Subscribe(wb.handleQueueSubscription)
 	defer wb.start()
-	defer wb.queues.Register(dq, c.Priority)
+	defer wb.queues.Register(dq, c.priority)
 
-	return NewDistributedQueue[T](dq)
+	return NewDistributedQueue[T](dq, configs...)
 }
 
 func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	defer dpq.Subscribe(wb.handleQueueSubscription)
 	defer wb.start()
-	defer wb.queues.Register(dpq, c.Priority)
+	defer wb.queues.Register(dpq, c.priority)
 
-	return NewDistributedPriorityQueue[T](dpq)
+	return NewDistributedPriorityQueue[T](dpq, configs...)
 }
 
 type errWorkerBinder[T any] struct {

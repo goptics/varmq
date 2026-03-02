@@ -698,3 +698,125 @@ func TestExternalQueue(t *testing.T) {
 		assert.Equal(0, queue.NumPending(), "worker should process all pending jobs after close")
 	})
 }
+
+func TestQueueCapacity(t *testing.T) {
+	t.Run("BasicQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("item-1")
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("item-2")
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("item-3")
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.NumPending(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "item-1", ID: "1"},
+				{Data: "item-2", ID: "2"},
+				{Data: "item-3", ID: "3"},
+				{Data: "item-4", ID: "4"},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.NumPending(), "Queue should only accept up to capacity")
+		})
+
+		t.Run("Zero capacity means unlimited", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(0))
+
+			for i := range 100 {
+				_, ok := queue.Add("item-" + strconv.Itoa(i))
+				assert.True(t, ok, "Items should be added without limit")
+			}
+			assert.Equal(t, 100, queue.NumPending())
+		})
+
+		t.Run("No capacity config means unlimited", func(t *testing.T) {
+			queue, _, _ := setupBasicQueue()
+
+			for i := range 100 {
+				_, ok := queue.Add("item-" + strconv.Itoa(i))
+				assert.True(t, ok, "Items should be added without limit")
+			}
+			assert.Equal(t, 100, queue.NumPending())
+		})
+
+		t.Run("IsFull returns correct state", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+			queue.Add("item-1")
+			assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+			queue.Add("item-2")
+			assert.True(t, queue.IsFull(), "Queue at capacity should be full")
+		})
+
+		t.Run("IsFull returns false with no capacity", func(t *testing.T) {
+			queue, _, _ := setupBasicQueue()
+
+			for i := range 100 {
+				queue.Add("item-" + strconv.Itoa(i))
+			}
+			assert.False(t, queue.IsFull(), "Queue with no capacity should never be full")
+		})
+	})
+
+	t.Run("PriorityQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("high", 1)
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("medium", 5)
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("low", 10)
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.NumPending(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "high", ID: "1", Priority: 1},
+				{Data: "medium", ID: "2", Priority: 5},
+				{Data: "low", ID: "3", Priority: 10},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.NumPending(), "Queue should only accept up to capacity")
+		})
+	})
+}
