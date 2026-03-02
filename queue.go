@@ -229,7 +229,12 @@ type externalBaseQueue struct {
 }
 
 type IExternalBaseQueue interface {
-	PendingTracker
+	// Deprecated: Use Queue's Len() method instead for a more idiomatic approach.
+	// This method will be removed in an upcoming release.
+	NumPending() int
+
+	// Len returns the number of jobs in the queue.
+	Len() int
 	// IsFull returns true if the queue has reached its configured capacity.
 	// If no capacity is set, it always returns false.
 	IsFull() bool
@@ -252,6 +257,10 @@ func (eq *externalBaseQueue) IsFull() bool {
 }
 
 func (eq *externalBaseQueue) NumPending() int {
+	return eq.q.Len()
+}
+
+func (eq *externalBaseQueue) Len() int {
 	return eq.q.Len()
 }
 

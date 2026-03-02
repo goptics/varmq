@@ -44,7 +44,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Test adding a job
 		ok := queue.Add("test-data")
 		assert.True(t, ok, "Job should be added successfully")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -54,7 +54,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Test adding a job with custom ID
 		ok := queue.Add("test-data", WithJobId("custom-id"))
 		assert.True(t, ok, "Job should be added successfully with custom ID")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -68,7 +68,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Attempt to add a job to closed queue
 		ok := queue.Add("test-data")
 		assert.False(t, ok, "Job should not be added to closed queue")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty")
 	})
 
@@ -81,7 +81,7 @@ func TestPersistentQueue(t *testing.T) {
 			assert.True(t, ok, "Job %d should be added successfully", i)
 		}
 
-		assert.Equal(t, 5, queue.NumPending(), "Queue should have five pending jobs")
+		assert.Equal(t, 5, queue.Len(), "Queue should have five pending jobs")
 		assert.Equal(t, 5, mockQueue.Len(), "Mock queue should have five items")
 	})
 
@@ -91,11 +91,11 @@ func TestPersistentQueue(t *testing.T) {
 		// Add some jobs first
 		queue.Add("test-data-1")
 		queue.Add("test-data-2")
-		assert.Equal(t, 2, queue.NumPending(), "Queue should have two pending jobs")
+		assert.Equal(t, 2, queue.Len(), "Queue should have two pending jobs")
 
 		// Purge the queue
 		queue.Purge()
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs after purge")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs after purge")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty after purge")
 	})
 
@@ -117,7 +117,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Test adding a job with priority
 		ok := queue.Add("test-data", 5)
 		assert.True(t, ok, "Job should be added successfully")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -127,7 +127,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Test adding a job with custom ID and priority
 		ok := queue.Add("test-data", 3, WithJobId("custom-id"))
 		assert.True(t, ok, "Job should be added successfully with custom ID and priority")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -141,7 +141,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Attempt to add a job to closed queue
 		ok := queue.Add("test-data", 1)
 		assert.False(t, ok, "Job should not be added to closed queue")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty")
 	})
 
@@ -155,7 +155,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 			assert.True(t, ok, "Job %d should be added successfully", i)
 		}
 
-		assert.Equal(t, 5, queue.NumPending(), "Queue should have five pending jobs")
+		assert.Equal(t, 5, queue.Len(), "Queue should have five pending jobs")
 		assert.Equal(t, 5, mockQueue.Len(), "Mock queue should have five items")
 	})
 
@@ -167,7 +167,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		queue.Add("high-priority", 1)
 		queue.Add("medium-priority", 5)
 
-		assert.Equal(t, 3, queue.NumPending(), "Queue should have three pending jobs")
+		assert.Equal(t, 3, queue.Len(), "Queue should have three pending jobs")
 
 		// Dequeue and verify priority ordering (highest priority first)
 		item1, ok1 := mockQueue.Dequeue()
@@ -192,11 +192,11 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Add some jobs first
 		queue.Add("test-data-1", 1)
 		queue.Add("test-data-2", 2)
-		assert.Equal(t, 2, queue.NumPending(), "Queue should have two pending jobs")
+		assert.Equal(t, 2, queue.Len(), "Queue should have two pending jobs")
 
 		// Purge the queue
 		queue.Purge()
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs after purge")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs after purge")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty after purge")
 	})
 
@@ -216,7 +216,7 @@ func TestPersistentQueueFailures(t *testing.T) {
 
 		ok := queue.Add("test-data")
 		assert.False(t, ok, "Enqueue should fail when configured")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, queue.Len(), "Queue should be empty")
 	})
 
 	t.Run("Acknowledge failure", func(t *testing.T) {
@@ -235,7 +235,7 @@ func TestPersistentPriorityQueueFailures(t *testing.T) {
 
 		ok := queue.Add("test-data", 1)
 		assert.False(t, ok, "Enqueue should fail when configured")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, queue.Len(), "Queue should be empty")
 	})
 
 	t.Run("Acknowledge failure", func(t *testing.T) {
