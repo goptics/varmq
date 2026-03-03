@@ -29,10 +29,6 @@ func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs .
 }
 
 func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j, priority); !ok {
@@ -51,10 +47,6 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
@@ -98,10 +90,6 @@ func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriori
 }
 
 func (q *resultPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j, priority); !ok {
@@ -120,10 +108,6 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {
@@ -167,10 +151,6 @@ func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue,
 }
 
 func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j, priority); !ok {
@@ -189,10 +169,6 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 
 		if ok := q.internalQueue.Enqueue(j, item.Priority); !ok {

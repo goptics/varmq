@@ -430,4 +430,53 @@ func TestQueue(t *testing.T) {
 			assert.Equal(i, val, "remaining elements should be in order after shrinking")
 		}
 	})
+
+	t.Run("SetCapacity", func(t *testing.T) {
+		t.Run("sets capacity correctly", func(t *testing.T) {
+			q := NewQueue[int]()
+			q.SetCapacity(5)
+			assert.Equal(t, 5, q.capacity)
+		})
+
+		t.Run("clamps negative values to zero", func(t *testing.T) {
+			q := NewQueue[int]()
+			q.SetCapacity(-10)
+			assert.Equal(t, 0, q.capacity)
+		})
+
+		t.Run("zero means unlimited", func(t *testing.T) {
+			q := NewQueue[int]()
+			q.SetCapacity(0)
+
+			for i := range 100 {
+				ok := q.Enqueue(i)
+				assert.True(t, ok, "enqueue should always succeed with zero capacity")
+			}
+			assert.Equal(t, 100, q.Len())
+		})
+
+		t.Run("enqueue blocked at capacity", func(t *testing.T) {
+			q := NewQueue[int]()
+			q.SetCapacity(3)
+
+			assert.True(t, q.Enqueue(1))
+			assert.True(t, q.Enqueue(2))
+			assert.True(t, q.Enqueue(3))
+			assert.False(t, q.Enqueue(4), "enqueue should fail when at capacity")
+			assert.Equal(t, 3, q.Len())
+		})
+
+		t.Run("enqueue resumes after dequeue frees space", func(t *testing.T) {
+			q := NewQueue[int]()
+			q.SetCapacity(2)
+
+			q.Enqueue(1)
+			q.Enqueue(2)
+			assert.False(t, q.Enqueue(3), "should be at capacity")
+
+			q.Dequeue()
+			assert.True(t, q.Enqueue(3), "should succeed after dequeue frees space")
+			assert.Equal(t, 2, q.Len())
+		})
+	})
 }

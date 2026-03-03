@@ -332,6 +332,7 @@ func WithQueuePriority(priority int) QueueConfigFunc {
 //     Values less than 1 are treated as 0, meaning unlimited capacity.
 //
 // Default behavior: If this option is not set, the queue has unlimited capacity (0).
+// Note: If the queue doesn't implement the CapacitySetter interface, this option will be ignored.
 func WithQueueCapacity(capacity int) QueueConfigFunc {
 	return func(c *queueConfig) {
 		c.capacity = max(0, capacity)

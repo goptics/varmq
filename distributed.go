@@ -13,9 +13,15 @@ type distributedQueue[T any] struct {
 }
 
 func NewDistributedQueue[T any](internalQueue IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	c := loadQueueConfigs(configs...)
+
+	if cap, ok := internalQueue.(CapacitySetter); ok {
+		cap.SetCapacity(c.capacity)
+	}
+
 	return &distributedQueue[T]{
 		IDistributedQueue: internalQueue,
-		config:            loadQueueConfigs(configs...),
+		config:            c,
 	}
 }
 
@@ -28,10 +34,6 @@ func (dq *distributedQueue[T]) IsFull() bool {
 }
 
 func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
-	if dq.IsFull() {
-		return false
-	}
-
 	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()

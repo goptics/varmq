@@ -14,9 +14,15 @@ type distributedPriorityQueue[T any] struct {
 }
 
 func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	cfg := loadQueueConfigs(configs...)
+
+	if cap, ok := internalQueue.(CapacitySetter); ok {
+		cap.SetCapacity(cfg.capacity)
+	}
+
 	return &distributedPriorityQueue[T]{
 		IDistributedPriorityQueue: internalQueue,
-		config:                    loadQueueConfigs(configs...),
+		config:                    cfg,
 	}
 }
 
@@ -29,10 +35,6 @@ func (dpq *distributedPriorityQueue[T]) IsFull() bool {
 }
 
 func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFunc) bool {
-	if dpq.IsFull() {
-		return false
-	}
-
 	j := newJob(data, loadJobConfigs(newConfig(), c...))
 
 	jBytes, err := j.Json()

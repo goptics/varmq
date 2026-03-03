@@ -16,6 +16,7 @@ type enqItem[T any] struct {
 type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
 	insertionCount int
+	capacity       int // Maximum size of the queue
 	mx             sync.RWMutex
 	closed         atomic.Bool
 }
@@ -27,6 +28,10 @@ func NewPriorityQueue[T any]() *PriorityQueue[T] {
 	}
 	heap.Init(pq)
 	return &PriorityQueue[T]{internal: pq}
+}
+
+func (q *PriorityQueue[T]) SetCapacity(cap int) {
+	q.capacity = max(0, cap)
 }
 
 // Len returns the number of items in the priority queue.
@@ -54,23 +59,26 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 		return false
 	}
 
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
 	typedValue, ok := item.(T)
 
 	if !ok {
 		return false
 	}
 
-	i := enqItem[T]{
+	q.mx.Lock()
+	if q.capacity > 0 && q.internal.Len() == q.capacity {
+		q.mx.Unlock()
+		return false
+	}
+
+	heap.Push(q.internal, &enqItem[T]{
 		Value:    typedValue,
 		Priority: priority,
 		Index:    q.insertionCount,
-	}
-
+	}) // O(log n)
 	q.insertionCount++
-	heap.Push(q.internal, &i) // O(log n)
+	q.mx.Unlock()
+
 	return true
 }
 

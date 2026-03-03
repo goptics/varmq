@@ -10,20 +10,21 @@ import (
 
 var (
 	initialBufferCapacity = 1024       // 1KB initial capacity
-	chunkMaxCapacity      = 100 * 1024 // 100KB max capacity
+	maxChunkCapacity      = 100 * 1024 // 100KB max capacity
 )
 
 // Queue implements a FIFO queue using linked buffer chunks
 // This eliminates large slice allocations while maintaining good cache locality
 // Inspired by [pond](https://github.com/alitto/pond) buffer implementation with dynamic capacity growth
 type Queue[T any] struct {
-	readChunk   *linkedbuffer.Chunk[T] // Current chunk being read from
-	writeChunk  *linkedbuffer.Chunk[T] // Current chunk being written to
-	writeCount  atomic.Uint64          // Total items written
-	readCount   atomic.Uint64          // Total items read
-	mx          sync.RWMutex           // Protects chunk pointers
-	maxCapacity int                    // Maximum capacity per chunk
-	closed      atomic.Bool
+	readChunk        *linkedbuffer.Chunk[T] // Current chunk being read from
+	writeChunk       *linkedbuffer.Chunk[T] // Current chunk being written to
+	writeCount       atomic.Uint64          // Total items written
+	readCount        atomic.Uint64          // Total items read
+	mx               sync.RWMutex           // Protects chunk pointers
+	maxChunkCapacity int                    // Maximum capacity per chunk
+	capacity         int                    // Maximum capacity of the queue
+	closed           atomic.Bool
 }
 
 // NewQueue creates a new empty linked buffer queue
@@ -31,10 +32,14 @@ func NewQueue[T any]() *Queue[T] {
 	chunk := linkedbuffer.NewChunk[T](initialBufferCapacity)
 
 	return &Queue[T]{
-		readChunk:   chunk,
-		writeChunk:  chunk,
-		maxCapacity: chunkMaxCapacity,
+		readChunk:        chunk,
+		writeChunk:       chunk,
+		maxChunkCapacity: maxChunkCapacity,
 	}
+}
+
+func (q *Queue[T]) SetCapacity(cap int) {
+	q.capacity = max(0, cap)
 }
 
 // Len returns the total number of items in the queue
@@ -66,6 +71,10 @@ func (q *Queue[T]) Enqueue(item any) bool {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
+	if q.capacity > 0 && q.Len() == q.capacity {
+		return false
+	}
+
 	// Try to push to current write chunk
 	if q.writeChunk.Push(typedItem) {
 		q.writeCount.Add(1)
@@ -73,7 +82,7 @@ func (q *Queue[T]) Enqueue(item any) bool {
 	}
 
 	currentCap := q.writeChunk.Cap()
-	newCapacity := min(currentCap+currentCap/2, q.maxCapacity)
+	newCapacity := min(currentCap+currentCap/2, q.maxChunkCapacity)
 
 	newChunk := linkedbuffer.NewChunk[T](newCapacity)
 

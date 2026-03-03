@@ -1,6 +1,8 @@
 package varmq
 
-import "io"
+import (
+	"io"
+)
 
 // queue is the base implementation of the Queue interface
 // It contains an externalBaseQueue for worker management and an internalQueue for job storage
@@ -45,10 +47,6 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 }
 
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -67,10 +65,6 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -114,10 +108,6 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 }
 
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -136,10 +126,6 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -182,10 +168,6 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 }
 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
-	if q.IsFull() {
-		return nil, false
-	}
-
 	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
 
 	if ok := q.internalQueue.Enqueue(j); !ok {
@@ -204,10 +186,6 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	groupJob := newResultGroupJob[T, R](len(items))
 
 	for _, item := range items {
-		if q.IsFull() {
-			continue
-		}
-
 		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
@@ -245,6 +223,10 @@ type IExternalBaseQueue interface {
 }
 
 func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig) *externalBaseQueue {
+	if cap, ok := q.(CapacitySetter); ok {
+		cap.SetCapacity(config.capacity)
+	}
+
 	return &externalBaseQueue{
 		w:      worker,
 		q:      q,

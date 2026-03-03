@@ -30,10 +30,6 @@ func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, confi
 
 // Add adds a job with the given data to the persistent queue
 func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
-	if q.IsFull() {
-		return false
-	}
-
 	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
 	val, err := j.Json()
 
