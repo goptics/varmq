@@ -402,7 +402,7 @@ func TestDistributedPriorityQueueEdgeCases(t *testing.T) {
 func TestDistributedQueueCapacity(t *testing.T) {
 	t.Run("Add returns false when at capacity", func(t *testing.T) {
 		mockQueue := mocks.NewMockDistributedQueue()
-		queue := NewDistributedQueue[string](mockQueue, WithQueueCapacity(2)).(*distributedQueue[string])
+		queue := NewDistributedQueue[string](mockQueue, WithQueueCapacity(2))
 
 		ok1 := queue.Add("item-1")
 		assert.True(t, ok1, "First item should be added successfully")
@@ -418,7 +418,7 @@ func TestDistributedQueueCapacity(t *testing.T) {
 
 	t.Run("IsFull returns correct state", func(t *testing.T) {
 		mockQueue := mocks.NewMockDistributedQueue()
-		queue := NewDistributedQueue[string](mockQueue, WithQueueCapacity(2)).(*distributedQueue[string])
+		queue := NewDistributedQueue[string](mockQueue, WithQueueCapacity(2))
 
 		assert.False(t, queue.IsFull(), "Empty queue should not be full")
 
@@ -433,7 +433,7 @@ func TestDistributedQueueCapacity(t *testing.T) {
 func TestDistributedPriorityQueueCapacity(t *testing.T) {
 	t.Run("Add returns false when at capacity", func(t *testing.T) {
 		mockQueue := mocks.NewMockDistributedPriorityQueue()
-		queue := NewDistributedPriorityQueue[string](mockQueue, WithQueueCapacity(2)).(*distributedPriorityQueue[string])
+		queue := NewDistributedPriorityQueue[string](mockQueue, WithQueueCapacity(2))
 
 		ok1 := queue.Add("high", 1)
 		assert.True(t, ok1, "First item should be added successfully")
@@ -449,7 +449,7 @@ func TestDistributedPriorityQueueCapacity(t *testing.T) {
 
 	t.Run("IsFull returns correct state", func(t *testing.T) {
 		mockQueue := mocks.NewMockDistributedPriorityQueue()
-		queue := NewDistributedPriorityQueue[string](mockQueue, WithQueueCapacity(2)).(*distributedPriorityQueue[string])
+		queue := NewDistributedPriorityQueue[string](mockQueue, WithQueueCapacity(2))
 
 		assert.False(t, queue.IsFull(), "Empty queue should not be full")
 
