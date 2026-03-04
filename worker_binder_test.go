@@ -34,7 +34,7 @@ func TestWorkerBinderPersistentMethods(t *testing.T) {
 		ok := persistentQueue.Add("test-data")
 		assert.True(t, ok, "Should be able to add job to persistent queue")
 		// NumPending might be 0 or 1 due to immediate processing by worker
-		assert.LessOrEqual(t, persistentQueue.NumPending(), 1, "Should have at most one pending job (may be processed immediately)")
+		assert.LessOrEqual(t, persistentQueue.Len(), 1, "Should have at most one pending job (may be processed immediately)")
 
 		// Clean up
 		worker.Stop()
@@ -61,7 +61,7 @@ func TestWorkerBinderPersistentMethods(t *testing.T) {
 		// Test adding a job with priority
 		ok := persistentPriorityQueue.Add("test-data", 5)
 		assert.True(t, ok, "Should be able to add job to persistent priority queue")
-		assert.LessOrEqual(t, persistentPriorityQueue.NumPending(), 1, "Should have at most one pending job (may be processed immediately)")
+		assert.LessOrEqual(t, persistentPriorityQueue.Len(), 1, "Should have at most one pending job (may be processed immediately)")
 
 		// Clean up
 		worker.Stop()
@@ -85,7 +85,7 @@ func TestWorkerBinderDistributedMethods(t *testing.T) {
 		// Verify the queue was created and bound correctly
 		assert.NotNil(t, distributedQueue, "Distributed queue should not be nil")
 		// Mock distributed queue starts with 0 items
-		assert.Equal(t, 0, distributedQueue.NumPending(), "Should start with no pending jobs")
+		assert.Equal(t, 0, distributedQueue.Len(), "Should start with no pending jobs")
 
 		// Test adding a job
 		ok := distributedQueue.Add("test-data")
@@ -111,7 +111,7 @@ func TestWorkerBinderDistributedMethods(t *testing.T) {
 		// Verify the queue was created and bound correctly
 		assert.NotNil(t, distributedPriorityQueue, "Distributed priority queue should not be nil")
 		// Mock distributed priority queue starts with 0 items
-		assert.Equal(t, 0, distributedPriorityQueue.NumPending(), "Should start with no pending jobs")
+		assert.Equal(t, 0, distributedPriorityQueue.Len(), "Should start with no pending jobs")
 
 		// Test adding a job with priority
 		ok := distributedPriorityQueue.Add("test-data", 3)

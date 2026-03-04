@@ -9,7 +9,7 @@ import (
 )
 
 // Setup functions for persistent queues
-func setupPersistentQueue() (*persistentQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentQueue) {
+func setupPersistentQueue() (PersistentQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentQueue) {
 	// Create a worker with a simple process function
 	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
@@ -17,12 +17,12 @@ func setupPersistentQueue() (*persistentQueue[string], *worker[string, iJob[stri
 
 	mockQueue := mocks.NewMockPersistentQueue()
 	worker := newWorker(workerFunc)
-	queue := newPersistentQueue(worker, mockQueue).(*persistentQueue[string])
+	queue := newPersistentQueue(worker, mockQueue)
 
 	return queue, worker, mockQueue
 }
 
-func setupPersistentPriorityQueue() (*persistentPriorityQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentPriorityQueue) {
+func setupPersistentPriorityQueue() (PersistentPriorityQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentPriorityQueue) {
 	// Create a worker with a simple process function
 	workerFunc := func(j iJob[string]) {
 		// Simple processor that doesn't return anything
@@ -30,7 +30,7 @@ func setupPersistentPriorityQueue() (*persistentPriorityQueue[string], *worker[s
 
 	mockQueue := mocks.NewMockPersistentPriorityQueue()
 	worker := newWorker(workerFunc)
-	queue := newPersistentPriorityQueue(worker, mockQueue).(*persistentPriorityQueue[string])
+	queue := newPersistentPriorityQueue(worker, mockQueue)
 
 	return queue, worker, mockQueue
 }
@@ -44,7 +44,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Test adding a job
 		ok := queue.Add("test-data")
 		assert.True(t, ok, "Job should be added successfully")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -54,7 +54,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Test adding a job with custom ID
 		ok := queue.Add("test-data", WithJobId("custom-id"))
 		assert.True(t, ok, "Job should be added successfully with custom ID")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -68,7 +68,7 @@ func TestPersistentQueue(t *testing.T) {
 		// Attempt to add a job to closed queue
 		ok := queue.Add("test-data")
 		assert.False(t, ok, "Job should not be added to closed queue")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty")
 	})
 
@@ -81,7 +81,7 @@ func TestPersistentQueue(t *testing.T) {
 			assert.True(t, ok, "Job %d should be added successfully", i)
 		}
 
-		assert.Equal(t, 5, queue.NumPending(), "Queue should have five pending jobs")
+		assert.Equal(t, 5, queue.Len(), "Queue should have five pending jobs")
 		assert.Equal(t, 5, mockQueue.Len(), "Mock queue should have five items")
 	})
 
@@ -91,11 +91,11 @@ func TestPersistentQueue(t *testing.T) {
 		// Add some jobs first
 		queue.Add("test-data-1")
 		queue.Add("test-data-2")
-		assert.Equal(t, 2, queue.NumPending(), "Queue should have two pending jobs")
+		assert.Equal(t, 2, queue.Len(), "Queue should have two pending jobs")
 
 		// Purge the queue
 		queue.Purge()
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs after purge")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs after purge")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty after purge")
 	})
 
@@ -117,7 +117,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Test adding a job with priority
 		ok := queue.Add("test-data", 5)
 		assert.True(t, ok, "Job should be added successfully")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -127,7 +127,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Test adding a job with custom ID and priority
 		ok := queue.Add("test-data", 3, WithJobId("custom-id"))
 		assert.True(t, ok, "Job should be added successfully with custom ID and priority")
-		assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+		assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
 	})
 
@@ -141,7 +141,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Attempt to add a job to closed queue
 		ok := queue.Add("test-data", 1)
 		assert.False(t, ok, "Job should not be added to closed queue")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty")
 	})
 
@@ -155,7 +155,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 			assert.True(t, ok, "Job %d should be added successfully", i)
 		}
 
-		assert.Equal(t, 5, queue.NumPending(), "Queue should have five pending jobs")
+		assert.Equal(t, 5, queue.Len(), "Queue should have five pending jobs")
 		assert.Equal(t, 5, mockQueue.Len(), "Mock queue should have five items")
 	})
 
@@ -167,7 +167,7 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		queue.Add("high-priority", 1)
 		queue.Add("medium-priority", 5)
 
-		assert.Equal(t, 3, queue.NumPending(), "Queue should have three pending jobs")
+		assert.Equal(t, 3, queue.Len(), "Queue should have three pending jobs")
 
 		// Dequeue and verify priority ordering (highest priority first)
 		item1, ok1 := mockQueue.Dequeue()
@@ -192,11 +192,11 @@ func TestPersistentPriorityQueue(t *testing.T) {
 		// Add some jobs first
 		queue.Add("test-data-1", 1)
 		queue.Add("test-data-2", 2)
-		assert.Equal(t, 2, queue.NumPending(), "Queue should have two pending jobs")
+		assert.Equal(t, 2, queue.Len(), "Queue should have two pending jobs")
 
 		// Purge the queue
 		queue.Purge()
-		assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs after purge")
+		assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs after purge")
 		assert.Equal(t, 0, mockQueue.Len(), "Mock queue should be empty after purge")
 	})
 
@@ -216,7 +216,7 @@ func TestPersistentQueueFailures(t *testing.T) {
 
 		ok := queue.Add("test-data")
 		assert.False(t, ok, "Enqueue should fail when configured")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, queue.Len(), "Queue should be empty")
 	})
 
 	t.Run("Acknowledge failure", func(t *testing.T) {
@@ -235,7 +235,7 @@ func TestPersistentPriorityQueueFailures(t *testing.T) {
 
 		ok := queue.Add("test-data", 1)
 		assert.False(t, ok, "Enqueue should fail when configured")
-		assert.Equal(t, 0, queue.NumPending(), "Queue should be empty")
+		assert.Equal(t, 0, queue.Len(), "Queue should be empty")
 	})
 
 	t.Run("Acknowledge failure", func(t *testing.T) {
@@ -297,5 +297,75 @@ func TestPersistentPriorityQueueEdgeCases(t *testing.T) {
 		ok := queue.Add("test-data", 1000000)
 		assert.True(t, ok, "Job with very high priority number should be added successfully")
 		assert.Equal(t, 1, mockQueue.Len(), "Mock queue should have one item")
+	})
+}
+
+func TestPersistentQueueCapacity(t *testing.T) {
+	t.Run("Add returns false when at capacity", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2))
+
+		ok1 := queue.Add("item-1")
+		assert.True(t, ok1, "First item should be added successfully")
+
+		ok2 := queue.Add("item-2")
+		assert.True(t, ok2, "Second item should be added successfully")
+
+		ok3 := queue.Add("item-3")
+		assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+		assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+	})
+
+	t.Run("IsFull returns correct state", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2))
+
+		assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+		queue.Add("item-1")
+		assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+		queue.Add("item-2")
+		assert.True(t, queue.IsFull(), "Queue at capacity should be full")
+	})
+}
+
+func TestPersistentPriorityQueueCapacity(t *testing.T) {
+	t.Run("Add returns false when at capacity", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentPriorityQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2))
+
+		ok1 := queue.Add("high", 1)
+		assert.True(t, ok1, "First item should be added successfully")
+
+		ok2 := queue.Add("medium", 5)
+		assert.True(t, ok2, "Second item should be added successfully")
+
+		ok3 := queue.Add("low", 10)
+		assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+		assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+	})
+
+	t.Run("IsFull returns correct state", func(t *testing.T) {
+		workerFunc := func(j iJob[string]) {}
+		mockQueue := mocks.NewMockPersistentPriorityQueue()
+		worker := newWorker(workerFunc)
+		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2))
+
+		assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+		queue.Add("item-1", 1)
+		assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+		queue.Add("item-2", 2)
+		assert.True(t, queue.IsFull(), "Queue at capacity should be full")
 	})
 }

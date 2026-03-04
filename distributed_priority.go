@@ -10,16 +10,28 @@ type DistributedPriorityQueue[T any] interface {
 
 type distributedPriorityQueue[T any] struct {
 	IDistributedPriorityQueue
+	config queueConfig
 }
 
-func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue) DistributedPriorityQueue[T] {
+func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	cfg := loadQueueConfigs(configs...)
+
+	if cap, ok := internalQueue.(CapacitySetter); ok {
+		cap.SetCapacity(cfg.capacity)
+	}
+
 	return &distributedPriorityQueue[T]{
 		IDistributedPriorityQueue: internalQueue,
+		config:                    cfg,
 	}
 }
 
 func (dpq *distributedPriorityQueue[T]) NumPending() int {
 	return dpq.Len()
+}
+
+func (dpq *distributedPriorityQueue[T]) IsFull() bool {
+	return dpq.config.capacity > 0 && dpq.Len() >= dpq.config.capacity
 }
 
 func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfigFunc) bool {

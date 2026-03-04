@@ -9,6 +9,10 @@ type IBaseQueue interface {
 	Close() error
 }
 
+type CapacitySetter interface {
+	SetCapacity(capacity int)
+}
+
 // IQueue is the root interface of queue operations.
 type IQueue interface {
 	IBaseQueue

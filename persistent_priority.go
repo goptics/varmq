@@ -37,7 +37,3 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 
 	return true
 }
-
-func (q *persistentPriorityQueue[T]) Purge() {
-	q.priorityQueue.Purge()
-}

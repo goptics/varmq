@@ -20,10 +20,10 @@ type PriorityQueue[T any] interface {
 // NewPriorityQueue creates a new priorityQueue with the specified concurrency and worker function.
 func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) *priorityQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(pq, c.Priority)
+	w.queues.Register(pq, c.priority)
 
 	return &priorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w),
+		externalBaseQueue: newExternalQueue(pq, w, c),
 		internalQueue:     pq,
 	}
 }
@@ -81,10 +81,10 @@ type ResultPriorityQueue[T, R any] interface {
 
 func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriorityQueue, configs ...QueueConfigFunc) *resultPriorityQueue[T, R] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(pq, c.Priority)
+	w.queues.Register(pq, c.priority)
 
 	return &resultPriorityQueue[T, R]{
-		externalBaseQueue: newExternalQueue(pq, w),
+		externalBaseQueue: newExternalQueue(pq, w, c),
 		internalQueue:     pq,
 	}
 }
@@ -142,10 +142,10 @@ type ErrPriorityQueue[T any] interface {
 
 func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) *errorPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(pq, c.Priority)
+	w.queues.Register(pq, c.priority)
 
 	return &errorPriorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w),
+		externalBaseQueue: newExternalQueue(pq, w, c),
 		internalQueue:     pq,
 	}
 }

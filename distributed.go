@@ -9,16 +9,28 @@ type DistributedQueue[T any] interface {
 
 type distributedQueue[T any] struct {
 	IDistributedQueue
+	config queueConfig
 }
 
-func NewDistributedQueue[T any](internalQueue IDistributedQueue) DistributedQueue[T] {
+func NewDistributedQueue[T any](internalQueue IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	c := loadQueueConfigs(configs...)
+
+	if cap, ok := internalQueue.(CapacitySetter); ok {
+		cap.SetCapacity(c.capacity)
+	}
+
 	return &distributedQueue[T]{
 		IDistributedQueue: internalQueue,
+		config:            c,
 	}
 }
 
 func (dq *distributedQueue[T]) NumPending() int {
 	return dq.Len()
+}
+
+func (dq *distributedQueue[T]) IsFull() bool {
+	return dq.config.capacity > 0 && dq.Len() >= dq.config.capacity
 }
 
 func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {

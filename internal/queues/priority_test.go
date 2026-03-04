@@ -115,4 +115,53 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(2, val, "dequeue should return the first element")
 		assert.Equal(1, pq.Len(), "queue should have length 1 after dequeuing from closed queue")
 	})
+
+	t.Run("SetCapacity", func(t *testing.T) {
+		t.Run("sets capacity correctly", func(t *testing.T) {
+			pq := NewPriorityQueue[int]()
+			pq.SetCapacity(5)
+			assert.Equal(t, 5, pq.capacity)
+		})
+
+		t.Run("clamps negative values to zero", func(t *testing.T) {
+			pq := NewPriorityQueue[int]()
+			pq.SetCapacity(-10)
+			assert.Equal(t, 0, pq.capacity)
+		})
+
+		t.Run("zero means unlimited", func(t *testing.T) {
+			pq := NewPriorityQueue[int]()
+			pq.SetCapacity(0)
+
+			for i := range 100 {
+				ok := pq.Enqueue(i, i)
+				assert.True(t, ok, "enqueue should always succeed with zero capacity")
+			}
+			assert.Equal(t, 100, pq.Len())
+		})
+
+		t.Run("enqueue blocked at capacity", func(t *testing.T) {
+			pq := NewPriorityQueue[int]()
+			pq.SetCapacity(3)
+
+			assert.True(t, pq.Enqueue(1, 1))
+			assert.True(t, pq.Enqueue(2, 2))
+			assert.True(t, pq.Enqueue(3, 3))
+			assert.False(t, pq.Enqueue(4, 4), "enqueue should fail when at capacity")
+			assert.Equal(t, 3, pq.Len())
+		})
+
+		t.Run("enqueue resumes after dequeue frees space", func(t *testing.T) {
+			pq := NewPriorityQueue[int]()
+			pq.SetCapacity(2)
+
+			pq.Enqueue(1, 1)
+			pq.Enqueue(2, 2)
+			assert.False(t, pq.Enqueue(3, 3), "should be at capacity")
+
+			pq.Dequeue()
+			assert.True(t, pq.Enqueue(3, 3), "should succeed after dequeue frees space")
+			assert.Equal(t, 2, pq.Len())
+		})
+	})
 }

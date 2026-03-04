@@ -76,7 +76,7 @@ func TestQueues(t *testing.T) {
 			job, ok := queue.Add("test-data")
 			assert.True(t, ok, "Job should be added successfully")
 			assert.NotNil(t, job, "Job should not be nil")
-			assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+			assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 			assert.Equal(t, 1, internalQueue.Len(), "Internal Queue should have one item")
 		})
 
@@ -91,7 +91,7 @@ func TestQueues(t *testing.T) {
 			// Wait for job completion
 			job.Wait()
 
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 		})
 
@@ -105,7 +105,7 @@ func TestQueues(t *testing.T) {
 			queue, worker, internalQueue := setupBasicQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 3, pending, "Queue should have three pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have three items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have three items")
@@ -117,7 +117,7 @@ func TestQueues(t *testing.T) {
 			// Wait for all jobs to complete
 			groupJob.Wait()
 
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -138,7 +138,7 @@ func TestQueues(t *testing.T) {
 			job, ok := queue.Add("42")
 			assert.True(t, ok, "Job should be added successfully")
 			assert.NotNil(t, job, "Job should not be nil")
-			assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+			assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 			assert.Equal(t, 1, internalQueue.Len(), "Internal Queue should have one item")
 		})
 
@@ -154,7 +154,7 @@ func TestQueues(t *testing.T) {
 
 			assert.NoError(t, err, "Job should complete without error")
 			assert.Equal(t, 84, result, "Result should be double the input")
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 		})
 
@@ -184,7 +184,7 @@ func TestQueues(t *testing.T) {
 			queue, worker, internalQueue := setupResultQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 5, pending, "Queue should have five pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have five items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have five items")
@@ -217,7 +217,7 @@ func TestQueues(t *testing.T) {
 				assert.True(t, ok, "unexpected result value: %d", val)
 			}
 
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -238,7 +238,7 @@ func TestQueues(t *testing.T) {
 			job, ok := queue.Add("test-data")
 			assert.True(t, ok, "Job should be added successfully")
 			assert.NotNil(t, job, "Job should not be nil")
-			assert.Equal(t, 1, queue.NumPending(), "Queue should have one pending job")
+			assert.Equal(t, 1, queue.Len(), "Queue should have one pending job")
 			assert.Equal(t, 1, internalQueue.Len(), "Internal Queue should have one item")
 		})
 
@@ -253,7 +253,7 @@ func TestQueues(t *testing.T) {
 			err = job.Err()
 
 			assert.NoError(t, err, "Job should complete without error")
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 		})
 
@@ -281,7 +281,7 @@ func TestQueues(t *testing.T) {
 			queue, worker, internalQueue := setupErrorQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 3, pending, "Queue should have three pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have three items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have three items")
@@ -302,7 +302,7 @@ func TestQueues(t *testing.T) {
 			}
 
 			assert.Equal(t, 1, errorCount, "Should have exactly one error")
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -382,7 +382,7 @@ func TestPriorityQueues(t *testing.T) {
 			_, ok = queue.Add("low-priority", 10)
 			assert.True(t, ok, "Job should be added successfully")
 
-			assert.Equal(t, 3, queue.NumPending(), "Queue should have three pending jobs")
+			assert.Equal(t, 3, queue.Len(), "Queue should have three pending jobs")
 			assert.Equal(t, 3, internalQueue.Len(), "Internal Queue should have three items")
 		})
 
@@ -403,7 +403,7 @@ func TestPriorityQueues(t *testing.T) {
 			job2.Wait()
 			job3.Wait()
 
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 		})
 
 		t.Run("Adding multiple jobs with priorities", func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestPriorityQueues(t *testing.T) {
 			queue, worker, internalQueue := setupPriorityQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 3, pending, "Queue should have three pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have three items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have three items")
@@ -428,7 +428,7 @@ func TestPriorityQueues(t *testing.T) {
 			// Wait for all jobs to complete
 			groupJob.Wait()
 
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -456,7 +456,7 @@ func TestPriorityQueues(t *testing.T) {
 			_, ok = queue.Add("10", 10) // low priority
 			assert.True(t, ok, "Job should be added successfully")
 
-			assert.Equal(t, 3, queue.NumPending(), "Queue should have three pending jobs")
+			assert.Equal(t, 3, queue.Len(), "Queue should have three pending jobs")
 			assert.Equal(t, 3, internalQueue.Len(), "Internal Queue should have three items")
 		})
 
@@ -510,7 +510,7 @@ func TestPriorityQueues(t *testing.T) {
 			queue, worker, internalQueue := setupResultPriorityQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 3, pending, "Queue should have three pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have three items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have three items")
@@ -531,7 +531,7 @@ func TestPriorityQueues(t *testing.T) {
 			// but we can check that all expected values are there
 			expected := []int{10, 20, 30}
 			assert.ElementsMatch(t, expected, got, "Results should match expected values")
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -559,7 +559,7 @@ func TestPriorityQueues(t *testing.T) {
 			_, ok = queue.Add("success", 10) // low priority
 			assert.True(t, ok, "Job should be added successfully")
 
-			assert.Equal(t, 3, queue.NumPending(), "Queue should have three pending jobs")
+			assert.Equal(t, 3, queue.Len(), "Queue should have three pending jobs")
 			assert.Equal(t, 3, internalQueue.Len(), "Internal Queue should have three items")
 		})
 
@@ -600,7 +600,7 @@ func TestPriorityQueues(t *testing.T) {
 			queue, worker, internalQueue := setupErrorPriorityQueue()
 
 			groupJob := queue.AddAll(jobs)
-			pending := queue.NumPending()
+			pending := queue.Len()
 			assert.Equal(t, 3, pending, "Queue should have three pending jobs")
 			assert.Equal(t, pending, internalQueue.Len(), "Internal Queue should have three items")
 			assert.Equal(t, pending, groupJob.NumPending(), "Group job should have three items")
@@ -621,7 +621,7 @@ func TestPriorityQueues(t *testing.T) {
 			}
 
 			assert.Equal(t, 1, errorCount, "Should have exactly one error")
-			assert.Equal(t, 0, queue.NumPending(), "Queue should have no pending jobs")
+			assert.Equal(t, 0, queue.Len(), "Queue should have no pending jobs")
 			assert.Equal(t, 0, internalQueue.Len(), "Internal Queue should be empty")
 			assert.Equal(t, 0, groupJob.NumPending(), "Group job should have no pending jobs")
 		})
@@ -634,16 +634,16 @@ func TestExternalQueue(t *testing.T) {
 		assert := assert.New(t)
 
 		// Initially no pending jobs
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs initially")
+		assert.Equal(0, queue.Len(), "Queue should have no pending jobs initially")
 
 		// Add a job and check pending count
 		queue.Add("test-data")
-		assert.Equal(1, queue.NumPending(), "Queue should have one pending job after Add")
+		assert.Equal(1, queue.Len(), "Queue should have one pending job after Add")
 
 		// Add more jobs and check pending count
 		queue.Add("test-data-2")
 		queue.Add("test-data-3")
-		assert.Equal(3, queue.NumPending(), "Queue should have three pending jobs after multiple Adds")
+		assert.Equal(3, queue.Len(), "Queue should have three pending jobs after multiple Adds")
 	})
 
 	t.Run("Worker", func(t *testing.T) {
@@ -663,13 +663,13 @@ func TestExternalQueue(t *testing.T) {
 		for i := range 5 {
 			queue.Add("test-data-" + strconv.Itoa(i))
 		}
-		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have five pending jobs")
+		assert.LessOrEqual(queue.Len(), 5, "Queue should have five pending jobs")
 
 		// Purge the queue
 		queue.Purge()
 
 		// After purging, should have no pending jobs
-		assert.Equal(0, queue.NumPending(), "Queue should have no pending jobs after Purge")
+		assert.Equal(0, queue.Len(), "Queue should have no pending jobs after Purge")
 		assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after Purge")
 	})
 
@@ -685,7 +685,7 @@ func TestExternalQueue(t *testing.T) {
 		for i := range 5 {
 			queue.Add("test-data-" + strconv.Itoa(i))
 		}
-		assert.LessOrEqual(queue.NumPending(), 5, "Queue should have at most five pending jobs")
+		assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
 
 		// Close the queue
 		err = queue.Close()
@@ -695,6 +695,274 @@ func TestExternalQueue(t *testing.T) {
 		assert.False(ok, "Add should fail after Close")
 
 		worker.WaitUntilFinished()
-		assert.Equal(0, queue.NumPending(), "worker should process all pending jobs after close")
+		assert.Equal(0, queue.Len(), "worker should process all pending jobs after close")
+	})
+}
+
+func TestQueueCapacity(t *testing.T) {
+	t.Run("BasicQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("item-1")
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("item-2")
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("item-3")
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "item-1", ID: "1"},
+				{Data: "item-2", ID: "2"},
+				{Data: "item-3", ID: "3"},
+				{Data: "item-4", ID: "4"},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
+
+		t.Run("Zero capacity means unlimited", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(0))
+
+			for i := range 100 {
+				_, ok := queue.Add("item-" + strconv.Itoa(i))
+				assert.True(t, ok, "Items should be added without limit")
+			}
+			assert.Equal(t, 100, queue.Len())
+		})
+
+		t.Run("No capacity config means unlimited", func(t *testing.T) {
+			queue, _, _ := setupBasicQueue()
+
+			for i := range 100 {
+				_, ok := queue.Add("item-" + strconv.Itoa(i))
+				assert.True(t, ok, "Items should be added without limit")
+			}
+			assert.Equal(t, 100, queue.Len())
+		})
+
+		t.Run("IsFull returns correct state", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			assert.False(t, queue.IsFull(), "Empty queue should not be full")
+
+			queue.Add("item-1")
+			assert.False(t, queue.IsFull(), "Queue with 1/2 items should not be full")
+
+			queue.Add("item-2")
+			assert.True(t, queue.IsFull(), "Queue at capacity should be full")
+		})
+
+		t.Run("IsFull returns false with no capacity", func(t *testing.T) {
+			queue, _, _ := setupBasicQueue()
+
+			for i := range 100 {
+				queue.Add("item-" + strconv.Itoa(i))
+			}
+			assert.False(t, queue.IsFull(), "Queue with no capacity should never be full")
+		})
+	})
+
+	t.Run("PriorityQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("high", 1)
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("medium", 5)
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("low", 10)
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newWorker(workerFunc)
+			queue := newPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "high", ID: "1", Priority: 1},
+				{Data: "medium", ID: "2", Priority: 5},
+				{Data: "low", ID: "3", Priority: 10},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
+	})
+
+	t.Run("ResultQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iResultJob[string, int]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newResultWorker(workerFunc)
+			queue := newResultQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("item-1")
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("item-2")
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("item-3")
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iResultJob[string, int]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newResultWorker(workerFunc)
+			queue := newResultQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "item-1", ID: "1"},
+				{Data: "item-2", ID: "2"},
+				{Data: "item-3", ID: "3"},
+				{Data: "item-4", ID: "4"},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
+	})
+
+	t.Run("ErrorQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iErrorJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newErrWorker(workerFunc)
+			queue := newErrorQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("item-1")
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("item-2")
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("item-3")
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iErrorJob[string]) {}
+			internalQueue := queues.NewQueue[any]()
+			worker := newErrWorker(workerFunc)
+			queue := newErrorQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "item-1", ID: "1"},
+				{Data: "item-2", ID: "2"},
+				{Data: "item-3", ID: "3"},
+				{Data: "item-4", ID: "4"},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
+	})
+
+	t.Run("ResultPriorityQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iResultJob[string, int]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newResultWorker(workerFunc)
+			queue := newResultPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("high", 1)
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("medium", 5)
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("low", 10)
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iResultJob[string, int]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newResultWorker(workerFunc)
+			queue := newResultPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "high", ID: "1", Priority: 1},
+				{Data: "medium", ID: "2", Priority: 5},
+				{Data: "low", ID: "3", Priority: 10},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
+	})
+
+	t.Run("ErrorPriorityQueue", func(t *testing.T) {
+		t.Run("Add returns false when at capacity", func(t *testing.T) {
+			workerFunc := func(j iErrorJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newErrWorker(workerFunc)
+			queue := newErrorPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			_, ok1 := queue.Add("high", 1)
+			assert.True(t, ok1, "First item should be added successfully")
+
+			_, ok2 := queue.Add("medium", 5)
+			assert.True(t, ok2, "Second item should be added successfully")
+
+			_, ok3 := queue.Add("low", 10)
+			assert.False(t, ok3, "Third item should fail when queue is at capacity")
+
+			assert.Equal(t, 2, queue.Len(), "Queue should have exactly 2 pending items")
+		})
+
+		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
+			workerFunc := func(j iErrorJob[string]) {}
+			internalQueue := queues.NewPriorityQueue[any]()
+			worker := newErrWorker(workerFunc)
+			queue := newErrorPriorityQueue(worker, internalQueue, WithQueueCapacity(2))
+
+			items := []Item[string]{
+				{Data: "high", ID: "1", Priority: 1},
+				{Data: "medium", ID: "2", Priority: 5},
+				{Data: "low", ID: "3", Priority: 10},
+			}
+
+			queue.AddAll(items)
+			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
+		})
 	})
 }

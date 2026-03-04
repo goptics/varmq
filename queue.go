@@ -1,6 +1,8 @@
 package varmq
 
-import "io"
+import (
+	"io"
+)
 
 // queue is the base implementation of the Queue interface
 // It contains an externalBaseQueue for worker management and an internalQueue for job storage
@@ -36,10 +38,10 @@ type Item[T any] struct {
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
 func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc) *queue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
@@ -97,10 +99,10 @@ type ErrQueue[T any] interface {
 
 func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...QueueConfigFunc) *errorQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
@@ -157,10 +159,10 @@ type ResultQueue[T, R any] interface {
 
 func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs ...QueueConfigFunc) *resultQueue[T, R] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.Priority)
+	w.queues.Register(q, c.priority)
 
 	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, w),
+		externalBaseQueue: newExternalQueue(q, w, c),
 		internalQueue:     q,
 	}
 }
@@ -199,26 +201,48 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 }
 
 type externalBaseQueue struct {
-	w Worker
-	q IBaseQueue
+	w      Worker
+	q      IBaseQueue
+	config queueConfig
 }
 
 type IExternalBaseQueue interface {
-	PendingTracker
+	// Deprecated: Use Queue's Len() method instead for a more idiomatic approach.
+	// This method will be removed in an upcoming release.
+	NumPending() int
+
+	// Len returns the number of jobs in the queue.
+	Len() int
+	// IsFull returns true if the queue has reached its configured capacity.
+	// If no capacity is set, it always returns false.
+	IsFull() bool
 	// Purge removes all pending Jobs from the queue.
 	Purge()
 	// Close closes the queue, no more jobs can be added to the queue after closing the queue.
 	Close() error
 }
 
-func newExternalQueue(q IBaseQueue, worker Worker) *externalBaseQueue {
+func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig) *externalBaseQueue {
+	if cap, ok := q.(CapacitySetter); ok {
+		cap.SetCapacity(config.capacity)
+	}
+
 	return &externalBaseQueue{
-		w: worker,
-		q: q,
+		w:      worker,
+		q:      q,
+		config: config,
 	}
 }
 
+func (eq *externalBaseQueue) IsFull() bool {
+	return eq.config.capacity > 0 && eq.q.Len() >= eq.config.capacity
+}
+
 func (eq *externalBaseQueue) NumPending() int {
+	return eq.q.Len()
+}
+
+func (eq *externalBaseQueue) Len() int {
 	return eq.q.Len()
 }
 
