@@ -12,7 +12,7 @@ func main() {
 		fmt.Println("Processing:", j.Data())
 		time.Sleep(500 * time.Millisecond) // Simulate work
 	}) // change strategy through using varmq.WithStrategy default is varmq.Priority
-	defer worker.WaitUntilFinished()
+	defer worker.WaitUntilIdle()
 
 	// Bind to a standard queues with coronological priorities
 	// You can change queue priority using varmq.WithQueuePriority function

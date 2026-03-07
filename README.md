@@ -55,7 +55,7 @@ func main() {
     fmt.Printf("Processing %d\n", j.Data())
     time.Sleep(500 * time.Millisecond)
   }, 10) // with concurrency 10
-  defer worker.WaitUntilFinished()
+  defer worker.WaitUntilIdle()
   queue := worker.BindQueue()
 
   for i := range 100 {
@@ -133,7 +133,7 @@ worker := varmq.NewWorker(func(j varmq.Job[string]) {
 	fmt.Println("Processing:", j.Data())
 	time.Sleep(500 * time.Millisecond) // Simulate work
 }) // change strategy through using varmq.WithStrategy default is varmq.Priority
-defer worker.WaitUntilFinished()
+defer worker.WaitUntilIdle()
 
 // Bind to a standard queues with coronological priorities
 // You can change queue priority using varmq.WithQueuePriority function
@@ -172,7 +172,7 @@ worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
 
  return len(data), nil
 })
-defer worker.WaitUntilFinished()
+defer worker.WaitUntilIdle()
 queue := worker.BindQueue()
 
 // Add jobs to the queue (non-blocking)
@@ -209,7 +209,7 @@ VarMQ provides helper functions that enable direct function submission similar t
 
 ```go
 worker := varmq.NewWorker(varmq.Func(), 10)
-defer worker.WaitUntilFinished()
+defer worker.WaitUntilIdle()
 
 queue := worker.BindQueue()
 

@@ -187,7 +187,7 @@ func TestWorkers(t *testing.T) {
 
 				assert.Equal(t, newConcurrency, w.NumConcurrency(), "Concurrency should be updated to new lower value")
 				time.Sleep(100 * time.Millisecond)
-				assert.True(t, w.IsRunning(), "Worker should still be running after decreasing concurrency")
+				assert.True(t, w.IsActive(), "Worker should still be running after decreasing concurrency")
 			})
 
 			t.Run("set concurrency to zero", func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(err, "Worker should start without error")
 
 				// Wait for jobs to be processed and pool to expand
-				w.WaitUntilFinished()
+				w.WaitUntilIdle()
 
 				assert.Equal(w.pool.Len(), w.NumConcurrency(), "Pool size should be equal to the concurrency")
 
@@ -284,7 +284,7 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(w.pool.Len(), 1, "Pool size should be equal to one after expiration")
 			})
 
-			t.Run("WaitUntilFinished", func(t *testing.T) {
+			t.Run("WaitUntilIdle", func(t *testing.T) {
 				queue, worker, internalQueue := setupBasicQueue()
 				assert := assert.New(t)
 
@@ -300,11 +300,11 @@ func TestWorkers(t *testing.T) {
 				assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
 
 				// Wait until all jobs are processed
-				worker.WaitUntilFinished()
+				worker.WaitUntilIdle()
 
 				// After waiting, should have no pending jobs
-				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitUntilFinished")
-				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilFinished")
+				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitUntilIdle")
+				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilIdle")
 			})
 
 			t.Run("WaitAndStop", func(t *testing.T) {
@@ -342,15 +342,15 @@ func TestWorkers(t *testing.T) {
 
 				assert.Equal(initiated, w.status.Load(), "Initial status should be 'initiated'")
 				assert.Equal("Initiated", w.Status(), "Initial status string should be 'Initiated'")
-				assert.False(w.IsRunning(), "Worker should not be running initially")
+				assert.False(w.IsActive(), "Worker should not be running initially")
 				assert.False(w.IsPaused(), "Worker should not be paused initially")
 				assert.False(w.IsStopped(), "Worker should not be stopped initially")
 
 				err := w.start()
 				assert.NoError(err, "Starting worker should not error")
-				assert.Equal(running, w.status.Load(), "Status after start should be 'running'")
-				assert.Equal("Running", w.Status(), "Status string after start should be 'Running'")
-				assert.True(w.IsRunning(), "Worker should be running after start")
+				assert.Equal(idle, w.status.Load(), "Status after start should be 'idle'")
+				assert.Equal("Idle", w.Status(), "Status string after start should be 'Idle'")
+				assert.True(w.IsActive(), "Worker should be running after start")
 
 				err = w.start()
 				assert.ErrorIs(err, ErrRunningWorker, "Starting an already running worker should error")
@@ -359,13 +359,13 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(paused, w.status.Load(), "Status after pause should be 'paused'")
 				assert.Equal("Paused", w.Status(), "Status string after pause should be 'Paused'")
 				assert.True(w.IsPaused(), "Worker should be paused after Pause()")
-				assert.False(w.IsRunning(), "Worker should not be running after Pause()")
+				assert.False(w.IsActive(), "Worker should not be running after Pause()")
 
 				err = w.Resume()
 				assert.NoError(err, "Resuming worker should not error")
-				assert.Equal(running, w.status.Load(), "Status after resume should be 'running'")
-				assert.Equal("Running", w.Status(), "Status string after resume should be 'Running'")
-				assert.True(w.IsRunning(), "Worker should be running after Resume()")
+				assert.Equal(idle, w.status.Load(), "Status after resume should be 'idle'")
+				assert.Equal("Idle", w.Status(), "Status string after resume should be 'Idle'")
+				assert.True(w.IsActive(), "Worker should be running after Resume()")
 
 				err = w.Resume()
 				assert.ErrorIs(err, ErrRunningWorker, "Resuming an already running worker should error")
@@ -374,7 +374,7 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(stopped, w.status.Load(), "Status after stop should be 'stopped'")
 				assert.Equal("Stopped", w.Status(), "Status string after stop should be 'Stopped'")
 				assert.True(w.IsStopped(), "Worker should be stopped after Stop()")
-				assert.False(w.IsRunning(), "Worker should not be running after Stop()")
+				assert.False(w.IsActive(), "Worker should not be running after Stop()")
 				assert.False(w.IsPaused(), "Worker should not be paused after Stop()")
 
 				// Test the "Unknown" status case
@@ -461,7 +461,7 @@ func TestWorkers(t *testing.T) {
 				// Start worker
 				err := w.start()
 				assert.NoError(err, "Starting worker should not error")
-				assert.True(w.IsRunning(), "Worker should be running after start")
+				assert.True(w.IsActive(), "Worker should be running after start")
 
 				// Wait for some jobs to be processed
 				time.Sleep(50 * time.Millisecond)
@@ -478,7 +478,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(err, "Restarting worker should not error")
 
 				// Verify worker is running after restart
-				assert.True(w.IsRunning(), "Worker should be running after restart")
+				assert.True(w.IsActive(), "Worker should be running after restart")
 
 				// Verify the eventLoopSignal was recreated
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be recreated after restart")
@@ -508,7 +508,7 @@ func TestWorkers(t *testing.T) {
 				// Restart
 				err = w.Restart()
 				assert.NoError(err, "Restarting a stopped worker should succeed")
-				assert.True(w.IsRunning(), "Worker should be running after restart")
+				assert.True(w.IsActive(), "Worker should be running after restart")
 
 				// Cleanup
 				w.Stop()
@@ -581,7 +581,7 @@ func TestWorkers(t *testing.T) {
 					})
 					w.start()
 					assert.NoError(t, w.Restart())
-					assert.True(t, w.IsRunning())
+					assert.True(t, w.IsActive())
 					w.Stop()
 				})
 
@@ -590,7 +590,7 @@ func TestWorkers(t *testing.T) {
 					w.start()
 					w.Pause()
 					assert.NoError(t, w.Restart())
-					assert.True(t, w.IsRunning())
+					assert.True(t, w.IsActive())
 					w.Stop()
 				})
 
@@ -717,7 +717,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				// Wait for processing
-				w.WaitUntilFinished()
+				w.WaitUntilIdle()
 
 				// Check NumPending is 0
 				assert.Equal(0, w.NumPending(), "NumPending should be 0 after processing")
@@ -977,7 +977,7 @@ func TestWorkers(t *testing.T) {
 
 				err := w.Resume()
 				assert.NoError(t, err, "Resume should start worker from initiated state")
-				assert.True(t, w.IsRunning(), "Worker should be running after Resume from initiated")
+				assert.True(t, w.IsActive(), "Worker should be running after Resume from initiated")
 
 				w.Stop()
 			})
@@ -1163,7 +1163,7 @@ func TestWorkers(t *testing.T) {
 				assert := assert.New(t)
 				err := w.start()
 				assert.NoError(err)
-				assert.True(w.IsRunning())
+				assert.True(w.IsActive())
 
 				// Cancel the context
 				cancel()
