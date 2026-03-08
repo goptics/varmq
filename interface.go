@@ -9,10 +9,6 @@ type IBaseQueue interface {
 	Close() error
 }
 
-type CapacitySetter interface {
-	SetCapacity(capacity int)
-}
-
 // IQueue is the root interface of queue operations.
 type IQueue interface {
 	IBaseQueue
@@ -60,4 +56,9 @@ type IDistributedQueue interface {
 type IDistributedPriorityQueue interface {
 	IPersistentPriorityQueue
 	ISubscribable
+}
+
+// CapacitySetter is the interface for setting the capacity of a queue. (Optional)
+type CapacitySetter interface {
+	SetCapacity(cap int)
 }
