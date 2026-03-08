@@ -54,7 +54,7 @@ func main() {
   worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Printf("Processing %d\n", j.Data())
     time.Sleep(500 * time.Millisecond)
-  }, 10) // with concurrency 10
+  }, 10) // with concurrency 10 or set 0 for parallelism
   defer worker.WaitUntilIdle()
   queue := worker.BindQueue()
 
@@ -64,7 +64,7 @@ func main() {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/XugpmYb9Dal)**
+↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
 ### Priority Queue
 
@@ -80,7 +80,7 @@ for i := range 10 {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/w_RuYKv-VxB)**
+↗️ **[Run it on Playground](https://go.dev/play/p/CHF8PVyrBI0)**
 
 ## 💡 Highlighted Features
 
@@ -154,7 +154,7 @@ for i := range 10 {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/tVC3D5QLNg4)**
+↗️ **[Run it on Playground](https://go.dev/play/p/0eL_0WNRVIh)**
 
 ### Result and Error Worker
 
@@ -195,7 +195,7 @@ if job, ok := queue.Add("error"); ok {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/W8Pi_QrzTHe)**
+↗️ **[Run it on Playground](https://go.dev/play/p/4jkGb9SAIrp)**
 
 `NewErrWorker` is similar to `NewResultWorker` but it returns only error.
 
@@ -221,7 +221,7 @@ for i := range 100 {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/YO4vOu3sg9f)**
+↗️ **[Run it on Playground](https://go.dev/play/p/J2xXmVlGYyW)**
 
 > [!Important]
 > Function helpers don't support persistence or distribution since functions cannot be serialized.

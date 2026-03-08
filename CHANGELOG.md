@@ -1,5 +1,33 @@
 # Changelog
 
+## [v1.6.0] (2026-03-08)
+
+### ✨ New Features
+
+- **Idle Worker Status** (#69): Introduced a distinct `idle` status for workers to differentiate between workers actively processing jobs and workers that are active but waiting for new jobs.
+  - Added `IsIdle()` method to check if the worker is idle (active but not processing).
+  - Added `IsActive()` method to check if the worker is active (either running or idle).
+  - Added `WaitUntilIdle()` method that waits until all pending jobs in the queue are processed and the worker transitions to idle.
+  - Worker event loop now dynamically transitions between `running` and `idle` based on workload and processing status.
+
+- **Queue Capacity** (#68): Added `WithQueueCapacity(cap int)` queue configuration option to set a maximum queue size.
+  - `IsFull()` method returns `true` when the queue has reached its configured capacity.
+  - `Add()` returns `false` as the second return value when the queue is full.
+
+### 🐛 Bug Fixes
+
+- **Metrics Completion Tracking**: Moved `w.metrics.incCompleted()` call earlier in job completion logic to ensure accurate metrics reporting.
+
+### ⚠️ Deprecations
+
+- **`queue.NumPending()`**: Deprecated in favor of `queue.Len()` for a more idiomatic Go API. `NumPending()` will be removed in an upcoming release.
+- **`worker.WaitUntilFinished()`**: Deprecated in favor of `worker.WaitUntilIdle()` which better describes the behavior of waiting until all pending jobs are processed and the worker is idle.
+
+### 📚 Documentation
+
+- Added `configs` parameter documentation to queue methods godoc.
+- Removed extra spaces from code examples.
+
 ## [v1.5.0] (2026-02-24)
 
 ### 🔄 Behavioral Changes
