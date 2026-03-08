@@ -299,9 +299,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	j.changeStatus(processing)
 	j.setAckId(ackId)
 	// if worker is idle, change the status to running
-	if w.IsIdle() {
-		w.status.Store(running)
-	}
+	w.status.CompareAndSwap(idle, running)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
