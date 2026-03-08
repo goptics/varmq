@@ -352,9 +352,9 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 		if err := j.Close(); err != nil {
 			w.sendError(err)
 		}
+		w.metrics.incCompleted()
 		w.freePoolNode(node)
 		w.releaseWaiters(w.curProcessing.Add(^uint32(0)))
-		w.metrics.incCompleted()
 		w.notifyToPullNextJobs()
 	})
 
