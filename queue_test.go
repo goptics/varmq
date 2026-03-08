@@ -694,7 +694,7 @@ func TestExternalQueue(t *testing.T) {
 		_, ok := queue.Add("test-data-6")
 		assert.False(ok, "Add should fail after Close")
 
-		worker.WaitUntilFinished()
+		worker.WaitUntilIdle()
 		assert.Equal(0, queue.Len(), "worker should process all pending jobs after close")
 	})
 }

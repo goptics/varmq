@@ -307,7 +307,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify queue is not nil
 		assert.NotNil(t, queue, "Queue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding queue")
 
 		// Clean up
 		w.Stop()
@@ -326,7 +326,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify priority queue is not nil
 		assert.NotNil(t, pQueue, "PriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding priority queue")
 
 		// Clean up
 		w.Stop()
@@ -442,7 +442,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify queue is not nil
 		assert.NotNil(t, queue, "ResultQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding queue")
 
 		// Clean up
 		w.Stop()
@@ -463,7 +463,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify priority queue is not nil
 		assert.NotNil(t, pQueue, "ResultPriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding priority queue")
 
 		// Clean up
 		w.Stop()
@@ -485,7 +485,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify queue is not nil
 		assert.NotNil(t, queue, "ErrQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding queue")
 
 		// Clean up
 		w.Stop()
@@ -506,7 +506,7 @@ func TestWorkerBinders(t *testing.T) {
 
 		// Verify priority queue is not nil and is of the expected type ErrPriorityQueue[string]
 		assert.NotNil(t, pQueue, "ErrPriorityQueue should not be nil")
-		assert.True(t, w.IsRunning(), "Worker should be running after binding priority queue")
+		assert.True(t, w.IsIdle(), "Worker should be idle after binding priority queue")
 
 		// Clean up
 		w.Stop()

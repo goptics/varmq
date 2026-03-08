@@ -34,6 +34,6 @@ func main() {
 		q.Add(i)
 	}
 
-	w.WaitUntilFinished()
+	w.WaitUntilIdle()
 	fmt.Println("Worker stopped gracefully")
 }

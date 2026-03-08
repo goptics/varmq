@@ -16,6 +16,7 @@ type status = uint32
 
 const (
 	initiated status = iota
+	idle
 	running
 	paused
 	stopped
@@ -57,12 +58,16 @@ type worker[T any, JobType iJob[T]] struct {
 
 // Worker represents a worker that processes Jobs.
 type Worker interface {
+	// IsRunning returns whether the worker is actively processing jobs.
+	IsRunning() bool
+	// IsIdle returns whether the worker is idle.
+	IsIdle() bool
+	// IsActive returns whether the worker is either running or idle.
+	IsActive() bool
 	// IsPaused returns whether the worker is paused.
 	IsPaused() bool
 	// IsStopped returns whether the worker is stopped.
 	IsStopped() bool
-	// IsRunning returns whether the worker is running.
-	IsRunning() bool
 	// Status returns the current status of the worker.
 	Status() string
 	// NumProcessing returns the number of Jobs currently being processed by the worker.
@@ -92,7 +97,11 @@ type Worker interface {
 	// Resume continues processing jobs those are pending in the queue.
 	Resume() error
 	// WaitUntilFinished waits until all pending Jobs in the are processed.
+	//
+	// Deprecated: Use WaitUntilIdle instead.
 	WaitUntilFinished()
+	// WaitUntilIdle waits until all pending Jobs in the queue are processed.
+	WaitUntilIdle()
 	// WaitAndStop waits until all pending Jobs in the queue are processed and then closes the queue.
 	WaitAndStop() error
 
@@ -190,6 +199,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
 		// Broadcast to all waiters to signal they can continue
 		w.waiters.Broadcast()
+		w.status.Store(idle)
 	}
 }
 
@@ -207,9 +217,13 @@ func (w *worker[T, JobType]) Metrics() Metrics {
 }
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
+	w.WaitUntilIdle()
+}
+
+func (w *worker[T, JobType]) WaitUntilIdle() {
 	condition := func() bool {
 		switch w.status.Load() {
-		case running:
+		case running, idle:
 			return w.queues.Len() > 0 || w.curProcessing.Load() > 0
 		case paused, stopped:
 			return w.curProcessing.Load() > 0
@@ -284,6 +298,8 @@ func (w *worker[T, JobType]) processNextJob() error {
 	w.curProcessing.Add(1)
 	j.changeStatus(processing)
 	j.setAckId(ackId)
+	// if worker is idle, change the status to running
+	w.status.CompareAndSwap(idle, running)
 
 	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
@@ -334,9 +350,9 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 		if err := j.Close(); err != nil {
 			w.sendError(err)
 		}
+		w.metrics.incCompleted()
 		w.freePoolNode(node)
 		w.releaseWaiters(w.curProcessing.Add(^uint32(0)))
-		w.metrics.incCompleted()
 		w.notifyToPullNextJobs()
 	})
 
@@ -418,7 +434,7 @@ func (w *worker[T, JobType]) goListenToContext() {
 func (w *worker[T, JobType]) goEventLoop() {
 	go func(signal <-chan struct{}) {
 		for range signal {
-			for w.IsRunning() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
+			for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 				if err := w.processNextJob(); err != nil {
 					w.sendError(err)
 				}
@@ -462,12 +478,12 @@ func (w *worker[T, JobType]) stopAndRemoveAllWorkers() {
 }
 
 func (w *worker[T, JobType]) start() error {
-	if w.IsRunning() {
+	if w.IsActive() {
 		return ErrRunningWorker
 	}
 
 	defer w.notifyToPullNextJobs()
-	defer w.status.Store(running)
+	defer w.status.Store(idle)
 
 	w.goEventLoop()
 	w.goRemoveIdleWorkers()
@@ -480,7 +496,7 @@ func (w *worker[T, JobType]) start() error {
 }
 
 func (w *worker[T, JobType]) TunePool(concurrency int) error {
-	if w.status.Load() != running {
+	if !w.IsActive() {
 		return ErrNotRunningWorker
 	}
 
@@ -533,7 +549,7 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 
 func (w *worker[T, JobType]) Pause() error {
 	switch s := w.status.Load(); s {
-	case running:
+	case running, idle:
 		w.status.Store(paused)
 	case paused, stopped:
 		return nil
@@ -548,10 +564,10 @@ func (w *worker[T, JobType]) Stop() error {
 	switch s := w.status.Load(); s {
 	case stopped:
 		return nil
-	case running:
+	case running, idle:
 		w.PauseAndWait()
 	case paused:
-		w.WaitUntilFinished()
+		w.WaitUntilIdle()
 	default:
 		return ErrNotRunningWorker
 	}
@@ -576,14 +592,14 @@ func (w *worker[T, JobType]) NumPending() int {
 func (w *worker[T, JobType]) Restart() error {
 	// If worker is running, pause and wait for ongoing processes
 	switch w.status.Load() {
-	case running:
+	case running, idle:
 		if err := w.PauseAndWait(); err != nil {
 			return err
 		}
 		// to remove idle workers if any
 		w.stopAndRemoveAllWorkers()
 	case paused:
-		w.WaitUntilFinished()
+		w.WaitUntilIdle()
 		// to remove idle workers if any
 		w.stopAndRemoveAllWorkers()
 	case stopped, initiated:
@@ -622,6 +638,15 @@ func (w *worker[T, JobType]) IsRunning() bool {
 	return w.status.Load() == running
 }
 
+func (w *worker[T, JobType]) IsActive() bool {
+	s := w.status.Load()
+	return s == running || s == idle
+}
+
+func (w *worker[T, JobType]) IsIdle() bool {
+	return w.status.Load() == idle
+}
+
 func (w *worker[T, JobType]) IsStopped() bool {
 	return w.status.Load() == stopped
 }
@@ -630,6 +655,8 @@ func (w *worker[T, JobType]) Status() string {
 	switch w.status.Load() {
 	case initiated:
 		return "Initiated"
+	case idle:
+		return "Idle"
 	case running:
 		return "Running"
 	case paused:
@@ -654,11 +681,11 @@ func (w *worker[T, JobType]) Resume() error {
 		return w.start()
 	}
 
-	if w.IsRunning() {
+	if w.IsActive() {
 		return ErrRunningWorker
 	}
 
-	w.status.Store(running)
+	w.status.Store(idle)
 	w.notifyToPullNextJobs()
 
 	return nil
@@ -673,12 +700,12 @@ func (w *worker[T, JobType]) PauseAndWait() error {
 		return err
 	}
 
-	w.WaitUntilFinished()
+	w.WaitUntilIdle()
 	return nil
 }
 
 func (w *worker[T, JobType]) WaitAndStop() error {
-	w.WaitUntilFinished()
+	w.WaitUntilIdle()
 
 	return w.Stop()
 }

@@ -65,7 +65,7 @@ if ok := persistentQ.Add("critical task data"); ok {
     fmt.Println("Job added to persistent queue.")
 }
 
-worker.WaitUntilFinished() // Wait for all current jobs to finish
+worker.WaitUntilIdle() // Wait for all current jobs to finish
 ```
 
 For concrete examples of persistent queue adapter usage, see the [redis-persistent example](../examples/redis-persistent) and the [sqlite-persistent example](../examples/sqlite-persistent).
@@ -79,7 +79,7 @@ if ok := distributedQ.Add("critical task data"); ok {
     fmt.Println("Job added to distributed queue.")
 }
 
-worker.WaitUntilFinished() // Wait for all current jobs to finish
+worker.WaitUntilIdle() // Wait for all current jobs to finish
 ```
 
 For concrete examples of distributed queue adapter usage, see the [redis-distributed example](../examples/redis-distributed)
@@ -125,7 +125,7 @@ if enqueuedJob, ok := errQueue.Add(42); ok {
     }
 }
 
-errWorker.WaitUntilFinished() // Wait for all current jobs to finish
+errWorker.WaitUntilIdle() // Wait for all current jobs to finish
 ```
 
 ### 3. `NewResultWorker`
@@ -171,7 +171,7 @@ if enqueuedJob, ok := resultQueue.Add("hello gophers"); ok {
     }
 }
 
-resultWorker.WaitUntilFinished() // Wait for all current jobs to finish
+resultWorker.WaitUntilIdle() // Wait for all current jobs to finish
 ```
 
 ## Worker Configuration
@@ -224,8 +224,10 @@ Key methods of the `Worker` interface (defined in `worker.go`):
 
   - `IsPaused() bool`: Returns `true` if the worker pool is paused.
   - `IsStopped() bool`: Returns `true` if the worker pool is stopped.
-  - `IsRunning() bool`: Returns `true` if the worker pool is active (not paused or stopped).
-  - `Status() string`: Returns the current status (e.g., "Initiated", "Running", "Paused", "Stopped").
+  - `IsIdle() bool`: Returns `true` if the worker pool is idle (running but with an empty queue).
+  - `IsActive() bool`: Returns `true` if the worker pool is active (running or idle).
+  - `IsRunning() bool`: Returns `true` if the worker pool is actively running jobs.
+  - `Status() string`: Returns the current status (e.g., "Initiated", "Running", "Idle", "Paused", "Stopped").
   - `NumProcessing() int`: Number of jobs currently being processed.
   - `NumPending() int`: Number of jobs waiting in the queue to be processed.
   - `NumConcurrency() int`: Current maximum concurrency (pool size).
@@ -241,7 +243,7 @@ Key methods of the `Worker` interface (defined in `worker.go`):
   - `Resume() error`: Resumes a paused worker pool.
   - `Stop() error`: Stops the worker pool gracefully. Waits for processing jobs to finish. Queue is not closed.
   - `Restart() error`: Restarts a stopped worker pool.
-  - `WaitUntilFinished()`: Blocks until all jobs _currently in the queue and being processed_ are finished. Does not prevent new jobs from being added.
+  - `WaitUntilIdle()`: Blocks until all jobs _currently in the queue and being processed_ are finished. Does not prevent new jobs from being added.
   - `WaitAndStop() error`: Waits for all jobs in the queue to be processed, then stops the worker.
 
 ## Job Lifecycle and Interfaces

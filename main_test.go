@@ -47,7 +47,7 @@ func TestHelperFunctions(t *testing.T) {
 
 			assert.True(t, ok, "job should be added successfully")
 			assert.NotNil(t, job, "job should not be nil")
-			worker.WaitUntilFinished()
+			worker.WaitUntilIdle()
 			assert.True(t, executed, "function should have been executed by worker")
 		})
 
@@ -76,7 +76,7 @@ func TestHelperFunctions(t *testing.T) {
 				assert.NotNil(t, job, "job should not be nil")
 
 				// The worker should handle the panic gracefully
-				worker.WaitUntilFinished()
+				worker.WaitUntilIdle()
 				// Note: The actual panic handling depends on the worker implementation
 			})
 		})
@@ -161,7 +161,7 @@ func TestHelperFunctions(t *testing.T) {
 			assert.True(t, ok, "job should be added successfully")
 			assert.NotNil(t, job, "job should not be nil")
 
-			worker.WaitUntilFinished()
+			worker.WaitUntilIdle()
 			assert.Equal(t, uint64(1), worker.Metrics().Successful(), "should have 1 successful task")
 		})
 
@@ -380,7 +380,7 @@ func TestWorkerPanicCoverage(t *testing.T) {
 	defer worker.Stop()
 
 	queue.Add("test")
-	worker.WaitUntilFinished()
+	worker.WaitUntilIdle()
 
 	assert.Equal(t, uint64(1), worker.Metrics().Failed())
 }
@@ -393,7 +393,7 @@ func TestErrWorkerPanicCoverage(t *testing.T) {
 	defer worker.Stop()
 
 	job, _ := queue.Add("test")
-	worker.WaitUntilFinished()
+	worker.WaitUntilIdle()
 
 	assert.Equal(t, uint64(1), worker.Metrics().Failed())
 	assert.Error(t, job.Err())
@@ -407,7 +407,7 @@ func TestResultWorkerPanicCoverage(t *testing.T) {
 	defer worker.Stop()
 
 	job, _ := queue.Add("test")
-	worker.WaitUntilFinished()
+	worker.WaitUntilIdle()
 
 	assert.Equal(t, uint64(1), worker.Metrics().Failed())
 	_, err := job.Result()
