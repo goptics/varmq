@@ -199,7 +199,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
 		// Broadcast to all waiters to signal they can continue
 		w.waiters.Broadcast()
-		w.status.Store(idle)
+		w.status.CompareAndSwap(running, idle)
 	}
 }
 

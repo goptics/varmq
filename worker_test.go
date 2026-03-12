@@ -436,6 +436,49 @@ func TestWorkers(t *testing.T) {
 				w.Stop()
 			})
 
+			t.Run("pause preserves status after in-flight jobs drain", func(t *testing.T) {
+				// This tests the edge case where releaseWaiters was overwriting
+				// paused status with idle after the last in-flight job completed.
+				var jobsProcessed atomic.Uint32
+
+				fn := func(j iJob[int]) {
+					time.Sleep(50 * time.Millisecond) // Simulate slow work
+					jobsProcessed.Add(1)
+				}
+
+				w := newWorker(fn, WithConcurrency(2))
+				assert := assert.New(t)
+
+				q := queues.NewQueue[iJob[int]]()
+				w.queues.Register(q, math.MaxInt)
+
+				// Add enough jobs to keep the worker busy
+				for i := range 10 {
+					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
+				}
+
+				err := w.start()
+				assert.NoError(err, "Worker should start without error")
+
+				// Wait briefly for jobs to start processing
+				time.Sleep(20 * time.Millisecond)
+				assert.True(w.IsActive(), "Worker should be active while processing jobs")
+
+				// Pause while jobs are still in-flight
+				err = w.Pause()
+				assert.NoError(err, "Pause should not error")
+
+				// Wait for all in-flight jobs to finish
+				time.Sleep(200 * time.Millisecond)
+
+				// Status should still be "Paused", not "Idle"
+				assert.True(w.IsPaused(), "Worker should remain paused after in-flight jobs drain")
+				assert.Equal("Paused", w.Status(), "Status string should be 'Paused' after in-flight jobs drain")
+				assert.Zero(w.NumProcessing(), "No jobs should be processing")
+
+				w.Stop()
+			})
+
 			t.Run("restart functionality", func(t *testing.T) {
 				// Track job processing
 				var jobsProcessed atomic.Uint32
