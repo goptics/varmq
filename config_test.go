@@ -441,8 +441,7 @@ func TestDefaultConfig(t *testing.T) {
 
 		t.Run("Sets context with cancel", func(t *testing.T) {
 			defaultConfig = original
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			DefaultCtx(ctx)
 			assert.Equal(t, ctx, defaultConfig.ctx)
 		})

@@ -3,6 +3,8 @@ package varmq
 import (
 	"context"
 	"math"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/goptics/varmq/utils"
@@ -18,7 +20,12 @@ type configs struct {
 	jobIdGenerator           func() string
 	idleWorkerExpiryDuration time.Duration
 	ctx                      context.Context
+	name                     string
 }
+
+var (
+	workerCounter atomic.Uint64
+)
 
 var defaultConfig = configs{
 	concurrency: 1,
@@ -132,7 +139,20 @@ func mergeConfigs(c configs, cs ...any) configs {
 		}
 	}
 
+	if c.name == "" {
+		count := workerCounter.Add(1)
+		c.name = "worker-" + strconv.FormatUint(count, 10)
+	}
+
 	return c
+}
+
+// WithName configures the name for the worker.
+// If not set, a default name will be generated like "worker-1", "worker-2", etc.
+func WithName(name string) ConfigFunc {
+	return func(c *configs) {
+		c.name = name
+	}
 }
 
 // WithIdleWorkerExpiryDuration configures the time period after which idle workers are
