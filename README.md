@@ -123,7 +123,7 @@ Create your own adapters by implementing the `IPersistentQueue` or `IDistributed
 
 Bind multiple queues to a single worker, enabling efficient processing of jobs from different sources with configurable strategies. The worker supports four strategies:
 
-1. **Priority** (default - prioritizes jobs based on their priority)
+1. **Priority** (default - prioritizes higher priority queues that have pending jobs)
 2. **RoundRobin** (cycles through queues equally)
 3. **MaxLen** (prioritizes queues with more jobs)
 4. **MinLen** (prioritizes queues with fewer jobs)

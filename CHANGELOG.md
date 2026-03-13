@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.6.1] (2026-03-13)
+
+### 🐛 Bug Fixes
+
+- **Worker Pause State**: Fixed an issue where `releaseWaiters` overwrites the worker status to `idle` when the last in-flight job completes, even if the worker had been explicitly paused. The fix uses `status.CompareAndSwap(running, idle)` so the transition only occurs from the `running` state, effectively preserving the paused status.
+
+
 ## [v1.6.0] (2026-03-08)
 
 ### ✨ New Features
