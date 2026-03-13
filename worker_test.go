@@ -432,18 +432,17 @@ func TestWorkers(t *testing.T) {
 
 				// should process all jobs
 				assert.Equal(jobsProcessed.Load(), uint32(10), "All jobs should be processed after resume")
-
 				w.Stop()
 			})
 
 			t.Run("pause preserves status after in-flight jobs drain", func(t *testing.T) {
-				// This tests the edge case where releaseWaiters was overwriting
-				// paused status with idle after the last in-flight job completed.
-				var jobsProcessed atomic.Uint32
+				// Synchronization channels for deterministic testing
+				started := make(chan struct{}, 10) // signals when a job begins processing
+				resumeCh := make(chan struct{})    // blocks jobs until test releases them
 
 				fn := func(j iJob[int]) {
-					time.Sleep(50 * time.Millisecond) // Simulate slow work
-					jobsProcessed.Add(1)
+					started <- struct{}{} // signal that this job has started
+					<-resumeCh            // block until the test releases
 				}
 
 				w := newWorker(fn, WithConcurrency(2))
@@ -460,16 +459,19 @@ func TestWorkers(t *testing.T) {
 				err := w.start()
 				assert.NoError(err, "Worker should start without error")
 
-				// Wait briefly for jobs to start processing
-				time.Sleep(20 * time.Millisecond)
+				// Wait deterministically for at least one job to start processing
+				<-started
 				assert.True(w.IsActive(), "Worker should be active while processing jobs")
 
 				// Pause while jobs are still in-flight
 				err = w.Pause()
 				assert.NoError(err, "Pause should not error")
 
+				// Release all blocked jobs so in-flight work can drain
+				close(resumeCh)
+
 				// Wait for all in-flight jobs to finish
-				time.Sleep(200 * time.Millisecond)
+				w.WaitUntilIdle()
 
 				// Status should still be "Paused", not "Idle"
 				assert.True(w.IsPaused(), "Worker should remain paused after in-flight jobs drain")
