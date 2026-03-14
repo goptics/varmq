@@ -432,6 +432,51 @@ func TestWorkers(t *testing.T) {
 
 				// should process all jobs
 				assert.Equal(jobsProcessed.Load(), uint32(10), "All jobs should be processed after resume")
+				w.Stop()
+			})
+
+			t.Run("pause preserves status after in-flight jobs drain", func(t *testing.T) {
+				// Synchronization channels for deterministic testing
+				started := make(chan struct{}, 10) // signals when a job begins processing
+				resumeCh := make(chan struct{})    // blocks jobs until test releases them
+
+				fn := func(j iJob[int]) {
+					started <- struct{}{} // signal that this job has started
+					<-resumeCh            // block until the test releases
+				}
+
+				w := newWorker(fn, WithConcurrency(2))
+				assert := assert.New(t)
+
+				q := queues.NewQueue[iJob[int]]()
+				w.queues.Register(q, math.MaxInt)
+
+				// Add enough jobs to keep the worker busy
+				for i := range 10 {
+					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
+				}
+
+				err := w.start()
+				assert.NoError(err, "Worker should start without error")
+
+				// Wait deterministically for at least one job to start processing
+				<-started
+				assert.True(w.IsActive(), "Worker should be active while processing jobs")
+
+				// Pause while jobs are still in-flight
+				err = w.Pause()
+				assert.NoError(err, "Pause should not error")
+
+				// Release all blocked jobs so in-flight work can drain
+				close(resumeCh)
+
+				// Wait for all in-flight jobs to finish
+				w.WaitUntilIdle()
+
+				// Status should still be "Paused", not "Idle"
+				assert.True(w.IsPaused(), "Worker should remain paused after in-flight jobs drain")
+				assert.Equal("Paused", w.Status(), "Status string should be 'Paused' after in-flight jobs drain")
+				assert.Zero(w.NumProcessing(), "No jobs should be processing")
 
 				w.Stop()
 			})
