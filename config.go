@@ -136,6 +136,8 @@ func mergeConfigs(c configs, cs ...any) configs {
 			config(&c)
 		case int:
 			c.concurrency = withSafeConcurrency(config)
+		case string:
+			c.name = config
 		}
 	}
 

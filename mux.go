@@ -37,6 +37,8 @@ func Handler(prefix string) http.Handler {
 // under any prefix using [Handler].
 func NewServerMux() *http.ServeMux {
 	mux := http.NewServeMux()
+	// GET /health
+	mux.HandleFunc("GET /health", handleHealthCheck)
 
 	// GET /workers
 	mux.HandleFunc("GET /workers", handleListWorkers)
@@ -56,6 +58,11 @@ func registerWorker(w Worker) {
 	if w != nil {
 		WorkerRegistry.Store(w.Name(), w)
 	}
+}
+
+// handleHealthCheck returns a simple 200 OK status.
+func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handleListWorkers returns a high-level summary of all registered workers.
