@@ -3,8 +3,6 @@ package varmq
 import (
 	"context"
 	"math"
-	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/goptics/varmq/utils"
@@ -22,10 +20,6 @@ type configs struct {
 	ctx                      context.Context
 	name                     string
 }
-
-var (
-	workerCounter atomic.Uint64
-)
 
 var defaultConfig = configs{
 	concurrency: 1,
@@ -139,11 +133,6 @@ func mergeConfigs(c configs, cs ...any) configs {
 		case string:
 			c.name = config
 		}
-	}
-
-	if c.name == "" {
-		count := workerCounter.Add(1)
-		c.name = "worker-" + strconv.FormatUint(count, 10)
 	}
 
 	return c

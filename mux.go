@@ -55,8 +55,9 @@ func NewServerMux() *http.ServeMux {
 
 // registerWorker stores the worker in the global registry.
 func registerWorker(w Worker) {
-	if w != nil {
-		WorkerRegistry.Store(w.Name(), w)
+	name := w.Name()
+	if w != nil && name != "" {
+		WorkerRegistry.Store(name, w)
 	}
 }
 
