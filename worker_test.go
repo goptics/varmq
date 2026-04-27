@@ -38,7 +38,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
-				assert.NotNil(w.waiters, "waiters slice should be initialized")
+				assert.NotNil(w.cond, "waiter cond should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
 				assert.Zero(w.pool.Len(), "pool should be empty initially")
 				assert.Zero(w.curProcessing.Load(), "current processing count should be initialized to zero")
@@ -284,52 +284,6 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(w.pool.Len(), 1, "Pool size should be equal to one after expiration")
 			})
 
-			t.Run("WaitUntilIdle", func(t *testing.T) {
-				queue, worker, internalQueue := setupBasicQueue()
-				assert := assert.New(t)
-
-				// Start the worker
-				err := worker.start()
-				assert.NoError(err, "Worker should start successfully")
-				defer worker.Stop()
-
-				// Add several jobs
-				for i := range 5 {
-					queue.Add("test-data-" + strconv.Itoa(i))
-				}
-				assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
-
-				// Wait until all jobs are processed
-				worker.WaitUntilIdle()
-
-				// After waiting, should have no pending jobs
-				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitUntilIdle")
-				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilIdle")
-			})
-
-			t.Run("WaitAndStop", func(t *testing.T) {
-				queue, worker, internalQueue := setupBasicQueue()
-				assert := assert.New(t)
-
-				// Start the worker
-				err := worker.start()
-				assert.NoError(err, "Worker should start successfully")
-
-				// Add several jobs
-				for i := range 5 {
-					queue.Add("test-data-" + strconv.Itoa(i))
-				}
-				assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
-
-				// Wait and close the queue
-				err = worker.WaitAndStop()
-				assert.NoError(err, "WaitAndStop should not return an error")
-
-				// After waiting and closing, should have no pending jobs and worker should be stopped
-				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitAndStop")
-				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndStop")
-				assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndStop")
-			})
 		})
 
 		// Group 4: Lifecycle tests

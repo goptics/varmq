@@ -18,8 +18,11 @@ const (
 	initiated status = iota
 	idle
 	running
+	pausing
 	paused
+	stopping
 	stopped
+	restarting
 )
 
 const (
@@ -48,12 +51,12 @@ type worker[T any, JobType iJob[T]] struct {
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	errorChan       chan error
-	waiters         *sync.Cond
 	tickers         []*time.Ticker
 	mx              sync.RWMutex
 	ctx             context.Context
 	cancel          context.CancelFunc
 	Configs         configs
+	*Waiter
 }
 
 // Worker represents a worker that processes Jobs.
@@ -100,8 +103,14 @@ type Worker interface {
 	//
 	// Deprecated: Use WaitUntilIdle instead.
 	WaitUntilFinished()
-	// WaitUntilIdle waits until all pending Jobs in the queue are processed.
+	// WaitUntilIdle waits until the worker reaches Idle status.
 	WaitUntilIdle()
+	// Wait waits until the worker reaches Paused, Stopped, or Idle status.
+	Wait()
+	// WaitUntilPaused waits until the worker reaches Paused status.
+	WaitUntilPaused()
+	// WaitUntilStopped waits until the worker reaches Stopped status.
+	WaitUntilStopped()
 	// WaitAndStop waits until all pending Jobs in the queue are processed and then closes the queue.
 	WaitAndStop() error
 
@@ -125,7 +134,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		Configs:         c,
 	}
 
-	w.waiters = sync.NewCond(&w.mx)
+	w.Waiter = newWaiter(&w.mx, w.status.Load)
 	w.concurrency.Store(c.concurrency)
 
 	if c.ctx != nil {
@@ -150,7 +159,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		Configs:         c,
 	}
 
-	w.waiters = sync.NewCond(&w.mx)
+	w.Waiter = newWaiter(&w.mx, w.status.Load)
 	w.concurrency.Store(c.concurrency)
 
 	if c.ctx != nil {
@@ -175,7 +184,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		Configs:         c,
 	}
 
-	w.waiters = sync.NewCond(&w.mx)
+	w.Waiter = newWaiter(&w.mx, w.status.Load)
 	w.concurrency.Store(c.concurrency)
 
 	if c.ctx != nil {
@@ -195,11 +204,26 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	// Only release waiters if worker is paused or if running with an empty queue
-	if w.IsPaused() || (w.IsRunning() && w.queues.Len() == 0) {
-		// Broadcast to all waiters to signal they can continue
-		w.waiters.Broadcast()
-		w.status.CompareAndSwap(running, idle)
+	defer w.cond.Broadcast()
+
+	if w.status.CompareAndSwap(running, idle) {
+		return
+	}
+
+	// Transition from pausing to paused when done processing
+	if w.status.CompareAndSwap(pausing, paused) {
+		return
+	}
+
+	// For restarting, stopping, or any other terminal transition,
+	// perform full cleanup and set status to stopped.
+	w.stopTickers()
+	w.closeChannels()
+	w.removeAllWorkers()
+	w.status.Store(stopped)
+
+	if w.cancel != nil {
+		w.cancel()
 	}
 }
 
@@ -218,26 +242,6 @@ func (w *worker[T, JobType]) Metrics() Metrics {
 
 func (w *worker[T, JobType]) WaitUntilFinished() {
 	w.WaitUntilIdle()
-}
-
-func (w *worker[T, JobType]) WaitUntilIdle() {
-	condition := func() bool {
-		switch w.status.Load() {
-		case running, idle:
-			return w.queues.Len() > 0 || w.curProcessing.Load() > 0
-		case paused, stopped:
-			return w.curProcessing.Load() > 0
-		default:
-			return false
-		}
-	}
-
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	for condition() {
-		w.waiters.Wait()
-	}
 }
 
 func (w *worker[T, JobType]) Errs() <-chan error {
@@ -468,8 +472,8 @@ func (w *worker[T, JobType]) closeChannels() {
 	}
 }
 
-// stopAndRemoveAllWorkers removes all nodes from the list and closes the pool nodes
-func (w *worker[T, JobType]) stopAndRemoveAllWorkers() {
+// removeAllWorkers removes all nodes from the list and closes the pool nodes
+func (w *worker[T, JobType]) removeAllWorkers() {
 	for _, node := range w.pool.NodeSlice() {
 		w.pool.Remove(node)
 		node.Value.Stop()
@@ -550,8 +554,13 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 func (w *worker[T, JobType]) Pause() error {
 	switch s := w.status.Load(); s {
 	case running, idle:
-		w.status.Store(paused)
-	case paused, stopped:
+		if w.NumProcessing() == 0 {
+			w.status.Store(paused)
+			return nil
+		}
+
+		w.status.Store(pausing)
+	case pausing, paused, stopped:
 		return nil
 	default:
 		return ErrNotRunningWorker
@@ -562,25 +571,25 @@ func (w *worker[T, JobType]) Pause() error {
 
 func (w *worker[T, JobType]) Stop() error {
 	switch s := w.status.Load(); s {
-	case stopped:
+	case stopped, stopping:
 		return nil
-	case running, idle:
-		w.PauseAndWait()
-	case paused:
-		w.WaitUntilIdle()
+	case running, idle, pausing, paused:
+		if w.NumProcessing() == 0 {
+			w.stopTickers()
+			w.closeChannels()
+			w.removeAllWorkers()
+			w.status.Store(stopped)
+
+			if w.cancel != nil {
+				w.cancel()
+			}
+			return nil
+		}
+
+		w.status.Store(stopping)
 	default:
 		return ErrNotRunningWorker
 	}
-
-	if w.cancel != nil {
-		defer w.cancel()
-	}
-	defer w.status.Store(stopped)
-
-	w.stopTickers()
-	w.closeChannels()
-
-	w.stopAndRemoveAllWorkers()
 
 	return nil
 }
@@ -590,25 +599,42 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) Restart() error {
+	var needsCleanup bool
+
 	// If worker is running, pause and wait for ongoing processes
 	switch w.status.Load() {
-	case running, idle:
-		if err := w.PauseAndWait(); err != nil {
-			return err
-		}
-		// to remove idle workers if any
-		w.stopAndRemoveAllWorkers()
+	case idle:
+		w.status.Store(restarting)
+		needsCleanup = true
+	case running:
+		w.status.Store(restarting)
+		// Wait until ongoing jobs are processed
+		w.Wait()
+		// cleanup is handled by releaseWaiters when the last job finishes
+	case pausing:
+		w.WaitUntilPaused()
+		w.status.Store(restarting)
+		w.removeAllWorkers()
+		needsCleanup = true
 	case paused:
-		w.WaitUntilIdle()
-		// to remove idle workers if any
-		w.stopAndRemoveAllWorkers()
-	case stopped, initiated:
-		// proceed to restart
+		w.status.Store(restarting)
+		w.removeAllWorkers()
+		needsCleanup = true
+	case stopping:
+		w.WaitUntilStopped()
+		w.status.Store(restarting)
+		// already cleaned up by releaseWaiters
+	case stopped:
+		w.status.Store(restarting)
+		// already clean
 	default:
 		return ErrNotRunningWorker
 	}
 
-	w.closeChannels()
+	if needsCleanup {
+		w.stopTickers()
+		w.closeChannels()
+	}
 
 	w.mx.Lock()
 	w.eventLoopSignal = make(chan struct{}, eventLoopSignalCap)
@@ -619,9 +645,6 @@ func (w *worker[T, JobType]) Restart() error {
 		w.ctx, w.cancel = context.WithCancel(w.Configs.ctx)
 	}
 	w.mx.Unlock()
-
-	// Reset status to initiated to allow start() to proceed
-	w.status.Store(initiated)
 
 	if err := w.start(); err != nil {
 		return err
@@ -659,8 +682,14 @@ func (w *worker[T, JobType]) Status() string {
 		return "Idle"
 	case running:
 		return "Running"
+	case restarting:
+		return "Restarting"
+	case pausing:
+		return "Pausing"
 	case paused:
 		return "Paused"
+	case stopping:
+		return "Stopping"
 	case stopped:
 		return "Stopped"
 	default:
@@ -700,12 +729,12 @@ func (w *worker[T, JobType]) PauseAndWait() error {
 		return err
 	}
 
-	w.WaitUntilIdle()
+	w.Wait()
 	return nil
 }
 
 func (w *worker[T, JobType]) WaitAndStop() error {
-	w.WaitUntilIdle()
+	w.Wait()
 
 	return w.Stop()
 }
