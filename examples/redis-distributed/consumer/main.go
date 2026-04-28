@@ -31,6 +31,6 @@ func main() {
 	// Using redisq adapter (you can use any adapter that implements IDistributedQueue)
 	q := w.WithDistributedQueue(rq)
 
-	fmt.Println("pending jobs:", q.NumPending())
+	fmt.Println("pending jobs:", q.Len())
 	fmt.Println("listening...")
 }
