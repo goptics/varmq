@@ -319,8 +319,8 @@ func TestWaiters(t *testing.T) {
 			started := make(chan struct{})
 			blockCh := make(chan struct{})
 			w := newWorker(func(j iJob[string]) {
-				close(started)          // Signal that job has started
-				<-blockCh               // Block until test releases
+				close(started) // Signal that job has started
+				<-blockCh      // Block until test releases
 			})
 			assert := assert.New(t)
 

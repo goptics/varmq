@@ -336,15 +336,17 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	// For restarting, stopping, or any other terminal transition,
-	// perform full cleanup and set status to stopped.
-	w.stopTickers()
-	w.closeChannels()
-	w.removeAllWorkers()
-	w.status.Store(stopped)
+	switch w.status.Load() {
+	case stopping, restarting:
+		// For stopping or restarting, perform full cleanup and set status to stopped.
+		w.stopTickers()
+		w.closeChannels()
+		w.removeAllWorkers()
+		w.status.Store(stopped)
 
-	if w.cancel != nil {
-		w.cancel()
+		if w.cancel != nil {
+			w.cancel()
+		}
 	}
 }
 
