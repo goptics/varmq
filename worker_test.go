@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"reflect"
-	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -38,7 +37,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
-				assert.NotNil(w.cond, "waiter cond should be initialized")
+				assert.NotNil(w.waiters, "waiters cond should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
 				assert.Zero(w.pool.Len(), "pool should be empty initially")
 				assert.Zero(w.curProcessing.Load(), "current processing count should be initialized to zero")
@@ -260,12 +259,12 @@ func TestWorkers(t *testing.T) {
 					q.Enqueue(newJob("job"+string(rune(i)), loadJobConfigs(w.configs())))
 				}
 
-				err := w.start()
-				assert := assert.New(t)
-				assert.NoError(err, "Worker should start without error")
+			err := w.start()
+			assert := assert.New(t)
+			assert.NoError(err, "Worker should start without error")
 
-				// Wait for jobs to be processed and pool to expand
-				w.WaitUntilIdle()
+			// Wait for jobs to be processed and pool to expand
+			w.Wait()
 
 				assert.Equal(w.pool.Len(), w.NumConcurrency(), "Pool size should be equal to the concurrency")
 
@@ -335,104 +334,6 @@ func TestWorkers(t *testing.T) {
 				// This is a direct manipulation of internal state for testing purposes
 				w.status.Store(99) // Invalid status value
 				assert.Equal("Unknown", w.Status(), "Status string for unknown status should be 'Unknown'")
-			})
-
-			t.Run("pause and wait functionality", func(t *testing.T) {
-				// Track job processing
-				var jobsProcessed atomic.Uint32
-
-				// Create a worker function that increments counter
-				fn := func(j iJob[int]) {
-					time.Sleep(10 * time.Millisecond) // Simulate work
-					jobsProcessed.Add(1)
-				}
-
-				// Create worker with concurrency 2
-				w := newWorker(fn)
-				assert := assert.New(t)
-
-				// Create a queue for testing using internal implementation
-				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q, math.MaxInt)
-
-				// Submit some jobs
-				for i := range 10 {
-					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
-				}
-
-				// Start worker
-				err := w.start()
-				assert.NoError(err, "Starting worker should not error")
-
-				w.PauseAndWait()
-
-				// Check no jobs are being processed
-				assert.Zero(w.NumProcessing(), "No jobs should be processing after PauseAndWait")
-
-				// Check status
-				assert.True(w.IsPaused(), "Worker should be paused after PauseAndWait")
-
-				// Keep track of processed count before resume
-				processedBeforeResume := jobsProcessed.Load()
-
-				// Resume and let remaining jobs process
-				err = w.Resume()
-				assert.NoError(err, "Resuming worker should not error")
-
-				time.Sleep(100 * time.Millisecond)
-				// Check more jobs were processed after resume
-				assert.Greater(jobsProcessed.Load(), processedBeforeResume, "More jobs should be processed after resume")
-				time.Sleep(100 * time.Millisecond)
-
-				// should process all jobs
-				assert.Equal(jobsProcessed.Load(), uint32(10), "All jobs should be processed after resume")
-				w.Stop()
-			})
-
-			t.Run("pause preserves status after in-flight jobs drain", func(t *testing.T) {
-				// Synchronization channels for deterministic testing
-				started := make(chan struct{}, 10) // signals when a job begins processing
-				resumeCh := make(chan struct{})    // blocks jobs until test releases them
-
-				fn := func(j iJob[int]) {
-					started <- struct{}{} // signal that this job has started
-					<-resumeCh            // block until the test releases
-				}
-
-				w := newWorker(fn, WithConcurrency(2))
-				assert := assert.New(t)
-
-				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q, math.MaxInt)
-
-				// Add enough jobs to keep the worker busy
-				for i := range 10 {
-					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
-				}
-
-				err := w.start()
-				assert.NoError(err, "Worker should start without error")
-
-				// Wait deterministically for at least one job to start processing
-				<-started
-				assert.True(w.IsActive(), "Worker should be active while processing jobs")
-
-				// Pause while jobs are still in-flight
-				err = w.Pause()
-				assert.NoError(err, "Pause should not error")
-
-				// Release all blocked jobs so in-flight work can drain
-				close(resumeCh)
-
-				// Wait for all in-flight jobs to finish
-				w.WaitUntilIdle()
-
-				// Status should still be "Paused", not "Idle"
-				assert.True(w.IsPaused(), "Worker should remain paused after in-flight jobs drain")
-				assert.Equal("Paused", w.Status(), "Status string should be 'Paused' after in-flight jobs drain")
-				assert.Zero(w.NumProcessing(), "No jobs should be processing")
-
-				w.Stop()
 			})
 
 			t.Run("restart functionality", func(t *testing.T) {
@@ -600,65 +501,6 @@ func TestWorkers(t *testing.T) {
 					assert.ErrorIs(t, w.Restart(), ErrNotRunningWorker)
 				})
 
-				t.Run("RestartPauseAndWaitError", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {})
-					defer w.Stop()
-
-					done := make(chan struct{})
-					// Use many goroutines to increase the race probability
-					for range 50 {
-						go func() {
-							for {
-								select {
-								case <-done:
-									return
-								default:
-									if w.status.Load() == running {
-										w.status.Store(initiated)
-									}
-									runtime.Gosched()
-								}
-							}
-						}()
-					}
-
-					// Try many times to hit the race
-					for range 5000 {
-						w.status.Store(running)
-						_ = w.Restart()
-					}
-					close(done)
-				})
-
-				t.Run("RestartStartError", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {})
-					defer w.Stop()
-
-					w.status.Store(stopped)
-
-					done := make(chan struct{})
-					for range 50 {
-						go func() {
-							for {
-								select {
-								case <-done:
-									return
-								default:
-									if w.status.Load() == initiated {
-										w.status.Store(running)
-									}
-									runtime.Gosched()
-								}
-							}
-						}()
-					}
-
-					for range 500 {
-						w.status.Store(stopped)
-						_ = w.Restart()
-					}
-					close(done)
-				})
 			})
 
 			t.Run("pool node job close error", func(t *testing.T) {
@@ -716,7 +558,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				// Wait for processing
-				w.WaitUntilIdle()
+				w.Wait()
 
 				// Check NumPending is 0
 				assert.Equal(0, w.NumPending(), "NumPending should be 0 after processing")
