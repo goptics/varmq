@@ -1135,6 +1135,215 @@ type mockJob struct {
 	shouldFailClose bool
 }
 
+func TestStatusError(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   status
+		wantErr  error
+	}{
+		{"paused returns ErrWorkerPaused", paused, ErrWorkerPaused},
+		{"stopped returns ErrWorkerStopped", stopped, ErrWorkerStopped},
+		{"pausing returns ErrWorkerPausing", pausing, ErrWorkerPausing},
+		{"stopping returns ErrWorkerStopping", stopping, ErrWorkerStopping},
+		{"restarting returns ErrWorkerRestarting", restarting, ErrWorkerRestarting},
+		{"running returns ErrRunningWorker", running, ErrRunningWorker},
+		{"idle returns ErrRunningWorker", idle, ErrRunningWorker},
+		{"initiated returns ErrNotRunningWorker", initiated, ErrNotRunningWorker},
+		{"unknown status returns ErrNotRunningWorker", status(99), ErrNotRunningWorker},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newWorker(func(j iJob[string]) {})
+			w.status.Store(tt.status)
+			assert.Equal(t, tt.wantErr, w.getStatusError())
+		})
+	}
+}
+
+func TestIdempotentStateTransitions(t *testing.T) {
+	t.Run("Pause is idempotent for pausing state", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load())
+
+		err = w.Pause()
+		assert.NoError(t, err, "Pause on pausing state should be idempotent")
+
+		close(blockCh)
+		w.WaitUntilPaused()
+		w.Stop()
+	})
+
+	t.Run("Stop is idempotent for stopping state", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.Equal(t, stopping, w.status.Load())
+
+		err = w.Stop()
+		assert.NoError(t, err, "Stop on stopping state should be idempotent")
+
+		close(blockCh)
+		w.WaitUntilStopped()
+	})
+
+	t.Run("Restart is idempotent for restarting state", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		w.status.Store(restarting)
+
+		err := w.Restart()
+		assert.NoError(t, err, "Restart on restarting state should be idempotent")
+	})
+
+	t.Run("Pause returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(stopping)
+		assert.ErrorIs(t, w.Pause(), ErrWorkerStopping)
+
+		w.status.Store(restarting)
+		assert.ErrorIs(t, w.Pause(), ErrWorkerRestarting)
+	})
+
+	t.Run("Stop returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(restarting)
+		assert.ErrorIs(t, w.Stop(), ErrWorkerRestarting)
+
+		// paused is a valid transition for Stop, should succeed
+		w.status.Store(paused)
+		assert.NoError(t, w.Stop())
+	})
+
+	t.Run("Restart from pausing state waits then restarts", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load())
+
+		done := make(chan struct{})
+		go func() {
+			err := w.Restart()
+			assert.NoError(t, err)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("Restart should block while pausing")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(blockCh)
+
+		select {
+		case <-done:
+			assert.True(t, w.IsActive(), "Worker should be active after restart from pausing")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Restart should complete after pausing completes")
+		}
+
+		w.Stop()
+	})
+
+	t.Run("Restart from stopping state waits then restarts", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.Equal(t, stopping, w.status.Load())
+
+		done := make(chan struct{})
+		go func() {
+			err := w.Restart()
+			assert.NoError(t, err)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("Restart should block while stopping")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(blockCh)
+
+		select {
+		case <-done:
+			assert.True(t, w.IsActive(), "Worker should be active after restart from stopping")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Restart should complete after stopping completes")
+		}
+	})
+
+	t.Run("TunePool returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(paused)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerPaused)
+
+		w.status.Store(stopped)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerStopped)
+
+		w.status.Store(pausing)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerPausing)
+	})
+}
+
 func (m *mockJob) Close() error {
 	if m.shouldFailClose {
 		return errors.New("close failure")

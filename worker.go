@@ -691,7 +691,7 @@ func (w *worker[T, JobType]) start() error {
 
 func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	if !w.IsActive() {
-		return statusError(w.status.Load())
+		return w.getStatusError()
 	}
 
 	oldConcurrency := w.concurrency.Load()
@@ -759,7 +759,7 @@ func (w *worker[T, JobType]) Pause() error {
 		return nil
 	}
 
-	return statusError(w.status.Load())
+	return w.getStatusError()
 }
 
 func (w *worker[T, JobType]) Stop() error {
@@ -785,7 +785,7 @@ func (w *worker[T, JobType]) Stop() error {
 		}
 	}
 
-	return statusError(w.status.Load())
+	return w.getStatusError()
 }
 
 func (w *worker[T, JobType]) NumPending() int {
@@ -852,18 +852,18 @@ func (w *worker[T, JobType]) transitionToRestarting() (needsCleanup bool, _ erro
 	case pausing:
 		w.WaitUntilPaused()
 		if !w.status.CompareAndSwap(paused, restarting) {
-			return false, statusError(w.status.Load())
+			return false, w.getStatusError()
 		}
 		w.removeAllWorkers()
 		return true, nil
 	case stopping:
 		w.WaitUntilStopped()
 		if !w.status.CompareAndSwap(stopped, restarting) {
-			return false, statusError(w.status.Load())
+			return false, w.getStatusError()
 		}
 		return false, nil
 	default:
-		return false, statusError(s)
+		return false, w.getStatusError()
 	}
 }
 
@@ -886,6 +886,25 @@ func (w *worker[T, JobType]) IsIdle() bool {
 
 func (w *worker[T, JobType]) IsStopped() bool {
 	return w.status.Load() == stopped
+}
+
+func (w *worker[T, JobType]) getStatusError() error {
+	switch s := w.status.Load(); s {
+	case paused:
+		return ErrWorkerPaused
+	case stopped:
+		return ErrWorkerStopped
+	case pausing:
+		return ErrWorkerPausing
+	case stopping:
+		return ErrWorkerStopping
+	case restarting:
+		return ErrWorkerRestarting
+	case running, idle:
+		return ErrRunningWorker
+	default:
+		return ErrNotRunningWorker
+	}
 }
 
 func (w *worker[T, JobType]) Status() string {
@@ -966,23 +985,4 @@ func (w *worker[T, JobType]) WaitAndStop() error {
 	w.Wait()
 
 	return w.Stop()
-}
-
-func statusError(s status) error {
-	switch s {
-	case paused:
-		return ErrWorkerPaused
-	case stopped:
-		return ErrWorkerStopped
-	case pausing:
-		return ErrWorkerPausing
-	case stopping:
-		return ErrWorkerStopping
-	case restarting:
-		return ErrWorkerRestarting
-	case running, idle:
-		return ErrRunningWorker
-	default:
-		return ErrNotRunningWorker
-	}
 }
