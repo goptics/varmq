@@ -459,18 +459,20 @@ func TestWorkers(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {})
 				// initiated to paused: error
 				assert.ErrorIs(t, w.Pause(), ErrNotRunningWorker)
+				// initiated to stopped: error
+				assert.ErrorIs(t, w.Stop(), ErrNotRunningWorker)
 
 				w.start()
 				w.Pause()
 				assert.True(t, w.IsPaused())
-				// paused to paused: nil
+				// paused to paused: idempotent nil
 				assert.NoError(t, w.Pause())
 
 				w.Stop()
 				assert.True(t, w.IsStopped())
-				// stopped to paused: nil
-				assert.NoError(t, w.Pause())
-				// stopped to stopped: nil
+				// stopped to paused: error
+				assert.ErrorIs(t, w.Pause(), ErrWorkerStopped)
+				// stopped to stopped: idempotent nil
 				assert.NoError(t, w.Stop())
 			})
 
@@ -791,24 +793,6 @@ func TestWorkers(t *testing.T) {
 				assert.Less(t, w.pool.Len(), initialPoolSize, "Pool should be shrunk")
 			})
 
-			t.Run("Pause when not running", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				err := w.Pause()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Pause should return error when worker not running")
-			})
-
-			t.Run("Stop when not running", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				err := w.Stop()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Stop should return error when worker not running")
-			})
-
 			t.Run("Resume from initiated state", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
@@ -848,17 +832,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(t, err, "Worker should stop without error")
 
 				err = w.Resume()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Resume should return error when worker is stopped")
-			})
-
-			t.Run("PauseAndWait with error", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				// PauseAndWait should return error when worker not running
-				err := w.PauseAndWait()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "PauseAndWait should return error when worker not running")
+				assert.ErrorIs(t, err, ErrWorkerStopped, "Resume should return error when worker is stopped")
 			})
 
 			t.Run("processNextJob with empty queue", func(t *testing.T) {

@@ -34,6 +34,11 @@ const (
 var (
 	ErrRunningWorker    = errors.New("worker is already running")
 	ErrNotRunningWorker = errors.New("worker is not running")
+	ErrWorkerPaused     = errors.New("worker is paused")
+	ErrWorkerStopped    = errors.New("worker is stopped")
+	ErrWorkerPausing    = errors.New("worker is pausing")
+	ErrWorkerStopping   = errors.New("worker is stopping")
+	ErrWorkerRestarting = errors.New("worker is restarting")
 	ErrSameConcurrency  = errors.New("worker already has the same concurrency")
 	ErrFailedToDequeue  = errors.New("failed to dequeue job")
 	ErrFailedToCastJob  = errors.New("failed to cast job")
@@ -686,7 +691,7 @@ func (w *worker[T, JobType]) start() error {
 
 func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	if !w.IsActive() {
-		return ErrNotRunningWorker
+		return statusError(w.status.Load())
 	}
 
 	oldConcurrency := w.concurrency.Load()
@@ -737,46 +742,48 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 }
 
 func (w *worker[T, JobType]) Pause() error {
-	switch s := w.status.Load(); s {
-	case running, idle:
-		if w.NumProcessing() == 0 {
-			w.status.Store(paused)
-			return nil
-		}
-
-		w.status.Store(pausing)
-	case pausing, paused, stopped:
+	if w.status.CompareAndSwap(idle, paused) {
 		return nil
-	default:
-		return ErrNotRunningWorker
 	}
 
-	return nil
+	if w.status.CompareAndSwap(running, pausing) {
+		if w.NumProcessing() == 0 {
+			w.status.CompareAndSwap(pausing, paused)
+		}
+		return nil
+	}
+
+	s := w.status.Load()
+	if s == paused || s == pausing {
+		return nil
+	}
+
+	return statusError(s)
 }
 
 func (w *worker[T, JobType]) Stop() error {
-	switch s := w.status.Load(); s {
-	case stopped, stopping:
-		return nil
-	case running, idle, pausing, paused:
-		if w.NumProcessing() == 0 {
-			w.stopTickers()
-			w.closeChannels()
-			w.removeAllWorkers()
-			w.status.Store(stopped)
+	for _, from := range []status{running, idle, pausing, paused} {
+		if w.status.CompareAndSwap(from, stopping) {
+			if w.NumProcessing() == 0 {
+				w.stopTickers()
+				w.closeChannels()
+				w.removeAllWorkers()
+				w.status.Store(stopped)
 
-			if w.cancel != nil {
-				w.cancel()
+				if w.cancel != nil {
+					w.cancel()
+				}
 			}
 			return nil
 		}
-
-		w.status.Store(stopping)
-	default:
-		return ErrNotRunningWorker
 	}
 
-	return nil
+	s := w.status.Load()
+	if s == stopped || s == stopping {
+		return nil
+	}
+
+	return statusError(s)
 }
 
 func (w *worker[T, JobType]) NumPending() int {
@@ -784,40 +791,9 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) Restart() error {
-	needsCleanup := true
-
-	// If worker is running, pause and wait for ongoing processes
-	switch w.status.Load() {
-	case idle:
-		w.status.Store(restarting)
-		w.removeAllWorkers()
-	case running:
-		w.status.Store(restarting)
-		if w.NumProcessing() > 0 {
-			// Wait until ongoing jobs are processed.
-			// Cleanup is handled by releaseWaiters when the last job finishes.
-			w.Wait()
-		} else {
-			w.removeAllWorkers()
-		}
-	case pausing:
-		w.WaitUntilPaused()
-		w.status.Store(restarting)
-		w.removeAllWorkers()
-	case paused:
-		w.status.Store(restarting)
-		w.removeAllWorkers()
-	case stopping:
-		w.WaitUntilStopped()
-		w.status.Store(restarting)
-		// already cleaned up by releaseWaiters
-		needsCleanup = false
-	case stopped:
-		w.status.Store(restarting)
-		// already clean
-		needsCleanup = false
-	default:
-		return ErrNotRunningWorker
+	needsCleanup, err := w.transitionToRestarting()
+	if err != nil {
+		return err
 	}
 
 	if needsCleanup {
@@ -840,6 +816,53 @@ func (w *worker[T, JobType]) Restart() error {
 	}
 
 	return nil
+}
+
+func (w *worker[T, JobType]) transitionToRestarting() (needsCleanup bool, _ error) {
+	if w.status.CompareAndSwap(idle, restarting) {
+		w.removeAllWorkers()
+		return true, nil
+	}
+
+	if w.status.CompareAndSwap(paused, restarting) {
+		w.removeAllWorkers()
+		return true, nil
+	}
+
+	if w.status.CompareAndSwap(running, restarting) {
+		if w.NumProcessing() > 0 {
+			w.Wait()
+		} else {
+			w.removeAllWorkers()
+		}
+		return true, nil
+	}
+
+	if w.status.CompareAndSwap(stopped, restarting) {
+		return false, nil
+	}
+
+	if w.status.CompareAndSwap(restarting, restarting) {
+		return false, nil
+	}
+
+	switch s := w.status.Load(); s {
+	case pausing:
+		w.WaitUntilPaused()
+		if !w.status.CompareAndSwap(paused, restarting) {
+			return false, statusError(w.status.Load())
+		}
+		w.removeAllWorkers()
+		return true, nil
+	case stopping:
+		w.WaitUntilStopped()
+		if !w.status.CompareAndSwap(stopped, restarting) {
+			return false, statusError(w.status.Load())
+		}
+		return false, nil
+	default:
+		return false, statusError(s)
+	}
 }
 
 func (w *worker[T, JobType]) IsPaused() bool {
@@ -892,7 +915,7 @@ func (w *worker[T, JobType]) NumProcessing() int {
 
 func (w *worker[T, JobType]) Resume() error {
 	if w.IsStopped() {
-		return ErrNotRunningWorker
+		return ErrWorkerStopped
 	}
 
 	if w.status.Load() == initiated {
@@ -941,4 +964,23 @@ func (w *worker[T, JobType]) WaitAndStop() error {
 	w.Wait()
 
 	return w.Stop()
+}
+
+func statusError(s status) error {
+	switch s {
+	case paused:
+		return ErrWorkerPaused
+	case stopped:
+		return ErrWorkerStopped
+	case pausing:
+		return ErrWorkerPausing
+	case stopping:
+		return ErrWorkerStopping
+	case restarting:
+		return ErrWorkerRestarting
+	case running, idle:
+		return ErrRunningWorker
+	default:
+		return ErrNotRunningWorker
+	}
 }
