@@ -742,6 +742,12 @@ func (w *worker[T, JobType]) NumIdleWorkers() int {
 }
 
 func (w *worker[T, JobType]) Pause() error {
+	s := w.status.Load()
+
+	if s == paused || s == pausing {
+		return nil
+	}
+
 	if w.status.CompareAndSwap(idle, paused) {
 		return nil
 	}
@@ -753,15 +759,16 @@ func (w *worker[T, JobType]) Pause() error {
 		return nil
 	}
 
-	s := w.status.Load()
-	if s == paused || s == pausing {
-		return nil
-	}
-
-	return statusError(s)
+	return statusError(w.status.Load())
 }
 
 func (w *worker[T, JobType]) Stop() error {
+	s := w.status.Load()
+
+	if s == stopped || s == stopping {
+		return nil
+	}
+
 	for _, from := range []status{running, idle, pausing, paused} {
 		if w.status.CompareAndSwap(from, stopping) {
 			if w.NumProcessing() == 0 {
@@ -778,12 +785,7 @@ func (w *worker[T, JobType]) Stop() error {
 		}
 	}
 
-	s := w.status.Load()
-	if s == stopped || s == stopping {
-		return nil
-	}
-
-	return statusError(s)
+	return statusError(w.status.Load())
 }
 
 func (w *worker[T, JobType]) NumPending() int {
@@ -791,6 +793,10 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) Restart() error {
+	if w.status.Load() == restarting {
+		return nil
+	}
+
 	needsCleanup, err := w.transitionToRestarting()
 	if err != nil {
 		return err
@@ -839,10 +845,6 @@ func (w *worker[T, JobType]) transitionToRestarting() (needsCleanup bool, _ erro
 	}
 
 	if w.status.CompareAndSwap(stopped, restarting) {
-		return false, nil
-	}
-
-	if w.status.CompareAndSwap(restarting, restarting) {
 		return false, nil
 	}
 
