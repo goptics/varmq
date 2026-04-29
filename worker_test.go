@@ -1350,3 +1350,169 @@ func (m *mockJob) Close() error {
 	}
 	return m.job.Close()
 }
+
+func TestPausePausingFastPath(t *testing.T) {
+	t.Run("Pause transitions directly to paused when no jobs processing", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, paused, w.status.Load(), "Should transition directly to paused when idle")
+		assert.True(t, w.IsPaused())
+
+		w.Stop()
+	})
+
+	t.Run("Pause transitions to pausing then paused when in-flight job completes", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load(), "Should be pausing")
+
+		close(blockCh)
+
+		w.WaitUntilPaused()
+		assert.True(t, w.IsPaused())
+
+		w.Stop()
+	})
+}
+
+func TestRestartCoverage(t *testing.T) {
+	t.Run("Restart from idle with no processing calls removeAllWorkers", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		assert.True(t, w.IsIdle())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart from stopped needs no cleanup", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		w.Stop()
+		assert.True(t, w.IsStopped())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart from paused needs cleanup", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.True(t, w.IsPaused())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart with context cancels and recreates context", func(t *testing.T) {
+		ctx := t.Context()
+		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+		err := w.start()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+		assert.NoError(t, w.Context().Err(), "New context should not be cancelled")
+
+		w.Stop()
+	})
+
+	t.Run("Restart without context does not panic", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		assert.Nil(t, w.Context())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.Nil(t, w.Context())
+
+		w.Stop()
+	})
+}
+
+func TestStatusAllCases(t *testing.T) {
+	t.Run("Status returns correct string for all states", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		assert.Equal(t, "Initiated", w.Status())
+
+		w.start()
+		assert.Equal(t, "Idle", w.Status())
+
+		w.status.Store(running)
+		assert.Equal(t, "Running", w.Status())
+
+		w.status.Store(pausing)
+		assert.Equal(t, "Pausing", w.Status())
+
+		w.status.Store(paused)
+		assert.Equal(t, "Paused", w.Status())
+
+		w.status.Store(stopping)
+		assert.Equal(t, "Stopping", w.Status())
+
+		w.status.Store(stopped)
+		assert.Equal(t, "Stopped", w.Status())
+
+		w.status.Store(restarting)
+		assert.Equal(t, "Restarting", w.Status())
+
+		w.status.Store(99)
+		assert.Equal(t, "Unknown", w.Status())
+	})
+}
+
+func TestStopAndWaitErrorPath(t *testing.T) {
+	t.Run("StopAndWait returns error when Stop fails", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.StopAndWait()
+		assert.ErrorIs(t, err, ErrNotRunningWorker)
+	})
+}
+
+func TestReleaseWaitersCleanup(t *testing.T) {
+	t.Run("releaseWaiters performs full cleanup for stopping state with context", func(t *testing.T) {
+		ctx := context.Background()
+		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+		err := w.start()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.True(t, w.IsStopped())
+	})
+}
