@@ -66,6 +66,8 @@ type worker[T any, JobType iJob[T]] struct {
 
 // Worker represents a worker that processes Jobs.
 type Worker interface {
+	// Name returns the unique name of the worker.
+	Name() string
 	// IsRunning returns whether the worker is actively processing jobs.
 	//
 	// A worker is Running when it has at least one job currently being processed.
@@ -267,6 +269,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		w.ctx, w.cancel = context.WithCancel(c.ctx)
 	}
 
+	registerWorker(w)
 	return w
 }
 
@@ -292,6 +295,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		w.ctx, w.cancel = context.WithCancel(c.ctx)
 	}
 
+	registerWorker(w)
 	return w
 }
 
@@ -317,11 +321,16 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		w.ctx, w.cancel = context.WithCancel(c.ctx)
 	}
 
+	registerWorker(w)
 	return w
 }
 
 func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
+}
+
+func (w *worker[T, JobType]) Name() string {
+	return w.Configs.name
 }
 
 func (w *worker[T, JobType]) releaseWaiters(processing uint32) {

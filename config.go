@@ -18,6 +18,7 @@ type configs struct {
 	jobIdGenerator           func() string
 	idleWorkerExpiryDuration time.Duration
 	ctx                      context.Context
+	name                     string
 }
 
 var defaultConfig = configs{
@@ -129,10 +130,20 @@ func mergeConfigs(c configs, cs ...any) configs {
 			config(&c)
 		case int:
 			c.concurrency = withSafeConcurrency(config)
+		case string:
+			c.name = config
 		}
 	}
 
 	return c
+}
+
+// WithName configures the name for the worker.
+// If not set, a default name will be generated like "worker-1", "worker-2", etc.
+func WithName(name string) ConfigFunc {
+	return func(c *configs) {
+		c.name = name
+	}
 }
 
 // WithIdleWorkerExpiryDuration configures the time period after which idle workers are
