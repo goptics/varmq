@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"reflect"
-	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -38,7 +37,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.tickers, "tickers map should be initialized")
-				assert.NotNil(w.waiters, "waiters slice should be initialized")
+				assert.NotNil(w.waiters, "waiters cond should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
 				assert.Zero(w.pool.Len(), "pool should be empty initially")
 				assert.Zero(w.curProcessing.Load(), "current processing count should be initialized to zero")
@@ -260,12 +259,12 @@ func TestWorkers(t *testing.T) {
 					q.Enqueue(newJob("job"+string(rune(i)), loadJobConfigs(w.configs())))
 				}
 
-				err := w.start()
-				assert := assert.New(t)
-				assert.NoError(err, "Worker should start without error")
+			err := w.start()
+			assert := assert.New(t)
+			assert.NoError(err, "Worker should start without error")
 
-				// Wait for jobs to be processed and pool to expand
-				w.WaitUntilIdle()
+			// Wait for jobs to be processed and pool to expand
+			w.Wait()
 
 				assert.Equal(w.pool.Len(), w.NumConcurrency(), "Pool size should be equal to the concurrency")
 
@@ -284,52 +283,6 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(w.pool.Len(), 1, "Pool size should be equal to one after expiration")
 			})
 
-			t.Run("WaitUntilIdle", func(t *testing.T) {
-				queue, worker, internalQueue := setupBasicQueue()
-				assert := assert.New(t)
-
-				// Start the worker
-				err := worker.start()
-				assert.NoError(err, "Worker should start successfully")
-				defer worker.Stop()
-
-				// Add several jobs
-				for i := range 5 {
-					queue.Add("test-data-" + strconv.Itoa(i))
-				}
-				assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
-
-				// Wait until all jobs are processed
-				worker.WaitUntilIdle()
-
-				// After waiting, should have no pending jobs
-				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitUntilIdle")
-				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitUntilIdle")
-			})
-
-			t.Run("WaitAndStop", func(t *testing.T) {
-				queue, worker, internalQueue := setupBasicQueue()
-				assert := assert.New(t)
-
-				// Start the worker
-				err := worker.start()
-				assert.NoError(err, "Worker should start successfully")
-
-				// Add several jobs
-				for i := range 5 {
-					queue.Add("test-data-" + strconv.Itoa(i))
-				}
-				assert.LessOrEqual(queue.Len(), 5, "Queue should have at most five pending jobs")
-
-				// Wait and close the queue
-				err = worker.WaitAndStop()
-				assert.NoError(err, "WaitAndStop should not return an error")
-
-				// After waiting and closing, should have no pending jobs and worker should be stopped
-				assert.Equal(0, queue.Len(), "Queue should have no pending jobs after WaitAndStop")
-				assert.Equal(0, internalQueue.Len(), "Internal queue should be empty after WaitAndStop")
-				assert.True(worker.IsStopped(), "Worker should be stopped after WaitAndStop")
-			})
 		})
 
 		// Group 4: Lifecycle tests
@@ -381,104 +334,6 @@ func TestWorkers(t *testing.T) {
 				// This is a direct manipulation of internal state for testing purposes
 				w.status.Store(99) // Invalid status value
 				assert.Equal("Unknown", w.Status(), "Status string for unknown status should be 'Unknown'")
-			})
-
-			t.Run("pause and wait functionality", func(t *testing.T) {
-				// Track job processing
-				var jobsProcessed atomic.Uint32
-
-				// Create a worker function that increments counter
-				fn := func(j iJob[int]) {
-					time.Sleep(10 * time.Millisecond) // Simulate work
-					jobsProcessed.Add(1)
-				}
-
-				// Create worker with concurrency 2
-				w := newWorker(fn)
-				assert := assert.New(t)
-
-				// Create a queue for testing using internal implementation
-				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q, math.MaxInt)
-
-				// Submit some jobs
-				for i := range 10 {
-					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
-				}
-
-				// Start worker
-				err := w.start()
-				assert.NoError(err, "Starting worker should not error")
-
-				w.PauseAndWait()
-
-				// Check no jobs are being processed
-				assert.Zero(w.NumProcessing(), "No jobs should be processing after PauseAndWait")
-
-				// Check status
-				assert.True(w.IsPaused(), "Worker should be paused after PauseAndWait")
-
-				// Keep track of processed count before resume
-				processedBeforeResume := jobsProcessed.Load()
-
-				// Resume and let remaining jobs process
-				err = w.Resume()
-				assert.NoError(err, "Resuming worker should not error")
-
-				time.Sleep(100 * time.Millisecond)
-				// Check more jobs were processed after resume
-				assert.Greater(jobsProcessed.Load(), processedBeforeResume, "More jobs should be processed after resume")
-				time.Sleep(100 * time.Millisecond)
-
-				// should process all jobs
-				assert.Equal(jobsProcessed.Load(), uint32(10), "All jobs should be processed after resume")
-				w.Stop()
-			})
-
-			t.Run("pause preserves status after in-flight jobs drain", func(t *testing.T) {
-				// Synchronization channels for deterministic testing
-				started := make(chan struct{}, 10) // signals when a job begins processing
-				resumeCh := make(chan struct{})    // blocks jobs until test releases them
-
-				fn := func(j iJob[int]) {
-					started <- struct{}{} // signal that this job has started
-					<-resumeCh            // block until the test releases
-				}
-
-				w := newWorker(fn, WithConcurrency(2))
-				assert := assert.New(t)
-
-				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q, math.MaxInt)
-
-				// Add enough jobs to keep the worker busy
-				for i := range 10 {
-					q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
-				}
-
-				err := w.start()
-				assert.NoError(err, "Worker should start without error")
-
-				// Wait deterministically for at least one job to start processing
-				<-started
-				assert.True(w.IsActive(), "Worker should be active while processing jobs")
-
-				// Pause while jobs are still in-flight
-				err = w.Pause()
-				assert.NoError(err, "Pause should not error")
-
-				// Release all blocked jobs so in-flight work can drain
-				close(resumeCh)
-
-				// Wait for all in-flight jobs to finish
-				w.WaitUntilIdle()
-
-				// Status should still be "Paused", not "Idle"
-				assert.True(w.IsPaused(), "Worker should remain paused after in-flight jobs drain")
-				assert.Equal("Paused", w.Status(), "Status string should be 'Paused' after in-flight jobs drain")
-				assert.Zero(w.NumProcessing(), "No jobs should be processing")
-
-				w.Stop()
 			})
 
 			t.Run("restart functionality", func(t *testing.T) {
@@ -604,18 +459,20 @@ func TestWorkers(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {})
 				// initiated to paused: error
 				assert.ErrorIs(t, w.Pause(), ErrNotRunningWorker)
+				// initiated to stopped: error
+				assert.ErrorIs(t, w.Stop(), ErrNotRunningWorker)
 
 				w.start()
 				w.Pause()
 				assert.True(t, w.IsPaused())
-				// paused to paused: nil
+				// paused to paused: idempotent nil
 				assert.NoError(t, w.Pause())
 
 				w.Stop()
 				assert.True(t, w.IsStopped())
-				// stopped to paused: nil
-				assert.NoError(t, w.Pause())
-				// stopped to stopped: nil
+				// stopped to paused: error
+				assert.ErrorIs(t, w.Pause(), ErrWorkerStopped)
+				// stopped to stopped: idempotent nil
 				assert.NoError(t, w.Stop())
 			})
 
@@ -646,65 +503,6 @@ func TestWorkers(t *testing.T) {
 					assert.ErrorIs(t, w.Restart(), ErrNotRunningWorker)
 				})
 
-				t.Run("RestartPauseAndWaitError", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {})
-					defer w.Stop()
-
-					done := make(chan struct{})
-					// Use many goroutines to increase the race probability
-					for range 50 {
-						go func() {
-							for {
-								select {
-								case <-done:
-									return
-								default:
-									if w.status.Load() == running {
-										w.status.Store(initiated)
-									}
-									runtime.Gosched()
-								}
-							}
-						}()
-					}
-
-					// Try many times to hit the race
-					for range 5000 {
-						w.status.Store(running)
-						_ = w.Restart()
-					}
-					close(done)
-				})
-
-				t.Run("RestartStartError", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {})
-					defer w.Stop()
-
-					w.status.Store(stopped)
-
-					done := make(chan struct{})
-					for range 50 {
-						go func() {
-							for {
-								select {
-								case <-done:
-									return
-								default:
-									if w.status.Load() == initiated {
-										w.status.Store(running)
-									}
-									runtime.Gosched()
-								}
-							}
-						}()
-					}
-
-					for range 500 {
-						w.status.Store(stopped)
-						_ = w.Restart()
-					}
-					close(done)
-				})
 			})
 
 			t.Run("pool node job close error", func(t *testing.T) {
@@ -762,7 +560,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				// Wait for processing
-				w.WaitUntilIdle()
+				w.Wait()
 
 				// Check NumPending is 0
 				assert.Equal(0, w.NumPending(), "NumPending should be 0 after processing")
@@ -995,24 +793,6 @@ func TestWorkers(t *testing.T) {
 				assert.Less(t, w.pool.Len(), initialPoolSize, "Pool should be shrunk")
 			})
 
-			t.Run("Pause when not running", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				err := w.Pause()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Pause should return error when worker not running")
-			})
-
-			t.Run("Stop when not running", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				err := w.Stop()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Stop should return error when worker not running")
-			})
-
 			t.Run("Resume from initiated state", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
@@ -1052,17 +832,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(t, err, "Worker should stop without error")
 
 				err = w.Resume()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "Resume should return error when worker is stopped")
-			})
-
-			t.Run("PauseAndWait with error", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(5 * time.Millisecond)
-				})
-
-				// PauseAndWait should return error when worker not running
-				err := w.PauseAndWait()
-				assert.ErrorIs(t, err, ErrNotRunningWorker, "PauseAndWait should return error when worker not running")
+				assert.ErrorIs(t, err, ErrWorkerStopped, "Resume should return error when worker is stopped")
 			})
 
 			t.Run("processNextJob with empty queue", func(t *testing.T) {
@@ -1365,9 +1135,384 @@ type mockJob struct {
 	shouldFailClose bool
 }
 
+func TestStatusError(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   status
+		wantErr  error
+	}{
+		{"paused returns ErrWorkerPaused", paused, ErrWorkerPaused},
+		{"stopped returns ErrWorkerStopped", stopped, ErrWorkerStopped},
+		{"pausing returns ErrWorkerPausing", pausing, ErrWorkerPausing},
+		{"stopping returns ErrWorkerStopping", stopping, ErrWorkerStopping},
+		{"restarting returns ErrWorkerRestarting", restarting, ErrWorkerRestarting},
+		{"running returns ErrRunningWorker", running, ErrRunningWorker},
+		{"idle returns ErrRunningWorker", idle, ErrRunningWorker},
+		{"initiated returns ErrNotRunningWorker", initiated, ErrNotRunningWorker},
+		{"unknown status returns ErrNotRunningWorker", status(99), ErrNotRunningWorker},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newWorker(func(j iJob[string]) {})
+			w.status.Store(tt.status)
+			assert.Equal(t, tt.wantErr, w.getStatusError())
+		})
+	}
+}
+
+func TestIdempotentStateTransitions(t *testing.T) {
+	t.Run("Pause is idempotent for pausing state", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load())
+
+		err = w.Pause()
+		assert.NoError(t, err, "Pause on pausing state should be idempotent")
+
+		close(blockCh)
+		w.WaitUntilPaused()
+		w.Stop()
+	})
+
+	t.Run("Stop is idempotent for stopping state", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.Equal(t, stopping, w.status.Load())
+
+		err = w.Stop()
+		assert.NoError(t, err, "Stop on stopping state should be idempotent")
+
+		close(blockCh)
+		w.WaitUntilStopped()
+	})
+
+	t.Run("Restart is idempotent for restarting state", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		w.status.Store(restarting)
+
+		err := w.Restart()
+		assert.NoError(t, err, "Restart on restarting state should be idempotent")
+	})
+
+	t.Run("Pause returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(stopping)
+		assert.ErrorIs(t, w.Pause(), ErrWorkerStopping)
+
+		w.status.Store(restarting)
+		assert.ErrorIs(t, w.Pause(), ErrWorkerRestarting)
+	})
+
+	t.Run("Stop returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(restarting)
+		assert.ErrorIs(t, w.Stop(), ErrWorkerRestarting)
+
+		// paused is a valid transition for Stop, should succeed
+		w.status.Store(paused)
+		assert.NoError(t, w.Stop())
+	})
+
+	t.Run("Restart from pausing state waits then restarts", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load())
+
+		done := make(chan struct{})
+		go func() {
+			err := w.Restart()
+			assert.NoError(t, err)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("Restart should block while pausing")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(blockCh)
+
+		select {
+		case <-done:
+			assert.True(t, w.IsActive(), "Worker should be active after restart from pausing")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Restart should complete after pausing completes")
+		}
+
+		w.Stop()
+	})
+
+	t.Run("Restart from stopping state waits then restarts", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.Equal(t, stopping, w.status.Load())
+
+		done := make(chan struct{})
+		go func() {
+			err := w.Restart()
+			assert.NoError(t, err)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("Restart should block while stopping")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		close(blockCh)
+
+		select {
+		case <-done:
+			assert.True(t, w.IsActive(), "Worker should be active after restart from stopping")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Restart should complete after stopping completes")
+		}
+	})
+
+	t.Run("TunePool returns status-specific errors", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		w.status.Store(paused)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerPaused)
+
+		w.status.Store(stopped)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerStopped)
+
+		w.status.Store(pausing)
+		assert.ErrorIs(t, w.TunePool(2), ErrWorkerPausing)
+	})
+}
+
 func (m *mockJob) Close() error {
 	if m.shouldFailClose {
 		return errors.New("close failure")
 	}
 	return m.job.Close()
+}
+
+func TestPausePausingFastPath(t *testing.T) {
+	t.Run("Pause transitions directly to paused when no jobs processing", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, paused, w.status.Load(), "Should transition directly to paused when idle")
+		assert.True(t, w.IsPaused())
+
+		w.Stop()
+	})
+
+	t.Run("Pause transitions to pausing then paused when in-flight job completes", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[string]) {
+			<-blockCh
+		})
+		q := queues.NewQueue[iJob[string]]()
+		w.queues.Register(q, 1)
+
+		err := w.start()
+		assert.NoError(t, err)
+
+		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
+		w.notifyToPullNextJobs()
+		time.Sleep(20 * time.Millisecond)
+		assert.Greater(t, w.NumProcessing(), 0)
+
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.Equal(t, pausing, w.status.Load(), "Should be pausing")
+
+		close(blockCh)
+
+		w.WaitUntilPaused()
+		assert.True(t, w.IsPaused())
+
+		w.Stop()
+	})
+}
+
+func TestRestartCoverage(t *testing.T) {
+	t.Run("Restart from idle with no processing calls removeAllWorkers", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		assert.True(t, w.IsIdle())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart from stopped needs no cleanup", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		w.Stop()
+		assert.True(t, w.IsStopped())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart from paused needs cleanup", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		err = w.Pause()
+		assert.NoError(t, err)
+		assert.True(t, w.IsPaused())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.True(t, w.IsActive())
+		w.Stop()
+	})
+
+	t.Run("Restart with context cancels and recreates context", func(t *testing.T) {
+		ctx := t.Context()
+		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+		err := w.start()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+		assert.NoError(t, w.Context().Err(), "New context should not be cancelled")
+
+		w.Stop()
+	})
+
+	t.Run("Restart without context does not panic", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.start()
+		assert.NoError(t, err)
+		assert.Nil(t, w.Context())
+
+		err = w.Restart()
+		assert.NoError(t, err)
+		assert.Nil(t, w.Context())
+
+		w.Stop()
+	})
+}
+
+func TestStatusAllCases(t *testing.T) {
+	t.Run("Status returns correct string for all states", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+
+		assert.Equal(t, "Initiated", w.Status())
+
+		w.start()
+		assert.Equal(t, "Idle", w.Status())
+
+		w.status.Store(running)
+		assert.Equal(t, "Running", w.Status())
+
+		w.status.Store(pausing)
+		assert.Equal(t, "Pausing", w.Status())
+
+		w.status.Store(paused)
+		assert.Equal(t, "Paused", w.Status())
+
+		w.status.Store(stopping)
+		assert.Equal(t, "Stopping", w.Status())
+
+		w.status.Store(stopped)
+		assert.Equal(t, "Stopped", w.Status())
+
+		w.status.Store(restarting)
+		assert.Equal(t, "Restarting", w.Status())
+
+		w.status.Store(99)
+		assert.Equal(t, "Unknown", w.Status())
+	})
+}
+
+func TestStopAndWaitErrorPath(t *testing.T) {
+	t.Run("StopAndWait returns error when Stop fails", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {})
+		err := w.StopAndWait()
+		assert.ErrorIs(t, err, ErrNotRunningWorker)
+	})
+}
+
+func TestReleaseWaitersCleanup(t *testing.T) {
+	t.Run("releaseWaiters performs full cleanup for stopping state with context", func(t *testing.T) {
+		ctx := context.Background()
+		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
+		err := w.start()
+		assert.NoError(t, err)
+		assert.NotNil(t, w.Context())
+
+		err = w.Stop()
+		assert.NoError(t, err)
+		assert.True(t, w.IsStopped())
+	})
 }

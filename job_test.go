@@ -378,7 +378,7 @@ func TestJobCloseEdgeCases(t *testing.T) {
 
 		worker.Resume()
 		queue.Add("test")
-		worker.WaitUntilIdle()
+		worker.Wait()
 	})
 
 	t.Run("Close already closed job", func(t *testing.T) {
