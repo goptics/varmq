@@ -34,7 +34,7 @@ retry:
 		q.Add(i)
 	}
 	fmt.Println("Added jobs")
-	w.WaitUntilIdle()
+	w.Wait()
 
 	goto retry
 }

@@ -55,7 +55,7 @@ func main() {
     fmt.Printf("Processing %d\n", j.Data())
     time.Sleep(500 * time.Millisecond)
   }, 10) // with concurrency 10 or set 0 for parallelism
-  defer worker.WaitUntilIdle()
+  defer worker.Wait()
   queue := worker.BindQueue()
 
   for i := range 100 {
@@ -64,7 +64,7 @@ func main() {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
+↗️ **[Run it on Playground](https://go.dev/play/p/BchjtGzkDsp)**
 
 ### Priority Queue
 
@@ -133,7 +133,7 @@ worker := varmq.NewWorker(func(j varmq.Job[string]) {
 	fmt.Println("Processing:", j.Data())
 	time.Sleep(500 * time.Millisecond) // Simulate work
 }) // change strategy through using varmq.WithStrategy default is varmq.Priority
-defer worker.WaitUntilIdle()
+defer worker.Wait()
 
 // Bind to a standard queues with coronological priorities
 // You can change queue priority using varmq.WithQueuePriority function
@@ -154,7 +154,7 @@ for i := range 10 {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/0eL_0WNRVIh)**
+↗️ **[Run it on Playground](https://go.dev/play/p/f13sNKI5_md)**
 
 ### Result and Error Worker
 
@@ -172,7 +172,7 @@ worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
 
  return len(data), nil
 })
-defer worker.WaitUntilIdle()
+defer worker.Wait()
 queue := worker.BindQueue()
 
 // Add jobs to the queue (non-blocking)
@@ -195,7 +195,7 @@ if job, ok := queue.Add("error"); ok {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/4jkGb9SAIrp)**
+↗️ **[Run it on Playground](https://go.dev/play/p/Z3Lh3miEOt6)**
 
 `NewErrWorker` is similar to `NewResultWorker` but it returns only error.
 
@@ -221,7 +221,7 @@ for i := range 100 {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/J2xXmVlGYyW)**
+↗️ **[Run it on Playground](https://go.dev/play/p/MK2LVOYAUnq)**
 
 > [!Important]
 > Function helpers don't support persistence or distribution since functions cannot be serialized.
