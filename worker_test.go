@@ -314,16 +314,16 @@ func TestWorkers(t *testing.T) {
 				assert.True(w.IsPaused(), "Worker should be paused after Pause()")
 				assert.False(w.IsActive(), "Worker should not be running after Pause()")
 
-				err = w.Resume()
-				assert.NoError(err, "Resuming worker should not error")
-				assert.Equal(idle, w.status.Load(), "Status after resume should be 'idle'")
-				assert.Equal("Idle", w.Status(), "Status string after resume should be 'Idle'")
-				assert.True(w.IsActive(), "Worker should be running after Resume()")
+			err = w.Resume()
+			assert.NoError(err, "Resuming worker should not error")
+			assert.Equal(idle, w.status.Load(), "Status after resume should be 'idle'")
+			assert.Equal("Idle", w.Status(), "Status string after resume should be 'Idle'")
+			assert.True(w.IsActive(), "Worker should be running after Resume()")
 
-				err = w.Resume()
-				assert.ErrorIs(err, ErrRunningWorker, "Resuming an already running worker should error")
+			err = w.Resume()
+			assert.NoError(err, "Resuming an already running worker should be idempotent")
 
-				w.Stop()
+			w.Stop()
 				w.WaitUntilStopped()
 				assert.Equal(stopped, w.status.Load(), "Status after stop should be 'stopped'")
 				assert.Equal("Stopped", w.Status(), "Status string after stop should be 'Stopped'")
@@ -802,7 +802,7 @@ func TestWorkers(t *testing.T) {
 				assert.ErrorIs(t, err, ErrNotRunningWorker, "Resume should return error from initiated state")
 			})
 
-			t.Run("Resume when already running", func(t *testing.T) {
+			t.Run("Resume when already running is idempotent", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
 				})
@@ -812,7 +812,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				err = w.Resume()
-				assert.ErrorIs(t, err, ErrRunningWorker, "Resume should return error when already running")
+				assert.NoError(t, err, "Resume should be idempotent when already running")
 			})
 
 			t.Run("Resume stopped worker", func(t *testing.T) {
@@ -1494,22 +1494,16 @@ func TestResumeConcurrency(t *testing.T) {
 	assert.True(t, w.IsPaused())
 
 	var wg sync.WaitGroup
-	successCount := atomic.Int32{}
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			err := w.Resume()
-			if err == nil {
-				successCount.Add(1)
-			} else {
-				assert.ErrorIs(t, err, ErrRunningWorker)
-			}
+			assert.NoError(t, err)
 		}()
 	}
 	wg.Wait()
 
-	assert.Equal(t, int32(1), successCount.Load(), "Exactly one Resume should succeed")
 	assert.True(t, w.IsIdle())
 	assert.False(t, w.IsPaused())
 	w.Stop()

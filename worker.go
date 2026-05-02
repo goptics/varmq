@@ -701,6 +701,10 @@ func (w *worker[T, JobType]) Resume() error {
 		return nil
 	}
 
+	if w.IsActive() {
+		return nil
+	}
+
 	return w.getStatusError()
 }
 
