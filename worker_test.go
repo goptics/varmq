@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1479,4 +1480,37 @@ func TestReleaseWaitersCleanup(t *testing.T) {
 		w.WaitUntilStopped()
 		assert.True(t, w.IsStopped())
 	})
+}
+
+func TestResumeConcurrency(t *testing.T) {
+	w := newWorker(func(j iJob[string]) {
+		time.Sleep(5 * time.Millisecond)
+	})
+
+	err := w.start()
+	assert.NoError(t, err)
+	w.Pause()
+	w.WaitUntilPaused()
+	assert.True(t, w.IsPaused())
+
+	var wg sync.WaitGroup
+	successCount := atomic.Int32{}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := w.Resume()
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				assert.ErrorIs(t, err, ErrRunningWorker)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), successCount.Load(), "Exactly one Resume should succeed")
+	assert.True(t, w.IsIdle())
+	assert.False(t, w.IsPaused())
+	w.Stop()
 }

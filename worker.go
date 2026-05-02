@@ -696,8 +696,7 @@ func (w *worker[T, JobType]) Pause() error {
 }
 
 func (w *worker[T, JobType]) Resume() error {
-	if w.IsPaused() {
-		w.status.Store(idle)
+	if w.status.CompareAndSwap(paused, idle) {
 		w.notifyToPullNextJobs()
 		return nil
 	}
