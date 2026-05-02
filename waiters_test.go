@@ -206,15 +206,16 @@ func TestWaiters(t *testing.T) {
 			err := w.start()
 			assert.NoError(err)
 
-			err = w.Stop()
-			assert.NoError(err)
-			assert.True(w.IsStopped(), "Worker should be stopped")
+		err = w.Stop()
+		assert.NoError(err)
+		w.WaitUntilStopped()
+		assert.True(w.IsStopped(), "Worker should be stopped")
 
-			done := make(chan struct{})
-			go func() {
-				w.Wait()
-				close(done)
-			}()
+		done := make(chan struct{})
+		go func() {
+			w.Wait()
+			close(done)
+		}()
 
 			select {
 			case <-done:
@@ -405,15 +406,16 @@ func TestWaiters(t *testing.T) {
 			err := w.start()
 			assert.NoError(err)
 
-			err = w.Stop()
-			assert.NoError(err)
-			assert.True(w.IsStopped(), "Worker should be stopped")
+		err = w.Stop()
+		assert.NoError(err)
+		w.WaitUntilStopped()
+		assert.True(w.IsStopped(), "Worker should be stopped")
 
-			done := make(chan struct{})
-			go func() {
-				w.WaitUntilIdle()
-				close(done)
-			}()
+		done := make(chan struct{})
+		go func() {
+			w.WaitUntilIdle()
+			close(done)
+		}()
 
 			// Should block because Stopped != Idle
 			select {
@@ -543,15 +545,16 @@ func TestWaiters(t *testing.T) {
 			err := w.start()
 			assert.NoError(err)
 
-			err = w.Stop()
-			assert.NoError(err)
-			assert.True(w.IsStopped(), "Worker should be stopped")
+		err = w.Stop()
+		assert.NoError(err)
+		w.WaitUntilStopped()
+		assert.True(w.IsStopped(), "Worker should be stopped")
 
-			done := make(chan struct{})
-			go func() {
-				w.WaitUntilStopped()
-				close(done)
-			}()
+		done := make(chan struct{})
+		go func() {
+			w.WaitUntilStopped()
+			close(done)
+		}()
 
 			select {
 			case <-done:

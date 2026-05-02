@@ -36,7 +36,6 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
 				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
-				assert.NotNil(w.tickers, "tickers map should be initialized")
 				assert.NotNil(w.waiters, "waiters cond should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
 				assert.Zero(w.pool.Len(), "pool should be empty initially")
@@ -324,6 +323,7 @@ func TestWorkers(t *testing.T) {
 				assert.ErrorIs(err, ErrRunningWorker, "Resuming an already running worker should error")
 
 				w.Stop()
+				w.WaitUntilStopped()
 				assert.Equal(stopped, w.status.Load(), "Status after stop should be 'stopped'")
 				assert.Equal("Stopped", w.Status(), "Status string after stop should be 'Stopped'")
 				assert.True(w.IsStopped(), "Worker should be stopped after Stop()")
@@ -370,18 +370,12 @@ func TestWorkers(t *testing.T) {
 				processedBeforeRestart := jobsProcessed.Load()
 				assert.Greater(processedBeforeRestart, uint32(0), "Some jobs should be processed before restart")
 
-				// Verify eventLoopSignal exists before restart
-				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should exist before restart")
-
 				// Restart the worker
 				err = w.Restart()
 				assert.NoError(err, "Restarting worker should not error")
 
 				// Verify worker is running after restart
 				assert.True(w.IsActive(), "Worker should be running after restart")
-
-				// Verify the eventLoopSignal was recreated
-				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be recreated after restart")
 
 				// Wait for jobs to be processed after restart
 				time.Sleep(50 * time.Millisecond)
@@ -403,6 +397,7 @@ func TestWorkers(t *testing.T) {
 				err := w.start()
 				assert.NoError(err)
 				w.Stop()
+				w.WaitUntilStopped()
 				assert.True(w.IsStopped())
 
 				// Restart
@@ -429,6 +424,7 @@ func TestWorkers(t *testing.T) {
 				// Stop
 				err = w.Stop()
 				assert.NoError(err, "Stopping a paused worker should succeed")
+				w.WaitUntilStopped()
 				assert.True(w.IsStopped(), "Worker should be stopped")
 			})
 
@@ -468,9 +464,10 @@ func TestWorkers(t *testing.T) {
 				// paused to paused: idempotent nil
 				assert.NoError(t, w.Pause())
 
-				w.Stop()
-				assert.True(t, w.IsStopped())
-				// stopped to paused: error
+			w.Stop()
+			w.WaitUntilStopped()
+			assert.True(t, w.IsStopped())
+			// stopped to paused: error
 				assert.ErrorIs(t, w.Pause(), ErrWorkerStopped)
 				// stopped to stopped: idempotent nil
 				assert.NoError(t, w.Stop())
@@ -830,6 +827,7 @@ func TestWorkers(t *testing.T) {
 
 				err = w.Stop()
 				assert.NoError(t, err, "Worker should stop without error")
+				w.WaitUntilStopped()
 
 				err = w.Resume()
 				assert.ErrorIs(t, err, ErrWorkerStopped, "Resume should return error when worker is stopped")
@@ -958,9 +956,9 @@ func TestWorkers(t *testing.T) {
 
 		// Group 8: Context-related tests
 		t.Run("Context", func(t *testing.T) {
-			t.Run("returns nil when no context configured", func(t *testing.T) {
+			t.Run("returns default context when not configured", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {})
-				assert.Nil(t, w.Context(), "Context should be nil when not configured")
+				assert.NotNil(t, w.Context(), "Context should have a default background context")
 			})
 
 			t.Run("returns context when configured with WithContext", func(t *testing.T) {
@@ -1000,7 +998,6 @@ func TestWorkers(t *testing.T) {
 				// Verify context exists
 				assert.NotNil(w.Context())
 
-				// Stop and restart cleanly to avoid race with goListenToContext
 				err = w.Stop()
 				assert.NoError(err)
 
@@ -1145,7 +1142,6 @@ func TestStatusError(t *testing.T) {
 		{"stopped returns ErrWorkerStopped", stopped, ErrWorkerStopped},
 		{"pausing returns ErrWorkerPausing", pausing, ErrWorkerPausing},
 		{"stopping returns ErrWorkerStopping", stopping, ErrWorkerStopping},
-		{"restarting returns ErrWorkerRestarting", restarting, ErrWorkerRestarting},
 		{"running returns ErrRunningWorker", running, ErrRunningWorker},
 		{"idle returns ErrRunningWorker", idle, ErrRunningWorker},
 		{"initiated returns ErrNotRunningWorker", initiated, ErrNotRunningWorker},
@@ -1215,29 +1211,15 @@ func TestIdempotentStateTransitions(t *testing.T) {
 		w.WaitUntilStopped()
 	})
 
-	t.Run("Restart is idempotent for restarting state", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		w.status.Store(restarting)
-
-		err := w.Restart()
-		assert.NoError(t, err, "Restart on restarting state should be idempotent")
-	})
-
 	t.Run("Pause returns status-specific errors", func(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
 
 		w.status.Store(stopping)
 		assert.ErrorIs(t, w.Pause(), ErrWorkerStopping)
-
-		w.status.Store(restarting)
-		assert.ErrorIs(t, w.Pause(), ErrWorkerRestarting)
 	})
 
 	t.Run("Stop returns status-specific errors", func(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
-
-		w.status.Store(restarting)
-		assert.ErrorIs(t, w.Stop(), ErrWorkerRestarting)
 
 		// paused is a valid transition for Stop, should succeed
 		w.status.Store(paused)
@@ -1395,7 +1377,7 @@ func TestPausePausingFastPath(t *testing.T) {
 }
 
 func TestRestartCoverage(t *testing.T) {
-	t.Run("Restart from idle with no processing calls removeAllWorkers", func(t *testing.T) {
+	t.Run("Restart from idle with no processing", func(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
 		err := w.start()
 		assert.NoError(t, err)
@@ -1404,23 +1386,11 @@ func TestRestartCoverage(t *testing.T) {
 		err = w.Restart()
 		assert.NoError(t, err)
 		assert.True(t, w.IsActive())
+
 		w.Stop()
 	})
 
-	t.Run("Restart from stopped needs no cleanup", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		err := w.start()
-		assert.NoError(t, err)
-		w.Stop()
-		assert.True(t, w.IsStopped())
-
-		err = w.Restart()
-		assert.NoError(t, err)
-		assert.True(t, w.IsActive())
-		w.Stop()
-	})
-
-	t.Run("Restart from paused needs cleanup", func(t *testing.T) {
+	t.Run("Restart from paused", func(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
 		err := w.start()
 		assert.NoError(t, err)
@@ -1453,11 +1423,11 @@ func TestRestartCoverage(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
 		err := w.start()
 		assert.NoError(t, err)
-		assert.Nil(t, w.Context())
+		assert.NotNil(t, w.Context())
 
 		err = w.Restart()
 		assert.NoError(t, err)
-		assert.Nil(t, w.Context())
+		assert.NotNil(t, w.Context())
 
 		w.Stop()
 	})
@@ -1487,9 +1457,6 @@ func TestStatusAllCases(t *testing.T) {
 		w.status.Store(stopped)
 		assert.Equal(t, "Stopped", w.Status())
 
-		w.status.Store(restarting)
-		assert.Equal(t, "Restarting", w.Status())
-
 		w.status.Store(99)
 		assert.Equal(t, "Unknown", w.Status())
 	})
@@ -1504,15 +1471,15 @@ func TestStopAndWaitErrorPath(t *testing.T) {
 }
 
 func TestReleaseWaitersCleanup(t *testing.T) {
-	t.Run("releaseWaiters performs full cleanup for stopping state with context", func(t *testing.T) {
-		ctx := context.Background()
+	t.Run("event loop performs full cleanup on context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
 		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
 		err := w.start()
 		assert.NoError(t, err)
 		assert.NotNil(t, w.Context())
 
-		err = w.Stop()
-		assert.NoError(t, err)
+		cancel()
+		w.WaitUntilStopped()
 		assert.True(t, w.IsStopped())
 	})
 }
