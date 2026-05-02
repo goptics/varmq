@@ -88,14 +88,13 @@ type Worker interface {
 	IsPaused() bool
 	// IsStopped returns whether the worker is in the Stopped state.
 	//
-	// A stopped worker has ceased all processing, closed its channels,
-	// and removed all worker goroutines. It cannot be resumed; use Restart()
-	// to create a fresh worker instance.
+	// A stopped worker has ceased all processing and removed all worker
+	// goroutines. It cannot be resumed; use Restart() to start again.
 	IsStopped() bool
 	// Status returns the human-readable current status of the worker.
 	//
 	// Possible values: "Idle", "Running", "Pausing", "Paused",
-	// "Stopping", "Stopped", "Restarting"
+	// "Stopping", "Stopped"
 	Status() string
 	// NumProcessing returns the number of jobs currently being processed
 	// by the worker (in-flight jobs).
@@ -136,21 +135,17 @@ type Worker interface {
 
 	// Stop initiates a graceful shutdown of the worker.
 	//
-	// This is non-blocking and returns immediately. The behavior depends on
-	// whether there are in-flight jobs:
-	//   - If no jobs are processing: stops immediately — channels are closed, worker goroutines
-	// 		 are removed, and status becomes Stopped.
-	//   - If jobs are processing: transitions to Stopping. In-flight jobs
-	//     continue until completion, then the full cleanup runs and status
-	//     becomes Stopped.
+	// This is non-blocking and returns immediately. The worker transitions
+	// to Stopping and cancels its internal context. The event loop then
+	// waits for in-flight jobs to finish, removes all worker goroutines,
+	// and transitions to Stopped.
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.
 	Stop() error
 	// Restart gracefully restarts the worker, preserving any pending
-	// jobs in the queue. Ongoing jobs are allowed to complete before
-	// the worker is stopped and reinitialized with fresh worker goroutines
-	// based on the current concurrency setting.
+	// jobs in the queue. It stops the worker, waits for it to reach
+	// Stopped, recreates the internal context, and starts again.
 	Restart() error
 	// Resume resumes a paused worker and begins processing pending
 	// jobs from the queue. This has no effect on a stopped worker —
@@ -168,7 +163,7 @@ type Worker interface {
 	// This returns when:
 	//   - Status is Running or Idle: queue is empty AND curProcessing == 0
 	//   - Status is Paused or Stopped: curProcessing == 0 (all in-flight jobs done)
-	//   - Status is Pausing, Stopping, or Restarting: waits until transition completes
+	//   - Status is Pausing or Stopping: curProcessing == 0
 	//
 	// Unlike WaitUntilIdle(), this does NOT require the status to be Idle.
 	// For example, if Pause() is called and all jobs drain, Wait() returns
@@ -188,9 +183,8 @@ type Worker interface {
 	//   - If status is Paused with no work, it blocks indefinitely (Paused != Idle)
 	//   - If status is Stopped, it blocks indefinitely (Stopped != Idle)
 	//
-	// Use this when you need the worker in the Idle state specifically, such as
-	// during Restart() when cleanup must only happen after the worker transitions
-	// from Running -> Idle. Use Wait() when you only care that work is done.
+	// Use this when you need the worker in the Idle state specifically.
+	// Use Wait() when you only care that work is done.
 	//
 	// Note: If the worker is already Idle with no pending jobs, this returns immediately.
 	WaitUntilIdle()
@@ -211,17 +205,17 @@ type Worker interface {
 	// Note: If the worker is already Stopped, this returns immediately.
 	WaitUntilStopped()
 	// WaitAndStop waits until all pending jobs are processed and in-flight
-	// jobs complete, then stops the worker.
+	// jobs complete, then stops the worker and blocks until fully stopped.
 	//
-	// This is equivalent to calling Wait() followed by Stop(). Use this
-	// when you want to drain the queue before shutting down.
+	// This is equivalent to calling Wait(), Stop(), and WaitUntilStopped().
+	// Use this when you want to drain the queue before shutting down.
 	WaitAndStop() error
 	// StopAndWait initiates a graceful stop and blocks until the worker
 	// reaches the Stopped state.
 	//
 	// This is equivalent to calling Stop() followed by WaitUntilStopped().
 	// If there are in-flight jobs, this blocks until they complete and
-	// the full cleanup (closing channels, removing goroutines) finishes.
+	// all worker goroutines are removed.
 	StopAndWait() error
 	// WaitAndPause waits until all pending jobs are processed and in-flight
 	// jobs complete, then pauses the worker.
