@@ -790,7 +790,7 @@ func TestWorkers(t *testing.T) {
 				assert.Less(t, w.pool.Len(), initialPoolSize, "Pool should be shrunk")
 			})
 
-			t.Run("Resume from initiated state", func(t *testing.T) {
+			t.Run("Resume from initiated state returns error", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
 				})
@@ -798,10 +798,7 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(t, initiated, w.status.Load(), "Worker should be in initiated state")
 
 				err := w.Resume()
-				assert.NoError(t, err, "Resume should start worker from initiated state")
-				assert.True(t, w.IsActive(), "Worker should be running after Resume from initiated")
-
-				w.Stop()
+				assert.ErrorIs(t, err, ErrNotRunningWorker, "Resume should return error from initiated state")
 			})
 
 			t.Run("Resume when already running", func(t *testing.T) {

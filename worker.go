@@ -700,12 +700,12 @@ func (w *worker[T, JobType]) Resume() error {
 		return ErrWorkerStopped
 	}
 
-	if w.status.Load() == initiated {
-		return w.start()
-	}
-
 	if w.IsActive() {
 		return ErrRunningWorker
+	}
+
+	if !w.IsPaused() {
+		return ErrNotRunningWorker
 	}
 
 	w.status.Store(idle)

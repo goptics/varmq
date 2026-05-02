@@ -376,7 +376,7 @@ func TestJobCloseEdgeCases(t *testing.T) {
 		worker := newWorker(workerFunc)
 		queue := newPersistentQueue(worker, mockQueue)
 
-		worker.Resume()
+		worker.start()
 		queue.Add("test")
 		worker.Wait()
 	})
