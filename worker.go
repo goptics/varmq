@@ -696,22 +696,13 @@ func (w *worker[T, JobType]) Pause() error {
 }
 
 func (w *worker[T, JobType]) Resume() error {
-	if w.IsStopped() {
-		return ErrWorkerStopped
+	if w.IsPaused() {
+		w.status.Store(idle)
+		w.notifyToPullNextJobs()
+		return nil
 	}
 
-	if w.IsActive() {
-		return ErrRunningWorker
-	}
-
-	if !w.IsPaused() {
-		return ErrNotRunningWorker
-	}
-
-	w.status.Store(idle)
-	w.notifyToPullNextJobs()
-
-	return nil
+	return w.getStatusError()
 }
 
 func (w *worker[T, JobType]) start() error {
