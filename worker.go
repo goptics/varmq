@@ -709,18 +709,22 @@ func (w *worker[T, JobType]) Resume() error {
 }
 
 func (w *worker[T, JobType]) start() error {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+
 	if w.IsActive() {
 		return ErrRunningWorker
 	}
-
-	defer w.notifyToPullNextJobs()
-	defer w.status.Store(idle)
 
 	w.goEventLoop()
 	w.goRemoveIdleWorkers()
 
 	// init the first worker by default
 	w.pool.PushNode(w.initPoolNode())
+
+	w.status.Store(idle)
+	w.waiters.Broadcast()
+	w.notifyToPullNextJobs()
 
 	return nil
 }
@@ -747,9 +751,23 @@ func (w *worker[T, JobType]) Restart() error {
 		return err
 	}
 
-	w.WaitUntilStopped()
+	// Wait for the worker to reach a terminal state (stopped or active).
+	// If another goroutine already restarted this worker while we were
+	// waiting, IsActive() will be true and we return ErrRunningWorker.
+	// sync.Cond.Wait() atomically releases w.mx and re-acquires it on wake-up.
+	w.mx.Lock()
+	for !w.IsStopped() && !w.IsActive() {
+		w.waiters.Wait()
+	}
+	if w.IsActive() {
+		w.mx.Unlock()
+		return ErrRunningWorker
+	}
 
+	// Create a new context before releasing the lock so that start()
+	// and the event loop goroutine see the updated context.
 	w.ctx, w.cancel = context.WithCancel(w.Configs.ctx)
+	w.mx.Unlock()
 
 	return w.start()
 }

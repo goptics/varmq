@@ -1508,3 +1508,47 @@ func TestResumeConcurrency(t *testing.T) {
 	assert.False(t, w.IsPaused())
 	w.Stop()
 }
+
+func TestStartConcurrency(t *testing.T) {
+	w := newWorker(func(j iJob[string]) {
+		time.Sleep(1 * time.Millisecond)
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = w.start()
+		}()
+	}
+	wg.Wait()
+
+	assert.True(t, w.IsActive(), "worker should be active after concurrent start calls")
+	w.Stop()
+	w.WaitUntilStopped()
+}
+
+func TestRestartConcurrency(t *testing.T) {
+	w := newWorker(func(j iJob[string]) {
+		time.Sleep(1 * time.Millisecond)
+	})
+
+	err := w.start()
+	assert.NoError(t, err)
+	assert.True(t, w.IsActive())
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = w.Restart()
+		}()
+	}
+	wg.Wait()
+
+	assert.True(t, w.IsActive(), "worker should remain active after concurrent restarts")
+	w.Stop()
+	w.WaitUntilStopped()
+}
