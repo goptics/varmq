@@ -298,6 +298,10 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
 
+	if c.autoRun {
+		w.Start()
+	}
+
 	return w
 }
 
@@ -319,6 +323,10 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
 
+	if c.autoRun {
+		w.Start()
+	}
+
 	return w
 }
 
@@ -339,6 +347,10 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
+
+	if c.autoRun {
+		w.Start()
+	}
 
 	return w
 }
@@ -766,7 +778,7 @@ func (w *worker[T, JobType]) Resume() error {
 	return w.getStatusError()
 }
 
-func (w *worker[T, JobType]) start() error {
+func (w *worker[T, JobType]) Start() error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
