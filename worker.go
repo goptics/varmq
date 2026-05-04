@@ -422,7 +422,7 @@ func (w *worker[T, JobType]) WaitUntilIdle() {
 	defer w.mx.Unlock()
 
 	for {
-		if w.status.Load() == idle && w.queues.Len() == 0 {
+		if w.status.Load() == idle && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
 			return
 		}
 
@@ -452,6 +452,14 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
+func (w *worker[T, JobType]) undoProcessingIncrement() {
+	processing := w.curProcessing.Add(^uint32(0))
+	w.releaseWaiters(processing)
+	if processing < w.concurrency.Load() {
+		w.notifyToPullNextJobs()
+	}
+}
+
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
@@ -459,6 +467,9 @@ func (w *worker[T, JobType]) processNextJob() error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGetNextQueue, err)
 	}
+
+	w.curProcessing.Add(1)
+	w.status.CompareAndSwap(idle, running)
 
 	var (
 		v     any
@@ -474,42 +485,41 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if !ok {
+		w.undoProcessingIncrement()
 		return ErrFailedToDequeue
 	}
 
 	var j JobType
 
-	// check the type of the value
-	// and cast it to the appropriate job type
 	switch value := v.(type) {
 	case JobType:
 		j = value
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
+			w.undoProcessingIncrement()
 			return err
 		}
 
 		if j, ok = v.(JobType); !ok {
+			w.undoProcessingIncrement()
 			return ErrFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
+		w.undoProcessingIncrement()
 		return ErrFailedToCastJob
 	}
 
 	if j.IsClosed() {
+		w.undoProcessingIncrement()
 		return nil
 	}
 
-	w.curProcessing.Add(1)
 	j.changeStatus(processing)
 	j.setAckId(ackId)
-	// if worker is idle, change the status to running
-	w.status.CompareAndSwap(idle, running)
 
-	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
 
 	return nil
@@ -726,12 +736,15 @@ func (w *worker[T, JobType]) Pause() error {
 	}
 
 	if w.status.CompareAndSwap(idle, paused) {
+		// won't Broadcast from releaseWaiters
+		w.waiters.Broadcast()
 		return nil
 	}
 
 	if w.status.CompareAndSwap(running, pausing) {
-		if w.NumProcessing() == 0 {
-			w.status.CompareAndSwap(pausing, paused)
+		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
+			// won't Broadcast from releaseWaiters
+			w.waiters.Broadcast()
 		}
 		return nil
 	}
@@ -741,6 +754,7 @@ func (w *worker[T, JobType]) Pause() error {
 
 func (w *worker[T, JobType]) Resume() error {
 	if w.status.CompareAndSwap(paused, idle) {
+		w.waiters.Broadcast()
 		w.notifyToPullNextJobs()
 		return nil
 	}
@@ -782,7 +796,9 @@ func (w *worker[T, JobType]) Stop() error {
 
 	for _, from := range []status{running, idle, pausing, paused} {
 		if w.status.CompareAndSwap(from, stopping) {
+			w.mx.Lock()
 			w.cancel()
+			w.mx.Unlock()
 			return nil
 		}
 	}
