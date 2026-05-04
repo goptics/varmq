@@ -131,6 +131,14 @@ type Worker interface {
 	//
 	// Once Paused, no new jobs are processed from the queue. Use Resume()
 	// to resume processing, or PauseAndWait() to block until fully paused.
+	//
+	// Pause is idempotent: calling Pause on an already Paused or Pausing
+	// worker returns nil.
+	//
+	// Errors:
+	//   - ErrWorkerStopped: worker is in the Stopped state.
+	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
 	Pause() error
 
 	// Stop initiates a graceful shutdown of the worker.
@@ -142,15 +150,51 @@ type Worker interface {
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.
+	//
+	// Stop is idempotent: calling Stop on an already Stopped or Stopping
+	// worker returns nil.
+	//
+	// Errors:
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
+	//   - ErrWorkerStopped: worker is already in the Stopped state
+	//     (returned when called from an invalid intermediate state; the
+	//     idempotent path above returns nil for Stopped/Stopping).
 	Stop() error
 	// Restart gracefully restarts the worker, preserving any pending
 	// jobs in the queue. It stops the worker, waits for it to reach
 	// Stopped, recreates the internal context, and starts again.
+	//
+	// Restart works from any valid state: Running, Idle, Pausing, Paused,
+	// Stopping, or Stopped. It transparently handles the case where another
+	// goroutine already restarted the worker by returning ErrRunningWorker.
+	//
+	// Errors:
+	//   - ErrRunningWorker: worker is already active (concurrent restart).
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
+	//   - Errors from Stop(): see Stop's error documentation.
 	Restart() error
 	// Resume resumes a paused worker and begins processing pending
-	// jobs from the queue. This has no effect on a stopped worker —
-	// use Restart() instead.
+	// jobs from the queue.
+	//
+	// Resume is idempotent: calling Resume on an already active (Running or
+	// Idle) worker returns nil.
+	//
+	// Errors:
+	//   - ErrWorkerStopped: worker is in the Stopped state. Use Restart().
+	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
 	Resume() error
+	// Start begins processing jobs from the bound queues.
+	// When WithAutoRun is true (the default), the worker starts automatically
+	// after creation and this method returns ErrRunningWorker.
+	// Use WithAutoRun(false) to create a worker in an initiated state,
+	// then call Start() manually when ready.
+	//
+	// Errors:
+	//   - ErrRunningWorker: worker is already active (Running or Idle).
+	//   - ErrNotRunningWorker: worker is in an unexpected state
+	//     (not Initiated or any other valid start state).
+	Start() error
 	// WaitUntilFinished waits until all pending jobs are processed and the worker
 	// has no in-flight work. This is an alias for Wait().
 	//
