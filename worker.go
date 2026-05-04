@@ -131,6 +131,14 @@ type Worker interface {
 	//
 	// Once Paused, no new jobs are processed from the queue. Use Resume()
 	// to resume processing, or PauseAndWait() to block until fully paused.
+	//
+	// Pause is idempotent: calling Pause on an already Paused or Pausing
+	// worker returns nil.
+	//
+	// Errors:
+	//   - ErrWorkerStopped: worker is in the Stopped state.
+	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
 	Pause() error
 
 	// Stop initiates a graceful shutdown of the worker.
@@ -142,15 +150,51 @@ type Worker interface {
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.
+	//
+	// Stop is idempotent: calling Stop on an already Stopped or Stopping
+	// worker returns nil.
+	//
+	// Errors:
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
+	//   - ErrWorkerStopped: worker is already in the Stopped state
+	//     (returned when called from an invalid intermediate state; the
+	//     idempotent path above returns nil for Stopped/Stopping).
 	Stop() error
 	// Restart gracefully restarts the worker, preserving any pending
 	// jobs in the queue. It stops the worker, waits for it to reach
 	// Stopped, recreates the internal context, and starts again.
+	//
+	// Restart works from any valid state: Running, Idle, Pausing, Paused,
+	// Stopping, or Stopped. It transparently handles the case where another
+	// goroutine already restarted the worker by returning ErrRunningWorker.
+	//
+	// Errors:
+	//   - ErrRunningWorker: worker is already active (concurrent restart).
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
+	//   - Errors from Stop(): see Stop's error documentation.
 	Restart() error
 	// Resume resumes a paused worker and begins processing pending
-	// jobs from the queue. This has no effect on a stopped worker —
-	// use Restart() instead.
+	// jobs from the queue.
+	//
+	// Resume is idempotent: calling Resume on an already active (Running or
+	// Idle) worker returns nil.
+	//
+	// Errors:
+	//   - ErrWorkerStopped: worker is in the Stopped state. Use Restart().
+	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrNotRunningWorker: worker is in the Initiated state.
 	Resume() error
+	// Start begins processing jobs from the bound queues.
+	// When WithAutoRun is true (the default), the worker starts automatically
+	// after creation and this method returns ErrRunningWorker.
+	// Use WithAutoRun(false) to create a worker in an initiated state,
+	// then call Start() manually when ready.
+	//
+	// Errors:
+	//   - ErrRunningWorker: worker is already active (Running or Idle).
+	//   - ErrNotRunningWorker: worker is in an unexpected state
+	//     (not Initiated or any other valid start state).
+	Start() error
 	// WaitUntilFinished waits until all pending jobs are processed and the worker
 	// has no in-flight work. This is an alias for Wait().
 	//
@@ -254,6 +298,10 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
 
+	if c.autoRun {
+		w.Start()
+	}
+
 	return w
 }
 
@@ -275,6 +323,10 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
 
+	if c.autoRun {
+		w.Start()
+	}
+
 	return w
 }
 
@@ -295,6 +347,10 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
+
+	if c.autoRun {
+		w.Start()
+	}
 
 	return w
 }
@@ -378,7 +434,7 @@ func (w *worker[T, JobType]) WaitUntilIdle() {
 	defer w.mx.Unlock()
 
 	for {
-		if w.status.Load() == idle && w.queues.Len() == 0 {
+		if w.status.Load() == idle && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
 			return
 		}
 
@@ -408,6 +464,14 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
+func (w *worker[T, JobType]) undoProcessingIncrement() {
+	processing := w.curProcessing.Add(^uint32(0))
+	w.releaseWaiters(processing)
+	if processing < w.concurrency.Load() {
+		w.notifyToPullNextJobs()
+	}
+}
+
 // processNextJob processes the next Job in the queue.
 func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
@@ -415,6 +479,9 @@ func (w *worker[T, JobType]) processNextJob() error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGetNextQueue, err)
 	}
+
+	w.curProcessing.Add(1)
+	w.status.CompareAndSwap(idle, running)
 
 	var (
 		v     any
@@ -430,42 +497,41 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if !ok {
+		w.undoProcessingIncrement()
 		return ErrFailedToDequeue
 	}
 
 	var j JobType
 
-	// check the type of the value
-	// and cast it to the appropriate job type
 	switch value := v.(type) {
 	case JobType:
 		j = value
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
+			w.undoProcessingIncrement()
 			return err
 		}
 
 		if j, ok = v.(JobType); !ok {
+			w.undoProcessingIncrement()
 			return ErrFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
+		w.undoProcessingIncrement()
 		return ErrFailedToCastJob
 	}
 
 	if j.IsClosed() {
+		w.undoProcessingIncrement()
 		return nil
 	}
 
-	w.curProcessing.Add(1)
 	j.changeStatus(processing)
 	j.setAckId(ackId)
-	// if worker is idle, change the status to running
-	w.status.CompareAndSwap(idle, running)
 
-	// then job will be process by the processSingleJob function inside spawnWorker
 	w.sendToNextChannel(j)
 
 	return nil
@@ -682,12 +748,15 @@ func (w *worker[T, JobType]) Pause() error {
 	}
 
 	if w.status.CompareAndSwap(idle, paused) {
+		// won't Broadcast from releaseWaiters
+		w.waiters.Broadcast()
 		return nil
 	}
 
 	if w.status.CompareAndSwap(running, pausing) {
-		if w.NumProcessing() == 0 {
-			w.status.CompareAndSwap(pausing, paused)
+		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
+			// won't Broadcast from releaseWaiters
+			w.waiters.Broadcast()
 		}
 		return nil
 	}
@@ -697,6 +766,7 @@ func (w *worker[T, JobType]) Pause() error {
 
 func (w *worker[T, JobType]) Resume() error {
 	if w.status.CompareAndSwap(paused, idle) {
+		w.waiters.Broadcast()
 		w.notifyToPullNextJobs()
 		return nil
 	}
@@ -708,7 +778,7 @@ func (w *worker[T, JobType]) Resume() error {
 	return w.getStatusError()
 }
 
-func (w *worker[T, JobType]) start() error {
+func (w *worker[T, JobType]) Start() error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
@@ -738,7 +808,9 @@ func (w *worker[T, JobType]) Stop() error {
 
 	for _, from := range []status{running, idle, pausing, paused} {
 		if w.status.CompareAndSwap(from, stopping) {
+			w.mx.Lock()
 			w.cancel()
+			w.mx.Unlock()
 			return nil
 		}
 	}
@@ -751,25 +823,20 @@ func (w *worker[T, JobType]) Restart() error {
 		return err
 	}
 
-	// Wait for the worker to reach a terminal state (stopped or active).
-	// If another goroutine already restarted this worker while we were
-	// waiting, IsActive() will be true and we return ErrRunningWorker.
-	// sync.Cond.Wait() atomically releases w.mx and re-acquires it on wake-up.
 	w.mx.Lock()
 	for !w.IsStopped() && !w.IsActive() {
 		w.waiters.Wait()
 	}
+
 	if w.IsActive() {
 		w.mx.Unlock()
 		return ErrRunningWorker
 	}
 
-	// Create a new context before releasing the lock so that start()
-	// and the event loop goroutine see the updated context.
 	w.ctx, w.cancel = context.WithCancel(w.Configs.ctx)
 	w.mx.Unlock()
 
-	return w.start()
+	return w.Start()
 }
 
 func (w *worker[T, JobType]) IsPaused() bool {

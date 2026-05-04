@@ -132,10 +132,6 @@ func TestHandleQueueSubscription(t *testing.T) {
 		// Get the worker binder to access handleQueueSubscription
 		binder := worker.(*workerBinder[string])
 
-		// Start the worker so it can process notifications
-		err := binder.worker.start()
-		assert.NoError(t, err, "Worker should start successfully")
-
 		// Test handleQueueSubscription directly
 		// This simulates what happens when a distributed queue notifies about an enqueued job
 		binder.handleQueueSubscription("enqueued")
@@ -335,6 +331,7 @@ func TestWorkerBinders(t *testing.T) {
 	t.Run("HasDistributedQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
+		defer w.Stop()
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -346,13 +343,12 @@ func TestWorkerBinders(t *testing.T) {
 
 		_, exists = binderType.MethodByName("WithDistributedPriorityQueue")
 		assert.True(t, exists, "WorkerBinder should have WithDistributedPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
 	})
 
 	t.Run("HasPersistentQueueMethod", func(t *testing.T) {
 		// Create a worker
 		w := newWorker(func(j iJob[string]) {})
+		defer w.Stop()
 
 		// Create a worker binder
 		binder := newQueues(w)
@@ -364,8 +360,6 @@ func TestWorkerBinders(t *testing.T) {
 
 		_, exists = binderType.MethodByName("WithPersistentPriorityQueue")
 		assert.True(t, exists, "WorkerBinder should have WithPersistentPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
 	})
 
 	t.Run("ResultHasQueueMethods", func(t *testing.T) {
@@ -373,6 +367,7 @@ func TestWorkerBinders(t *testing.T) {
 		w := newResultWorker(func(j iResultJob[string, int]) {
 			j.sendResult(len(j.Data()))
 		})
+		defer w.Stop()
 
 		// Create a result worker binder
 		binder := newResultQueues(w)
@@ -393,8 +388,6 @@ func TestWorkerBinders(t *testing.T) {
 
 		_, exists = binderType.MethodByName("WithPriorityQueue")
 		assert.True(t, exists, "ResultWorkerBinder should have WithPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
 	})
 
 	t.Run("ErrHasQueueMethods", func(t *testing.T) {
@@ -402,6 +395,7 @@ func TestWorkerBinders(t *testing.T) {
 		w := newErrWorker(func(j iErrorJob[string]) {
 			j.sendError(nil)
 		})
+		defer w.Stop()
 
 		// Create an error worker binder
 		binder := newErrQueues(w)
@@ -422,8 +416,6 @@ func TestWorkerBinders(t *testing.T) {
 
 		_, exists = binderType.MethodByName("WithPriorityQueue")
 		assert.True(t, exists, "ErrWorkerBinder should have WithPriorityQueue method")
-
-		// No need to clean up as worker wasn't started
 	})
 
 	// Test result worker binder
