@@ -119,6 +119,10 @@ type Worker interface {
 	Metrics() Metrics
 	// TunePool adjusts the concurrency (pool size) of the worker
 	// up or down. This takes effect immediately for new jobs.
+	//
+	// Errors:
+	//   - ErrSameConcurrency: worker already has this concurrency value.
+	//   - see getStatusError() for additional state-specific errors.
 	TunePool(concurrency int) error
 	// Pause initiates a graceful pause of the worker.
 	//
@@ -155,9 +159,6 @@ type Worker interface {
 	//
 	// Errors:
 	//   - ErrNotRunningWorker: worker is in the Initiated state.
-	//   - ErrWorkerStopped: worker is already in the Stopped state
-	//     (returned when called from an invalid intermediate state; the
-	//     idempotent path above returns nil for Stopped/Stopping).
 	Stop() error
 	// Restart gracefully restarts the worker, preserving any pending
 	// jobs in the queue. It stops the worker, waits for it to reach
@@ -181,6 +182,7 @@ type Worker interface {
 	// Errors:
 	//   - ErrWorkerStopped: worker is in the Stopped state. Use Restart().
 	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrWorkerPausing: worker is in the Pausing state.
 	//   - ErrNotRunningWorker: worker is in the Initiated state.
 	Resume() error
 	// Start begins processing jobs from the bound queues.
@@ -189,10 +191,15 @@ type Worker interface {
 	// Use WithAutoRun(false) to create a worker in an initiated state,
 	// then call Start() manually when ready.
 	//
+	// Start only accepts initiated or stopped states. For all other states
+	// that still have a running event loop, it returns the corresponding
+	// status error.
+	//
 	// Errors:
 	//   - ErrRunningWorker: worker is already active (Running or Idle).
-	//   - ErrNotRunningWorker: worker is in an unexpected state
-	//     (not Initiated or any other valid start state).
+	//   - ErrWorkerPaused: worker is in the Paused state. Use Resume().
+	//   - ErrWorkerStopping: worker is in the Stopping state.
+	//   - ErrWorkerPausing: worker is in the Pausing state.
 	Start() error
 	// WaitUntilFinished waits until all pending jobs are processed and the worker
 	// has no in-flight work. This is an alias for Wait().
@@ -252,6 +259,9 @@ type Worker interface {
 	//
 	// This is equivalent to calling Wait(), Stop(), and WaitUntilStopped().
 	// Use this when you want to drain the queue before shutting down.
+	//
+	// Errors:
+	//   - see Stop() for error documentation.
 	WaitAndStop() error
 	// StopAndWait initiates a graceful stop and blocks until the worker
 	// reaches the Stopped state.
@@ -259,12 +269,18 @@ type Worker interface {
 	// This is equivalent to calling Stop() followed by WaitUntilStopped().
 	// If there are in-flight jobs, this blocks until they complete and
 	// all worker goroutines are removed.
+	//
+	// Errors:
+	//   - see Stop() for error documentation.
 	StopAndWait() error
 	// WaitAndPause waits until all pending jobs are processed and in-flight
 	// jobs complete, then pauses the worker.
 	//
 	// This is equivalent to calling Wait() followed by Pause(). Use this
 	// when you want to drain the queue before pausing.
+	//
+	// Errors:
+	//   - see Pause() for error documentation.
 	WaitAndPause() error
 	// PauseAndWait initiates a pause and blocks until the worker reaches
 	// the Paused state.
@@ -272,6 +288,9 @@ type Worker interface {
 	// This is equivalent to calling Pause() followed by WaitUntilPaused().
 	// If there are in-flight jobs, this blocks until they complete and
 	// the status transitions from Pausing to Paused.
+	//
+	// Errors:
+	//   - see Pause() for error documentation.
 	PauseAndWait() error
 
 	configs() configs
@@ -788,6 +807,11 @@ func (w *worker[T, JobType]) Start() error {
 
 	if w.IsActive() {
 		return ErrRunningWorker
+	}
+
+	s := w.status.Load()
+	if s != initiated && s != stopped {
+		return w.getStatusError()
 	}
 
 	w.goEventLoop()

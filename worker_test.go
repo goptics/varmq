@@ -325,6 +325,58 @@ func TestWorkers(t *testing.T) {
 				assert.Equal("Unknown", w.Status(), "Status string for unknown status should be 'Unknown'")
 			})
 
+			t.Run("Start returns error for paused/pausing/stopping states", func(t *testing.T) {
+				blockCh := make(chan struct{})
+				w := newWorker(func(j iJob[string]) {
+					<-blockCh
+				}, WithAutoRun(false))
+				assert := assert.New(t)
+
+				q := queues.NewQueue[iJob[string]]()
+				w.queues.Register(q, math.MaxInt)
+
+				// Test Start on paused
+				w.Start()
+				w.Pause()
+				w.WaitUntilPaused()
+				err := w.Start()
+				assert.ErrorIs(err, ErrWorkerPaused, "Start() on paused worker should return ErrWorkerPaused")
+				w.Resume()
+				w.Stop()
+				w.WaitUntilStopped()
+
+				// Test Start on pausing
+				w2 := newWorker(func(j iJob[string]) {
+					<-blockCh
+				}, WithAutoRun(false))
+				q2 := queues.NewQueue[iJob[string]]()
+				w2.queues.Register(q2, math.MaxInt)
+				q2.Enqueue(newJob("job", loadJobConfigs(w2.configs())))
+				w2.Start()
+				assert.Eventually(func() bool { return w2.NumProcessing() > 0 }, 200*time.Millisecond, 5*time.Millisecond)
+				w2.Pause()
+				err = w2.Start()
+				assert.ErrorIs(err, ErrWorkerPausing, "Start() on pausing worker should return ErrWorkerPausing")
+
+				// Test Start on stopping
+				w3 := newWorker(func(j iJob[string]) {
+					<-blockCh
+				}, WithAutoRun(false))
+				q3 := queues.NewQueue[iJob[string]]()
+				w3.queues.Register(q3, math.MaxInt)
+				q3.Enqueue(newJob("job", loadJobConfigs(w3.configs())))
+				w3.Start()
+				assert.Eventually(func() bool { return w3.NumProcessing() > 0 }, 200*time.Millisecond, 5*time.Millisecond)
+				w3.Stop()
+				err = w3.Start()
+				assert.ErrorIs(err, ErrWorkerStopping, "Start() on stopping worker should return ErrWorkerStopping")
+
+				close(blockCh)
+				w2.Stop()
+				w2.WaitUntilStopped()
+				w3.WaitUntilStopped()
+			})
+
 			t.Run("restart functionality", func(t *testing.T) {
 				var jobsProcessed atomic.Uint32
 
