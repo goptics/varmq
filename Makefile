@@ -22,7 +22,7 @@ test:
 	go test -race -count=1 -timeout 5m -v ./...
 
 bench:
-	go test -bench=. -timeout 2m -benchmem
+	go test -bench=. -timeout 5m -benchmem
 
 # Format codes
 format:
