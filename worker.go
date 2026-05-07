@@ -3,7 +3,6 @@ package varmq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -477,7 +476,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	queue, err := w.queues.next()
 
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrGetNextQueue, err)
+		return ErrGetNextQueue
 	}
 
 	w.curProcessing.Add(1)
@@ -667,7 +666,12 @@ func (w *worker[T, JobType]) goEventLoop() {
 			case <-signal:
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 					if err := w.processNextJob(); err != nil {
-						w.sendError(err)
+						switch {
+						case errors.Is(err, ErrGetNextQueue):
+							break
+						default:
+							w.sendError(err)
+						}
 					}
 				}
 			}

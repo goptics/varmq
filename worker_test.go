@@ -976,13 +976,11 @@ func TestWorkers(t *testing.T) {
 func TestPublicWorkerErrors(t *testing.T) {
 	t.Run("ErrGetNextQueue can be detected with errors.Is", func(t *testing.T) {
 		w := newWorker(func(j iJob[string]) {})
+		defer w.StopAndWait()
 
-		// Set an invalid strategy to trigger the error
-		w.queues.strategy = Strategy(99) // Invalid strategy
-
-		// Register a queue with some data to attempt processing
+		// Register an empty queue so next() returns ErrAllItemsEmpty,
+		// which processNextJob returns as ErrGetNextQueue.
 		mockQueue := mocks.NewMockPersistentQueue()
-		mockQueue.Queue.Enqueue("test")
 		w.queues.Register(mockQueue, math.MaxInt)
 
 		err := w.processNextJob()
@@ -993,6 +991,7 @@ func TestPublicWorkerErrors(t *testing.T) {
 	t.Run("ErrParseJob can be detected with errors.Is", func(t *testing.T) {
 		mockQueue := mocks.NewMockPersistentQueue()
 		w := newWorker(func(j iJob[int]) {})
+		defer w.StopAndWait()
 
 		mockQueue.Queue.Enqueue([]byte("invalid json"))
 
