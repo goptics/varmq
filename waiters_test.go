@@ -34,8 +34,7 @@ func TestWaiters(t *testing.T) {
 		})
 
 		t.Run("returns immediately when initiated", func(t *testing.T) {
-			w := newWorker(func(j iJob[string]) {})
-			// Worker is in initiated state, never started
+			w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
 
 			done := make(chan struct{})
 			go func() {
@@ -45,7 +44,6 @@ func TestWaiters(t *testing.T) {
 
 			select {
 			case <-done:
-				// Success
 			case <-time.After(100 * time.Millisecond):
 				t.Fatal("Wait() should return immediately for initiated worker")
 			}

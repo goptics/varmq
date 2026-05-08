@@ -620,6 +620,7 @@ func TestExternalQueue(t *testing.T) {
 		assert := assert.New(t)
 
 		worker.Start()
+		defer worker.Stop()
 
 		// Add several jobs
 		for i := range 5 {
@@ -662,7 +663,8 @@ func TestQueueCapacity(t *testing.T) {
 		t.Run("AddAll skips items beyond capacity", func(t *testing.T) {
 			workerFunc := func(j iJob[string]) {}
 			internalQueue := queues.NewQueue[any]()
-			worker := newWorker(workerFunc)
+			worker := newWorker(workerFunc, WithAutoRun(false))
+
 			queue := newQueue(worker, internalQueue, WithQueueCapacity(2))
 
 			items := []Item[string]{

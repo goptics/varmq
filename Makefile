@@ -1,4 +1,4 @@
-.PHONY: help init test format release
+.PHONY: help init test bench format release
 
 # Default target - list available targets
 help:

@@ -674,12 +674,10 @@ func (w *worker[T, JobType]) goEventLoop() {
 			case <-signal:
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 					if err := w.processNextJob(); err != nil {
-						switch {
-						case errors.Is(err, ErrGetNextQueue):
-							break
-						default:
-							w.sendError(err)
+						if errors.Is(err, ErrGetNextQueue) {
+							continue
 						}
+						w.sendError(err)
 					}
 				}
 			}
