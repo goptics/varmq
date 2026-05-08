@@ -675,7 +675,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 					if err := w.processNextJob(); err != nil {
 						if errors.Is(err, ErrGetNextQueue) {
-							continue
+							break
 						}
 						w.sendError(err)
 					}
