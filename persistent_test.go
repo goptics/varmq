@@ -16,20 +16,17 @@ func setupPersistentQueue() (PersistentQueue[string], *worker[string, iJob[strin
 	}
 
 	mockQueue := mocks.NewMockPersistentQueue()
-	worker := newWorker(workerFunc)
+	worker := newWorker(workerFunc, WithAutoRun(false))
 	queue := newPersistentQueue(worker, mockQueue)
 
 	return queue, worker, mockQueue
 }
 
 func setupPersistentPriorityQueue() (PersistentPriorityQueue[string], *worker[string, iJob[string]], *mocks.MockPersistentPriorityQueue) {
-	// Create a worker with a simple process function
-	workerFunc := func(j iJob[string]) {
-		// Simple processor that doesn't return anything
-	}
+	workerFunc := func(j iJob[string]) {}
 
 	mockQueue := mocks.NewMockPersistentPriorityQueue()
-	worker := newWorker(workerFunc)
+	worker := newWorker(workerFunc, WithAutoRun(false))
 	queue := newPersistentPriorityQueue(worker, mockQueue)
 
 	return queue, worker, mockQueue
@@ -304,7 +301,7 @@ func TestPersistentQueueCapacity(t *testing.T) {
 	t.Run("Add returns false when at capacity", func(t *testing.T) {
 		workerFunc := func(j iJob[string]) {}
 		mockQueue := mocks.NewMockPersistentQueue()
-		worker := newWorker(workerFunc)
+		worker := newWorker(workerFunc, WithAutoRun(false))
 		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2))
 
 		ok1 := queue.Add("item-1")
@@ -322,7 +319,7 @@ func TestPersistentQueueCapacity(t *testing.T) {
 	t.Run("IsFull returns correct state", func(t *testing.T) {
 		workerFunc := func(j iJob[string]) {}
 		mockQueue := mocks.NewMockPersistentQueue()
-		worker := newWorker(workerFunc)
+		worker := newWorker(workerFunc, WithAutoRun(false))
 		queue := newPersistentQueue(worker, mockQueue, WithQueueCapacity(2))
 
 		assert.False(t, queue.IsFull(), "Empty queue should not be full")
@@ -339,7 +336,7 @@ func TestPersistentPriorityQueueCapacity(t *testing.T) {
 	t.Run("Add returns false when at capacity", func(t *testing.T) {
 		workerFunc := func(j iJob[string]) {}
 		mockQueue := mocks.NewMockPersistentPriorityQueue()
-		worker := newWorker(workerFunc)
+		worker := newWorker(workerFunc, WithAutoRun(false))
 		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2))
 
 		ok1 := queue.Add("high", 1)
@@ -357,7 +354,7 @@ func TestPersistentPriorityQueueCapacity(t *testing.T) {
 	t.Run("IsFull returns correct state", func(t *testing.T) {
 		workerFunc := func(j iJob[string]) {}
 		mockQueue := mocks.NewMockPersistentPriorityQueue()
-		worker := newWorker(workerFunc)
+		worker := newWorker(workerFunc, WithAutoRun(false))
 		queue := newPersistentPriorityQueue(worker, mockQueue, WithQueueCapacity(2))
 
 		assert.False(t, queue.IsFull(), "Empty queue should not be full")
