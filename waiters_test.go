@@ -812,6 +812,7 @@ func TestWaiters(t *testing.T) {
 			// Wait for job to complete and stop
 			select {
 			case <-done:
+				w.WaitUntilStopped()
 				assert.True(w.IsStopped(), "Worker should be Stopped")
 				assert.Equal(0, w.NumPending(), "Queue should be empty")
 			case <-time.After(2 * time.Second):
@@ -826,6 +827,7 @@ func TestWaiters(t *testing.T) {
 			assert := assert.New(t)
 			err := w.WaitAndStop()
 			assert.NoError(err)
+			w.WaitUntilStopped()
 			assert.True(w.IsStopped(), "Worker should be stopped")
 		})
 	})

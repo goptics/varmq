@@ -201,12 +201,6 @@ type Worker interface {
 	//   - ErrWorkerStopping: worker is in the Stopping state.
 	//   - ErrWorkerPausing: worker is in the Pausing state.
 	Start() error
-	// WaitUntilFinished waits until all pending jobs are processed and the worker
-	// has no in-flight work. This is an alias for Wait().
-	//
-	// Deprecated: Use Wait() or WaitUntilIdle() instead, depending on whether you
-	// care about the final status or just that work is done.
-	WaitUntilFinished()
 	// Wait blocks until the worker has no pending jobs in the queue and no jobs
 	// currently being processed.
 	//
@@ -255,10 +249,12 @@ type Worker interface {
 	// Note: If the worker is already Stopped, this returns immediately.
 	WaitUntilStopped()
 	// WaitAndStop waits until all pending jobs are processed and in-flight
-	// jobs complete, then stops the worker and blocks until fully stopped.
+	// jobs complete, then initiates a graceful stop and returns immediately.
 	//
-	// This is equivalent to calling Wait(), Stop(), and WaitUntilStopped().
+	// This is equivalent to calling Wait() followed by Stop().
 	// Use this when you want to drain the queue before shutting down.
+	// Use StopAndWait() when you need to block until the worker reaches
+	// the Stopped state.
 	//
 	// Errors:
 	//   - see Stop() for error documentation.
@@ -412,13 +408,6 @@ func (w *worker[T, JobType]) sendError(err error) {
 
 func (w *worker[T, JobType]) Metrics() Metrics {
 	return w.metrics
-}
-
-// WaitUntilFinished waits until all pending jobs are processed.
-//
-// Deprecated: Use Wait() or WaitUntilIdle() instead.
-func (w *worker[T, JobType]) WaitUntilFinished() {
-	w.Wait()
 }
 
 // Wait blocks until the worker has no pending jobs in the queue
@@ -960,11 +949,5 @@ func (w *worker[T, JobType]) StopAndWait() error {
 
 func (w *worker[T, JobType]) WaitAndStop() error {
 	w.Wait()
-
-	if err := w.Stop(); err != nil {
-		return err
-	}
-
-	w.WaitUntilStopped()
-	return nil
+	return w.Stop()
 }
