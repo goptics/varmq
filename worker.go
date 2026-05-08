@@ -801,6 +801,10 @@ func (w *worker[T, JobType]) Start() error {
 		return w.getStatusError()
 	}
 
+	if s == stopped {
+		w.initContext(w.Configs.ctx)
+	}
+
 	w.goEventLoop()
 	w.goRemoveIdleWorkers()
 
@@ -847,8 +851,6 @@ func (w *worker[T, JobType]) Restart() error {
 		w.mx.Unlock()
 		return ErrRunningWorker
 	}
-
-	w.ctx, w.cancel = context.WithCancel(w.Configs.ctx)
 	w.mx.Unlock()
 
 	return w.Start()

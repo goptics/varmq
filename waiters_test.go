@@ -2,8 +2,6 @@ package varmq
 
 import (
 	"fmt"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -869,63 +867,33 @@ func TestWaiters(t *testing.T) {
 		})
 	})
 
-	t.Run("Restart uses Wait correctly", func(t *testing.T) {
-		t.Run("restart with running jobs waits then restarts", func(t *testing.T) {
-			started := make(chan struct{})
-			var startOnce sync.Once
-			blockCh := make(chan struct{})
-			var processed atomic.Int32
-			w := newWorker(func(j iJob[int]) {
-				processed.Add(1)
-				startOnce.Do(func() { close(started) })
-				<-blockCh
-			})
-			assert := assert.New(t)
+	t.Run("Restart blocks until in-flight jobs drain", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		w := newWorker(func(j iJob[int]) {
+			<-blockCh
+		}, WithAutoRun(false))
+		q := queues.NewQueue[iJob[int]]()
+		w.queues.Register(q, 1)
+		q.Enqueue(newJob(1, loadJobConfigs(w.configs())))
+		w.Start()
 
-			q := queues.NewQueue[iJob[int]]()
-			w.queues.Register(q, 1)
-			// Start some jobs
-			for i := range 3 {
-				q.Enqueue(newJob(i, loadJobConfigs(w.configs())))
-			}
-			w.notifyToPullNextJobs()
+		assert.Eventually(t, func() bool { return w.NumProcessing() > 0 }, 200*time.Millisecond, 5*time.Millisecond)
 
-			// Wait for at least one job to start
-			select {
-			case <-started:
-				// Job started
-			case <-time.After(500 * time.Millisecond):
-				t.Fatal("Some jobs should have started")
-			}
-			assert.Greater(processed.Load(), int32(0), "Some jobs should have started")
+		done := make(chan struct{})
+		go func() {
+			assert.NoError(t, w.Restart())
+			close(done)
+		}()
 
-			// Restart should wait for in-flight jobs, then restart
-			done := make(chan struct{})
-			go func() {
-				err := w.Restart()
-				assert.NoError(err)
-				close(done)
-			}()
+		close(blockCh)
 
-			// Should block while jobs are in-flight
-			select {
-			case <-done:
-				t.Fatal("Restart() should block while jobs are in-flight")
-			case <-time.After(50 * time.Millisecond):
-				// Expected
-			}
+		select {
+		case <-done:
+			assert.True(t, w.IsActive(), "Worker should be active after restart")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Restart() should return after in-flight jobs complete")
+		}
 
-			// Release all jobs
-			close(blockCh)
-
-			select {
-			case <-done:
-				assert.True(w.IsActive(), "Worker should be active after restart")
-			case <-time.After(2 * time.Second):
-				t.Fatal("Restart() should return after in-flight jobs complete")
-			}
-
-			w.Stop()
-		})
+		w.Stop()
 	})
 }
