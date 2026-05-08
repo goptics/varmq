@@ -13,6 +13,7 @@ type ConfigFunc func(*configs)
 
 type configs struct {
 	concurrency              uint32
+	autoRun                  bool
 	strategy                 Strategy
 	minIdleWorkerRatio       uint8
 	jobIdGenerator           func() string
@@ -21,6 +22,7 @@ type configs struct {
 }
 
 var defaultConfig = configs{
+	autoRun:     true,
 	concurrency: 1,
 	jobIdGenerator: func() string {
 		return ""
@@ -204,6 +206,18 @@ func WithMinIdleWorkerRatio(percentage uint8) ConfigFunc {
 func WithConcurrency(concurrency int) ConfigFunc {
 	return func(c *configs) {
 		c.concurrency = withSafeConcurrency(concurrency)
+	}
+}
+
+// WithAutoRun configures whether the worker automatically starts when created.
+// When autoRun is true (the default), the worker begins processing immediately
+// after creation. When set to false, the worker remains in an initiated state
+// until Start() is called manually.
+//
+// Default: true
+func WithAutoRun(run bool) ConfigFunc {
+	return func(c *configs) {
+		c.autoRun = run
 	}
 }
 

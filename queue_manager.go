@@ -1,14 +1,10 @@
 package varmq
 
 import (
-	"errors"
-
 	"github.com/goptics/varmq/internal/helpers"
 )
 
 type Strategy uint8
-
-var errInvalidStrategyType = errors.New("invalid strategy type")
 
 const (
 	// Selects queues in a round-robin fashion
@@ -37,8 +33,6 @@ func newQueueManager(strategy Strategy) *queueManager {
 
 func (qm *queueManager) next() (IBaseQueue, error) {
 	switch qm.strategy {
-	case Priority:
-		return qm.GetPriorityItem()
 	case RoundRobin:
 		return qm.GetRoundRobinItem()
 	case MaxLen:
@@ -46,6 +40,6 @@ func (qm *queueManager) next() (IBaseQueue, error) {
 	case MinLen:
 		return qm.GetMinLenItem()
 	default:
-		return nil, errInvalidStrategyType
+		return qm.GetPriorityItem()
 	}
 }
