@@ -471,7 +471,7 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
-func (w *worker[T, JobType]) undoProcessingIncrement() {
+func (w *worker[T, JobType]) releaseProcessingSlot() {
 	processing := w.curProcessing.Add(^uint32(0))
 	w.releaseWaiters(processing)
 	if processing < w.concurrency.Load() {
@@ -504,7 +504,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 	}
 
 	if !ok {
-		w.undoProcessingIncrement()
+		w.releaseProcessingSlot()
 		return ErrFailedToDequeue
 	}
 
@@ -516,23 +516,23 @@ func (w *worker[T, JobType]) processNextJob() error {
 	case []byte:
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
-			w.undoProcessingIncrement()
+			w.releaseProcessingSlot()
 			return err
 		}
 
 		if j, ok = v.(JobType); !ok {
-			w.undoProcessingIncrement()
+			w.releaseProcessingSlot()
 			return ErrFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
-		w.undoProcessingIncrement()
+		w.releaseProcessingSlot()
 		return ErrFailedToCastJob
 	}
 
 	if j.IsClosed() {
-		w.undoProcessingIncrement()
+		w.releaseProcessingSlot()
 		return nil
 	}
 
@@ -589,12 +589,7 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 		}
 		w.metrics.incCompleted()
 		w.freePoolNode(node)
-		processing := w.curProcessing.Add(^uint32(0))
-		w.releaseWaiters(processing)
-
-		if processing < w.concurrency.Load() {
-			w.notifyToPullNextJobs()
-		}
+		w.releaseProcessingSlot()
 	})
 
 	return node
