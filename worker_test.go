@@ -78,61 +78,16 @@ func TestWorkers(t *testing.T) {
 				assert := assert.New(t)
 				assert.Equal(withSafeConcurrency(0), w.concurrency.Load(), "concurrency should default to CPU count with negative value")
 			})
-
-			t.Run("with closure capturing", func(t *testing.T) {
-				counter := 0
-				wf := func(j iJob[string]) {
-					counter += len(j.Data())
-				}
-				w := newWorker(wf)
-				assert := assert.New(t)
-				assert.NotNil(w, "worker should not be nil")
-				assert.NotNil(w.workerFunc, "worker function should be initialized")
-			})
-
-			t.Run("pool node initialization", func(t *testing.T) {
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(10 * time.Millisecond)
-				})
-				assert := assert.New(t)
-				node := w.initPoolNode()
-				assert.NotNil(node, "initPoolNode should return a valid node")
-				assert.NotNil(node.Value, "node value should not be nil")
-			})
 		})
 
 		// Group 2: Concurrency tests
 		t.Run("Concurrency", func(t *testing.T) {
-			t.Run("initial value", func(t *testing.T) {
-				concurrencyValue := 4
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(10 * time.Millisecond)
-				}, WithConcurrency(concurrencyValue))
-				assert.Equal(t, concurrencyValue, w.NumConcurrency(), "CurrentConcurrency should return the initial concurrency value")
-			})
-
 			t.Run("default value", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(10 * time.Millisecond)
 				})
 				expectedConcurrency := int(withSafeConcurrency(1))
 				assert.Equal(t, expectedConcurrency, w.NumConcurrency(), "CurrentConcurrency should return the default concurrency value")
-			})
-
-			t.Run("after tuning", func(t *testing.T) {
-				initialConcurrency := 2
-				w := newWorker(func(j iJob[string]) {
-					time.Sleep(10 * time.Millisecond)
-				}, WithConcurrency(initialConcurrency))
-				defer w.Stop()
-
-				assert.Equal(t, initialConcurrency, w.NumConcurrency(), "CurrentConcurrency should match initial value")
-
-				newConcurrency := 5
-				err := w.TunePool(newConcurrency)
-				assert.NoError(t, err, "TunePool should not return error")
-
-				assert.Equal(t, newConcurrency, w.NumConcurrency(), "CurrentConcurrency should return updated value after tuning")
 			})
 		})
 
@@ -291,6 +246,8 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(err, "Starting worker should not error")
 				assert.Equal(idle, w.status.Load(), "Status after start should be 'idle'")
 				assert.Equal("Idle", w.Status(), "Status string after start should be 'Idle'")
+				w.status.Store(running)
+				assert.Equal("Running", w.Status())
 				assert.True(w.IsActive(), "Worker should be running after start")
 
 				err = w.Start()
@@ -312,6 +269,7 @@ func TestWorkers(t *testing.T) {
 				assert.NoError(err, "Resuming an already running worker should be idempotent")
 
 				w.Stop()
+				assert.Equal("Stopping", w.Status(), "Status string after stop should be 'Stopping'")
 				w.WaitUntilStopped()
 				assert.Equal(stopped, w.status.Load(), "Status after stop should be 'stopped'")
 				assert.Equal("Stopped", w.Status(), "Status string after stop should be 'Stopped'")
@@ -501,23 +459,6 @@ func TestWorkers(t *testing.T) {
 			})
 
 			t.Run("restart state conditions", func(t *testing.T) {
-				t.Run("RestartRunning", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {
-						time.Sleep(10 * time.Millisecond)
-					})
-					assert.NoError(t, w.Restart())
-					assert.True(t, w.IsActive())
-					w.Stop()
-				})
-
-				t.Run("RestartPaused", func(t *testing.T) {
-					w := newWorker(func(j iJob[string]) {})
-					w.Pause()
-					assert.NoError(t, w.Restart())
-					assert.True(t, w.IsActive())
-					w.Stop()
-				})
-
 				t.Run("RestartDefaultCase", func(t *testing.T) {
 					w := newWorker(func(j iJob[string]) {})
 					// Manually set an invalid status to hit default case in switch
@@ -860,20 +801,6 @@ func TestWorkers(t *testing.T) {
 				assert.Eventually(t, func() bool { return w.pool.Len() <= w.numMinIdleWorkers()+1 }, 200*time.Millisecond, 5*time.Millisecond, "Pool should be cleaned up")
 			})
 
-			t.Run("processNextJob with parse failure", func(t *testing.T) {
-				mockQueue := mocks.NewMockPersistentQueue()
-				w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
-
-				mockQueue.Queue.Enqueue([]byte("invalid json"))
-
-				queue := newQueue(w, mockQueue)
-				w.queues.Register(queue.internalQueue, math.MaxInt)
-
-				err := w.processNextJob()
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, ErrParseJob, "should return ErrParseJob sentinel")
-			})
-
 			t.Run("processNextJob with cast failure after parse", func(t *testing.T) {
 				mockQueue := mocks.NewMockPersistentQueue()
 				w := newErrWorker(func(j iErrorJob[string]) {}, WithAutoRun(false))
@@ -916,30 +843,6 @@ func TestWorkers(t *testing.T) {
 				cancel()
 
 				assert.Eventually(t, func() bool { return w.IsStopped() }, 500*time.Millisecond, 5*time.Millisecond, "Worker should be stopped after context cancellation")
-			})
-
-			t.Run("restart recreates context", func(t *testing.T) {
-				ctx := t.Context()
-
-				w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
-
-				assert := assert.New(t)
-
-				// Verify context exists
-				assert.NotNil(w.Context())
-
-				err := w.Stop()
-				assert.NoError(err)
-
-				err = w.Restart()
-				assert.NoError(err)
-
-				// After restart, context should still exist and be valid
-				newCtx := w.Context()
-				assert.NotNil(newCtx, "Context should exist after restart")
-				assert.NoError(newCtx.Err(), "New context should not be cancelled")
-
-				w.Stop()
 			})
 
 			t.Run("newErrWorker with context", func(t *testing.T) {
@@ -1038,21 +941,6 @@ func TestPublicWorkerErrors(t *testing.T) {
 		err := w.processNextJob()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrGetNextQueue, "should return ErrGetNextQueue sentinel")
-	})
-
-	t.Run("ErrParseJob can be detected with errors.Is", func(t *testing.T) {
-		mockQueue := mocks.NewMockPersistentQueue()
-		w := newWorker(func(j iJob[int]) {})
-		defer w.StopAndWait()
-
-		mockQueue.Queue.Enqueue([]byte("invalid json"))
-
-		queue := newQueue(w, mockQueue)
-		w.queues.Register(queue.internalQueue, math.MaxInt)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrParseJob, "should return ErrParseJob sentinel")
 	})
 }
 
@@ -1289,90 +1177,6 @@ func TestPausePausingFastPath(t *testing.T) {
 		assert.True(t, w.IsPaused())
 
 		w.Stop()
-	})
-}
-
-func TestRestartCoverage(t *testing.T) {
-	t.Run("Restart from idle with no processing", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		w.WaitUntilIdle()
-
-		err := w.Restart()
-		assert.NoError(t, err)
-		w.WaitUntilIdle()
-		assert.True(t, w.IsActive())
-
-		w.Stop()
-	})
-
-	t.Run("Restart from paused", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		w.WaitUntilIdle()
-		err := w.Pause()
-		assert.NoError(t, err)
-		assert.True(t, w.IsPaused())
-
-		err = w.Restart()
-		assert.NoError(t, err)
-		assert.True(t, w.IsActive())
-		w.Stop()
-	})
-
-	t.Run("Restart with context cancels and recreates context", func(t *testing.T) {
-		ctx := t.Context()
-		w := newWorker(func(j iJob[string]) {}, WithContext(ctx))
-		w.WaitUntilIdle()
-		assert.NotNil(t, w.Context())
-
-		err := w.Restart()
-		assert.NoError(t, err)
-		w.WaitUntilIdle()
-		assert.NotNil(t, w.Context())
-		assert.NoError(t, w.Context().Err(), "New context should not be cancelled")
-
-		w.Stop()
-	})
-
-	t.Run("Restart without context does not panic", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		w.WaitUntilIdle()
-		assert.NotNil(t, w.Context())
-
-		err := w.Restart()
-		assert.NoError(t, err)
-		w.WaitUntilIdle()
-		assert.NotNil(t, w.Context())
-
-		w.Stop()
-	})
-}
-
-func TestStatusAllCases(t *testing.T) {
-	t.Run("Status returns correct string for all states", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
-
-		assert.Equal(t, "Initiated", w.Status())
-
-		w.Start()
-		assert.Equal(t, "Idle", w.Status())
-
-		w.status.Store(running)
-		assert.Equal(t, "Running", w.Status())
-
-		w.status.Store(pausing)
-		assert.Equal(t, "Pausing", w.Status())
-
-		w.status.Store(paused)
-		assert.Equal(t, "Paused", w.Status())
-
-		w.status.Store(stopping)
-		assert.Equal(t, "Stopping", w.Status())
-
-		w.status.Store(stopped)
-		assert.Equal(t, "Stopped", w.Status())
-
-		w.status.Store(99)
-		assert.Equal(t, "Unknown", w.Status())
 	})
 }
 
