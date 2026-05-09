@@ -1,4 +1,4 @@
-.PHONY: help init test format release
+.PHONY: help init test bench format release
 
 # Default target - list available targets
 help:
@@ -19,10 +19,10 @@ init:
 
 # Run all tests (no cache)
 test:
-	go test -race -count=1 -v ./...
+	go test -race -count=1 -timeout 5m -v ./...
 
 bench:
-	go test -bench=. -benchmem
+	go test -bench=. -timeout 5m -benchmem
 
 # Format codes
 format:
