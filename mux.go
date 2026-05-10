@@ -152,10 +152,12 @@ func handleWorkerAction(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "pause":
 		err = worker.Pause()
-	case "resume":
-		err = worker.Resume()
 	case "restart":
 		err = worker.Restart()
+	case "resume":
+		err = worker.Resume()
+	case "start":
+		err = worker.Start()
 	case "stop":
 		err = worker.Stop()
 	default:
