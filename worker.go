@@ -9,18 +9,6 @@ import (
 	"github.com/goptics/varmq/internal/pool"
 )
 
-type status = uint32
-
-const (
-	initiated status = iota
-	idle
-	running
-	pausing
-	paused
-	stopping
-	stopped
-)
-
 const (
 	poolChanCap        = 1
 	eventLoopSignalCap = 1
@@ -384,15 +372,19 @@ func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
 }
 
-func (w *worker[T, JobType]) Name() string {
-	return w.Configs.name
-}
-
 func (w *worker[T, JobType]) sendError(err error) {
 	select {
 	case w.errorChan <- err:
 	default:
 	}
+}
+
+func (w *worker[T, JobType]) Name() string {
+	return w.Configs.name
+}
+
+func (w *worker[T, JobType]) Context() context.Context {
+	return w.ctx
 }
 
 func (w *worker[T, JobType]) Metrics() Metrics {
@@ -403,42 +395,18 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
-func (w *worker[T, JobType]) NumConcurrency() int {
-	return int(w.concurrency.Load())
-}
-
-func (w *worker[T, JobType]) NumIdleWorkers() int {
-	return w.pool.Len()
-}
-
 func (w *worker[T, JobType]) NumPending() int {
 	return w.queues.Len()
-}
-func (w *worker[T, JobType]) IsPaused() bool {
-	return w.status.Load() == paused
-}
-
-func (w *worker[T, JobType]) IsRunning() bool {
-	return w.status.Load() == running
-}
-
-func (w *worker[T, JobType]) IsActive() bool {
-	s := w.status.Load()
-	return s == running || s == idle
-}
-
-func (w *worker[T, JobType]) IsIdle() bool {
-	return w.status.Load() == idle
-}
-
-func (w *worker[T, JobType]) IsStopped() bool {
-	return w.status.Load() == stopped
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
 	return int(w.curProcessing.Load())
 }
 
-func (w *worker[T, JobType]) Context() context.Context {
-	return w.ctx
+func (w *worker[T, JobType]) NumConcurrency() int {
+	return int(w.concurrency.Load())
+}
+
+func (w *worker[T, JobType]) NumIdleWorkers() int {
+	return w.pool.Len()
 }

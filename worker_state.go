@@ -1,44 +1,16 @@
 package varmq
 
-func (w *worker[T, JobType]) Pause() error {
-	w.mx.Lock()
-	defer w.mx.Unlock()
+type status = uint32
 
-	s := w.status.Load()
-	if s == paused || s == pausing {
-		return nil
-	}
-
-	if w.status.CompareAndSwap(idle, paused) {
-		w.waiters.Broadcast()
-		return nil
-	}
-
-	if w.status.CompareAndSwap(running, pausing) {
-		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
-			w.waiters.Broadcast()
-		}
-		return nil
-	}
-
-	return w.getStatusError()
-}
-
-func (w *worker[T, JobType]) Resume() error {
-	if w.status.CompareAndSwap(paused, idle) {
-		w.mx.Lock()
-		w.waiters.Broadcast()
-		w.mx.Unlock()
-		w.notifyToPullNextJobs()
-		return nil
-	}
-
-	if w.IsActive() {
-		return nil
-	}
-
-	return w.getStatusError()
-}
+const (
+	initiated status = iota
+	idle
+	running
+	pausing
+	paused
+	stopping
+	stopped
+)
 
 func (w *worker[T, JobType]) getStatusError() error {
 	switch s := w.status.Load(); s {
@@ -76,4 +48,25 @@ func (w *worker[T, JobType]) Status() string {
 	default:
 		return "Unknown"
 	}
+}
+
+func (w *worker[T, JobType]) IsPaused() bool {
+	return w.status.Load() == paused
+}
+
+func (w *worker[T, JobType]) IsRunning() bool {
+	return w.status.Load() == running
+}
+
+func (w *worker[T, JobType]) IsActive() bool {
+	s := w.status.Load()
+	return s == running || s == idle
+}
+
+func (w *worker[T, JobType]) IsIdle() bool {
+	return w.status.Load() == idle
+}
+
+func (w *worker[T, JobType]) IsStopped() bool {
+	return w.status.Load() == stopped
 }
