@@ -382,7 +382,6 @@ func (w *worker[T, JobType]) configs() configs {
 }
 
 func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
-	// Early return if there's still processing happening
 	if processing != 0 {
 		return
 	}
@@ -393,7 +392,6 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 		return
 	}
 
-	// Transition from pausing to paused when done processing
 	if w.status.CompareAndSwap(pausing, paused) {
 		return
 	}
@@ -472,8 +470,10 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) releaseProcessingSlot() {
+	w.mx.Lock()
 	processing := w.curProcessing.Add(^uint32(0))
 	w.releaseWaiters(processing)
+	w.mx.Unlock()
 	if processing < w.concurrency.Load() {
 		w.notifyToPullNextJobs()
 	}
@@ -663,8 +663,10 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.status.Store(stopping)
 				w.Wait()
 				w.removeAllWorkers()
+				w.mx.Lock()
 				w.status.Store(stopped)
 				w.waiters.Broadcast()
+				w.mx.Unlock()
 				return
 			case <-signal:
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
@@ -746,21 +748,21 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) Pause() error {
-	s := w.status.Load()
+	w.mx.Lock()
+	defer w.mx.Unlock()
 
+	s := w.status.Load()
 	if s == paused || s == pausing {
 		return nil
 	}
 
 	if w.status.CompareAndSwap(idle, paused) {
-		// won't Broadcast from releaseWaiters
 		w.waiters.Broadcast()
 		return nil
 	}
 
 	if w.status.CompareAndSwap(running, pausing) {
 		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
-			// won't Broadcast from releaseWaiters
 			w.waiters.Broadcast()
 		}
 		return nil
@@ -771,7 +773,9 @@ func (w *worker[T, JobType]) Pause() error {
 
 func (w *worker[T, JobType]) Resume() error {
 	if w.status.CompareAndSwap(paused, idle) {
+		w.mx.Lock()
 		w.waiters.Broadcast()
+		w.mx.Unlock()
 		w.notifyToPullNextJobs()
 		return nil
 	}
