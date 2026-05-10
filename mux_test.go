@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMuxListWorkers(t *testing.T) {
@@ -132,9 +134,7 @@ func TestMuxWorkerActions(t *testing.T) {
 			action:         "stop",
 			expectedStatus: http.StatusOK,
 			checkState: func(t *testing.T) {
-				if !w.IsStopped() {
-					t.Errorf("expected worker to be stopped")
-				}
+				assert.Eventually(t, w.IsStopped, time.Second, 10*time.Millisecond, "expected worker to be stopped")
 			},
 		},
 	}
