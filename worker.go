@@ -5,9 +5,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
 )
 
@@ -480,117 +478,24 @@ func (w *worker[T, JobType]) processNextJob() error {
 	return nil
 }
 
-func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
-	// If worker timeout is enabled, update the last used time
-	enabledIdleWorkersRemover := w.Configs.idleWorkerExpiryDuration > 0
 
-	if enabledIdleWorkersRemover {
-		node.Value.UpdateLastUsed()
+func (w *worker[T, JobType]) notifyToPullNextJobs() {
+	select {
+	case w.eventLoopSignal <- struct{}{}:
+	default:
 	}
-
-	// If queue length is high or we're under our idle worker target, keep this worker
-	if w.queues.Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
-		w.pool.PushNode(node)
-		return
-	}
-
-	// Otherwise stop the worker to reduce idle workers
-	node.Value.Stop()
-	w.pool.Cache.Put(node)
 }
 
-// sendToNextChannel sends the job to the next available channel for processing.
-// Time complexity: O(1)
 func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
-	// pop the last free node
 	if node := w.pool.PopBack(); node != nil {
 		node.Value.Send(j)
 		return
 	}
 
-	// if the pool is empty, create a new node and spawn a worker
 	w.initPoolNode().Value.Send(j)
 }
 
-func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := w.pool.Cache.Get().(*linkedlist.Node[pool.Node[JobType]])
 
-	// Start a worker goroutine to process jobs from this nodes channel
-	go node.Value.Serve(func(j JobType) {
-		w.workerFunc(j)
-
-		j.changeStatus(finished)
-		if err := j.Close(); err != nil {
-			w.sendError(err)
-		}
-		w.metrics.incCompleted()
-		w.freePoolNode(node)
-		w.releaseProcessingSlot()
-	})
-
-	return node
-}
-
-// notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
-func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	select {
-	case w.eventLoopSignal <- struct{}{}:
-	default:
-		// This default case means the eventLoopSignal buffer is full or
-		// no one is listening. This is generally fine as it's a non-blocking send.
-	}
-}
-
-// numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
-func (w *worker[T, JobType]) numMinIdleWorkers() int {
-	percentage := w.Configs.minIdleWorkerRatio
-	concurrency := w.concurrency.Load()
-
-	return int(max((concurrency*uint32(percentage))/100, 1))
-}
-
-func (w *worker[T, JobType]) goRemoveIdleWorkers() {
-	interval := w.Configs.idleWorkerExpiryDuration
-
-	if interval == 0 {
-		return
-	}
-
-	ticker := time.NewTicker(interval)
-
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				// Calculate the target number of idle workers
-				targetIdleWorkers := w.numMinIdleWorkers()
-
-				// if the number of idle workers is less than or equal to the target, continue
-				if w.pool.Len() <= targetIdleWorkers {
-					continue
-				}
-
-				nodes := w.pool.NodeSlice()
-				// If we have more nodes than our target, close the excess ones
-				for _, node := range nodes[targetIdleWorkers:] {
-					if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
-						!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
-						w.pool.Remove(node)
-						node.Value.Stop()
-						w.pool.Cache.Put(node)
-					}
-				}
-			}
-		}
-	}(w.ctx)
-}
-
-// starts the event loop that processes pending jobs when workers become available
-// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
-// When all conditions are met, it processes the next job in the queue
 func (w *worker[T, JobType]) goEventLoop() {
 	go func(ctx context.Context, signal <-chan struct{}) {
 		for {
@@ -616,59 +521,6 @@ func (w *worker[T, JobType]) goEventLoop() {
 			}
 		}
 	}(w.ctx, w.eventLoopSignal)
-}
-
-// removeAllWorkers removes all nodes from the list and closes the pool nodes
-func (w *worker[T, JobType]) removeAllWorkers() {
-	for _, node := range w.pool.NodeSlice() {
-		w.pool.Remove(node)
-		node.Value.Stop()
-		w.pool.Cache.Put(node)
-	}
-}
-
-func (w *worker[T, JobType]) TunePool(concurrency int) error {
-	if !w.IsActive() {
-		return w.getStatusError()
-	}
-
-	oldConcurrency := w.concurrency.Load()
-	safeConcurrency := withSafeConcurrency(concurrency)
-
-	if oldConcurrency == safeConcurrency {
-		return ErrSameConcurrency
-	}
-
-	w.concurrency.Store(safeConcurrency)
-
-	// if new concurrency is greater than the old concurrency, then notify to pull next jobs
-	// cause it will be extended by the event loop when it needs
-	if safeConcurrency > oldConcurrency {
-		w.notifyToPullNextJobs()
-		return nil
-	}
-
-	// if idle worker expiry duration is set, then no need to shrink the pool size
-	// cause it will be removed by the idle worker remover
-	if w.Configs.idleWorkerExpiryDuration != 0 {
-		return nil
-	}
-
-	shrinkPoolSize, minIdleWorkers := oldConcurrency-safeConcurrency, w.numMinIdleWorkers()
-
-	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
-		if node := w.pool.PopBack(); node != nil {
-			w.pool.Remove(node)
-			node.Value.Stop()
-			w.pool.Cache.Put(node)
-			shrinkPoolSize--
-		} else {
-			break
-		}
-	}
-
-	return nil
 }
 
 func (w *worker[T, JobType]) NumConcurrency() int {
