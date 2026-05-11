@@ -517,6 +517,12 @@ func TestWaiters(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, w.IsStopped(), "Worker should be stopped immediately")
 		})
+
+		t.Run("returns error when Stop fails", func(t *testing.T) {
+			w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+			err := w.StopAndWait()
+			assert.ErrorIs(t, err, ErrNotRunningWorker)
+		})
 	})
 
 	t.Run("WaitAndStop", func(t *testing.T) {
