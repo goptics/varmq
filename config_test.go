@@ -188,6 +188,10 @@ func TestConfig(t *testing.T) {
 			)
 
 			assert.Equal(t, uint32(3), c.concurrency)
+
+			// Test with string type (sets name)
+			c = mergeConfigs(baseConfig, "test-worker")
+			assert.Equal(t, "test-worker", c.name)
 		})
 	})
 
@@ -414,19 +418,19 @@ func TestDefaultConfig(t *testing.T) {
 		tests := []struct {
 			name     string
 			duration time.Duration
+			expected time.Duration
 		}{
-			{"Sets seconds duration", 30 * time.Second},
-			{"Sets minute duration", 5 * time.Minute},
-			{"Sets zero duration", 0},
-			{"Sets large duration", 24 * time.Hour},
+			{"Sets seconds duration", 30 * time.Second, 30 * time.Second},
+			{"Sets minute duration", 5 * time.Minute, 5 * time.Minute},
+			{"Sets zero duration", 0, 0},
+			{"Sets large duration", 24 * time.Hour, 24 * time.Hour},
 		}
 
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
 				defaultConfig = original
-				ctx := context.TODO()
-				DefaultCtx(ctx)
-				assert.Equal(t, ctx, defaultConfig.ctx)
+				DefaultIdleWorkerExpiryDuration(tc.duration)
+				assert.Equal(t, tc.expected, defaultConfig.idleWorkerExpiryDuration)
 			})
 		}
 	})

@@ -10,6 +10,255 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func setupMuxServer() (*http.ServeMux, func()) {
+	WorkerRegistry.Clear()
+	server := NewServerMux()
+	return server, func() {
+		WorkerRegistry.Range(func(key, value any) bool {
+			if w, ok := value.(Worker); ok {
+				w.Stop()
+			}
+			return true
+		})
+		WorkerRegistry.Clear()
+	}
+}
+
+func TestMuxHealthCheck(t *testing.T) {
+	server, cleanup := setupMuxServer()
+	defer cleanup()
+
+	req, err := http.NewRequest("GET", "/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var response map[string]string
+	json.NewDecoder(rr.Body).Decode(&response)
+	assert.Equal(t, "ok", response["status"])
+}
+
+func TestHandler(t *testing.T) {
+	WorkerRegistry.Clear()
+	defer WorkerRegistry.Clear()
+
+	handler := Handler("/varmq")
+	assert.NotNil(t, handler)
+
+	req, err := http.NewRequest("GET", "/varmq/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestMuxGetWorkerNotFound(t *testing.T) {
+	server, cleanup := setupMuxServer()
+	defer cleanup()
+
+	req, err := http.NewRequest("GET", "/workers/nonexistent", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestMuxWorkerActionNotFound(t *testing.T) {
+	server, cleanup := setupMuxServer()
+	defer cleanup()
+
+	req, err := http.NewRequest("PATCH", "/workers/nonexistent/actions/pause", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestMuxWorkerActionUnknown(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("unknown-action-worker"))
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/unknown-action-worker/actions/unknown", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestMuxWorkerStartConflict(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("start-conflict-worker"))
+	wb := newQueues(w)
+	wb.BindQueue()
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/start-conflict-worker/actions/start", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusConflict, rr.Code)
+}
+
+func TestMuxWorkerRestart(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("restart-worker"), WithConcurrency(2))
+	wb := newQueues(w)
+	wb.BindQueue()
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/restart-worker/actions/restart", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestMuxWorkerRestartNotRunning(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("restart-not-running-worker"), WithAutoRun(false))
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/restart-not-running-worker/actions/restart", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusConflict, rr.Code)
+}
+
+func TestMuxWorkerActionInternalError(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("internal-error-worker"))
+	w.StopAndWait()
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/internal-error-worker/actions/resume", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestMuxConcurrencyWorkerNotFound(t *testing.T) {
+	server, cleanup := setupMuxServer()
+	defer cleanup()
+
+	req, err := http.NewRequest("PATCH", "/workers/nonexistent/config/concurrency/5", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestMuxConcurrencyInvalid(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("concurrency-worker"))
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/concurrency-worker/config/concurrency/invalid", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestMuxConcurrencySameValue(t *testing.T) {
+	WorkerRegistry.Clear()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("same-concurrency-worker"), WithConcurrency(1))
+	wb := newQueues(w)
+	wb.BindQueue()
+	server := NewServerMux()
+	defer w.Stop()
+
+	req, err := http.NewRequest("PATCH", "/workers/same-concurrency-worker/config/concurrency/1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusConflict, rr.Code)
+}
+
+func TestMuxGetWorkerNilValue(t *testing.T) {
+	WorkerRegistry.Clear()
+	WorkerRegistry.Store("nil-worker", nil)
+	server := NewServerMux()
+	defer WorkerRegistry.Clear()
+
+	req, err := http.NewRequest("GET", "/workers/nil-worker", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestMuxGetWorkerWrongType(t *testing.T) {
+	WorkerRegistry.Clear()
+	WorkerRegistry.Store("non-worker", "some string")
+	server := NewServerMux()
+	defer WorkerRegistry.Clear()
+
+	req, err := http.NewRequest("GET", "/workers/non-worker", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func TestMuxListWorkers(t *testing.T) {
 	// Clear registry for clean test
 	WorkerRegistry.Clear()
