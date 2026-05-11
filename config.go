@@ -20,6 +20,7 @@ type configs struct {
 	idleWorkerExpiryDuration time.Duration
 	ctx                      context.Context
 	name                     string
+	stoppedRetention         time.Duration
 }
 
 var defaultConfig = configs{
@@ -28,7 +29,8 @@ var defaultConfig = configs{
 	jobIdGenerator: func() string {
 		return ""
 	},
-	strategy: Priority,
+	strategy:         Priority,
+	stoppedRetention: 1 * time.Minute,
 }
 
 // DefaultConcurrency sets the default concurrency level for all newly created workers.
@@ -113,6 +115,36 @@ func DefaultIdleWorkerExpiryDuration(duration time.Duration) {
 // Default: nil (no context)
 func DefaultCtx(ctx context.Context) {
 	defaultConfig.ctx = ctx
+}
+
+// DefaultStoppedRetention sets the default time after a stopped worker
+// is automatically removed from the global registry.
+//
+// When a worker with a name is stopped, a timer starts for this duration.
+// If the timer expires before the worker is started again, the worker
+// is removed from [WorkerRegistry].
+//
+// Set to 0 to disable (worker stays in registry forever after stop).
+//
+// Default: 1 minute
+func DefaultStoppedRetention(duration time.Duration) {
+	defaultConfig.stoppedRetention = duration
+}
+
+// WithStoppedRetention configures the time after a stopped worker
+// is automatically removed from the global registry.
+//
+// When the worker stops, a timer starts for this duration.
+// If the timer expires before the worker is started again, the worker
+// is removed from [WorkerRegistry].
+//
+// Set to 0 to disable (worker stays in registry forever after stop).
+//
+// Default: 1 minute (from [DefaultStoppedRetention])
+func WithStoppedRetention(duration time.Duration) ConfigFunc {
+	return func(c *configs) {
+		c.stoppedRetention = duration
+	}
 }
 
 func newConfig() configs {

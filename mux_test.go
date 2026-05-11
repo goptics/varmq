@@ -146,6 +146,7 @@ func TestMuxWorkerRestartNotRunning(t *testing.T) {
 	WorkerRegistry.Clear()
 
 	w := newWorker(func(j iJob[int]) {}, WithName("restart-not-running-worker"), WithAutoRun(false))
+	WorkerRegistry.Store("restart-not-running-worker", w)
 	server := NewServerMux()
 	defer w.Stop()
 

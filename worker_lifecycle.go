@@ -17,6 +17,15 @@ func (w *worker[T, JobType]) Start() error {
 		w.initContext(w.Configs.ctx)
 	}
 
+	if w.registryTimer != nil {
+		w.registryTimer.Stop()
+		w.registryTimer = nil
+	}
+
+	if name := w.Name(); name != "" {
+		WorkerRegistry.Store(name, w)
+	}
+
 	w.goEventLoop()
 	w.goRemoveIdleWorkers()
 

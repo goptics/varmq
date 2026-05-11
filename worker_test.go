@@ -1267,3 +1267,114 @@ func TestRestartConcurrency(t *testing.T) {
 	w.Stop()
 	w.WaitUntilStopped()
 }
+
+func TestWorkerRegistration(t *testing.T) {
+	t.Run("Named worker registered after Start", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("reg-test"))
+		_, loaded := WorkerRegistry.Load("reg-test")
+		assert.True(t, loaded, "named worker should be registered after creation")
+
+		w.Stop()
+	})
+
+	t.Run("Unnamed worker not registered", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+		var count int
+		WorkerRegistry.Range(func(_, _ any) bool {
+			count++
+			return true
+		})
+		assert.Zero(t, count, "unnamed worker should not be in registry")
+		w.Stop()
+	})
+
+	t.Run("WithAutoRun(false) not registered until Start", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("lazy-reg"), WithAutoRun(false))
+		_, loaded := WorkerRegistry.Load("lazy-reg")
+		assert.False(t, loaded, "worker should not be registered before Start")
+
+		w.Start()
+		_, loaded = WorkerRegistry.Load("lazy-reg")
+		assert.True(t, loaded, "worker should be registered after Start")
+
+		w.Stop()
+	})
+
+	t.Run("Worker re-registered after Start following Stop", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("re-reg"), WithStoppedRetention(10*time.Millisecond))
+		_, loaded := WorkerRegistry.Load("re-reg")
+		assert.True(t, loaded)
+
+		w.StopAndWait()
+		time.Sleep(50 * time.Millisecond)
+		_, loaded = WorkerRegistry.Load("re-reg")
+		assert.False(t, loaded, "worker should be removed after retention")
+
+		w.Start()
+		_, loaded = WorkerRegistry.Load("re-reg")
+		assert.True(t, loaded, "worker should be re-registered after Start")
+
+		w.Stop()
+	})
+
+	t.Run("Retention timer removes worker from registry", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("retention-test"), WithStoppedRetention(10*time.Millisecond))
+		_, loaded := WorkerRegistry.Load("retention-test")
+		assert.True(t, loaded, "worker should be registered initially")
+
+		w.StopAndWait()
+		time.Sleep(50 * time.Millisecond)
+		_, loaded = WorkerRegistry.Load("retention-test")
+		assert.False(t, loaded, "worker should be removed from registry after retention")
+	})
+
+	t.Run("Zero retention keeps worker in registry", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("no-retention"), WithStoppedRetention(0))
+		_, loaded := WorkerRegistry.Load("no-retention")
+		assert.True(t, loaded, "worker should be registered initially")
+
+		w.StopAndWait()
+		time.Sleep(50 * time.Millisecond)
+		_, loaded = WorkerRegistry.Load("no-retention")
+		assert.True(t, loaded, "worker should stay in registry when retention is 0")
+
+		w.Stop()
+	})
+
+	t.Run("Restart cancels retention timer", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		w := newWorker(func(j iJob[string]) {}, WithName("restart-retention"), WithStoppedRetention(50*time.Millisecond))
+		_, loaded := WorkerRegistry.Load("restart-retention")
+		assert.True(t, loaded)
+
+		w.Restart()
+		_, loaded = WorkerRegistry.Load("restart-retention")
+		assert.True(t, loaded, "worker should stay in registry after restart")
+
+		time.Sleep(100 * time.Millisecond)
+		_, loaded = WorkerRegistry.Load("restart-retention")
+		assert.True(t, loaded, "worker should still be in registry after retention period (restart cancelled timer)")
+
+		w.Stop()
+	})
+}

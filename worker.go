@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/goptics/varmq/internal/pool"
 )
@@ -44,6 +45,7 @@ type worker[T any, JobType iJob[T]] struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	Configs         configs
+	registryTimer   *time.Timer
 }
 
 // Worker represents a worker that processes Jobs.
@@ -304,7 +306,6 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		w.Start()
 	}
 
-	registerWorker(w)
 	return w
 }
 
@@ -330,7 +331,6 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		w.Start()
 	}
 
-	registerWorker(w)
 	return w
 }
 
@@ -356,7 +356,6 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		w.Start()
 	}
 
-	registerWorker(w)
 	return w
 }
 

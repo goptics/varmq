@@ -3,6 +3,7 @@ package varmq
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 func (w *worker[T, JobType]) goEventLoop() {
@@ -16,6 +17,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Lock()
 				w.status.Store(stopped)
 				w.waiters.Broadcast()
+				w.scheduleRetentionCleanup()
 				w.mx.Unlock()
 				return
 			case <-signal:
@@ -120,4 +122,18 @@ func (w *worker[T, JobType]) notifyToPullNextJobs() {
 	case w.eventLoopSignal <- struct{}{}:
 	default:
 	}
+}
+
+func (w *worker[T, JobType]) scheduleRetentionCleanup() {
+	if w.Configs.stoppedRetention <= 0 {
+		return
+	}
+
+	if w.Name() == "" {
+		return
+	}
+
+	w.registryTimer = time.AfterFunc(w.Configs.stoppedRetention, func() {
+		WorkerRegistry.Delete(w.Name())
+	})
 }

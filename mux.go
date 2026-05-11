@@ -53,14 +53,6 @@ func NewServerMux() *http.ServeMux {
 	return mux
 }
 
-// registerWorker stores the worker in the global registry.
-func registerWorker(w Worker) {
-	name := w.Name()
-	if w != nil && name != "" {
-		WorkerRegistry.Store(name, w)
-	}
-}
-
 // handleHealthCheck returns a simple 200 OK status.
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
