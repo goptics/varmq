@@ -173,7 +173,11 @@ func mergeConfigs(c configs, cs ...any) configs {
 }
 
 // WithName configures the name for the worker.
-// If not set, a default name will be generated like "worker-1", "worker-2", etc.
+//
+// Providing a non-empty name sets the worker name, which is used for
+// registration in [WorkerRegistry] when the worker starts.
+// If left empty, no default name is generated and the worker will not be
+// registered or queryable via the Mux HTTP API.
 func WithName(name string) ConfigFunc {
 	return func(c *configs) {
 		c.name = name

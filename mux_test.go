@@ -38,7 +38,8 @@ func TestMuxHealthCheck(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	var response map[string]string
-	json.NewDecoder(rr.Body).Decode(&response)
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	assert.NoError(t, err)
 	assert.Equal(t, "ok", response["status"])
 }
 
@@ -314,7 +315,7 @@ func TestMuxGetWorker(t *testing.T) {
 	// Force it to start so state becomes initiated/idle
 	wb := newQueues(w)
 	_ = wb.BindQueue()
-	time.Sleep(100 * time.Millisecond) // Give time to spin up idle workers
+	assert.Eventually(t, w.IsActive, time.Second, 10*time.Millisecond)
 
 	server := NewServerMux()
 

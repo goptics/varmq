@@ -134,6 +134,10 @@ func (w *worker[T, JobType]) scheduleRetentionCleanup() {
 	}
 
 	w.registryTimer = time.AfterFunc(w.Configs.stoppedRetention, func() {
-		WorkerRegistry.Delete(w.Name())
+		w.mx.Lock()
+		if w.IsStopped() {
+			WorkerRegistry.Delete(w.Name())
+		}
+		w.mx.Unlock()
 	})
 }
