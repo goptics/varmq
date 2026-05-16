@@ -7,20 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
-)
-
-type status = uint32
-
-const (
-	initiated status = iota
-	idle
-	running
-	pausing
-	paused
-	stopping
-	stopped
 )
 
 const (
@@ -58,10 +45,13 @@ type worker[T any, JobType iJob[T]] struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	Configs         configs
+	registryTimer   *time.Timer
 }
 
 // Worker represents a worker that processes Jobs.
 type Worker interface {
+	// Name returns the unique name of the worker.
+	Name() string
 	// IsRunning returns whether the worker is actively processing jobs.
 	//
 	// A worker is Running when it has at least one job currently being processed.
@@ -92,7 +82,7 @@ type Worker interface {
 	IsStopped() bool
 	// Status returns the human-readable current status of the worker.
 	//
-	// Possible values: "Idle", "Running", "Pausing", "Paused",
+	// Possible values: "Initiated", "Idle", "Running", "Pausing", "Paused",
 	// "Stopping", "Stopped"
 	Status() string
 	// NumProcessing returns the number of jobs currently being processed
@@ -381,22 +371,6 @@ func (w *worker[T, JobType]) configs() configs {
 	return w.Configs
 }
 
-func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
-	if processing != 0 {
-		return
-	}
-
-	defer w.waiters.Broadcast()
-
-	if w.status.CompareAndSwap(running, idle) {
-		return
-	}
-
-	if w.status.CompareAndSwap(pausing, paused) {
-		return
-	}
-}
-
 func (w *worker[T, JobType]) sendError(err error) {
 	select {
 	case w.errorChan <- err:
@@ -404,335 +378,28 @@ func (w *worker[T, JobType]) sendError(err error) {
 	}
 }
 
+func (w *worker[T, JobType]) Name() string {
+	return w.Configs.name
+}
+
+func (w *worker[T, JobType]) Context() context.Context {
+	return w.ctx
+}
+
 func (w *worker[T, JobType]) Metrics() Metrics {
 	return w.metrics
-}
-
-// Wait blocks until the worker has no pending jobs in the queue
-// and no jobs currently being processed.
-//
-// See the Worker interface for full documentation.
-func (w *worker[T, JobType]) Wait() {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	for {
-		s := w.status.Load()
-		switch s {
-		case running, idle:
-			if w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
-				return
-			}
-		case paused, stopped, pausing, stopping:
-			if w.curProcessing.Load() == 0 {
-				return
-			}
-		default:
-			return
-		}
-		w.waiters.Wait()
-	}
-}
-
-func (w *worker[T, JobType]) WaitUntilIdle() {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	for {
-		if w.status.Load() == idle && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
-			return
-		}
-
-		w.waiters.Wait()
-	}
-}
-
-func (w *worker[T, JobType]) WaitUntilPaused() {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	for w.status.Load() != paused {
-		w.waiters.Wait()
-	}
-}
-
-func (w *worker[T, JobType]) WaitUntilStopped() {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	for w.status.Load() != stopped {
-		w.waiters.Wait()
-	}
 }
 
 func (w *worker[T, JobType]) Errs() <-chan error {
 	return w.errorChan
 }
 
-func (w *worker[T, JobType]) releaseProcessingSlot() {
-	w.mx.Lock()
-	processing := w.curProcessing.Add(^uint32(0))
-	w.releaseWaiters(processing)
-	w.mx.Unlock()
-	if processing < w.concurrency.Load() {
-		w.notifyToPullNextJobs()
-	}
+func (w *worker[T, JobType]) NumPending() int {
+	return w.queues.Len()
 }
 
-// processNextJob processes the next Job in the queue.
-func (w *worker[T, JobType]) processNextJob() error {
-	queue, err := w.queues.next()
-
-	if err != nil {
-		return ErrGetNextQueue
-	}
-
-	w.curProcessing.Add(1)
-	w.status.CompareAndSwap(idle, running)
-
-	var (
-		v     any
-		ok    bool
-		ackId string
-	)
-
-	switch q := queue.(type) {
-	case IAcknowledgeable:
-		v, ok, ackId = q.DequeueWithAckId()
-	default:
-		v, ok = q.Dequeue()
-	}
-
-	if !ok {
-		w.releaseProcessingSlot()
-		return ErrFailedToDequeue
-	}
-
-	var j JobType
-
-	switch value := v.(type) {
-	case JobType:
-		j = value
-	case []byte:
-		var err error
-		if v, err = parseToJob[T](value); err != nil {
-			w.releaseProcessingSlot()
-			return err
-		}
-
-		if j, ok = v.(JobType); !ok {
-			w.releaseProcessingSlot()
-			return ErrFailedToCastJob
-		}
-
-		j.setInternalQueue(queue)
-	default:
-		w.releaseProcessingSlot()
-		return ErrFailedToCastJob
-	}
-
-	if j.IsClosed() {
-		w.releaseProcessingSlot()
-		return nil
-	}
-
-	j.changeStatus(processing)
-	j.setAckId(ackId)
-
-	w.sendToNextChannel(j)
-
-	return nil
-}
-
-func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
-	// If worker timeout is enabled, update the last used time
-	enabledIdleWorkersRemover := w.Configs.idleWorkerExpiryDuration > 0
-
-	if enabledIdleWorkersRemover {
-		node.Value.UpdateLastUsed()
-	}
-
-	// If queue length is high or we're under our idle worker target, keep this worker
-	if w.queues.Len() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
-		w.pool.PushNode(node)
-		return
-	}
-
-	// Otherwise stop the worker to reduce idle workers
-	node.Value.Stop()
-	w.pool.Cache.Put(node)
-}
-
-// sendToNextChannel sends the job to the next available channel for processing.
-// Time complexity: O(1)
-func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
-	// pop the last free node
-	if node := w.pool.PopBack(); node != nil {
-		node.Value.Send(j)
-		return
-	}
-
-	// if the pool is empty, create a new node and spawn a worker
-	w.initPoolNode().Value.Send(j)
-}
-
-func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := w.pool.Cache.Get().(*linkedlist.Node[pool.Node[JobType]])
-
-	// Start a worker goroutine to process jobs from this nodes channel
-	go node.Value.Serve(func(j JobType) {
-		w.workerFunc(j)
-
-		j.changeStatus(finished)
-		if err := j.Close(); err != nil {
-			w.sendError(err)
-		}
-		w.metrics.incCompleted()
-		w.freePoolNode(node)
-		w.releaseProcessingSlot()
-	})
-
-	return node
-}
-
-// notifyToPullNextJobs notifies the pullNextJobs function to process the next Job.
-func (w *worker[T, JobType]) notifyToPullNextJobs() {
-	select {
-	case w.eventLoopSignal <- struct{}{}:
-	default:
-		// This default case means the eventLoopSignal buffer is full or
-		// no one is listening. This is generally fine as it's a non-blocking send.
-	}
-}
-
-// numMinIdleWorkers returns the number of idle workers to keep based on concurrency and config percentage
-func (w *worker[T, JobType]) numMinIdleWorkers() int {
-	percentage := w.Configs.minIdleWorkerRatio
-	concurrency := w.concurrency.Load()
-
-	return int(max((concurrency*uint32(percentage))/100, 1))
-}
-
-func (w *worker[T, JobType]) goRemoveIdleWorkers() {
-	interval := w.Configs.idleWorkerExpiryDuration
-
-	if interval == 0 {
-		return
-	}
-
-	ticker := time.NewTicker(interval)
-
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				// Calculate the target number of idle workers
-				targetIdleWorkers := w.numMinIdleWorkers()
-
-				// if the number of idle workers is less than or equal to the target, continue
-				if w.pool.Len() <= targetIdleWorkers {
-					continue
-				}
-
-				nodes := w.pool.NodeSlice()
-				// If we have more nodes than our target, close the excess ones
-				for _, node := range nodes[targetIdleWorkers:] {
-					if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
-						!(node.Next() == nil && node.Prev() == nil) { // if both nil, it means the node is not in the list and not idle
-						w.pool.Remove(node)
-						node.Value.Stop()
-						w.pool.Cache.Put(node)
-					}
-				}
-			}
-		}
-	}(w.ctx)
-}
-
-// starts the event loop that processes pending jobs when workers become available
-// It continuously checks if the worker is running, has available capacity, and if there are jobs in the queue
-// When all conditions are met, it processes the next job in the queue
-func (w *worker[T, JobType]) goEventLoop() {
-	go func(ctx context.Context, signal <-chan struct{}) {
-		for {
-			select {
-			case <-ctx.Done():
-				w.status.Store(stopping)
-				w.Wait()
-				w.removeAllWorkers()
-				w.mx.Lock()
-				w.status.Store(stopped)
-				w.waiters.Broadcast()
-				w.mx.Unlock()
-				return
-			case <-signal:
-				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
-					if err := w.processNextJob(); err != nil {
-						if errors.Is(err, ErrGetNextQueue) {
-							break
-						}
-						w.sendError(err)
-					}
-				}
-			}
-		}
-	}(w.ctx, w.eventLoopSignal)
-}
-
-// removeAllWorkers removes all nodes from the list and closes the pool nodes
-func (w *worker[T, JobType]) removeAllWorkers() {
-	for _, node := range w.pool.NodeSlice() {
-		w.pool.Remove(node)
-		node.Value.Stop()
-		w.pool.Cache.Put(node)
-	}
-}
-
-func (w *worker[T, JobType]) TunePool(concurrency int) error {
-	if !w.IsActive() {
-		return w.getStatusError()
-	}
-
-	oldConcurrency := w.concurrency.Load()
-	safeConcurrency := withSafeConcurrency(concurrency)
-
-	if oldConcurrency == safeConcurrency {
-		return ErrSameConcurrency
-	}
-
-	w.concurrency.Store(safeConcurrency)
-
-	// if new concurrency is greater than the old concurrency, then notify to pull next jobs
-	// cause it will be extended by the event loop when it needs
-	if safeConcurrency > oldConcurrency {
-		w.notifyToPullNextJobs()
-		return nil
-	}
-
-	// if idle worker expiry duration is set, then no need to shrink the pool size
-	// cause it will be removed by the idle worker remover
-	if w.Configs.idleWorkerExpiryDuration != 0 {
-		return nil
-	}
-
-	shrinkPoolSize, minIdleWorkers := oldConcurrency-safeConcurrency, w.numMinIdleWorkers()
-
-	// if current concurrency is greater than the safe concurrency, shrink the pool size
-	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
-		if node := w.pool.PopBack(); node != nil {
-			w.pool.Remove(node)
-			node.Value.Stop()
-			w.pool.Cache.Put(node)
-			shrinkPoolSize--
-		} else {
-			break
-		}
-	}
-
-	return nil
+func (w *worker[T, JobType]) NumProcessing() int {
+	return int(w.curProcessing.Load())
 }
 
 func (w *worker[T, JobType]) NumConcurrency() int {
@@ -741,212 +408,4 @@ func (w *worker[T, JobType]) NumConcurrency() int {
 
 func (w *worker[T, JobType]) NumIdleWorkers() int {
 	return w.pool.Len()
-}
-
-func (w *worker[T, JobType]) NumPending() int {
-	return w.queues.Len()
-}
-
-func (w *worker[T, JobType]) Pause() error {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	s := w.status.Load()
-	if s == paused || s == pausing {
-		return nil
-	}
-
-	if w.status.CompareAndSwap(idle, paused) {
-		w.waiters.Broadcast()
-		return nil
-	}
-
-	if w.status.CompareAndSwap(running, pausing) {
-		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
-			w.waiters.Broadcast()
-		}
-		return nil
-	}
-
-	return w.getStatusError()
-}
-
-func (w *worker[T, JobType]) Resume() error {
-	if w.status.CompareAndSwap(paused, idle) {
-		w.mx.Lock()
-		w.waiters.Broadcast()
-		w.mx.Unlock()
-		w.notifyToPullNextJobs()
-		return nil
-	}
-
-	if w.IsActive() {
-		return nil
-	}
-
-	return w.getStatusError()
-}
-
-func (w *worker[T, JobType]) Start() error {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-
-	if w.IsActive() {
-		return ErrRunningWorker
-	}
-
-	s := w.status.Load()
-	if s != initiated && s != stopped {
-		return w.getStatusError()
-	}
-
-	if s == stopped {
-		w.initContext(w.Configs.ctx)
-	}
-
-	w.goEventLoop()
-	w.goRemoveIdleWorkers()
-
-	// init the first worker by default
-	w.pool.PushNode(w.initPoolNode())
-
-	w.status.Store(idle)
-	w.waiters.Broadcast()
-	w.notifyToPullNextJobs()
-
-	return nil
-}
-
-func (w *worker[T, JobType]) Stop() error {
-	s := w.status.Load()
-
-	if s == stopped || s == stopping {
-		return nil
-	}
-
-	for _, from := range []status{running, idle, pausing, paused} {
-		if w.status.CompareAndSwap(from, stopping) {
-			w.mx.Lock()
-			w.cancel()
-			w.mx.Unlock()
-			return nil
-		}
-	}
-
-	return w.getStatusError()
-}
-
-func (w *worker[T, JobType]) Restart() error {
-	if err := w.Stop(); err != nil {
-		return err
-	}
-
-	w.mx.Lock()
-	for !w.IsStopped() && !w.IsActive() {
-		w.waiters.Wait()
-	}
-
-	if w.IsActive() {
-		w.mx.Unlock()
-		return ErrRunningWorker
-	}
-	w.mx.Unlock()
-
-	return w.Start()
-}
-
-func (w *worker[T, JobType]) IsPaused() bool {
-	return w.status.Load() == paused
-}
-
-func (w *worker[T, JobType]) IsRunning() bool {
-	return w.status.Load() == running
-}
-
-func (w *worker[T, JobType]) IsActive() bool {
-	s := w.status.Load()
-	return s == running || s == idle
-}
-
-func (w *worker[T, JobType]) IsIdle() bool {
-	return w.status.Load() == idle
-}
-
-func (w *worker[T, JobType]) IsStopped() bool {
-	return w.status.Load() == stopped
-}
-
-func (w *worker[T, JobType]) getStatusError() error {
-	switch s := w.status.Load(); s {
-	case paused:
-		return ErrWorkerPaused
-	case stopped:
-		return ErrWorkerStopped
-	case pausing:
-		return ErrWorkerPausing
-	case stopping:
-		return ErrWorkerStopping
-	case running, idle:
-		return ErrRunningWorker
-	default:
-		return ErrNotRunningWorker
-	}
-}
-
-func (w *worker[T, JobType]) Status() string {
-	switch w.status.Load() {
-	case initiated:
-		return "Initiated"
-	case idle:
-		return "Idle"
-	case running:
-		return "Running"
-	case pausing:
-		return "Pausing"
-	case paused:
-		return "Paused"
-	case stopping:
-		return "Stopping"
-	case stopped:
-		return "Stopped"
-	default:
-		return "Unknown"
-	}
-}
-
-func (w *worker[T, JobType]) NumProcessing() int {
-	return int(w.curProcessing.Load())
-}
-
-func (w *worker[T, JobType]) Context() context.Context {
-	return w.ctx
-}
-
-func (w *worker[T, JobType]) PauseAndWait() error {
-	if err := w.Pause(); err != nil {
-		return err
-	}
-
-	w.WaitUntilPaused()
-	return nil
-}
-
-func (w *worker[T, JobType]) WaitAndPause() error {
-	w.Wait()
-
-	return w.Pause()
-}
-
-func (w *worker[T, JobType]) StopAndWait() error {
-	if err := w.Stop(); err != nil {
-		return err
-	}
-
-	w.WaitUntilStopped()
-	return nil
-}
-
-func (w *worker[T, JobType]) WaitAndStop() error {
-	w.Wait()
-	return w.Stop()
 }

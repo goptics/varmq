@@ -38,7 +38,7 @@ jobs:
         run: go mod download
 
       - name: Run tests with coverage
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: go test -race -timeout 3m -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
@@ -64,4 +64,4 @@ jobs:
         run: go mod download
 
       - name: Run benchmark tests
-        run: go test -bench=. -benchmem
+        run: go test -bench=. -benchmem -timeout 3m

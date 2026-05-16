@@ -138,6 +138,17 @@ func TestConfig(t *testing.T) {
 				})
 			}
 		})
+
+		t.Run("WithStoppedRetention", func(t *testing.T) {
+			fn := WithStoppedRetention(5 * time.Minute)
+			c := newConfig()
+			fn(&c)
+			assert.Equal(t, 5*time.Minute, c.stoppedRetention)
+
+			fn = WithStoppedRetention(0)
+			fn(&c)
+			assert.Equal(t, time.Duration(0), c.stoppedRetention)
+		})
 	})
 
 	t.Run("ConfigManagement", func(t *testing.T) {
@@ -188,6 +199,14 @@ func TestConfig(t *testing.T) {
 			)
 
 			assert.Equal(t, uint32(3), c.concurrency)
+
+			// Test with StoppedRetention
+			c = mergeConfigs(baseConfig, WithStoppedRetention(10*time.Minute))
+			assert.Equal(t, 10*time.Minute, c.stoppedRetention)
+
+			// Test with string type (sets name)
+			c = mergeConfigs(baseConfig, "test-worker")
+			assert.Equal(t, "test-worker", c.name)
 		})
 	})
 
@@ -414,21 +433,39 @@ func TestDefaultConfig(t *testing.T) {
 		tests := []struct {
 			name     string
 			duration time.Duration
+			expected time.Duration
 		}{
-			{"Sets seconds duration", 30 * time.Second},
-			{"Sets minute duration", 5 * time.Minute},
-			{"Sets zero duration", 0},
-			{"Sets large duration", 24 * time.Hour},
+			{"Sets seconds duration", 30 * time.Second, 30 * time.Second},
+			{"Sets minute duration", 5 * time.Minute, 5 * time.Minute},
+			{"Sets zero duration", 0, 0},
+			{"Sets large duration", 24 * time.Hour, 24 * time.Hour},
 		}
 
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
 				defaultConfig = original
-				ctx := context.TODO()
-				DefaultCtx(ctx)
-				assert.Equal(t, ctx, defaultConfig.ctx)
+				DefaultIdleWorkerExpiryDuration(tc.duration)
+				assert.Equal(t, tc.expected, defaultConfig.idleWorkerExpiryDuration)
 			})
 		}
+	})
+
+	t.Run("DefaultStoppedRetention", func(t *testing.T) {
+		t.Run("Default is 1 minute", func(t *testing.T) {
+			assert.Equal(t, 1*time.Minute, defaultConfig.stoppedRetention)
+		})
+
+		t.Run("Sets duration", func(t *testing.T) {
+			defaultConfig = original
+			DefaultStoppedRetention(5 * time.Minute)
+			assert.Equal(t, 5*time.Minute, defaultConfig.stoppedRetention)
+		})
+
+		t.Run("Sets zero to disable", func(t *testing.T) {
+			defaultConfig = original
+			DefaultStoppedRetention(0)
+			assert.Equal(t, time.Duration(0), defaultConfig.stoppedRetention)
+		})
 	})
 
 	t.Run("DefaultCtx", func(t *testing.T) {
@@ -441,8 +478,7 @@ func TestDefaultConfig(t *testing.T) {
 
 		t.Run("Sets context with cancel", func(t *testing.T) {
 			defaultConfig = original
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			DefaultCtx(ctx)
 			assert.Equal(t, ctx, defaultConfig.ctx)
 		})

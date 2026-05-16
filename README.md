@@ -28,6 +28,7 @@ With `VarMQ`, you can process messages asynchronously, handle errors properly, s
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
+- **📡 REST API**: Built-in HTTP endpoints to inspect worker status and manage state (pause, resume, stop, restart)
 - **🧩 Extensible**: Build your own storage adapters by implementing VarMQ's [internal queue interfaces](./assets/diagrams/interface.drawio.png)
 
 ## Quick Start
@@ -226,6 +227,29 @@ for i := range 100 {
 > [!Important]
 > Function helpers don't support persistence or distribution since functions cannot be serialized.
 
+### REST API
+
+VarMQ provides a built-in HTTP REST API for inspecting worker status and managing worker state remotely. Register the handler on any `http.Server` to expose endpoints:
+
+```go
+mux := http.NewServeMux()
+mux.Handle("/varmq/", varmq.Handler("/varmq"))
+http.ListenAndServe(":8080", mux)
+```
+
+Available endpoints:
+
+| Method   | Path                                      | Description                  |
+|----------|-------------------------------------------|------------------------------|
+| `GET`    | `/health`                                 | Health check                 |
+| `GET`    | `/workers`                                | List all workers (summary)   |
+| `GET`    | `/workers/{name}`                         | Get worker details + metrics |
+| `PATCH`  | `/workers/{name}/actions/{action}`        | Pause, resume, stop, restart |
+| `PATCH`  | `/workers/{name}/config/concurrency/{n}`  | Adjust concurrency           |
+
+> [!Warning]
+> The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.
+
 ## Benchmarks
 
 ```text
@@ -243,12 +267,12 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 889.6        | 112           | 2                       |
-|                  | Priority       | 965.7        | 128           | 3                       |
-| **ErrWorker**    | ErrQueue       | 977.8        | 288           | 5                       |
-|                  | ErrPriority    | 1063         | 304           | 6                       |
-| **ResultWorker** | ResultQueue    | 977.3        | 337           | 5                       |
-|                  | ResultPriority | 1061         | 352           | 6                       |
+| **Worker**       | Queue          | 1,045        | 113           | 2                       |
+|                  | Priority       | 1,072        | 128           | 3                       |
+| **ErrWorker**    | ErrQueue       | 1,153        | 289           | 5                       |
+|                  | ErrPriority    | 1,145        | 304           | 6                       |
+| **ResultWorker** | ResultQueue    | 1,167        | 337           | 5                       |
+|                  | ResultPriority | 1,155        | 352           | 6                       |
 
 ### `AddAll` Operation
 
@@ -256,12 +280,12 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 580,399      | 130,760       | 3,002                   |
-|                  | Priority       | 716,784      | 146,136       | 4,002                   |
-| **ErrWorker**    | ErrQueue       | 617,236      | 155,276       | 3,505                   |
-|                  | ErrPriority    | 753,532      | 170,657       | 4,505                   |
-| **ResultWorker** | ResultQueue    | 608,826      | 171,848       | 3,005                   |
-|                  | ResultPriority | 742,789      | 187,258       | 4,005                   |
+| **Worker**       | Queue          | 649,822      | 130,601       | 3,002                   |
+|                  | Priority       | 776,409      | 146,139       | 4,002                   |
+| **ErrWorker**    | ErrQueue       | 684,882      | 154,895       | 3,505                   |
+|                  | ErrPriority    | 808,360      | 170,661       | 4,505                   |
+| **ResultWorker** | ResultQueue    | 690,249      | 171,540       | 3,005                   |
+|                  | ResultPriority | 803,115      | 187,262       | 4,005                   |
 
 > [!Note]
 >
@@ -289,7 +313,7 @@ For detailed performance comparisons and benchmarking results, visit:
 
 ## API Reference
 
-For detailed API documentation, see the **[API Reference](./docs/API_REFERENCE.md)**.
+For the complete package documentation, types, and method signatures, browse the **[GoDoc](https://pkg.go.dev/github.com/goptics/varmq)**.
 
 ## The Concurrency Architecture
 

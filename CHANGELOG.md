@@ -1,5 +1,58 @@
 # Changelog
 
+## [v1.7.0] (2026-05-16)
+
+### ✨ New Features
+
+- **REST API** (#80): Built-in HTTP endpoints to inspect and manage workers remotely.
+  - `GET /health` — health check
+  - `GET /workers` — list all workers (summary)
+  - `GET /workers/{name}` — detailed worker info + metrics
+  - `PATCH /workers/{name}/actions/{action}` — pause, resume, stop, restart, start
+  - `PATCH /workers/{name}/config/concurrency/{n}` — adjust concurrency
+  - Register via `varmq.Handler("/varmq")` or `varmq.NewServerMux()`
+  - **Security note**: endpoints are unauthenticated by design — protect with middleware, network isolation, or a reverse proxy before production use.
+
+- **Lifecycle State Machine** (#72): Introduced a formal state machine with 8 distinct worker states: `Initiated`, `Idle`, `Running`, `Pausing`, `Paused`, `Stopping`, `Stopped`, and `Unknown`.
+  - `Status()` returns the human-readable current state.
+  - `WaitUntilPaused()` — blocks until the worker reaches the `Paused` state.
+  - `WaitUntilStopped()` — blocks until the worker reaches the `Stopped` state.
+  - `Wait()` — universal await: returns when all in-flight jobs complete regardless of final state.
+  - **Behavioral change**: `WaitUntilIdle()` now specifically waits for the `Idle` state (not just "work done"). If the worker is paused or stopped with no work, it blocks indefinitely — use `Wait()` instead when you only care that work is finished.
+
+- **Stopped Retention for Worker Registry**: Workers in the `Stopped` state are retained in the global `WorkerRegistry` (not auto-removed), allowing the REST API to report on stopped workers.
+
+- **Start Action in Mux Handler**: Added `start` as a valid action in `PATCH /workers/{name}/actions/start`.
+
+### 🐛 Bug Fixes
+
+- **Condition Variable Race Conditions** (#78): Fixed race conditions in the waiter system caused by improper condition variable synchronization.
+- **Named Worker Registration**: Fixed an issue where unnamed workers were being registered in the global `WorkerRegistry`. Only workers with an explicit name are now registered.
+- **Flaky Waiter Tests**: Stabilized flaky tests in the worker lifecycle test suite and removed redundant test cases.
+
+### 🔧 Refactoring
+
+- **Worker Module Decomposition**: Split the monolithic `worker.go` (~1,200 lines) into focused modules:
+  - `worker_state.go` — status constants and state machine logic
+  - `worker_lifecycle.go` — pause, stop, restart, start implementations
+  - `worker_eventloop.go` — event loop and job dispatch
+  - `worker_pool.go` — pool management and concurrency tuning
+  - `worker_wait.go` — wait semantics and condition variable handling
+- **Context Management** (#74): Moved worker context lifecycle management into the event loop for cleaner shutdown semantics.
+- **Processing Cleanup Deduplication** (#77): Extracted `releaseProcessingSlot` to reduce redundant cleanup logic across waiters.
+- **Universal `Wait`** (#73): Refactored `Wait()` to work correctly across all worker states (Running, Idle, Pausing, Paused, Stopping, Stopped).
+
+### 📚 Documentation
+
+- **README**: Added REST API section with endpoint table and security warning, updated benchmark data, added GoDoc link.
+- **Removed `docs/API_REFERENCE.md`**: Prefer GoDoc for complete package documentation.
+- **Status() GoDoc**: Updated to list all 8 possible return values matching the implementation.
+
+### 📈 Impact Summary
+
+This release introduces a REST API for remote worker management, a formal state machine with 8 lifecycle states, and a major internal refactoring that decomposes the worker module into focused, maintainable files. The `WaitUntilIdle()` behavior change ensures state-specific waiting semantics — use `Wait()` when you only need to know that work is done.
+
+
 ## [v1.6.1] (2026-03-13)
 
 ### 🐛 Bug Fixes
