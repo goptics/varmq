@@ -82,7 +82,7 @@ type Worker interface {
 	IsStopped() bool
 	// Status returns the human-readable current status of the worker.
 	//
-	// Possible values: "Idle", "Running", "Pausing", "Paused",
+	// Possible values: "Initiated", "Idle", "Running", "Pausing", "Paused",
 	// "Stopping", "Stopped"
 	Status() string
 	// NumProcessing returns the number of jobs currently being processed
