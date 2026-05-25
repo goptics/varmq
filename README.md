@@ -289,8 +289,8 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
 > [!Note]
 >
-> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.  
-> e.g. for default `Queue`, the average time per item is approximately **580ns**.
+> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
+> e.g. for default `Queue`, the average time per item is approximately **650ns**.
 
 Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
 
@@ -309,7 +309,8 @@ We conducted comprehensive benchmarking between `VarMQ` and [Pond v2](https://gi
 For detailed performance comparisons and benchmarking results, visit:
 
 - 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
-- 📈 **[Interactive Charts](https://varmq-benchmarks.netlify.app/)** - Visual performance comparisons
+- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Visual performance comparisons
+- 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
 
 ## API Reference
 
