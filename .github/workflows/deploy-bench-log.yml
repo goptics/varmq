@@ -1,0 +1,65 @@
+name: Benchmark Logs
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  actions: write
+  contents: write
+  pages: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch existing merged.json from bench-data
+        run: |
+          git init /tmp/bench-data
+          cd /tmp/bench-data
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git fetch origin bench-data 2>/dev/null || true
+          if git rev-parse origin/bench-data &>/dev/null; then
+            git checkout bench-data
+            cp merged.json "${{ github.workspace }}/prev-merged.json"
+          fi
+
+      - name: Run benchmark and merge
+        uses: goptics/vizb@v0
+        with:
+          bench-cmd: "go test -bench=. -benchmem -cpu=1"
+          tag: ${{ github.ref_name }}
+          merge-dir: prev-merged.json
+          group-pattern: n/y
+          name: "VarMQ Benchmark Log"
+          scale: log
+          tag-axis: x
+          output-json: merged.json
+          output-html: pages/bench-log/index.html
+
+      - name: Push merged.json to orphan bench-data branch
+        run: |
+          cd /tmp/bench-data
+          if [ ! -f merged.json ] || ! git rev-parse --verify bench-data &>/dev/null; then
+            git checkout --orphan bench-data
+            git rm -rf . || true
+          fi
+          cp "${{ github.workspace }}/merged.json" .
+          git add merged.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --cached --quiet || git commit -m "update benchmark data [${{ github.ref_name }}]"
+          git push origin bench-data
+
+      - name: Deploy index.html to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: pages
+          publish_branch: gh-pages
