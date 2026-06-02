@@ -938,21 +938,6 @@ func TestWorkers(t *testing.T) {
 	})
 }
 
-func TestPublicWorkerErrors(t *testing.T) {
-	t.Run("ErrGetNextQueue can be detected with errors.Is", func(t *testing.T) {
-		w := newWorker(func(j iJob[string]) {})
-		defer w.StopAndWait()
-
-		// Register an empty queue so next() returns ErrAllItemsEmpty,
-		// which processNextJob returns as ErrGetNextQueue.
-		mockQueue := mocks.NewMockPersistentQueue()
-		w.queues.Register(mockQueue, math.MaxInt)
-
-		err := w.processNextJob()
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrGetNextQueue, "should return ErrGetNextQueue sentinel")
-	})
-}
 
 type mockJob struct {
 	*job[string]

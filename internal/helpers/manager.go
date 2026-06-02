@@ -1,16 +1,11 @@
 package helpers
 
 import (
-	"errors"
 	"reflect"
 	"slices"
 	"sync"
 )
 
-var (
-	ErrNoItemsRegistered = errors.New("no items registered")
-	ErrAllItemsEmpty     = errors.New("all items are empty")
-)
 
 // Sizer is an interface for anything that has a Len method
 type Sizer interface {
@@ -102,12 +97,12 @@ func (m *Manager[T]) Len() int {
 }
 
 // GetMaxLenItem returns the item with the maximum length
-func (m *Manager[T]) GetMaxLenItem() (T, error) {
+func (m *Manager[T]) GetMaxLenItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
 	if len(m.items) == 0 {
-		return *new(T), ErrNoItemsRegistered
+		return *new(T), false
 	}
 
 	maxItem := slices.MaxFunc(m.items, func(a, b registered[T]) int {
@@ -115,19 +110,19 @@ func (m *Manager[T]) GetMaxLenItem() (T, error) {
 	})
 
 	if maxItem.item.Len() == 0 {
-		return *new(T), ErrAllItemsEmpty
+		return *new(T), false
 	}
 
-	return maxItem.item, nil
+	return maxItem.item, true
 }
 
 // GetMinLenItem returns the item with the minimum length (excluding empty items unless all are empty)
-func (m *Manager[T]) GetMinLenItem() (T, error) {
+func (m *Manager[T]) GetMinLenItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
 	if len(m.items) == 0 {
-		return *new(T), ErrNoItemsRegistered
+		return *new(T), false
 	}
 
 	var minItem T
@@ -144,38 +139,38 @@ func (m *Manager[T]) GetMinLenItem() (T, error) {
 
 	// If no non-empty items found, all items are empty
 	if minLen == -1 {
-		return *new(T), ErrAllItemsEmpty
+		return *new(T), false
 	}
 
-	return minItem, nil
+	return minItem, true
 }
 
 // GetPriorityItem returns the first item with length > 0 based on priority (highest priority first).
 // Since items are inherently stored sorted by priority (lowest number first), it simply returns the first non-empty item.
-func (m *Manager[T]) GetPriorityItem() (T, error) {
+func (m *Manager[T]) GetPriorityItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
 	if len(m.items) == 0 {
-		return *new(T), ErrNoItemsRegistered
+		return *new(T), false
 	}
 
 	for _, r := range m.items {
 		if r.item.Len() > 0 {
-			return r.item, nil
+			return r.item, true
 		}
 	}
 
-	return *new(T), ErrAllItemsEmpty
+	return *new(T), false
 }
 
 // GetRoundRobinItem returns the next item in round-robin order
-func (m *Manager[T]) GetRoundRobinItem() (T, error) {
+func (m *Manager[T]) GetRoundRobinItem() (T, bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
 	if len(m.items) == 0 {
-		return *new(T), ErrNoItemsRegistered
+		return *new(T), false
 	}
 
 	start := m.roundRobinIndex
@@ -185,11 +180,11 @@ func (m *Manager[T]) GetRoundRobinItem() (T, error) {
 		m.roundRobinIndex = (m.roundRobinIndex + 1) % len(m.items)
 
 		if r.item.Len() > 0 {
-			return r.item, nil
+			return r.item, true
 		}
 
 		if m.roundRobinIndex == start {
-			return *new(T), ErrAllItemsEmpty
+			return *new(T), false
 		}
 	}
 }

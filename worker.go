@@ -26,7 +26,6 @@ var (
 	ErrSameConcurrency  = errors.New("worker already has the same concurrency")
 	ErrFailedToDequeue  = errors.New("failed to dequeue job")
 	ErrFailedToCastJob  = errors.New("failed to cast job")
-	ErrGetNextQueue     = errors.New("failed to get next queue")
 	ErrParseJob         = errors.New("failed to parse job")
 )
 

@@ -2,7 +2,6 @@ package varmq
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -23,9 +22,6 @@ func (w *worker[T, JobType]) goEventLoop() {
 			case <-signal:
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
 					if err := w.processNextJob(); err != nil {
-						if errors.Is(err, ErrGetNextQueue) {
-							break
-						}
 						w.sendError(err)
 					}
 				}
@@ -35,10 +31,10 @@ func (w *worker[T, JobType]) goEventLoop() {
 }
 
 func (w *worker[T, JobType]) processNextJob() error {
-	queue, err := w.queues.next()
+	queue, found := w.queues.next()
 
-	if err != nil {
-		return ErrGetNextQueue
+	if !found {
+		return nil
 	}
 
 	w.curProcessing.Add(1)
