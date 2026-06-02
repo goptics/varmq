@@ -139,6 +139,28 @@ func TestConfig(t *testing.T) {
 			}
 		})
 
+		t.Run("WithErrHandler", func(t *testing.T) {
+			t.Run("Sets handler", func(t *testing.T) {
+				called := false
+				handler := func(Worker, error) { called = true }
+				configFunc := WithErrHandler(handler)
+				c := newConfig()
+				configFunc(&c)
+				assert.NotNil(t, c.errHandler)
+				c.errHandler(nil, nil)
+				assert.True(t, called)
+			})
+
+			t.Run("Nil preserves default", func(t *testing.T) {
+				configFunc := WithErrHandler(nil)
+				c := newConfig()
+				configFunc(&c)
+				// default no-op should still be callable without panic
+				assert.NotNil(t, c.errHandler)
+				assert.NotPanics(t, func() { c.errHandler(nil, nil) })
+			})
+		})
+
 		t.Run("WithStoppedRetention", func(t *testing.T) {
 			fn := WithStoppedRetention(5 * time.Minute)
 			c := newConfig()
@@ -465,6 +487,25 @@ func TestDefaultConfig(t *testing.T) {
 			defaultConfig = original
 			DefaultStoppedRetention(0)
 			assert.Equal(t, time.Duration(0), defaultConfig.stoppedRetention)
+		})
+	})
+
+	t.Run("DefaultErrHandler", func(t *testing.T) {
+		t.Run("Sets handler", func(t *testing.T) {
+			defaultConfig = original
+			called := false
+			DefaultErrHandler(func(Worker, error) { called = true })
+			assert.NotNil(t, defaultConfig.errHandler)
+			defaultConfig.errHandler(nil, nil)
+			assert.True(t, called)
+		})
+
+		t.Run("Nil is a no-op", func(t *testing.T) {
+			defaultConfig = original
+			DefaultErrHandler(nil)
+			// default no-op should still be callable without panic
+			assert.NotNil(t, defaultConfig.errHandler)
+			assert.NotPanics(t, func() { defaultConfig.errHandler(nil, nil) })
 		})
 	})
 

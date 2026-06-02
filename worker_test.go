@@ -954,6 +954,78 @@ func TestPublicWorkerErrors(t *testing.T) {
 	})
 }
 
+func TestErrHandler(t *testing.T) {
+	t.Run("Callback is invoked with worker and error", func(t *testing.T) {
+		sentErr := errors.New("job-error")
+
+		var (
+			cbWorker Worker
+			cbErr    error
+			wg       sync.WaitGroup
+		)
+		wg.Add(1)
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		}, WithErrHandler(func(w Worker, err error) {
+			cbWorker = w
+			cbErr = err
+			wg.Done()
+		}))
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
+
+		assert.NotNil(t, cbWorker)
+		assert.Equal(t, sentErr, cbErr)
+	})
+
+	t.Run("Error is also sent to Errs() channel", func(t *testing.T) {
+		sentErr := errors.New("chan-error")
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		}, WithErrHandler(func(Worker, error) {
+			wg.Done()
+		}))
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
+
+		select {
+		case err := <-w.Errs():
+			assert.Equal(t, sentErr, err)
+		case <-time.After(100 * time.Millisecond):
+			t.Error("expected error on Errs() channel")
+		}
+	})
+
+	t.Run("Default no-op handler does not panic", func(t *testing.T) {
+		sentErr := errors.New("noop-error")
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		w := NewErrWorker(func(j Job[string]) error {
+			defer wg.Done()
+			return sentErr
+		})
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		assert.NotPanics(t, func() { wg.Wait() })
+	})
+}
+
 type mockJob struct {
 	*job[string]
 	shouldFailClose bool

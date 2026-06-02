@@ -17,6 +17,7 @@ type configs struct {
 	strategy                 Strategy
 	minIdleWorkerRatio       uint8
 	jobIdGenerator           func() string
+	errHandler               func(Worker, error)
 	idleWorkerExpiryDuration time.Duration
 	ctx                      context.Context
 	name                     string
@@ -29,6 +30,7 @@ var defaultConfig = configs{
 	jobIdGenerator: func() string {
 		return ""
 	},
+	errHandler:       func(Worker, error) {},
 	strategy:         Priority,
 	stoppedRetention: 1 * time.Minute,
 }
@@ -89,6 +91,22 @@ func DefaultJobIdGenerator(fn func() string) {
 		return
 	}
 	defaultConfig.jobIdGenerator = fn
+}
+
+// DefaultErrHandler sets the default error handler callback for all newly created workers.
+// The provided function is called whenever a worker encounters an error, receiving the
+// worker instance and the error as arguments.
+// If cb is nil, the call is a no-op.
+//
+// Parameters:
+//   - cb: A function receiving the worker and the error.
+//
+// Default: A no-op handler (errors are only sent to the Errs() channel).
+func DefaultErrHandler(cb func(Worker, error)) {
+	if cb == nil {
+		return
+	}
+	defaultConfig.errHandler = cb
 }
 
 // DefaultIdleWorkerExpiryDuration sets the default time period after which idle workers are
@@ -276,6 +294,22 @@ func WithJobIdGenerator(fn func() string) ConfigFunc {
 			return
 		}
 		c.jobIdGenerator = fn
+	}
+}
+
+// WithErrHandler sets the error handler callback for the worker.
+// The provided function is called whenever the worker encounters an error,
+// receiving the worker instance and the error as arguments.
+// If cb is nil, the call is a no-op.
+//
+// Parameters:
+//   - cb: A function receiving the worker and the error.
+func WithErrHandler(cb func(Worker, error)) ConfigFunc {
+	return func(c *configs) {
+		if cb == nil {
+			return
+		}
+		c.errHandler = cb
 	}
 }
 
