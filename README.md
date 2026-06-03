@@ -1,10 +1,10 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/varmq-text-logo-dark.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/text-logo-dark.svg">
   
-  <source media="(prefers-color-scheme: light)" srcset="./assets/varmq-text-logo.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/text-logo.svg">
   
-  <img alt="VarMQ" width="400px" src="./assets/varmq-text-logo.svg">
+  <img alt="VarMQ" width="400px" src="./assets/text-logo.svg">
 </picture>
 
 
