@@ -38,7 +38,7 @@ jobs:
           merge-dir: prev-merged.json
           group-pattern: n/y
           name: "VarMQ Benchmark Log"
-          scale: log
+          charts: line,pie
           tag-axis: x
           output-json: merged.json
           output-html: pages/bench-log/index.html

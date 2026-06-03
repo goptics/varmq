@@ -4,21 +4,17 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "docs/**"
-      - "assets/**"
-      - "LICENSE"
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "docs/**"
-      - "assets/**"
-      - "LICENSE"
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
 
 jobs:
   test:
