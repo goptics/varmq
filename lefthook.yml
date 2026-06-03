@@ -31,4 +31,5 @@ pre-commit:
 pre-push:
   commands:
     run-tests:
+      glob: "{**/*.go,go.mod,go.sum}"
       run: go test -race -count=1 ./...
