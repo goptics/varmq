@@ -95,7 +95,9 @@ func DefaultJobIdGenerator(fn func() string) {
 
 // DefaultErrHandler sets the default error handler callback for all newly created workers.
 // The provided function is called whenever a worker encounters an error, receiving the
-// worker instance and the error as arguments.
+// worker instance and the error as arguments. It runs synchronously on the goroutine
+// that reports the error and must not block. The handler is invoked for every error,
+// including when the buffered Errs() channel is already full.
 // If cb is nil, the call is a no-op.
 //
 // Parameters:
@@ -299,7 +301,9 @@ func WithJobIdGenerator(fn func() string) ConfigFunc {
 
 // WithErrHandler sets the error handler callback for the worker.
 // The provided function is called whenever the worker encounters an error,
-// receiving the worker instance and the error as arguments.
+// receiving the worker instance and the error as arguments. It runs synchronously
+// on the goroutine that reports the error and must not block. The handler is
+// invoked for every error, including when the buffered Errs() channel is already full.
 // If cb is nil, the call is a no-op.
 //
 // Parameters:

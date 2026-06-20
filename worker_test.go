@@ -1010,11 +1010,8 @@ func TestErrHandler(t *testing.T) {
 
 	t.Run("Default no-op handler does not panic", func(t *testing.T) {
 		sentErr := errors.New("noop-error")
-		var wg sync.WaitGroup
-		wg.Add(1)
 
 		w := NewErrWorker(func(j Job[string]) error {
-			defer wg.Done()
 			return sentErr
 		})
 		defer w.StopAndWait()
@@ -1022,7 +1019,37 @@ func TestErrHandler(t *testing.T) {
 		q := w.BindQueue()
 		q.Add("trigger")
 
-		assert.NotPanics(t, func() { wg.Wait() })
+		select {
+		case err := <-w.Errs():
+			assert.Equal(t, sentErr, err)
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("expected error on Errs() channel")
+		}
+	})
+
+	t.Run("DefaultErrHandler is invoked for new workers", func(t *testing.T) {
+		original := defaultConfig
+		t.Cleanup(func() { defaultConfig = original })
+
+		sentErr := errors.New("default-handler-error")
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		DefaultErrHandler(func(w Worker, err error) {
+			assert.NotNil(t, w)
+			assert.Equal(t, sentErr, err)
+			wg.Done()
+		})
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		})
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
 	})
 }
 
