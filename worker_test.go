@@ -415,6 +415,20 @@ func TestWorkers(t *testing.T) {
 				assert.True(w.IsStopped(), "Worker should be stopped")
 			})
 
+			t.Run("event loop stops when no eligible queue", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+				w.queues.Register(&lenDriftQueue{}, math.MaxInt)
+
+				w.Start()
+				defer w.StopAndWait()
+
+				w.notifyToPullNextJobs()
+
+				assert.Eventually(t, func() bool {
+					return w.IsActive() && w.curProcessing.Load() == 0
+				}, 200*time.Millisecond, 5*time.Millisecond, "event loop should break without spinning")
+			})
+
 			t.Run("event loop processing error", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
 				errChan := w.Errs()
@@ -950,6 +964,23 @@ func TestWorkers(t *testing.T) {
 	})
 }
 
+
+// ponytail: Len() reports 1 once so Manager.Len() enters the pull loop, then 0 so next() returns !found
+type lenDriftQueue struct {
+	lenCalls atomic.Int32
+}
+
+func (q *lenDriftQueue) Len() int {
+	if q.lenCalls.Add(1) == 1 {
+		return 1
+	}
+	return 0
+}
+
+func (q *lenDriftQueue) Dequeue() (any, bool) { return nil, false }
+func (q *lenDriftQueue) Values() []any        { return nil }
+func (q *lenDriftQueue) Purge()               {}
+func (q *lenDriftQueue) Close() error         { return nil }
 
 type mockJob struct {
 	*job[string]
