@@ -813,9 +813,21 @@ func TestWorkers(t *testing.T) {
 				queue := newErrorQueue(w, mockQueue)
 				w.queues.Register(queue.internalQueue, math.MaxInt)
 
-				err := w.processNextJob()
+				_, err := w.processNextJob()
 				assert.Error(t, err)
 				assert.Equal(t, ErrFailedToCastJob, err)
+			})
+
+			t.Run("processNextJob returns false when all queues empty", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+				defer w.StopAndWait()
+
+				mockQueue := mocks.NewMockPersistentQueue()
+				w.queues.Register(mockQueue, math.MaxInt)
+
+				cont, err := w.processNextJob()
+				assert.False(t, cont)
+				assert.NoError(t, err)
 			})
 		})
 

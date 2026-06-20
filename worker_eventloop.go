@@ -21,8 +21,12 @@ func (w *worker[T, JobType]) goEventLoop() {
 				return
 			case <-signal:
 				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
-					if err := w.processNextJob(); err != nil {
+					cont, err := w.processNextJob()
+					if err != nil {
 						w.sendError(err)
+					}
+					if !cont {
+						break
 					}
 				}
 			}
@@ -30,11 +34,11 @@ func (w *worker[T, JobType]) goEventLoop() {
 	}(w.ctx, w.eventLoopSignal)
 }
 
-func (w *worker[T, JobType]) processNextJob() error {
+func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	queue, found := w.queues.next()
 
 	if !found {
-		return nil
+		return false, nil
 	}
 
 	w.curProcessing.Add(1)
@@ -55,7 +59,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 
 	if !ok {
 		w.releaseProcessingSlot()
-		return ErrFailedToDequeue
+		return true, ErrFailedToDequeue
 	}
 
 	var j JobType
@@ -67,23 +71,23 @@ func (w *worker[T, JobType]) processNextJob() error {
 		var err error
 		if v, err = parseToJob[T](value); err != nil {
 			w.releaseProcessingSlot()
-			return err
+			return true, err
 		}
 
 		if j, ok = v.(JobType); !ok {
 			w.releaseProcessingSlot()
-			return ErrFailedToCastJob
+			return true, ErrFailedToCastJob
 		}
 
 		j.setInternalQueue(queue)
 	default:
 		w.releaseProcessingSlot()
-		return ErrFailedToCastJob
+		return true, ErrFailedToCastJob
 	}
 
 	if j.IsClosed() {
 		w.releaseProcessingSlot()
-		return nil
+		return true, nil
 	}
 
 	j.changeStatus(processing)
@@ -91,7 +95,7 @@ func (w *worker[T, JobType]) processNextJob() error {
 
 	w.sendToNextChannel(j)
 
-	return nil
+	return true, nil
 }
 
 func (w *worker[T, JobType]) releaseProcessingSlot() {

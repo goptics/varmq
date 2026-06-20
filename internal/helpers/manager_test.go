@@ -233,11 +233,13 @@ func TestManager(t *testing.T) {
 			}(i)
 			go func() {
 				defer wg.Done()
-				manager.GetRoundRobinItem()
+				_, ok := manager.GetRoundRobinItem()
+				assert.True(ok)
 			}()
 			go func() {
 				defer wg.Done()
-				manager.GetMaxLenItem()
+				_, ok := manager.GetMaxLenItem()
+				assert.True(ok)
 			}()
 		}
 		wg.Wait()

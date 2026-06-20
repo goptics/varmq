@@ -96,7 +96,8 @@ func (m *Manager[T]) Len() int {
 	return totalLen
 }
 
-// GetMaxLenItem returns the item with the maximum length
+// GetMaxLenItem returns the item with the maximum length.
+// ok is false when no items are registered or all items are empty.
 func (m *Manager[T]) GetMaxLenItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
@@ -116,7 +117,8 @@ func (m *Manager[T]) GetMaxLenItem() (T, bool) {
 	return maxItem.item, true
 }
 
-// GetMinLenItem returns the item with the minimum length (excluding empty items unless all are empty)
+// GetMinLenItem returns the item with the minimum length (excluding empty items unless all are empty).
+// ok is false when no items are registered or all items are empty.
 func (m *Manager[T]) GetMinLenItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
@@ -147,6 +149,7 @@ func (m *Manager[T]) GetMinLenItem() (T, bool) {
 
 // GetPriorityItem returns the first item with length > 0 based on priority (highest priority first).
 // Since items are inherently stored sorted by priority (lowest number first), it simply returns the first non-empty item.
+// ok is false when no items are registered or all items are empty.
 func (m *Manager[T]) GetPriorityItem() (T, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
@@ -164,7 +167,8 @@ func (m *Manager[T]) GetPriorityItem() (T, bool) {
 	return *new(T), false
 }
 
-// GetRoundRobinItem returns the next item in round-robin order
+// GetRoundRobinItem returns the next item in round-robin order.
+// ok is false when no items are registered or all items are empty.
 func (m *Manager[T]) GetRoundRobinItem() (T, bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
