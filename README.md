@@ -1,16 +1,31 @@
-# VarMQ
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/text-logo-dark.svg">
+  
+  <source media="(prefers-color-scheme: light)" srcset="./assets/text-logo.svg">
+  
+  <img alt="VarMQ" width="400px" src="./assets/text-logo.svg">
+</picture>
 
-[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go?tab=readme-ov-file#messaging)
-[![Go Reference](https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go)](https://pkg.go.dev/github.com/goptics/varmq)
-[![Go Report Card](https://goreportcard.com/badge/github.com/goptics/varmq)](https://goreportcard.com/report/github.com/goptics/varmq)
-[![CI](https://github.com/goptics/varmq/actions/workflows/ci.yml/badge.svg)](https://github.com/goptics/varmq/actions/workflows/ci.yml)
-[![Codecov](https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg)](https://codecov.io/gh/goptics/varmq)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/doc/devel/release.html)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-A high-performance message queue and pool system for Go that simplifies concurrent task processing using [worker pool](#the-concurrency-architecture). Through Go generics, it provides type safety without sacrificing performance.
+  <p>
+    <a href="https://github.com/avelino/awesome-go?tab=readme-ov-file#messaging"><img src="https://awesome.re/mentioned-badge-flat.svg" alt="Mentioned in Awesome Go" /></a>
+    <a href="https://pkg.go.dev/github.com/goptics/varmq"><img src="https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go" alt="Go Reference" /></a>
+    <a href="https://goreportcard.com/report/github.com/goptics/varmq"><img src="https://goreportcard.com/badge/github.com/goptics/varmq" alt="Go Report Card" /></a>
+    <a href="https://github.com/goptics/varmq/actions/workflows/ci.yml"><img src="https://github.com/goptics/varmq/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://codecov.io/gh/goptics/varmq"><img src="https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg" alt="Codecov" /></a>
+    <a href="https://varmq.goptics.org/bench-log"><img src="https://img.shields.io/badge/Bench_Logs-orange?logo=googledocs&logoColor=white" alt="Bench Logs" /></a>
+    <a href="https://golang.org/doc/devel/release.html"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go Version" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
+  </p>
 
-With `VarMQ`, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using [adapters](#built-in-adapters). All through a clean, intuitive API that feels natural to Go developers.
+  <p>
+    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#the-concurrency-architecture">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
+  </p>
+  <p>
+    With <code>VarMQ</code>, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using <a href="#built-in-adapters">adapters</a>. All through a clean, intuitive API that feels natural to Go developers.
+  </p>
+</div>
 
 ## ✨ Features
 

@@ -31,7 +31,7 @@ func newQueueManager(strategy Strategy) *queueManager {
 	}
 }
 
-func (qm *queueManager) next() (IBaseQueue, error) {
+func (qm *queueManager) next() (IBaseQueue, bool) {
 	switch qm.strategy {
 	case RoundRobin:
 		return qm.GetRoundRobinItem()
