@@ -375,6 +375,7 @@ func (w *worker[T, JobType]) sendError(err error) {
 	case w.errorChan <- err:
 	default:
 	}
+	w.Configs.errHandler(w, err)
 }
 
 func (w *worker[T, JobType]) Name() string {

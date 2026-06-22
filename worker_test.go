@@ -982,6 +982,104 @@ func (q *lenDriftQueue) Values() []any        { return nil }
 func (q *lenDriftQueue) Purge()               {}
 func (q *lenDriftQueue) Close() error         { return nil }
 
+func TestErrHandler(t *testing.T) {
+	t.Run("Callback is invoked with worker and error", func(t *testing.T) {
+		sentErr := errors.New("job-error")
+
+		var (
+			cbWorker Worker
+			cbErr    error
+			wg       sync.WaitGroup
+		)
+		wg.Add(1)
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		}, WithErrHandler(func(w Worker, err error) {
+			cbWorker = w
+			cbErr = err
+			wg.Done()
+		}))
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
+
+		assert.NotNil(t, cbWorker)
+		assert.Equal(t, sentErr, cbErr)
+	})
+
+	t.Run("Error is also sent to Errs() channel", func(t *testing.T) {
+		sentErr := errors.New("chan-error")
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		}, WithErrHandler(func(Worker, error) {
+			wg.Done()
+		}))
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
+
+		select {
+		case err := <-w.Errs():
+			assert.Equal(t, sentErr, err)
+		case <-time.After(100 * time.Millisecond):
+			t.Error("expected error on Errs() channel")
+		}
+	})
+
+	t.Run("Default no-op handler does not panic", func(t *testing.T) {
+		sentErr := errors.New("noop-error")
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		})
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		select {
+		case err := <-w.Errs():
+			assert.Equal(t, sentErr, err)
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("expected error on Errs() channel")
+		}
+	})
+
+	t.Run("DefaultErrHandler is invoked for new workers", func(t *testing.T) {
+		original := defaultConfig
+		t.Cleanup(func() { defaultConfig = original })
+
+		sentErr := errors.New("default-handler-error")
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		DefaultErrHandler(func(w Worker, err error) {
+			assert.NotNil(t, w)
+			assert.Equal(t, sentErr, err)
+			wg.Done()
+		})
+
+		w := NewErrWorker(func(j Job[string]) error {
+			return sentErr
+		})
+		defer w.StopAndWait()
+
+		q := w.BindQueue()
+		q.Add("trigger")
+
+		wg.Wait()
+	})
+}
 type mockJob struct {
 	*job[string]
 	shouldFailClose bool
