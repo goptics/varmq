@@ -20,7 +20,6 @@ jobs:
           go-version-file: go.mod
 
       - name: Fetch existing merged.json from R2
-        continue-on-error: true
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
