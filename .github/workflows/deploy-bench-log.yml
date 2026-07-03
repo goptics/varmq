@@ -19,16 +19,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Fetch existing merged.json from bench-data
-        run: |
-          git init /tmp/bench-data
-          cd /tmp/bench-data
-          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
-          git fetch origin bench-data 2>/dev/null || true
-          if git rev-parse origin/bench-data &>/dev/null; then
-            git checkout bench-data
-            cp merged.json "${{ github.workspace }}/prev-merged.json"
-          fi
+      - name: Fetch existing merged.json from R2
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object get varmq-bench-data/merged.json --file=prev-merged.json --remote
 
       - name: Run benchmark and merge
         uses: goptics/vizb@v0
@@ -43,19 +40,12 @@ jobs:
           output-json: merged.json
           output-html: pages/bench-log/index.html
 
-      - name: Push merged.json to orphan bench-data branch
-        run: |
-          cd /tmp/bench-data
-          if [ ! -f merged.json ] || ! git rev-parse --verify bench-data &>/dev/null; then
-            git checkout --orphan bench-data
-            git rm -rf . || true
-          fi
-          cp "${{ github.workspace }}/merged.json" .
-          git add merged.json
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --cached --quiet || git commit -m "update benchmark data [${{ github.ref_name }}]"
-          git push origin bench-data
+      - name: Upload merged.json to R2
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put varmq-bench-data/merged.json --file=merged.json --content-type=application/json --remote
 
       - name: Deploy index.html to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
