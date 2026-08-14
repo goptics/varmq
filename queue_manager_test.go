@@ -2,11 +2,80 @@ package varmq
 
 import (
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestQueueInventoryAccessors(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+
+		assert.Equal(t, 0, w.numQueues())
+		assert.Equal(t, []queueSnapshot{}, w.queueSnapshot())
+	})
+
+	t.Run("SingleMultipleAndRepeatedBindings", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+		q1 := queues.NewQueue[any]()
+		q2 := queues.NewQueue[any]()
+		q1.Enqueue("first")
+		q2.Enqueue("second")
+		q2.Enqueue("third")
+
+		w.queues.Register(q1, math.MaxInt)
+		w.queues.Register(q2, math.MaxInt)
+		w.queues.Register(q1, math.MaxInt)
+
+		assert.Equal(t, 3, w.numQueues())
+		assert.Equal(t, []queueSnapshot{{Len: 1}, {Len: 2}, {Len: 1}}, w.queueSnapshot())
+	})
+
+	t.Run("ReadsLengthsAtSnapshotTime", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+		q := queues.NewQueue[any]()
+		w.queues.Register(q, math.MaxInt)
+
+		assert.Equal(t, []queueSnapshot{{Len: 0}}, w.queueSnapshot())
+		q.Enqueue("queued")
+		assert.Equal(t, []queueSnapshot{{Len: 1}}, w.queueSnapshot())
+	})
+
+	t.Run("ConcurrentRegistrationAndSnapshots", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+		const registrations = 100
+		activeQueue := queues.NewQueue[any]()
+		w.queues.Register(activeQueue, math.MaxInt)
+		var wg sync.WaitGroup
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			for range registrations {
+				w.queues.Register(queues.NewQueue[any](), math.MaxInt)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for range registrations {
+				_ = w.queueSnapshot()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := range registrations {
+				activeQueue.Enqueue(i)
+				activeQueue.Dequeue()
+			}
+		}()
+
+		wg.Wait()
+		assert.Equal(t, registrations+1, w.numQueues())
+		assert.Len(t, w.queueSnapshot(), registrations+1)
+	})
+}
 
 func TestQueueManagerNext(t *testing.T) {
 	t.Run("Strategy: RoundRobin", func(t *testing.T) {

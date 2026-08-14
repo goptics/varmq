@@ -6,7 +6,6 @@ import (
 	"sync"
 )
 
-
 // Sizer is an interface for anything that has a Len method
 type Sizer interface {
 	Len() int
@@ -199,4 +198,18 @@ func (m *Manager[T]) Count() int {
 	defer m.mx.RUnlock()
 
 	return len(m.items)
+}
+
+// Snapshot returns the registered items in their current order.
+// The returned slice is independent of the manager's internal storage.
+func (m *Manager[T]) Snapshot() []T {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	items := make([]T, len(m.items))
+	for i, r := range m.items {
+		items[i] = r.item
+	}
+
+	return items
 }

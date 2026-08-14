@@ -24,6 +24,10 @@ type queueManager struct {
 	strategy Strategy
 }
 
+type queueSnapshot struct {
+	Len int
+}
+
 func newQueueManager(strategy Strategy) *queueManager {
 	return &queueManager{
 		Manager:  helpers.NewManager[IBaseQueue](),
@@ -42,4 +46,22 @@ func (qm *queueManager) next() (IBaseQueue, bool) {
 	default:
 		return qm.GetPriorityItem()
 	}
+}
+
+func (qm *queueManager) snapshot() []queueSnapshot {
+	queues := qm.Snapshot()
+	snapshot := make([]queueSnapshot, len(queues))
+	for i, queue := range queues {
+		snapshot[i].Len = queue.Len()
+	}
+
+	return snapshot
+}
+
+func (w *worker[T, JobType]) numQueues() int {
+	return w.queues.Count()
+}
+
+func (w *worker[T, JobType]) queueSnapshot() []queueSnapshot {
+	return w.queues.snapshot()
 }
