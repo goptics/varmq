@@ -50,6 +50,22 @@ func TestManager(t *testing.T) {
 		assert.Equal(5, manager.Len())
 	})
 
+	t.Run("Snapshot", func(t *testing.T) {
+		assert := assert.New(t)
+		manager := NewManager[*testItem]()
+		item1 := &testItem{id: "item1", len: 1}
+		item2 := &testItem{id: "item2", len: 2}
+		manager.Register(item1, math.MaxInt)
+		manager.Register(item2, math.MaxInt)
+
+		snapshot := manager.Snapshot()
+		assert.Equal([]*testItem{item1, item2}, snapshot)
+
+		manager.Register(&testItem{id: "item3", len: 3}, math.MaxInt)
+		assert.Equal([]*testItem{item1, item2}, snapshot)
+		assert.Len(manager.Snapshot(), 3)
+	})
+
 	t.Run("Strategies", func(t *testing.T) {
 		t.Run("RoundRobin", func(t *testing.T) {
 			assert := assert.New(t)
