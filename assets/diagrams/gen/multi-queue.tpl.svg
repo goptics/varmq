@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ multiple queues with round-robin selection</title>
-  <desc id="desc">Three empty queues are bound to one worker with concurrency 2 and the RoundRobin strategy. Producers add jobs to all three queues; only the first signal reaches the event loop, the others are dropped because one signal is already pending. The Queue Manager picks the next queue in turn: Queue 1, then Queue 2, both workers become busy, and the remaining jobs wait. Each time a worker finishes, its signal lets the event loop dispatch one more job, continuing the rotation with Queue 3 and Queue 1. When Queue 2 is empty the Queue Manager skips it and moves on to Queue 3. Once every queue is empty, later signals find nothing to do and the event loop waits.</desc>
+  <desc id="desc">Three empty queues are bound to one worker with concurrency 2 and the RoundRobin strategy. Producers add jobs to all three queues; only the first signal reaches the event loop, the others are dropped because one signal is already pending. The pool starts with a single worker goroutine. The Queue Manager picks the next queue in turn: Queue 1 goes to Worker 1, then Worker 2 is spawned for Queue 2, and the remaining jobs wait. A finished worker stays idle in the pool while enough jobs are queued; idle workers are reused newest first. Each time a worker finishes, its signal lets the event loop dispatch one more job, continuing the rotation with Queue 3 and Queue 1. When Queue 2 is empty the Queue Manager skips it and moves on to Queue 3. As the queues drain, Worker 2 exits because Worker 1 is already idle. Once every queue is empty, later signals find nothing to do and the event loop waits.</desc>
   <style>
     :root {
       --dur: {D}s;
@@ -168,6 +168,7 @@
   <text class="h" x="718" y="240">Worker Pool</text>
   <text class="m" x="908" y="240" style="text-anchor:end">concurrency = 2</text>
 
+  <g id="w1-row" class="a">
   <rect class="box" x="720" y="256" width="50" height="40" rx="6"/><text class="m" x="745" y="276">ch1</text>
   <path class="edge" d="M770 276H788" marker-end="url(#a)"/>
   <rect class="box wk" x="790" y="256" width="110" height="40" rx="6"/>
@@ -175,7 +176,9 @@
   <text class="t" x="845" y="270">Worker 1</text>
   <rect class="track" x="800" y="285" width="90" height="4" rx="2"/>
   <rect id="w1-bar" class="a lin bar" x="800" y="285" width="90" height="4" rx="2"/>
+  </g>
 
+  <g id="w2-row" class="a">
   <rect class="box" x="720" y="316" width="50" height="40" rx="6"/><text class="m" x="745" y="336">ch2</text>
   <path class="edge" d="M770 336H788" marker-end="url(#a)"/>
   <rect class="box wk" x="790" y="316" width="110" height="40" rx="6"/>
@@ -183,6 +186,7 @@
   <text class="t" x="845" y="330">Worker 2</text>
   <rect class="track" x="800" y="345" width="90" height="4" rx="2"/>
   <rect id="w2-bar" class="a lin bar" x="800" y="345" width="90" height="4" rx="2"/>
+  </g>
 
   <!-- moving tokens on top -->
   <circle id="job0" class="a lin" r="7"/>

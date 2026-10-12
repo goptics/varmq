@@ -31,6 +31,21 @@ rr, free_at = 0, [0.0, 0.0]
 jobs, pulses, last_wake = [], [], -9
 no_busy, no_empty, yes, pick, skip, qm, proc = [], [], [], [], [], [], []
 busy = {0: [], 1: []}
+# worker goroutines: the pool starts with one idle goroutine (W1); it is a LIFO list (PushNode / PopBack)
+pool, alive, pending = [0], {0: [(0, None)], 1: []}, []   # pending: (t, w) finishes not yet applied
+
+
+def settle(t):
+    """Apply worker finishes up to t, like freePoolNode: keep the goroutine idle in the pool while the
+    queues still hold >= concurrency jobs or no other worker is idle, otherwise stop it."""
+    for ft, w in sorted(p for p in pending if p[0] <= t):
+        pending.remove((ft, w))
+        if sum(map(len, queues.values())) >= 2 or not pool:
+            pool.append(w)
+        else:
+            alive[w][-1] = (alive[w][-1][0], ft + .35)
+
+
 departs = {q: [] for q in range(3)}
 
 while wakes:
@@ -41,8 +56,8 @@ while wakes:
     k = 0
     while any(queues.values()):
         d = t + .4 + .4 * k
-        free = [w for w in range(2) if free_at[w] <= d]
-        if not free:
+        settle(d)
+        if sum(j[4] > d for j in jobs) >= 2:               # curProcessing == concurrency
             break
         skipped = []
         while not queues[rr]:                              # RoundRobin skips empty queues
@@ -52,23 +67,32 @@ while wakes:
         item = queues[q].pop(0)
         assert ARR[q][item] + .5 < d
         departs[q].append(d)
-        w, n = free[0], len(jobs)
+        n = len(jobs)
 
         skip += [(sq, (d - .55, d - .4)) for sq in skipped]
         pick.append((q, (d - .35, d)))
         yes.append((d - .3, d - .1))
 
-        cy, ry = QY[q], WY[w]
+        cy = QY[q]
         p = Path(d + .05, 288, cy, TRIP_V, I).to(296, cy, op=1).to(310, cy).to(310, Y).to(322, Y).to(330, Y, op=0)
         qm.append((p.t, p.t + .3))
         p.wait(.15).to(460, Y).to(468, Y, op=1).to(490, Y).to(500, Y, op=0)
         t_in = p.t
         p.wait(.3).to(660, Y, fill=J)
         proc.append((t_in, p.t))
+        settle(p.t)                                        # sendToNextChannel: pop the last idle worker or spawn one
+        if pool:
+            w = pool.pop()
+        else:
+            w = next(r for r in (0, 1) if not alive[r] or alive[r][-1][1] is not None)
+            alive[w].append((p.t, None))
+        assert free_at[w] <= p.t, (n, w)
+        ry = WY[w]
         p.to(668, Y, op=1).to(690, Y).to(690, ry).to(712, ry).to(720, ry, op=0).to(770, ry).to(778, ry, op=1).to(786, ry).to(794, ry, op=0)
         paths[f"job{n}"] = p.pts
         done = p.t + WORK[n]
         free_at[w] = done
+        pending.append((done, w))
         busy[w].append((p.t, done))
         jobs.append((q, w, d, p.t, done))
 
@@ -84,6 +108,8 @@ while wakes:
         no_empty.append((t + .15, t + .8))
 
 kfu.D = D = round(max(pulses) + 1.6, 1)
+settle(D)
+assert pool == [0] and alive[1] and all(e for _, e in alive[1]), (pool, alive)   # loop ends as it starts: only W1
 # red "busy" ends when a worker frees its slot or the next signal wakes the loop, whichever is first
 no_busy = [(a, min(b, min((p for p in pulses if p > a), default=b) - .15, min(j[4] for j in jobs if j[4] > a))) for a, b in no_busy]
 for name, pts in paths.items():
@@ -114,6 +140,15 @@ flash("proc-glow", proc, .18)
 for q in range(3):
     flash(f"q{q + 1}-pick", [s for qq, s in pick if qq == q], .35, rise=.08, fall=.15)
     flash(f"q{q + 1}-skip", [s for qq, s in skip if qq == q], .35, rise=.05, fall=.1)
+GHOST = .15                                                # slot within the concurrency limit, no goroutine
+for w in range(2):
+    pts = [(0, {"opacity": 1 if w == 0 else GHOST})]
+    for s, e in alive[w]:
+        if s > 0:
+            pts += [(s - .1, {"opacity": GHOST}), (s + .2, {"opacity": 1})]
+        if e:
+            pts += [(e, {"opacity": 1}), (e + .4, {"opacity": GHOST})]
+    kf(f"w{w + 1}-row", pts)
 for w in range(2):
     flash(f"w{w + 1}-glow", busy[w], .14)
     bar(f"w{w + 1}-bar", busy[w])
@@ -121,6 +156,7 @@ for w in range(2):
 if __name__ == "__main__":
     for n, (q, w, d, s, e) in enumerate(jobs):
         print(f"job{n}: Q{q + 1} -> W{w + 1} dispatch {d:.2f} work {s:.2f}-{e:.2f}")
+    print("alive", alive)
     print("pulses", [round(p, 2) for p in pulses], "skips", [(s + 1, round(a, 2)) for s, (a, _) in skip])
     print("no_busy", [(round(a, 2), round(b, 2)) for a, b in no_busy], "no_empty", [(round(a, 2), round(b, 2)) for a, b in no_empty], "D", D)
     kfu.render(sys.argv[1], sys.argv[2], still=4.6)  # reduced-motion frame
