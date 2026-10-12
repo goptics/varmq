@@ -73,6 +73,15 @@ while wakes:
         pick.append((q, (d - .35, d)))
         yes.append((d - .3, d - .1))
 
+        # processNextJob -> sendToNextChannel runs right here in the loop: pop the last idle worker or spawn one.
+        # (the dot's trip below is only drawing; the worker is already chosen at dispatch time d)
+        if pool:
+            w = pool.pop()
+        else:
+            w = next(r for r in (0, 1) if not alive[r] or alive[r][-1][1] is not None)
+            alive[w].append((d, None))
+        assert free_at[w] <= d, (n, w)
+
         cy = QY[q]
         p = Path(d + .05, 288, cy, TRIP_V, I).to(296, cy, op=1).to(310, cy).to(310, Y).to(322, Y).to(330, Y, op=0)
         qm.append((p.t, p.t + .3))
@@ -80,13 +89,6 @@ while wakes:
         t_in = p.t
         p.wait(.3).to(660, Y, fill=J)
         proc.append((t_in, p.t))
-        settle(p.t)                                        # sendToNextChannel: pop the last idle worker or spawn one
-        if pool:
-            w = pool.pop()
-        else:
-            w = next(r for r in (0, 1) if not alive[r] or alive[r][-1][1] is not None)
-            alive[w].append((p.t, None))
-        assert free_at[w] <= p.t, (n, w)
         ry = WY[w]
         p.to(668, Y, op=1).to(690, Y).to(690, ry).to(712, ry).to(720, ry, op=0).to(770, ry).to(778, ry, op=1).to(786, ry).to(794, ry, op=0)
         paths[f"job{n}"] = p.pts
