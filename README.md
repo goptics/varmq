@@ -69,7 +69,7 @@ import (
 func main() {
   worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Printf("Processing %d\n", j.Data())
-    time.Sleep(500 * time.Millisecond)
+    time.Sleep(1 * time.Second)
   }) // default concurrency is 1
   defer worker.WaitUntilIdle()
   queue := worker.BindQueue()
@@ -78,6 +78,8 @@ func main() {
   queue.Add(2)
 }
 ```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/mobZd9pKcug)**
 
 A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
 
