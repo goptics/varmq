@@ -30,7 +30,8 @@ queues = {q: list(range(len(ARR[q]))) for q in range(3)}   # item indexes still 
 rr, free_at = 0, [0.0, 0.0]
 jobs, pulses, last_wake = [], [], -9
 no_busy, no_empty, yes, pick, skip, qm, proc = [], [], [], [], [], [], []
-busy = {0: [], 1: []}
+busy = {0: [], 1: []}                                       # job running on the worker (bar)
+claim = {0: [], 1: []}                                      # slot taken: curProcessing++ at dispatch (glow)
 # worker goroutines: the pool starts with one idle goroutine (W1); it is a LIFO list (PushNode / PopBack)
 pool, alive, pending = [0], {0: [(0, None)], 1: []}, []   # pending: (t, w) finishes not yet applied
 
@@ -96,6 +97,7 @@ while wakes:
         free_at[w] = done
         pending.append((done, w))
         busy[w].append((p.t, done))
+        claim[w].append((d, done))
         jobs.append((q, w, d, p.t, done))
 
         sig = Path(done, 900, ry, SIG_V).to(908, ry, op=1).to(940, ry).to(940, 58).to(673, 58).to(667, 58, op=0)
@@ -152,7 +154,7 @@ for w in range(2):
             pts += [(e, {"opacity": 1}), (e + .4, {"opacity": GHOST})]
     kf(f"w{w + 1}-row", pts)
 for w in range(2):
-    flash(f"w{w + 1}-glow", busy[w], .14)
+    flash(f"w{w + 1}-glow", claim[w], .14)
     bar(f"w{w + 1}-bar", busy[w])
 
 if __name__ == "__main__":
