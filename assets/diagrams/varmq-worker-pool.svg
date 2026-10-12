@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ worker pool with concurrency 4</title>
-  <desc id="desc">The queue starts empty. AddAll enqueues six jobs and signals the event loop. From that one signal the event loop dispatches four jobs back to back, one to each worker, until every slot is busy; the remaining two jobs wait in the queue. When Worker 2 finishes it signals the event loop, which dispatches the next job to it; when Worker 4 finishes the last job goes to Worker 4. Once the queue is empty, later completion signals find nothing to do and the event loop waits.</desc>
+  <desc id="desc">The queue starts empty. Add is called six times in a row. Each call tries to signal the event loop, but the signal channel holds only one pending signal, so the other five are dropped. From that one signal the event loop dispatches four jobs back to back, one to each worker, until every slot is busy; the remaining two jobs wait in the queue. When Worker 2 finishes it signals the event loop, which dispatches the next job to it; when Worker 4 finishes the last job goes to Worker 4. Once the queue is empty, later completion signals find nothing to do and the event loop waits.</desc>
   <style>
     :root {
       --dur: 14.6s;
@@ -50,6 +50,12 @@
     .bar { fill: var(--worker); transform-origin: left center; }
     .sigdot { fill: var(--signal); }
     #sig-add { animation-name: sig-add; }
+    #drop1 { animation-name: drop1; }
+    #drop2 { animation-name: drop2; }
+    #drop3 { animation-name: drop3; }
+    #drop4 { animation-name: drop4; }
+    #drop5 { animation-name: drop5; }
+    #drop-why { animation-name: drop-why; }
     #done0 { animation-name: done0; }
     #done1 { animation-name: done1; }
     #done2 { animation-name: done2; }
@@ -84,6 +90,12 @@
     #w4-glow { animation-name: w4-glow; }
     #w4-bar { animation-name: w4-bar; }
     @keyframes sig-add { 0% { opacity: 0; transform: translate(70px, 266px); } 3.42% { opacity: 0; transform: translate(70px, 266px); } 3.55% { opacity: 1; transform: translate(70px, 256px); } 6.35% { opacity: 1; transform: translate(70px, 44px); } 11.22% { opacity: 1; transform: translate(440px, 44px); } 11.3% { opacity: 0; transform: translate(446px, 44px); } 100% { opacity: 0; transform: translate(446px, 44px); } }
+    @keyframes drop1 { 0% { opacity: 0; transform: translate(70px, 266px); } 4.45% { opacity: 0; transform: translate(70px, 266px); } 4.79% { opacity: 1; transform: translate(70px, 256px); } 6.85% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop2 { 0% { opacity: 0; transform: translate(70px, 266px); } 5.48% { opacity: 0; transform: translate(70px, 266px); } 5.82% { opacity: 1; transform: translate(70px, 256px); } 7.88% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop3 { 0% { opacity: 0; transform: translate(70px, 266px); } 6.51% { opacity: 0; transform: translate(70px, 266px); } 6.85% { opacity: 1; transform: translate(70px, 256px); } 8.9% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop4 { 0% { opacity: 0; transform: translate(70px, 266px); } 7.53% { opacity: 0; transform: translate(70px, 266px); } 7.88% { opacity: 1; transform: translate(70px, 256px); } 9.93% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop5 { 0% { opacity: 0; transform: translate(70px, 266px); } 8.56% { opacity: 0; transform: translate(70px, 266px); } 8.9% { opacity: 1; transform: translate(70px, 256px); } 10.96% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop-why { 0% { opacity: 0; } 4.45% { opacity: 0; } 5.27% { opacity: 1; } 12.67% { opacity: 1; } 14.38% { opacity: 0; } 100% { opacity: 0; } }
     @keyframes done0 { 0% { opacity: 0; transform: translate(890px, 221px); } 54.79% { opacity: 0; transform: translate(890px, 221px); } 54.91% { opacity: 1; transform: translate(898px, 221px); } 55.45% { opacity: 1; transform: translate(935px, 221px); } 57.83% { opacity: 1; transform: translate(935px, 58px); } 62.27% { opacity: 1; transform: translate(630px, 58px); } 62.36% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
     @keyframes done1 { 0% { opacity: 0; transform: translate(890px, 271px); } 39.73% { opacity: 0; transform: translate(890px, 271px); } 39.84% { opacity: 1; transform: translate(898px, 271px); } 40.38% { opacity: 1; transform: translate(935px, 271px); } 43.49% { opacity: 1; transform: translate(935px, 58px); } 47.93% { opacity: 1; transform: translate(630px, 58px); } 48.02% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
     @keyframes done2 { 0% { opacity: 0; transform: translate(890px, 321px); } 56.85% { opacity: 0; transform: translate(890px, 321px); } 56.97% { opacity: 1; transform: translate(898px, 321px); } 57.51% { opacity: 1; transform: translate(935px, 321px); } 61.34% { opacity: 1; transform: translate(935px, 58px); } 65.78% { opacity: 1; transform: translate(630px, 58px); } 65.87% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
@@ -139,15 +151,16 @@
 
   <!-- signal edges: Add and worker-done both wake the event loop -->
   <path class="sig" d="M70 268V44H446" marker-end="url(#as)"/>
-  <text class="m s" x="270" y="32">AddAll() → notifyToPullNextJobs()</text>
+  <text class="m s" x="270" y="32">Add() → notifyToPullNextJobs()</text>
   <path class="sig" d="M890 221H935M890 271H935M890 321H935M890 371H935V58H624" marker-end="url(#as)"/>
   <text class="m s" x="780" y="46">done → notifyToPullNextJobs()</text>
 
   <!-- producer -->
   <rect class="box prod" x="20" y="268" width="100" height="56" rx="8"/>
   <rect id="add-glow" class="a g-item" x="20" y="268" width="100" height="56" rx="8"/>
-  <text class="t" x="70" y="289">AddAll</text>
-  <text class="m" x="70" y="307">6 jobs</text>
+  <text class="t" x="70" y="289">Add(job)</text>
+  <text class="m" x="70" y="307">× 6</text>
+  <text id="drop-why" class="why a" x="80" y="226" style="text-anchor:start">dropped: 1 signal pending</text>
   <text class="m" x="70" y="342">producer</text>
   <path class="edge" d="M120 296H152" marker-end="url(#a)"/>
 
@@ -247,6 +260,11 @@
   <circle id="job4" class="a lin" r="7"/>
   <circle id="job5" class="a lin" r="7"/>
   <circle id="sig-add" class="a lin sigdot" r="5"/>
+  <circle id="drop1" class="a lin sigdot" r="5"/>
+  <circle id="drop2" class="a lin sigdot" r="5"/>
+  <circle id="drop3" class="a lin sigdot" r="5"/>
+  <circle id="drop4" class="a lin sigdot" r="5"/>
+  <circle id="drop5" class="a lin sigdot" r="5"/>
   <circle id="done0" class="a lin sigdot" r="5"/>
   <circle id="done1" class="a lin sigdot" r="5"/>
   <circle id="done2" class="a lin sigdot" r="5"/>

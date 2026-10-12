@@ -82,7 +82,7 @@ func main() {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
-With concurrency above 1, one signal lets the event loop dispatch jobs back to back until every slot is busy:
+Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free.
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
