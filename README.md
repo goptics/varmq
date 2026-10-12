@@ -341,7 +341,7 @@ Workers operate independently - they process jobs and immediately signal back wh
 
 The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
-![varmq architecture](./assets/diagrams/varmq-architecture.png)
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
 
 ## Star History
 
