@@ -40,7 +40,7 @@ disp.append(arrive[3] + .4)   # Worker 4 frees next  -> job 5
 assert arrive[1] < arrive[3] < min(arrive[0], arrive[2]), arrive  # those two signals are the ones that find a waiting job
 
 # ---- jobs: queue head -> processNextJob -> chN -> Worker N ----
-proc, busy = [], {r: [] for r in range(4)}
+proc, busy, claim = [], {r: [] for r in range(4)}, {r: [] for r in range(4)}   # bar: job running; glow: slot taken at dispatch
 for k in range(6):
     cy = ROWS[JOB_ROW[k]]
     p = Path(disp[k] + .1, 372, Y, 420, I).to(380, Y, op=1).to(446, Y).to(456, Y, op=0, fill=I)
@@ -51,6 +51,7 @@ for k in range(6):
     kf(f"job{k}", p.pts)
     assert p.t < DONE[k], (k, p.t)
     busy[JOB_ROW[k]].append((p.t, DONE[k]))
+    claim[JOB_ROW[k]].append((disp[k], DONE[k]))
 
 # ---- queue items: arrive, shift right as heads leave, exit at head ----
 for i in range(6):
@@ -100,7 +101,7 @@ for r in (1, 2, 3):
     kf(f"w{r + 1}-row", pts)
 
 for r in range(4):
-    flash(f"w{r + 1}-glow", busy[r], .14)
+    flash(f"w{r + 1}-glow", claim[r], .14)
     bar(f"w{r + 1}-bar", busy[r])
 
 assert max(arrive.values()) + 1.2 < D
