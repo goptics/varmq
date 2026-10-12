@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 370" width="960" height="370" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ event loop with one worker</title>
   <desc id="desc">Queue starts empty. Add() enqueues a job and signals the event loop, which checks that the queue is not empty and a worker slot is free, then dequeues the job and sends it through a channel to Worker 1. A second job added while Worker 1 is busy waits in the queue because no slot is free. When Worker 1 finishes it signals the event loop, which dispatches the waiting job. After the last job the queue is empty and the event loop waits for the next signal.</desc>
   <style>
@@ -69,8 +69,8 @@
     @keyframes item-b { 0% { opacity: 0; transform: translate(150px, 0px); } 26.25% { opacity: 0; transform: translate(150px, 0px); } 27.19% { opacity: 1; transform: translate(172px, 0px); } 30% { opacity: 1; transform: translate(340px, 0px); } 50.62% { opacity: 1; transform: translate(340px, 0px); } 52.19% { opacity: 0; transform: translate(364px, 0px); } 100% { opacity: 0; transform: translate(364px, 0px); } }
     @keyframes job-a { 0% { opacity: 0; transform: translate(392px, 266px); fill: var(--item); } 13.75% { opacity: 0; transform: translate(392px, 266px); fill: var(--item); } 14.25% { opacity: 1; transform: translate(400px, 266px); } 15.62% { opacity: 1; transform: translate(446px, 266px); } 16.12% { opacity: 0; transform: translate(456px, 266px); fill: var(--item); } 19.06% { opacity: 0; transform: translate(612px, 266px); fill: var(--job); } 19.56% { opacity: 1; transform: translate(626px, 266px); } 20.94% { opacity: 1; transform: translate(696px, 266px); } 21.38% { opacity: 0; transform: translate(704px, 266px); } 22.38% { opacity: 0; transform: translate(748px, 266px); } 22.81% { opacity: 1; transform: translate(756px, 266px); } 23.44% { opacity: 1; transform: translate(768px, 266px); } 23.75% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } 100% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } }
     @keyframes job-b { 0% { opacity: 0; transform: translate(392px, 266px); fill: var(--item); } 51.25% { opacity: 0; transform: translate(392px, 266px); fill: var(--item); } 51.75% { opacity: 1; transform: translate(400px, 266px); } 53.12% { opacity: 1; transform: translate(446px, 266px); } 53.62% { opacity: 0; transform: translate(456px, 266px); fill: var(--item); } 56.56% { opacity: 0; transform: translate(612px, 266px); fill: var(--job); } 57.06% { opacity: 1; transform: translate(626px, 266px); } 58.44% { opacity: 1; transform: translate(696px, 266px); } 58.88% { opacity: 0; transform: translate(704px, 266px); } 59.88% { opacity: 0; transform: translate(748px, 266px); } 60.31% { opacity: 1; transform: translate(756px, 266px); } 60.94% { opacity: 1; transform: translate(768px, 266px); } 61.25% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } 100% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } }
-    @keyframes sig-add { 0% { opacity: 0; transform: translate(90px, 236px); } 3.12% { opacity: 0; transform: translate(90px, 236px); } 3.44% { opacity: 1; transform: translate(90px, 226px); } 5.31% { opacity: 1; transform: translate(90px, 44px); } 8.44% { opacity: 1; transform: translate(444px, 44px); } 8.75% { opacity: 0; transform: translate(448px, 44px); } 28.12% { opacity: 0; transform: translate(90px, 236px); } 28.44% { opacity: 1; transform: translate(90px, 226px); } 30.31% { opacity: 1; transform: translate(90px, 44px); } 33.44% { opacity: 1; transform: translate(444px, 44px); } 33.75% { opacity: 0; transform: translate(448px, 44px); } 100% { opacity: 0; transform: translate(448px, 44px); } }
-    @keyframes sig-done { 0% { opacity: 0; transform: translate(890px, 266px); } 38.75% { opacity: 0; transform: translate(890px, 266px); } 39.25% { opacity: 1; transform: translate(898px, 266px); } 39.69% { opacity: 1; transform: translate(935px, 266px); } 42.19% { opacity: 1; transform: translate(935px, 58px); } 45.75% { opacity: 1; transform: translate(626px, 58px); } 46.25% { opacity: 0; transform: translate(622px, 58px); } 76.25% { opacity: 0; transform: translate(890px, 266px); } 76.75% { opacity: 1; transform: translate(898px, 266px); } 77.19% { opacity: 1; transform: translate(935px, 266px); } 79.69% { opacity: 1; transform: translate(935px, 58px); } 83.25% { opacity: 1; transform: translate(626px, 58px); } 83.75% { opacity: 0; transform: translate(622px, 58px); } 100% { opacity: 0; transform: translate(622px, 58px); } }
+    @keyframes sig-add { 0% { opacity: 0; transform: translate(90px, 266px); } 3.12% { opacity: 0; transform: translate(90px, 266px); } 3.44% { opacity: 1; transform: translate(90px, 256px); } 5.31% { opacity: 1; transform: translate(90px, 44px); } 8.44% { opacity: 1; transform: translate(444px, 44px); } 8.75% { opacity: 0; transform: translate(448px, 44px); } 28.12% { opacity: 0; transform: translate(90px, 266px); } 28.44% { opacity: 1; transform: translate(90px, 256px); } 30.31% { opacity: 1; transform: translate(90px, 44px); } 33.44% { opacity: 1; transform: translate(444px, 44px); } 33.75% { opacity: 0; transform: translate(448px, 44px); } 100% { opacity: 0; transform: translate(448px, 44px); } }
+    @keyframes sig-done { 0% { opacity: 0; transform: translate(890px, 296px); } 38.75% { opacity: 0; transform: translate(890px, 296px); } 39.25% { opacity: 1; transform: translate(898px, 296px); } 39.69% { opacity: 1; transform: translate(935px, 296px); } 42.19% { opacity: 1; transform: translate(935px, 58px); } 45.75% { opacity: 1; transform: translate(626px, 58px); } 46.25% { opacity: 0; transform: translate(622px, 58px); } 76.25% { opacity: 0; transform: translate(890px, 296px); } 76.75% { opacity: 1; transform: translate(898px, 296px); } 77.19% { opacity: 1; transform: translate(935px, 296px); } 79.69% { opacity: 1; transform: translate(935px, 58px); } 83.25% { opacity: 1; transform: translate(626px, 58px); } 83.75% { opacity: 0; transform: translate(622px, 58px); } 100% { opacity: 0; transform: translate(622px, 58px); } }
     @media (prefers-reduced-motion: reduce) { .a { animation: none; } }
   </style>
   <defs>
@@ -82,14 +82,15 @@
     </marker>
   </defs>
 
-  <rect class="bg" x="0.5" y="0.5" width="959" height="339" rx="12"/>
+  <rect class="bg" x="0.5" y="0.5" width="959" height="369" rx="12"/>
 
   <!-- signal edges: Add() and worker-done both wake the event loop -->
-  <path class="sig" d="M90 238V44H446" marker-end="url(#as)"/>
+  <path class="sig" d="M90 268V44H446" marker-end="url(#as)"/>
   <text class="m s" x="270" y="32">Add() → notifyToPullNextJobs()</text>
-  <path class="sig" d="M890 266H935V58H624" marker-end="url(#as)"/>
+  <path class="sig" d="M890 296H935V58H624" marker-end="url(#as)"/>
   <text class="m s" x="780" y="46">done → notifyToPullNextJobs()</text>
 
+  <g transform="translate(0 30)">
   <!-- producer -->
   <text class="m" x="90" y="312">producer</text>
   <rect class="box prod" x="30" y="238" width="120" height="56" rx="8"/>
@@ -109,6 +110,8 @@
   <path class="edge" d="M390 266H448" marker-end="url(#a)"/>
   <text class="m" x="419" y="254">dequeue</text>
 
+  </g>
+
   <!-- event loop + check -->
   <text class="m" x="535" y="18">goroutine</text>
   <rect class="box loop" x="450" y="30" width="170" height="56" rx="8"/>
@@ -116,20 +119,21 @@
   <text class="t" x="535" y="51">Event Loop</text>
   <text class="m" x="535" y="70">select ← signal</text>
 
-  <path class="edge" d="M535 86V102" marker-end="url(#a)"/>
-  <path class="box" d="M440 144L535 104L630 144L535 184Z"/>
-  <path id="yes" class="a" d="M440 144L535 104L630 144L535 184Z"/>
-  <path id="no" class="a" d="M440 144L535 104L630 144L535 184Z"/>
-  <text class="m" x="535" y="137">queue not empty</text>
-  <text class="m" x="535" y="152">&amp;&amp; slot free</text>
+  <path class="edge" d="M535 86V134" marker-end="url(#a)"/>
+  <path class="box" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="yes" class="a" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="no" class="a" d="M440 176L535 136L630 176L535 216Z"/>
+  <text class="m" x="535" y="169">queue not empty</text>
+  <text class="m" x="535" y="184">&amp;&amp; slot free</text>
 
-  <path class="edge" d="M535 184V234" marker-end="url(#a)"/>
-  <text class="m" x="548" y="209" style="text-anchor:start">yes</text>
-  <path class="edge" d="M440 144H415V72H448" marker-end="url(#a)"/>
-  <text class="m" x="376" y="100">no: wait</text>
-  <text id="busy-why" class="why a" x="376" y="116">slot busy</text>
-  <text id="empty-why" class="why a" x="376" y="116">queue empty</text>
+  <path class="edge" d="M535 216V264" marker-end="url(#a)"/>
+  <text class="m" x="548" y="240" style="text-anchor:start">yes</text>
+  <path class="edge" d="M440 176H415V72H448" marker-end="url(#a)"/>
+  <text class="m" x="376" y="116">no: wait</text>
+  <text id="busy-why" class="why a" x="376" y="132">slot busy</text>
+  <text id="empty-why" class="why a" x="376" y="132">queue empty</text>
 
+  <g transform="translate(0 30)">
   <!-- dispatch -->
   <rect class="box mgr" x="450" y="236" width="170" height="60" rx="8"/>
   <rect id="proc-glow" class="a" x="450" y="236" width="170" height="60" rx="8"/>
@@ -153,6 +157,7 @@
   <!-- moving tokens on top -->
   <circle id="job-a" class="a lin" r="7"/>
   <circle id="job-b" class="a lin" r="7"/>
+  </g>
   <circle id="sig-add" class="a lin" r="5"/>
   <circle id="sig-done" class="a lin" r="5"/>
 </svg>
