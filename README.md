@@ -11,7 +11,6 @@
   <p>
     <a href="https://github.com/avelino/awesome-go?tab=readme-ov-file#messaging"><img src="https://awesome.re/mentioned-badge-flat.svg" alt="Mentioned in Awesome Go" /></a>
     <a href="https://pkg.go.dev/github.com/goptics/varmq"><img src="https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go" alt="Go Reference" /></a>
-    <a href="https://goreportcard.com/report/github.com/goptics/varmq"><img src="https://goreportcard.com/badge/github.com/goptics/varmq" alt="Go Report Card" /></a>
     <a href="https://github.com/goptics/varmq/actions/workflows/ci.yml"><img src="https://github.com/goptics/varmq/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
     <a href="https://codecov.io/gh/goptics/varmq"><img src="https://codecov.io/gh/goptics/varmq/branch/main/graph/badge.svg" alt="Codecov" /></a>
     <a href="https://varmq.goptics.org/bench-log"><img src="https://img.shields.io/badge/Bench_Logs-orange?logo=googledocs&logoColor=white" alt="Bench Logs" /></a>
@@ -20,7 +19,7 @@
   </p>
 
   <p>
-    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#the-concurrency-architecture">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
+    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#concurrency">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
   </p>
   <p>
     With <code>VarMQ</code>, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using <a href="#built-in-adapters">adapters</a>. All through a clean, intuitive API that feels natural to Go developers.
@@ -69,6 +68,37 @@ import (
 func main() {
   worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Printf("Processing %d\n", j.Data())
+    time.Sleep(1 * time.Second)
+  }) // default concurrency is 1
+  defer worker.WaitUntilIdle()
+  queue := worker.BindQueue()
+
+  queue.Add(1)
+  queue.Add(2)
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/mobZd9pKcug)**
+
+A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
+
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+
+### Concurrency
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/goptics/varmq"
+)
+
+func main() {
+  worker := varmq.NewWorker(func(j varmq.Job[int]) {
+    fmt.Printf("Processing %d\n", j.Data())
     time.Sleep(500 * time.Millisecond)
   }, 10) // with concurrency 10 or set 0 for parallelism
   defer worker.WaitUntilIdle()
@@ -81,6 +111,13 @@ func main() {
 ```
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
+
+Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free.
+
+![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
+
+> [!Note]
+> Concurrency is a limit, not a pool size. A worker starts with a single goroutine and spawns more only while jobs are waiting, up to the limit. As the queue drains, the extra goroutines exit one by one, keeping one idle (or the share set by `varmq.WithMinIdleWorkerRatio`). To keep idle goroutines around for reuse, set `varmq.WithIdleWorkerExpiryDuration`: they are then removed only after sitting idle that long.
 
 ### Priority Queue
 
@@ -97,6 +134,10 @@ for i := range 10 {
 ```
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/CHF8PVyrBI0)**
+
+Jobs waiting in a priority queue are reordered, so a higher-priority job added later is dispatched first:
+
+![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
 
 ## 💡 Highlighted Features
 
@@ -171,6 +212,10 @@ for i := range 10 {
 ```
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/0eL_0WNRVIh)**
+
+The Queue Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
+
+![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
 
 ### Result and Error Worker
 
@@ -330,18 +375,6 @@ For detailed performance comparisons and benchmarking results, visit:
 ## API Reference
 
 For the complete package documentation, types, and method signatures, browse the **[GoDoc](https://pkg.go.dev/github.com/goptics/varmq)**.
-
-## The Concurrency Architecture
-
-VarMQ's concurrency model is built around a smart event loop that keeps everything running smoothly.
-
-The event loop continuously monitors for pending jobs in queues and available workers in the pool. When both conditions are met, jobs get distributed to workers instantly. When there's no work to distribute, the system enters a low-power wait state.
-
-Workers operate independently - they process jobs and immediately signal back when they're ready for more work. This triggers the event loop to check for new jobs and distribute them right away.
-
-The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
-
-![varmq architecture](./assets/diagrams/varmq-architecture.png)
 
 ## Star History
 

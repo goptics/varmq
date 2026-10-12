@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ multiple queues with round-robin selection</title>
+  <desc id="desc">Three empty queues are bound to one worker with concurrency 2 and the RoundRobin strategy. Producers add jobs to all three queues; only the first signal reaches the event loop, the others are dropped because one signal is already pending. The pool starts with a single worker goroutine. The Queue Manager picks the next queue in turn: Queue 1 goes to Worker 1, then Worker 2 is spawned for Queue 2, and the remaining jobs wait. A finished worker stays idle in the pool while enough jobs are queued; idle workers are reused newest first. Each time a worker finishes, its signal lets the event loop dispatch one more job, continuing the rotation with Queue 3 and Queue 1. When Queue 2 is empty the Queue Manager skips it and moves on to Queue 3. As the queues drain, Worker 2 exits because Worker 1 is already idle. Once every queue is empty, later signals find nothing to do and the event loop waits.</desc>
+  <style>
+    :root {
+      --dur: {D}s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .loop { stroke: var(--el); stroke-width: 2; }
+    .mgr { stroke: var(--job); }
+    .wk { stroke: var(--worker); }
+    .prod { stroke: var(--item); stroke-width: 2; }
+    .lane { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .slot { fill: none; stroke: var(--item); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+    .item { fill: var(--item); }
+    .pool { fill: none; stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .sig { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .arrow { fill: var(--line); }
+    .arrow-sig { fill: var(--signal); }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .s { fill: var(--signal); }
+    .why { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; fill: var(--no); }
+    .c { fill: var(--fg); }
+    .lg { font-size: 12px; fill: var(--muted); text-anchor: start; }
+
+    /* motion: one shared --dur loop; keyframes generated from a simulated event-loop timeline, keyframe name == element id */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    #ring { fill: none; stroke: var(--el); stroke-width: 2; transform-origin: center; }
+    .g-item { fill: var(--item); }
+    .g-job { fill: var(--job); }
+    .g-no { fill: var(--no); }
+    .g-wk { fill: var(--worker); }
+    .bar { fill: var(--worker); transform-origin: left center; }
+    .sigdot { fill: var(--signal); }
+    /*KEYFRAMES*/
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -{STILL}s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-sig" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="439" rx="12"/>
+
+  <!--LEGEND-->
+
+  <!-- signal edges: Add and worker-done both wake the event loop -->
+  <path class="sig" d="M20 216H10M20 296H10M20 376H10V44H493" marker-end="url(#as)"/>
+  <text class="m s" x="250" y="32">Add() → notifyToPullNextJobs()</text>
+  <path class="sig" d="M900 276H940M900 336H940V58H667" marker-end="url(#as)"/>
+  <text class="m s" x="800" y="46">done → notifyToPullNextJobs()</text>
+
+  <!-- producers -->
+  <rect class="box prod" x="20" y="194" width="80" height="44" rx="8"/>
+  <rect class="box prod" x="20" y="274" width="80" height="44" rx="8"/>
+  <rect class="box prod" x="20" y="354" width="80" height="44" rx="8"/>
+  <g id="add-glow" class="a g-item">
+    <rect x="20" y="194" width="80" height="44" rx="8"/>
+    <rect x="20" y="274" width="80" height="44" rx="8"/>
+    <rect x="20" y="354" width="80" height="44" rx="8"/>
+  </g>
+  <text class="t" x="60" y="216">Add</text>
+  <text class="t" x="60" y="296">Add</text>
+  <text class="t" x="60" y="376">Add</text>
+  <text class="m" x="60" y="420">producers</text>
+  <path class="edge" d="M100 216H134" marker-end="url(#a)"/>
+  <path class="edge" d="M100 296H134" marker-end="url(#a)"/>
+  <path class="edge" d="M100 376H134" marker-end="url(#a)"/>
+
+  <!-- queues (start empty) -->
+  <text class="h" x="136" y="183">Queue 1</text>
+  <rect class="lane" x="136" y="193" width="152" height="46" rx="8"/>
+  <rect id="q1-pick" class="a g-job" x="136" y="193" width="152" height="46" rx="8"/>
+  <rect id="q1-skip" class="a g-no" x="136" y="193" width="152" height="46" rx="8"/>
+  <rect class="slot" x="144" y="201" width="30" height="30" rx="5"/>
+  <rect class="slot" x="178" y="201" width="30" height="30" rx="5"/>
+  <rect class="slot" x="212" y="201" width="30" height="30" rx="5"/>
+  <rect class="slot" x="246" y="201" width="30" height="30" rx="5"/>
+  <rect id="q1i0" class="item a" x="0" y="201" width="30" height="30" rx="5"/>
+  <rect id="q1i1" class="item a" x="0" y="201" width="30" height="30" rx="5"/>
+  <rect id="q1i2" class="item a" x="0" y="201" width="30" height="30" rx="5"/>
+
+  <text class="h" x="136" y="263">Queue 2</text>
+  <rect class="lane" x="136" y="273" width="152" height="46" rx="8"/>
+  <rect id="q2-pick" class="a g-job" x="136" y="273" width="152" height="46" rx="8"/>
+  <rect id="q2-skip" class="a g-no" x="136" y="273" width="152" height="46" rx="8"/>
+  <rect class="slot" x="144" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="178" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="212" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="246" y="281" width="30" height="30" rx="5"/>
+  <rect id="q2i0" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+
+  <text class="h" x="136" y="343">Queue 3</text>
+  <rect class="lane" x="136" y="353" width="152" height="46" rx="8"/>
+  <rect id="q3-pick" class="a g-job" x="136" y="353" width="152" height="46" rx="8"/>
+  <rect id="q3-skip" class="a g-no" x="136" y="353" width="152" height="46" rx="8"/>
+  <rect class="slot" x="144" y="361" width="30" height="30" rx="5"/>
+  <rect class="slot" x="178" y="361" width="30" height="30" rx="5"/>
+  <rect class="slot" x="212" y="361" width="30" height="30" rx="5"/>
+  <rect class="slot" x="246" y="361" width="30" height="30" rx="5"/>
+  <rect id="q3i0" class="item a" x="0" y="361" width="30" height="30" rx="5"/>
+  <rect id="q3i1" class="item a" x="0" y="361" width="30" height="30" rx="5"/>
+
+  <!-- queues -> queue manager -> processNextJob -->
+  <path class="edge" d="M288 216H310V376H288"/>
+  <path class="edge" d="M288 296H328" marker-end="url(#a)"/>
+
+  <rect class="box mgr" x="330" y="261" width="130" height="70" rx="8"/>
+  <rect id="qm-glow" class="a g-job" x="330" y="261" width="130" height="70" rx="8"/>
+  <text class="t" x="395" y="280">Queue Manager</text>
+  <text class="m" x="395" y="299">queues.next()</text>
+  <text class="m" x="395" y="315">RoundRobin</text>
+  <path class="edge" d="M460 296H498" marker-end="url(#a)"/>
+
+  <!-- event loop + check -->
+  <text class="m" x="580" y="18">goroutine</text>
+  <rect class="box loop" x="495" y="30" width="170" height="56" rx="8"/>
+  <rect id="ring" class="a" x="495" y="30" width="170" height="56" rx="8"/>
+  <text class="t" x="580" y="51">Event Loop</text>
+  <text class="m" x="580" y="70">select ← signal</text>
+
+  <path class="edge" d="M580 86V134" marker-end="url(#a)"/>
+  <path class="box" d="M485 176L580 136L675 176L580 216Z"/>
+  <path id="yes" class="a g-job" d="M485 176L580 136L675 176L580 216Z"/>
+  <path id="no" class="a g-no" d="M485 176L580 136L675 176L580 216Z"/>
+  <text class="m c" x="580" y="169">queues not empty</text>
+  <text class="m c" x="580" y="184">&amp;&amp; slot free</text>
+
+  <path class="edge" d="M580 216V264" marker-end="url(#a)"/>
+  <text class="m" x="593" y="240" style="text-anchor:start">yes</text>
+  <path class="edge" d="M485 176H462V72H493" marker-end="url(#a)"/>
+  <text class="m" x="424" y="116">no: wait</text>
+  <text id="why-busy" class="why a" x="424" y="132">all 2 busy</text>
+  <text id="why-empty" class="why a" x="424" y="132">queues empty</text>
+
+  <!-- dispatch -->
+  <rect class="box mgr" x="500" y="266" width="160" height="60" rx="8"/>
+  <rect id="proc-glow" class="a g-job" x="500" y="266" width="160" height="60" rx="8"/>
+  <text class="t" x="580" y="288">Process next job</text>
+  <text class="m" x="580" y="308">processNextJob()</text>
+  <path class="edge" d="M660 296H690M690 276V336"/>
+  <path class="edge" d="M690 276H718" marker-end="url(#a)"/>
+  <path class="edge" d="M690 336H718" marker-end="url(#a)"/>
+
+  <!-- worker pool -->
+  <rect class="pool" x="705" y="222" width="215" height="140" rx="10"/>
+  <text class="h" x="718" y="240">Worker Pool</text>
+  <text class="m" x="908" y="240" style="text-anchor:end">concurrency = 2</text>
+
+  <g id="w1-row" class="a">
+  <rect class="box" x="720" y="256" width="50" height="40" rx="6"/><text class="m" x="745" y="276">ch1</text>
+  <path class="edge" d="M770 276H788" marker-end="url(#a)"/>
+  <rect class="box wk" x="790" y="256" width="110" height="40" rx="6"/>
+  <rect id="w1-glow" class="a g-wk" x="790" y="256" width="110" height="40" rx="6"/>
+  <text class="t" x="845" y="270">Worker 1</text>
+  <rect class="track" x="800" y="285" width="90" height="4" rx="2"/>
+  <rect id="w1-bar" class="a lin bar" x="800" y="285" width="90" height="4" rx="2"/>
+  </g>
+
+  <g id="w2-row" class="a">
+  <rect class="box" x="720" y="316" width="50" height="40" rx="6"/><text class="m" x="745" y="336">ch2</text>
+  <path class="edge" d="M770 336H788" marker-end="url(#a)"/>
+  <rect class="box wk" x="790" y="316" width="110" height="40" rx="6"/>
+  <rect id="w2-glow" class="a g-wk" x="790" y="316" width="110" height="40" rx="6"/>
+  <text class="t" x="845" y="330">Worker 2</text>
+  <rect class="track" x="800" y="345" width="90" height="4" rx="2"/>
+  <rect id="w2-bar" class="a lin bar" x="800" y="345" width="90" height="4" rx="2"/>
+  </g>
+
+  <!-- moving tokens on top -->
+  <circle id="job0" class="a lin" r="7"/>
+  <circle id="job1" class="a lin" r="7"/>
+  <circle id="job2" class="a lin" r="7"/>
+  <circle id="job3" class="a lin" r="7"/>
+  <circle id="job4" class="a lin" r="7"/>
+  <circle id="job5" class="a lin" r="7"/>
+  <circle id="add1" class="a lin sigdot" r="5"/>
+  <circle id="add2" class="a lin sigdot" r="5"/>
+  <circle id="add3" class="a lin sigdot" r="5"/>
+  <circle id="done0" class="a lin sigdot" r="5"/>
+  <circle id="done1" class="a lin sigdot" r="5"/>
+  <circle id="done2" class="a lin sigdot" r="5"/>
+  <circle id="done3" class="a lin sigdot" r="5"/>
+  <circle id="done4" class="a lin sigdot" r="5"/>
+  <circle id="done5" class="a lin sigdot" r="5"/>
+</svg>

@@ -1,4 +1,4 @@
-.PHONY: help init test bench format release
+.PHONY: help init test bench format diagrams release
 
 # Default target - list available targets
 help:
@@ -7,6 +7,7 @@ help:
 	@echo "  init     - Install dependencies and setup git hooks"
 	@echo "  test     - Run all tests (no cache)"
 	@echo "  format   - Format codes"
+	@echo "  diagrams - Regenerate animated README diagrams (assets/diagrams/gen)"
 	@echo "  release  - Create and push a new tag to trigger release (usage: make release VERSION=v1.0.0)"
 
 # Install dependencies and setup git hooks
@@ -27,6 +28,12 @@ bench:
 # Format codes
 format:
 	gofmt -w .
+
+# Regenerate animated README diagrams
+diagrams:
+	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority; do \
+		python3 gen_$${d#*:}.py $${d%:*}.tpl.svg ../varmq-$${d%:*}.svg > /dev/null || exit 1; \
+	done
 
 # Create and push a new tag to trigger release
 release:

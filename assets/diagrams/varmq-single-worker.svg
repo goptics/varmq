@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 370" width="960" height="370" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ event loop with one worker</title>
+  <desc id="desc">Queue starts empty. Add() enqueues a job and signals the event loop, which checks that the queue is not empty and a worker slot is free, then dequeues the job and sends it through a channel to Worker 1. A second job added while Worker 1 is busy waits in the queue because no slot is free. When Worker 1 finishes it signals the event loop, which dispatches the waiting job. After the last job the queue is empty and the event loop waits for the next signal.</desc>
+  <style>
+    :root {
+      --dur: 16s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .loop { stroke: var(--el); stroke-width: 2; }
+    .mgr { stroke: var(--job); }
+    .wk { stroke: var(--worker); }
+    .prod { stroke: var(--item); stroke-width: 2; }
+    .lane { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .slot { fill: none; stroke: var(--item); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+    .item { fill: var(--item); }
+    .pool { fill: none; stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .sig { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .arrow { fill: var(--line); }
+    .arrow-sig { fill: var(--signal); }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .s { fill: var(--signal); }
+    .why { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; fill: var(--no); }
+    .c { fill: var(--fg); }
+    .lg { font-size: 12px; fill: var(--muted); text-anchor: start; }
+
+    /* motion: one shared --dur loop; choreography lives in keyframe percentages (generated from a seconds timeline) */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    #ring { fill: none; stroke: var(--el); stroke-width: 2; transform-origin: center; animation-name: ring; }
+    #add-glow { fill: var(--item); animation-name: add; }
+    #yes { fill: var(--job); animation-name: yes; }
+    #no { fill: var(--no); animation-name: no; }
+    #busy-why { animation-name: busy-why; }
+    #empty-why { animation-name: empty-why; }
+    #proc-glow { fill: var(--job); animation-name: proc; }
+    #w1-glow { fill: var(--worker); animation-name: busy; }
+    #w1-bar { fill: var(--worker); transform-origin: left center; animation-name: bar; }
+    #item-a { animation-name: item-a; }
+    #item-b { animation-name: item-b; }
+    #job-a { animation-name: job-a; }
+    #job-b { animation-name: job-b; }
+    #sig-add, #sig-done { fill: var(--signal); }
+    #sig-add { animation-name: sig-add; }
+    #sig-done { animation-name: sig-done; }
+    @keyframes ring { 0% { opacity: 0; transform: scale(1); } 8.75% { opacity: 0; transform: scale(1); } 9.38% { opacity: 0.9; transform: scale(1.04); } 12.5% { opacity: 0; transform: scale(1.18); } 33.75% { opacity: 0; transform: scale(1); } 34.38% { opacity: 0.9; transform: scale(1.04); } 37.5% { opacity: 0; transform: scale(1.18); } 46.25% { opacity: 0; transform: scale(1); } 46.88% { opacity: 0.9; transform: scale(1.04); } 50% { opacity: 0; transform: scale(1.18); } 83.75% { opacity: 0; transform: scale(1); } 84.38% { opacity: 0.9; transform: scale(1.04); } 87.5% { opacity: 0; transform: scale(1.18); } 100% { opacity: 0; transform: scale(1.18); } }
+    @keyframes add { 0% { opacity: 0; } 1.25% { opacity: 0; } 1.88% { opacity: 0.25; } 2.81% { opacity: 0.25; } 4.38% { opacity: 0; } 26.25% { opacity: 0; } 26.88% { opacity: 0.25; } 27.81% { opacity: 0.25; } 29.38% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes yes { 0% { opacity: 0; } 10% { opacity: 0; } 10.94% { opacity: 0.3; } 12.19% { opacity: 0.3; } 13.75% { opacity: 0; } 47.5% { opacity: 0; } 48.44% { opacity: 0.3; } 49.69% { opacity: 0.3; } 51.25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes no { 0% { opacity: 0; } 35% { opacity: 0; } 35.94% { opacity: 0.3; } 38.12% { opacity: 0.3; } 40% { opacity: 0; } 85% { opacity: 0; } 85.94% { opacity: 0.3; } 88.75% { opacity: 0.3; } 91.25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes busy-why { 0% { opacity: 0; } 35% { opacity: 0; } 35.94% { opacity: 1; } 38.75% { opacity: 1; } 40.62% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes empty-why { 0% { opacity: 0; } 85% { opacity: 0; } 85.94% { opacity: 1; } 90.62% { opacity: 1; } 92.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes proc { 0% { opacity: 0; } 15.62% { opacity: 0; } 16.25% { opacity: 0.18; } 18.75% { opacity: 0.18; } 19.69% { opacity: 0; } 53.12% { opacity: 0; } 53.75% { opacity: 0.18; } 56.25% { opacity: 0.18; } 57.19% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes busy { 0% { opacity: 0; } 23.12% { opacity: 0; } 24.38% { opacity: 0.14; } 38.75% { opacity: 0.14; } 40.62% { opacity: 0; } 60.63% { opacity: 0; } 61.88% { opacity: 0.14; } 76.25% { opacity: 0.14; } 78.12% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes bar { 0% { opacity: 1; transform: scaleX(0); } 23.75% { opacity: 1; transform: scaleX(0); } 38.75% { opacity: 1; transform: scaleX(1); } 40.62% { opacity: 0; transform: scaleX(1); } 40.69% { opacity: 1; transform: scaleX(0); } 61.25% { opacity: 1; transform: scaleX(0); } 76.25% { opacity: 1; transform: scaleX(1); } 78.12% { opacity: 0; transform: scaleX(1); } 78.19% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @keyframes item-a { 0% { opacity: 0; transform: translate(140px, 0px); } 1.25% { opacity: 0; transform: translate(140px, 0px); } 2.19% { opacity: 1; transform: translate(162px, 0px); } 5% { opacity: 1; transform: translate(330px, 0px); } 13.12% { opacity: 1; transform: translate(330px, 0px); } 14.69% { opacity: 0; transform: translate(354px, 0px); } 100% { opacity: 0; transform: translate(354px, 0px); } }
+    @keyframes item-b { 0% { opacity: 0; transform: translate(140px, 0px); } 26.25% { opacity: 0; transform: translate(140px, 0px); } 27.19% { opacity: 1; transform: translate(162px, 0px); } 30% { opacity: 1; transform: translate(330px, 0px); } 50.62% { opacity: 1; transform: translate(330px, 0px); } 52.19% { opacity: 0; transform: translate(354px, 0px); } 100% { opacity: 0; transform: translate(354px, 0px); } }
+    @keyframes job-a { 0% { opacity: 0; transform: translate(382px, 266px); fill: var(--item); } 13.75% { opacity: 0; transform: translate(382px, 266px); fill: var(--item); } 14.25% { opacity: 1; transform: translate(390px, 266px); } 15.62% { opacity: 1; transform: translate(446px, 266px); } 16.12% { opacity: 0; transform: translate(456px, 266px); fill: var(--item); } 19.06% { opacity: 0; transform: translate(612px, 266px); fill: var(--job); } 19.56% { opacity: 1; transform: translate(626px, 266px); } 20.94% { opacity: 1; transform: translate(696px, 266px); } 21.38% { opacity: 0; transform: translate(704px, 266px); } 22.38% { opacity: 0; transform: translate(748px, 266px); } 22.81% { opacity: 1; transform: translate(756px, 266px); } 23.44% { opacity: 1; transform: translate(768px, 266px); } 23.75% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } 100% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } }
+    @keyframes job-b { 0% { opacity: 0; transform: translate(382px, 266px); fill: var(--item); } 51.25% { opacity: 0; transform: translate(382px, 266px); fill: var(--item); } 51.75% { opacity: 1; transform: translate(390px, 266px); } 53.12% { opacity: 1; transform: translate(446px, 266px); } 53.62% { opacity: 0; transform: translate(456px, 266px); fill: var(--item); } 56.56% { opacity: 0; transform: translate(612px, 266px); fill: var(--job); } 57.06% { opacity: 1; transform: translate(626px, 266px); } 58.44% { opacity: 1; transform: translate(696px, 266px); } 58.88% { opacity: 0; transform: translate(704px, 266px); } 59.88% { opacity: 0; transform: translate(748px, 266px); } 60.31% { opacity: 1; transform: translate(756px, 266px); } 60.94% { opacity: 1; transform: translate(768px, 266px); } 61.25% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } 100% { opacity: 0; transform: translate(776px, 266px); fill: var(--job); } }
+    @keyframes sig-add { 0% { opacity: 0; transform: translate(80px, 266px); } 3.12% { opacity: 0; transform: translate(80px, 266px); } 3.44% { opacity: 1; transform: translate(80px, 256px); } 5.31% { opacity: 1; transform: translate(80px, 44px); } 8.44% { opacity: 1; transform: translate(444px, 44px); } 8.75% { opacity: 0; transform: translate(448px, 44px); } 28.12% { opacity: 0; transform: translate(80px, 266px); } 28.44% { opacity: 1; transform: translate(80px, 256px); } 30.31% { opacity: 1; transform: translate(80px, 44px); } 33.44% { opacity: 1; transform: translate(444px, 44px); } 33.75% { opacity: 0; transform: translate(448px, 44px); } 100% { opacity: 0; transform: translate(448px, 44px); } }
+    @keyframes sig-done { 0% { opacity: 0; transform: translate(890px, 296px); } 38.75% { opacity: 0; transform: translate(890px, 296px); } 39.25% { opacity: 1; transform: translate(898px, 296px); } 39.69% { opacity: 1; transform: translate(935px, 296px); } 42.19% { opacity: 1; transform: translate(935px, 58px); } 45.75% { opacity: 1; transform: translate(626px, 58px); } 46.25% { opacity: 0; transform: translate(622px, 58px); } 76.25% { opacity: 0; transform: translate(890px, 296px); } 76.75% { opacity: 1; transform: translate(898px, 296px); } 77.19% { opacity: 1; transform: translate(935px, 296px); } 79.69% { opacity: 1; transform: translate(935px, 58px); } 83.25% { opacity: 1; transform: translate(626px, 58px); } 83.75% { opacity: 0; transform: translate(622px, 58px); } 100% { opacity: 0; transform: translate(622px, 58px); } }
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -5.9s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-sig" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="369" rx="12"/>
+
+  <g transform="translate(110 88)">
+    <rect class="item" x="0" y="-6" width="12" height="12" rx="3"/><text class="lg" x="20" y="0">job waiting in queue</text>
+    <circle style="fill: var(--job)" cx="6" cy="20" r="6"/><text class="lg" x="20" y="20">job being dispatched</text>
+    <rect style="fill: var(--worker)" x="0" y="37" width="12" height="6" rx="2"/><text class="lg" x="20" y="40">worker busy</text>
+    <circle style="fill: var(--signal)" cx="6" cy="60" r="5"/><text class="lg" x="20" y="60">signal to event loop</text>
+  </g>
+
+  <!-- signal edges: Add() and worker-done both wake the event loop -->
+  <path class="sig" d="M80 268V44H446" marker-end="url(#as)"/>
+  <text class="m s" x="270" y="32">Add() → notifyToPullNextJobs()</text>
+  <path class="sig" d="M890 296H935V58H624" marker-end="url(#as)"/>
+  <text class="m s" x="780" y="46">done → notifyToPullNextJobs()</text>
+
+  <g transform="translate(0 30)">
+  <!-- producer -->
+  <text class="m" x="80" y="312">producer</text>
+  <rect class="box prod" x="20" y="238" width="120" height="56" rx="8"/>
+  <rect id="add-glow" class="a" x="20" y="238" width="120" height="56" rx="8"/>
+  <text class="t" x="80" y="266">Add(job)</text>
+  <path class="edge" d="M140 266H178" marker-end="url(#a)"/>
+
+  <!-- queue (starts empty) -->
+  <text class="h" x="180" y="226">Queue</text>
+  <rect class="lane" x="180" y="238" width="200" height="56" rx="8"/>
+  <rect class="slot" x="192" y="246" width="40" height="40" rx="6"/>
+  <rect class="slot" x="238" y="246" width="40" height="40" rx="6"/>
+  <rect class="slot" x="284" y="246" width="40" height="40" rx="6"/>
+  <rect class="slot" x="330" y="246" width="40" height="40" rx="6"/>
+  <rect id="item-a" class="item a" x="0" y="246" width="40" height="40" rx="6"/>
+  <rect id="item-b" class="item a" x="0" y="246" width="40" height="40" rx="6"/>
+  <path class="edge" d="M380 266H448" marker-end="url(#a)"/>
+  <text class="m" x="414" y="254">dequeue</text>
+
+  </g>
+
+  <!-- event loop + check -->
+  <text class="m" x="535" y="18">goroutine</text>
+  <rect class="box loop" x="450" y="30" width="170" height="56" rx="8"/>
+  <rect id="ring" class="a" x="450" y="30" width="170" height="56" rx="8"/>
+  <text class="t" x="535" y="51">Event Loop</text>
+  <text class="m" x="535" y="70">select ← signal</text>
+
+  <path class="edge" d="M535 86V134" marker-end="url(#a)"/>
+  <path class="box" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="yes" class="a" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="no" class="a" d="M440 176L535 136L630 176L535 216Z"/>
+  <text class="m c" x="535" y="169">queue not empty</text>
+  <text class="m c" x="535" y="184">&amp;&amp; slot free</text>
+
+  <path class="edge" d="M535 216V264" marker-end="url(#a)"/>
+  <text class="m" x="548" y="240" style="text-anchor:start">yes</text>
+  <path class="edge" d="M440 176H415V72H448" marker-end="url(#a)"/>
+  <text class="m" x="376" y="116">no: wait</text>
+  <text id="busy-why" class="why a" x="376" y="132">slot busy</text>
+  <text id="empty-why" class="why a" x="376" y="132">queue empty</text>
+
+  <g transform="translate(0 30)">
+  <!-- dispatch -->
+  <rect class="box mgr" x="450" y="236" width="170" height="60" rx="8"/>
+  <rect id="proc-glow" class="a" x="450" y="236" width="170" height="60" rx="8"/>
+  <text class="t" x="535" y="258">Process next job</text>
+  <text class="m" x="535" y="278">processNextJob()</text>
+  <path class="edge" d="M620 266H698" marker-end="url(#a)"/>
+  <text class="m" x="659" y="254">job</text>
+
+  <!-- worker pool -->
+  <rect class="pool" x="680" y="200" width="230" height="110" rx="10"/>
+  <text class="h" x="693" y="220">Worker Pool</text>
+  <text class="m" x="898" y="220" style="text-anchor:end">concurrency = 1</text>
+  <rect class="box" x="700" y="244" width="50" height="44" rx="6"/><text class="m" x="725" y="266">ch1</text>
+  <path class="edge" d="M750 266H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="244" width="120" height="44" rx="6"/>
+  <rect id="w1-glow" class="a" x="770" y="244" width="120" height="44" rx="6"/>
+  <text class="t" x="830" y="260">Worker 1</text>
+  <rect class="track" x="780" y="276" width="100" height="4" rx="2"/>
+  <rect id="w1-bar" class="a lin" x="780" y="276" width="100" height="4" rx="2"/>
+
+  <!-- moving tokens on top -->
+  <circle id="job-a" class="a lin" r="7"/>
+  <circle id="job-b" class="a lin" r="7"/>
+  </g>
+  <circle id="sig-add" class="a lin" r="5"/>
+  <circle id="sig-done" class="a lin" r="5"/>
+</svg>
