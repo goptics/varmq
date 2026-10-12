@@ -428,3 +428,58 @@ func TestMuxConcurrencyChange(t *testing.T) {
 
 	w.Stop()
 }
+
+// TestMuxInstanceHeader covers the instance identity header that lets clients
+// tell instances apart behind a load balancer: success, error and empty-body
+// responses must all carry it.
+func TestMuxInstanceHeader(t *testing.T) {
+	WorkerRegistry.Clear()
+	defer WorkerRegistry.Clear()
+
+	prev := InstanceID
+	InstanceID = "pod-7"
+	defer func() { InstanceID = prev }()
+
+	w := newWorker(func(j iJob[int]) {}, WithName("instance-header-worker"))
+	defer w.Stop()
+	server := NewServerMux()
+
+	cases := []struct{ method, path string }{
+		{"GET", "/health"},
+		{"GET", "/workers"},
+		{"GET", "/workers/nonexistent"},
+		{"PATCH", "/workers/instance-header-worker/actions/unknown"},
+		{"PATCH", "/workers/instance-header-worker/actions/start"},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(c.method, c.path, nil)
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, req)
+		assert.Equal(t, "pod-7", rr.Header().Get(InstanceHeader), "%s %s", c.method, c.path)
+	}
+
+	// Responses ServeMux generates itself (unknown path, wrong method, path
+	// outside the prefix) never reach writeJSON; Handler must still stamp them.
+	handler := Handler("/varmq")
+	for _, c := range []struct {
+		method, path string
+		code         int
+	}{
+		{"GET", "/varmq/nope", http.StatusNotFound},
+		{"POST", "/varmq/workers", http.StatusMethodNotAllowed},
+		{"GET", "/elsewhere", http.StatusNotFound},
+	} {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, httptest.NewRequest(c.method, c.path, nil))
+		assert.Equal(t, c.code, rr.Code, "%s %s", c.method, c.path)
+		assert.Equal(t, "pod-7", rr.Header().Get(InstanceHeader), "%s %s", c.method, c.path)
+	}
+
+	// Errors are JSON like every other response.
+	req := httptest.NewRequest("GET", "/workers/nonexistent", nil)
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+	var body map[string]string
+	assert.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+	assert.Equal(t, "worker not found", body["error"])
+}

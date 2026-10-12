@@ -4,12 +4,23 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 )
 
 // WorkerRegistry safely stores reference to all active workers by Name
 var WorkerRegistry sync.Map
+
+// InstanceHeader is the response header carrying [InstanceID]. Clients use it
+// to tell which process answered when several instances sit behind one URL
+// (e.g. a load balancer).
+const InstanceHeader = "X-Varmq-Instance"
+
+// InstanceID identifies this process in every REST API response. It defaults
+// to the hostname (the pod name on Kubernetes), or "" if that is unavailable;
+// set it before serving when several instances share a host.
+var InstanceID, _ = os.Hostname()
 
 type workerSummary struct {
 	Name           string `json:"name"`
@@ -28,8 +39,15 @@ type workerSummary struct {
 //	mainMux := http.NewServeMux()
 //	mainMux.Handle("/varmq/", varmq.Handler("/varmq"))
 //	http.ListenAndServe(":8080", mainMux)
+//
+// Handler sets [InstanceHeader] on every response, including the 404 and 405
+// replies ServeMux generates itself for unknown paths or methods.
 func Handler(prefix string) http.Handler {
-	return http.StripPrefix(prefix, NewServerMux())
+	mux := http.StripPrefix(prefix, NewServerMux())
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(InstanceHeader, InstanceID)
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // NewServerMux returns a new [http.ServeMux] with all the REST API routes configured.
@@ -98,7 +116,7 @@ func lookupWorker(name string) Worker {
 func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 	worker := lookupWorker(r.PathValue("name"))
 	if worker == nil {
-		http.Error(w, "worker not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "worker not found")
 		return
 	}
 
@@ -134,7 +152,7 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 func handleWorkerAction(w http.ResponseWriter, r *http.Request) {
 	worker := lookupWorker(r.PathValue("name"))
 	if worker == nil {
-		http.Error(w, "worker not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "worker not found")
 		return
 	}
 
@@ -153,7 +171,7 @@ func handleWorkerAction(w http.ResponseWriter, r *http.Request) {
 	case "stop":
 		err = worker.Stop()
 	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "unknown action")
 		return
 	}
 
@@ -164,13 +182,13 @@ func handleWorkerAction(w http.ResponseWriter, r *http.Request) {
 func handleWorkerConcurrency(w http.ResponseWriter, r *http.Request) {
 	worker := lookupWorker(r.PathValue("name"))
 	if worker == nil {
-		http.Error(w, "worker not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "worker not found")
 		return
 	}
 
 	concurrency, err := strconv.Atoi(r.PathValue("number"))
 	if err != nil {
-		http.Error(w, "invalid concurrency value", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid concurrency value")
 		return
 	}
 
@@ -190,10 +208,12 @@ func handleActionErr(w http.ResponseWriter, err error) {
 		return
 	}
 
+	w.Header().Set(InstanceHeader, InstanceID)
 	w.WriteHeader(http.StatusOK)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set(InstanceHeader, InstanceID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
