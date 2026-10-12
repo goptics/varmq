@@ -82,6 +82,10 @@ func main() {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
+With concurrency above 1, one signal lets the event loop dispatch jobs back to back until every slot is busy:
+
+![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
+
 ### Priority Queue
 
 You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
@@ -97,6 +101,10 @@ for i := range 10 {
 ```
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/CHF8PVyrBI0)**
+
+Jobs waiting in a priority queue are reordered, so a higher-priority job added later is dispatched first:
+
+![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
 
 ## 💡 Highlighted Features
 
@@ -171,6 +179,10 @@ for i := range 10 {
 ```
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/0eL_0WNRVIh)**
+
+The Queue Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
+
+![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
 
 ### Result and Error Worker
 
@@ -341,11 +353,7 @@ The event loop continuously monitors for pending jobs in queues and available wo
 
 Workers operate independently - they process jobs and immediately signal back when they're ready for more work. This triggers the event loop to check for new jobs and distribute them right away.
 
-![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
-
-When several queues are bound to the same worker, the Queue Manager decides which queue the next job comes from, based on the configured [strategy](#multi-queue-binds). With `RoundRobin` it takes turns across the queues and skips any that are empty.
-
-![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
+The same loop drives every setup: a [worker pool](#basic-usage) dispatches until all slots are busy, a [priority queue](#priority-queue) hands out the highest-priority job first, and with [multiple queues](#multi-queue-binds) the Queue Manager picks the source queue based on the configured strategy.
 
 The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
