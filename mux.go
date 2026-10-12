@@ -18,16 +18,9 @@ var WorkerRegistry sync.Map
 const InstanceHeader = "X-Varmq-Instance"
 
 // InstanceID identifies this process in every REST API response. It defaults
-// to the hostname (the pod name on Kubernetes); set it before serving when
-// several instances share a host.
-var InstanceID = defaultInstanceID()
-
-func defaultInstanceID() string {
-	if h, err := os.Hostname(); err == nil && h != "" {
-		return h
-	}
-	return "unknown"
-}
+// to the hostname (the pod name on Kubernetes), or "" if that is unavailable;
+// set it before serving when several instances share a host.
+var InstanceID, _ = os.Hostname()
 
 type workerSummary struct {
 	Name           string `json:"name"`
@@ -46,8 +39,15 @@ type workerSummary struct {
 //	mainMux := http.NewServeMux()
 //	mainMux.Handle("/varmq/", varmq.Handler("/varmq"))
 //	http.ListenAndServe(":8080", mainMux)
+//
+// Handler sets [InstanceHeader] on every response, including the 404 and 405
+// replies ServeMux generates itself for unknown paths or methods.
 func Handler(prefix string) http.Handler {
-	return http.StripPrefix(prefix, NewServerMux())
+	mux := http.StripPrefix(prefix, NewServerMux())
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(InstanceHeader, InstanceID)
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // NewServerMux returns a new [http.ServeMux] with all the REST API routes configured.
