@@ -36,6 +36,8 @@
     .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
     .s { fill: var(--signal); }
     .why { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; fill: var(--no); }
+    .c { fill: var(--fg); }
+    .lg { font-size: 12px; fill: var(--muted); text-anchor: start; }
 
     /* motion: one shared --dur loop; keyframes generated from a seconds timeline, keyframe name == element id */
     .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
@@ -115,7 +117,7 @@
     @keyframes w3-bar { 0% { opacity: 1; transform: scaleX(0); } 30.28% { opacity: 1; transform: scaleX(0); } 56.85% { opacity: 1; transform: scaleX(1); } 58.9% { opacity: 0; transform: scaleX(1); } 58.97% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
     @keyframes w4-glow { 0% { opacity: 0; } 33.84% { opacity: 0; } 34.66% { opacity: 0.14; } 47.95% { opacity: 0.14; } 49.66% { opacity: 0; } 72.01% { opacity: 0; } 72.83% { opacity: 0.14; } 81.51% { opacity: 0.14; } 83.22% { opacity: 0; } 100% { opacity: 0; } }
     @keyframes w4-bar { 0% { opacity: 1; transform: scaleX(0); } 33.84% { opacity: 1; transform: scaleX(0); } 47.95% { opacity: 1; transform: scaleX(1); } 50% { opacity: 0; transform: scaleX(1); } 50.07% { opacity: 1; transform: scaleX(0); } 72.01% { opacity: 1; transform: scaleX(0); } 81.51% { opacity: 1; transform: scaleX(1); } 83.56% { opacity: 0; transform: scaleX(1); } 83.63% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
-    @media (prefers-reduced-motion: reduce) { .a { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -5.4s; } }
   </style>
   <defs>
     <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
@@ -127,6 +129,13 @@
   </defs>
 
   <rect class="bg" x="0.5" y="0.5" width="959" height="419" rx="12"/>
+
+  <g transform="translate(110 88)">
+    <rect class="item" x="0" y="-6" width="12" height="12" rx="3"/><text class="lg" x="20" y="0">job waiting in queue</text>
+    <circle style="fill: var(--job)" cx="6" cy="20" r="6"/><text class="lg" x="20" y="20">job being dispatched</text>
+    <rect style="fill: var(--worker)" x="0" y="37" width="12" height="6" rx="2"/><text class="lg" x="20" y="40">worker busy</text>
+    <circle style="fill: var(--signal)" cx="6" cy="60" r="5"/><text class="lg" x="20" y="60">signal to event loop</text>
+  </g>
 
   <!-- signal edges: Add and worker-done both wake the event loop -->
   <path class="sig" d="M70 268V44H446" marker-end="url(#as)"/>
@@ -171,8 +180,8 @@
   <path class="box" d="M440 176L535 136L630 176L535 216Z"/>
   <path id="yes" class="a g-job" d="M440 176L535 136L630 176L535 216Z"/>
   <path id="no" class="a g-no" d="M440 176L535 136L630 176L535 216Z"/>
-  <text class="m" x="535" y="169">queue not empty</text>
-  <text class="m" x="535" y="184">&amp;&amp; slot free</text>
+  <text class="m c" x="535" y="169">queue not empty</text>
+  <text class="m c" x="535" y="184">&amp;&amp; slot free</text>
 
   <path class="edge" d="M535 216V264" marker-end="url(#a)"/>
   <text class="m" x="548" y="240" style="text-anchor:start">yes</text>
