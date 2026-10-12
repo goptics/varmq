@@ -6,3 +6,4 @@ assets/reel/node_modules/
 assets/reel/*.mp4
 assets/reel/*.srt
 assets/reel/still-*.png
+assets/reel/cover.png

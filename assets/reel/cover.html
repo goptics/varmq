@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VarMQ reel cover</title>
+<style>
+  :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --accent: #3fb950; --sans: system-ui, -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", monospace; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #000; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); text-align: center; }
+  /* everything sits inside the 1080x1350 middle band (y 285-1635) that profile grids show, and above the bottom UI */
+  .logo { position: absolute; top: 310px; left: 0; right: 0; margin: auto; width: 380px; }
+  .chip { position: absolute; top: 500px; left: 0; right: 0; margin: auto; width: max-content; font: 600 34px var(--mono); color: var(--accent); border: 3px solid var(--accent); border-radius: 999px; padding: 8px 28px; }
+  h1 { position: absolute; top: 600px; left: 40px; right: 40px; font-size: 128px; line-height: 1.02; font-weight: 850; letter-spacing: -3px; }
+  h1 span { color: var(--accent); }
+  .crop { position: absolute; top: 920px; left: 20px; width: 1040px; height: 510px; overflow: hidden; border-radius: 24px; border: 3px solid #30363d; }
+  /* worker-pool diagram, cropped to event loop + queue + dispatch + 4 workers (x 130-925, y 8-398) */
+  .crop iframe { position: absolute; width: 960px; height: 420px; border: 0; transform-origin: 0 0; transform: scale(1.308); left: -170px; top: -10px; }
+  .foot { position: absolute; top: 1480px; left: 0; right: 0; font: 600 40px var(--mono); color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img class="logo" src="../text-logo-dark.svg" alt="VarMQ">
+  <div class="chip">basic → advanced</div>
+  <h1>Go worker pool<br>in <span>60s</span></h1>
+  <div class="crop"><iframe src="../diagrams/varmq-worker-pool.svg" scrolling="no"></iframe></div>
+  <div class="foot">github.com/goptics/varmq</div>
+</div>
+<script>
+// Freeze the diagram at 5.4s: all 4 workers busy, 2 jobs waiting, check says "all 4 busy". Dark theme pinned.
+const STILL = 5.4;
+const frame = document.querySelector("iframe");
+window.ready = new Promise(ok => frame.addEventListener("load", () => {
+  const doc = frame.contentDocument;
+  for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) {
+    if (rule.media?.mediaText.includes("prefers-color-scheme: dark")) rule.media.mediaText = "all";
+    if (rule.media?.mediaText.includes("prefers-reduced-motion")) rule.media.mediaText = "not all";
+  }
+  doc.querySelector('g[transform="translate(110 88)"]').style.display = "none";  // legend: cropped, not needed on a cover
+  for (const a of doc.getAnimations()) { a.pause(); a.currentTime = STILL * 1000; }
+  ok();
+}, { once: true })).then(() => Promise.all([document.fonts.ready, ...[...document.images].map(i => i.decode())]));
+</script>
+</body>
+</html>

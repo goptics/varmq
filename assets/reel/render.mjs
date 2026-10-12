@@ -1,5 +1,6 @@
 // Renders index.html to a frame-exact MP4: seek(t) per frame -> PNG -> ffmpeg.
 // Usage: node render.mjs [out.mp4] [--fps 30] [--at 12.5,30  (stills only, for checking)]
+//        node render.mjs --cover   (cover.png from cover.html)
 //        node render.mjs --serve   (live presenter mode: open the printed URL and screen-record)
 import { createServer } from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
@@ -12,7 +13,7 @@ const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i < 0 ? def : args.splice(i, 2)[1]; };
 const FPS = Number(opt("--fps", 30));
 const AT = opt("--at", null);
-const SERVE = args.includes("--serve");
+const SERVE = args.includes("--serve"), COVER = args.includes("--cover");
 const OUT = args.find(a => !a.startsWith("--")) ?? "reel.mp4";
 
 // static server over assets/ so the page and the diagram iframes share one origin (seek reaches into them)
@@ -33,6 +34,13 @@ if (SERVE) {
 
 const browser = await chromium.launch({ channel: "chrome" });
 const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, colorScheme: "dark" });
+if (COVER) {
+  await page.goto(URL_.replace("index.html", "cover.html"));
+  await page.evaluate(() => window.ready);
+  await page.locator("#stage").screenshot({ path: "cover.png" });
+  console.log("wrote cover.png");
+  await browser.close(); server.close(); process.exit();
+}
 await page.goto(`${URL_}?render`);
 await page.evaluate(() => window.ready);
 const stage = page.locator("#stage");

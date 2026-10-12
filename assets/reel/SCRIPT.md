@@ -19,6 +19,12 @@ make reel
 
 Writes `assets/reel/reel.mp4` (1080×1920, 30 fps, silent) and `reel.srt` (captions). Add your voice or face-cam on top in any editor.
 
+Cover / thumbnail (`cover.html`, writes `assets/reel/cover.png`, 1080×1920):
+
+```bash
+cd assets/reel && npm run cover
+```
+
 Live presenter mode, to screen-record while you talk:
 
 ```bash

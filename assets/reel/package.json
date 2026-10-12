@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "render": "node render.mjs",
-    "serve": "node render.mjs --serve"
+    "serve": "node render.mjs --serve",
+    "cover": "node render.mjs --cover"
   },
   "devDependencies": {
     "playwright-core": "1.48.2"
