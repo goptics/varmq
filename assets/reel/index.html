@@ -27,7 +27,7 @@
   pre .ln { display: block; min-height: 1.5em; }
   .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); } .num { color: var(--num); } .fn { color: var(--fn); } .pkg { color: var(--pkg); }
   mark { color: inherit; background: var(--mark); border-radius: 6px; padding: 0 4px; outline: 2px solid transparent; }
-  .diagram { position: absolute; left: 0; width: 960px; border: 0; transform-origin: 0 0; transform: scale(1.125); }
+  .diagram { position: absolute; left: 40px; width: 960px; border: 2px solid var(--border); border-radius: 21px; transform-origin: 0 0; transform: scale(1.0417); }
   .cap { position: absolute; left: 60px; right: 120px; font-size: 52px; line-height: 1.25; font-weight: 700; }
   .cap code { font: 600 .9em var(--mono); color: var(--pkg); }
 
@@ -109,10 +109,10 @@ for (const s of SCENES) {
     frames.push({ el: el.querySelector("iframe"), scene: s });
   }
   stage.appendChild(el);
-  if (s.code) {              // stack: code, diagram (scaled 1.125, full bleed), caption
+  if (s.code) {              // stack: code, diagram (scaled to the code panel's 1000px width), caption
     const pre = el.querySelector("pre"), top = pre.offsetTop + pre.offsetHeight + 44;
     el.querySelector(".diagram").style.top = `${top}px`;
-    el.querySelector(".cap").style.top = `${top + s.h * 1.125 + 48}px`;
+    el.querySelector(".cap").style.top = `${top + s.h * 1.0417 + 48}px`;
   }
 
   // scene in/out: 0.35s fade + slide; the first scene is already on screen at frame 0 (it is the reel's first impression)
