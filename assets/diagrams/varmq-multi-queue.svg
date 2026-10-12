@@ -197,7 +197,7 @@
 
   <!-- queues -> queue manager -> processNextJob -->
   <path class="edge" d="M288 216H310V376H288"/>
-  <path class="edge" d="M310 296H328" marker-end="url(#a)"/>
+  <path class="edge" d="M288 296H328" marker-end="url(#a)"/>
 
   <rect class="box mgr" x="330" y="261" width="130" height="70" rx="8"/>
   <rect id="qm-glow" class="a g-job" x="330" y="261" width="130" height="70" rx="8"/>
