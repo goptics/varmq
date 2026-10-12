@@ -5,9 +5,119 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/goptics/varmq/mocks"
 )
+
+type acknowledgementQueue struct {
+	*mocks.MockPersistentQueue
+	acknowledged chan string
+}
+
+func (q *acknowledgementQueue) Acknowledge(id string) bool {
+	q.acknowledged <- id
+	return q.MockPersistentQueue.Acknowledge(id)
+}
+
+type acknowledgementPriorityQueue struct {
+	*mocks.MockPersistentPriorityQueue
+	acknowledged chan string
+}
+
+func (q *acknowledgementPriorityQueue) Acknowledge(id string) bool {
+	q.acknowledged <- id
+	return q.MockPersistentPriorityQueue.Acknowledge(id)
+}
+
+func TestWorkerBinderAcknowledgements(t *testing.T) {
+	tests := []struct {
+		name string
+		bind func(IWorkerBinder[string], bool) (func() bool, <-chan string)
+	}{
+		{
+			name: "custom queue",
+			bind: func(w IWorkerBinder[string], fail bool) (func() bool, <-chan string) {
+				q := &acknowledgementQueue{mocks.NewMockPersistentQueue(), make(chan string, 2)}
+				q.ShouldFailAcknowledge = fail
+				bound := w.WithQueue(q)
+				return func() bool {
+					_, ok := bound.Add("payload", WithJobId("test-job"))
+					return ok
+				}, q.acknowledged
+			},
+		},
+		{
+			name: "custom priority queue",
+			bind: func(w IWorkerBinder[string], fail bool) (func() bool, <-chan string) {
+				q := &acknowledgementPriorityQueue{mocks.NewMockPersistentPriorityQueue(), make(chan string, 2)}
+				q.ShouldFailAcknowledge = fail
+				bound := w.WithPriorityQueue(q)
+				return func() bool {
+					_, ok := bound.Add("payload", 1, WithJobId("test-job"))
+					return ok
+				}, q.acknowledged
+			},
+		},
+		{
+			name: "serialized persistent queue",
+			bind: func(w IWorkerBinder[string], fail bool) (func() bool, <-chan string) {
+				q := &acknowledgementQueue{mocks.NewMockPersistentQueue(), make(chan string, 2)}
+				q.ShouldFailAcknowledge = fail
+				bound := w.WithPersistentQueue(q)
+				return func() bool {
+					return bound.Add("payload", WithJobId("test-job"))
+				}, q.acknowledged
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		for _, fail := range []bool{false, true} {
+			name := "success"
+			if fail {
+				name = "failure"
+			}
+			t.Run(tt.name+"/"+name, func(t *testing.T) {
+				w := NewWorker(func(j Job[string]) {
+					assert.Equal(t, "payload", j.Data())
+				}, WithAutoRun(false))
+				enqueue, acknowledged := tt.bind(w, fail)
+				require.True(t, enqueue())
+				require.NoError(t, w.Start())
+				t.Cleanup(func() { assert.NoError(t, w.StopAndWait()) })
+				w.Wait()
+
+				select {
+				case id := <-acknowledged:
+					assert.Equal(t, "mock-ack-id", id)
+				default:
+					t.Error("job completion did not acknowledge the queue")
+				}
+				select {
+				case id := <-acknowledged:
+					t.Errorf("job was acknowledged twice: %s", id)
+				default:
+				}
+
+				select {
+				case err := <-w.Errs():
+					if fail {
+						assert.ErrorIs(t, err, ErrAcknowledgeJob)
+						assert.Contains(t, err.Error(), "test-job")
+						assert.Contains(t, err.Error(), "mock-ack-id")
+					} else {
+						t.Errorf("unexpected worker error: %v", err)
+					}
+				default:
+					if fail {
+						t.Error("rejected acknowledgement did not reach the worker error channel")
+					}
+				}
+			})
+		}
+	}
+}
 
 // Additional tests for Worker Binder functions with 0% coverage
 

@@ -78,12 +78,12 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 			w.releaseProcessingSlot()
 			return true, ErrFailedToCastJob
 		}
-
-		j.setInternalQueue(queue)
 	default:
 		w.releaseProcessingSlot()
 		return true, ErrFailedToCastJob
 	}
+
+	j.setInternalQueue(queue)
 
 	if j.IsClosed() {
 		w.releaseProcessingSlot()

@@ -63,11 +63,11 @@ func (gj *groupJob[T]) Close() error {
 		return err
 	}
 
-	gj.ack()
+	ackErr := gj.ack()
 	gj.changeStatus(closed)
 	gj.wgc.Done()
 
-	return nil
+	return ackErr
 }
 
 type resultGroupJob[T, R any] struct {
@@ -129,7 +129,7 @@ func (gj *resultGroupJob[T, R]) Close() error {
 		return err
 	}
 
-	gj.ack()
+	ackErr := gj.ack()
 	gj.changeStatus(closed)
 	gj.wgc.Done()
 
@@ -137,7 +137,7 @@ func (gj *resultGroupJob[T, R]) Close() error {
 		gj.Response.Close()
 	}
 
-	return nil
+	return ackErr
 }
 
 type errorGroupJob[T any] struct {
@@ -200,7 +200,7 @@ func (gj *errorGroupJob[T]) Close() error {
 		return err
 	}
 
-	gj.ack()
+	ackErr := gj.ack()
 	gj.changeStatus(closed)
 	gj.wgc.Done()
 
@@ -208,5 +208,5 @@ func (gj *errorGroupJob[T]) Close() error {
 		gj.Response.Close()
 	}
 
-	return nil
+	return ackErr
 }
