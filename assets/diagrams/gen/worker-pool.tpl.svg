@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ worker pool with concurrency 4</title>
-  <desc id="desc">The queue starts empty. Add is called six times in a row. Each call tries to signal the event loop, but the signal channel holds only one pending signal, so the other five are dropped. From that one signal the event loop dispatches four jobs back to back, one to each worker, until every slot is busy; the remaining two jobs wait in the queue. When Worker 2 finishes it signals the event loop, which dispatches the next job to it; when Worker 4 finishes the last job goes to Worker 4. Once the queue is empty, later completion signals find nothing to do and the event loop waits.</desc>
+  <desc id="desc">The queue starts empty and the pool holds a single idle worker goroutine; concurrency 4 is only the upper limit. Add is called six times in a row. Each call tries to signal the event loop, but the signal channel holds only one pending signal, so the other five are dropped. From that one signal the event loop dispatches four jobs back to back: the first goes to Worker 1 and Workers 2, 3 and 4 are spawned for the next three, until every slot is busy; the remaining two jobs wait in the queue. When a worker finishes and no other worker is idle, it stays in the pool and receives the next job; when another worker is already idle, it exits. As the queue drains, the pool shrinks back to the single idle Worker 1 and the event loop waits.</desc>
   <style>
     :root {
       --dur: {D}s;
@@ -144,6 +144,7 @@
   <rect class="track" x="780" y="230" width="100" height="4" rx="2"/>
   <rect id="w1-bar" class="a lin bar" x="780" y="230" width="100" height="4" rx="2"/>
 
+  <g id="w2-row" class="a">
   <rect class="box" x="700" y="251" width="50" height="40" rx="6"/><text class="m" x="725" y="271">ch2</text>
   <path class="edge" d="M750 271H768" marker-end="url(#a)"/>
   <rect class="box wk" x="770" y="251" width="120" height="40" rx="6"/>
@@ -151,7 +152,9 @@
   <text class="t" x="830" y="265">Worker 2</text>
   <rect class="track" x="780" y="280" width="100" height="4" rx="2"/>
   <rect id="w2-bar" class="a lin bar" x="780" y="280" width="100" height="4" rx="2"/>
+  </g>
 
+  <g id="w3-row" class="a">
   <rect class="box" x="700" y="301" width="50" height="40" rx="6"/><text class="m" x="725" y="321">ch3</text>
   <path class="edge" d="M750 321H768" marker-end="url(#a)"/>
   <rect class="box wk" x="770" y="301" width="120" height="40" rx="6"/>
@@ -159,7 +162,9 @@
   <text class="t" x="830" y="315">Worker 3</text>
   <rect class="track" x="780" y="330" width="100" height="4" rx="2"/>
   <rect id="w3-bar" class="a lin bar" x="780" y="330" width="100" height="4" rx="2"/>
+  </g>
 
+  <g id="w4-row" class="a">
   <rect class="box" x="700" y="351" width="50" height="40" rx="6"/><text class="m" x="725" y="371">ch4</text>
   <path class="edge" d="M750 371H768" marker-end="url(#a)"/>
   <rect class="box wk" x="770" y="351" width="120" height="40" rx="6"/>
@@ -167,6 +172,7 @@
   <text class="t" x="830" y="365">Worker 4</text>
   <rect class="track" x="780" y="380" width="100" height="4" rx="2"/>
   <rect id="w4-bar" class="a lin bar" x="780" y="380" width="100" height="4" rx="2"/>
+  </g>
 
   <!-- moving tokens on top -->
   <circle id="job0" class="a lin" r="7"/>

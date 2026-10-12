@@ -3,7 +3,7 @@ import sys
 import kfu
 from kfu import Path, at, flash, kf, ring, bar
 
-kfu.D = D = 14.6
+kfu.D = D = 16.0
 Y = 296                       # main row centre
 ROWS = [221, 271, 321, 371]   # worker row centres
 SLOTS = [162, 196, 230, 264, 298, 332]
@@ -23,7 +23,7 @@ wake = add.t
 
 # ---- dispatch schedule ----
 JOB_ROW = [0, 1, 2, 3, 1, 3]
-DONE = {0: 8.0, 1: 5.8, 2: 8.3, 3: 7.0, 4: 11.0, 5: 11.9}
+DONE = {0: 12.2, 1: 5.8, 2: 9.6, 3: 8.9, 4: 11.4, 5: 13.3}   # tuned so Worker 1 is the one left idle: loop ends as it starts
 disp = [wake + .4 + .4 * k for k in range(4)]   # inner for-loop: 4 back-to-back from one signal
 
 
@@ -37,14 +37,16 @@ def done_signal(k):
 arrive = {k: done_signal(k) for k in range(6)}
 disp.append(arrive[1] + .4)   # Worker 2 frees first -> job 4
 disp.append(arrive[3] + .4)   # Worker 4 frees next  -> job 5
+assert arrive[1] < arrive[3] < min(arrive[0], arrive[2]), arrive  # those two signals are the ones that find a waiting job
 
 # ---- jobs: queue head -> processNextJob -> chN -> Worker N ----
-proc, busy = [], {r: [] for r in range(4)}
+proc, busy, leave = [], {r: [] for r in range(4)}, {}
 for k in range(6):
     cy = ROWS[JOB_ROW[k]]
     p = Path(disp[k] + .1, 372, Y, 420, I).to(380, Y, op=1).to(446, Y).to(456, Y, op=0, fill=I)
     t_in = p.t
     p.wait(.45).to(612, Y, fill=J)
+    leave[k] = p.t                              # sendToNextChannel: pop an idle worker or spawn one
     proc.append((t_in, p.t))
     p.to(626, Y, op=1).to(660, Y).to(660, cy).to(694, cy).to(704, cy, op=0).to(748, cy).to(756, cy, op=1).to(768, cy).to(776, cy, op=0)
     kf(f"job{k}", p.pts)
@@ -74,6 +76,29 @@ flash("no", busy_span + empty, .3)
 flash("why-busy", busy_span, 1)
 flash("why-empty", empty, 1)
 flash("proc-glow", proc, .18)
+# ---- pool size: mirror sendToNextChannel / freePoolNode (no idle expiry, min idle 1) ----
+GHOST = .15                                     # slot within the concurrency limit, no goroutine
+pool, alive, events = [0], {0: [(0, None)]}, []
+events += [(leave[k], "disp", k) for k in range(6)] + [(DONE[k], "done", k) for k in range(6)]
+for t, kind, k in sorted(events):
+    r = JOB_ROW[k]
+    if kind == "disp":
+        if pool:
+            assert pool.pop() == r, (k, r)      # PopBack hands the job to the idle worker
+        else:
+            assert r not in alive or alive[r][-1][1] is not None, (k, r)
+            alive.setdefault(r, []).append((t, None))   # spawn
+    elif pool:                                  # another worker already idle -> this one exits
+        alive[r][-1] = (alive[r][-1][0], t + .35)
+    else:
+        pool.append(r)                          # stay idle in the pool
+assert pool == [0] and all(e for r in (1, 2, 3) for _, e in alive[r]), (pool, alive)
+for r in (1, 2, 3):
+    pts = [(0, {"opacity": GHOST})]
+    for s, e in alive[r]:
+        pts += [(s - .1, {"opacity": GHOST}), (s + .2, {"opacity": 1}), (e, {"opacity": 1}), (e + .4, {"opacity": GHOST})]
+    kf(f"w{r + 1}-row", pts)
+
 for r in range(4):
     flash(f"w{r + 1}-glow", busy[r], .14)
     bar(f"w{r + 1}-bar", busy[r])
