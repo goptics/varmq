@@ -106,6 +106,14 @@ Jobs waiting in a priority queue are reordered, so a higher-priority job added l
 
 ![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
 
+## The Concurrency Architecture
+
+A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
+
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+
+Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
+
 ## 💡 Highlighted Features
 
 ### Persistent and Distributed Queues
@@ -342,20 +350,6 @@ For detailed performance comparisons and benchmarking results, visit:
 ## API Reference
 
 For the complete package documentation, types, and method signatures, browse the **[GoDoc](https://pkg.go.dev/github.com/goptics/varmq)**.
-
-## The Concurrency Architecture
-
-VarMQ's concurrency model is built around a smart event loop that keeps everything running smoothly.
-
-The event loop continuously monitors for pending jobs in queues and available workers in the pool. When both conditions are met, jobs get distributed to workers instantly. When there's no work to distribute, the system enters a low-power wait state.
-
-![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
-
-Workers operate independently - they process jobs and immediately signal back when they're ready for more work. This triggers the event loop to check for new jobs and distribute them right away.
-
-The same loop drives every setup: a [worker pool](#basic-usage) dispatches until all slots are busy, a [priority queue](#priority-queue) hands out the highest-priority job first, and with [multiple queues](#multi-queue-binds) the Queue Manager picks the source queue based on the configured strategy.
-
-The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ## Star History
 
