@@ -20,7 +20,7 @@
   </p>
 
   <p>
-    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#the-concurrency-architecture">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
+    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#concurrency">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
   </p>
   <p>
     With <code>VarMQ</code>, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using <a href="#built-in-adapters">adapters</a>. All through a clean, intuitive API that feels natural to Go developers.
@@ -70,6 +70,35 @@ func main() {
   worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Printf("Processing %d\n", j.Data())
     time.Sleep(500 * time.Millisecond)
+  }) // default concurrency is 1
+  defer worker.WaitUntilIdle()
+  queue := worker.BindQueue()
+
+  queue.Add(1)
+  queue.Add(2)
+}
+```
+
+A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
+
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+
+### Concurrency
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/goptics/varmq"
+)
+
+func main() {
+  worker := varmq.NewWorker(func(j varmq.Job[int]) {
+    fmt.Printf("Processing %d\n", j.Data())
+    time.Sleep(500 * time.Millisecond)
   }, 10) // with concurrency 10 or set 0 for parallelism
   defer worker.WaitUntilIdle()
   queue := worker.BindQueue()
@@ -85,6 +114,8 @@ func main() {
 Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free.
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
+
+Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ### Priority Queue
 
@@ -105,14 +136,6 @@ for i := range 10 {
 Jobs waiting in a priority queue are reordered, so a higher-priority job added later is dispatched first:
 
 ![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
-
-## The Concurrency Architecture
-
-A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
-
-![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
-
-Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ## 💡 Highlighted Features
 
