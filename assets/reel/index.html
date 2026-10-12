@@ -33,8 +33,6 @@
 
   .center { position: absolute; left: 60px; right: 60px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 48px; }
   .center img { width: 760px; }
-  .center .tag { font-size: 60px; font-weight: 800; line-height: 1.2; }
-  .center .sub { font-size: 40px; color: var(--muted); }
   .center pre { position: static; font-size: 34px; }
   .star { font-size: 52px; font-weight: 700; }
 </style>
@@ -46,8 +44,7 @@
 // so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
 const TOTAL = 60;
 const SCENES = [
-  { start: 0, end: 4, intro: true },
-  { start: 4, end: 16, step: "1 / 4", title: "Basic usage", frame: "varmq-single-worker.svg", h: 370, offset: 1,
+  { start: 0, end: 13, step: "1 / 4", title: "Basic usage", frame: "varmq-single-worker.svg", h: 370, offset: 1,
     code: `worker := varmq.NewWorker(func(j varmq.Job[int]) {
     fmt.Println("Processing", j.Data())
     time.Sleep(time.Second)
@@ -57,7 +54,7 @@ queue := worker.BindQueue()
 queue.Add(1)
 queue.Add(2)`,
     cap: "One event loop. <code>Add()</code> wakes it, and it hands the job to a free worker." },
-  { start: 16, end: 30, step: "2 / 4", title: "Concurrency", frame: "varmq-worker-pool.svg", h: 420, offset: .5,
+  { start: 13, end: 28, step: "2 / 4", title: "Concurrency", frame: "varmq-worker-pool.svg", h: 420, offset: .5,
     code: `worker := varmq.NewWorker(process, ⟦4⟧)
 
 queue := worker.BindQueue()
@@ -65,14 +62,14 @@ for i := range 6 {
     queue.Add(i)
 }`,
     cap: "Concurrency is a limit: workers spawn on demand and retire when the queue drains." },
-  { start: 30, end: 42, step: "3 / 4", title: "Priority queue", frame: "varmq-priority-queue.svg", h: 370, offset: 1.5,
+  { start: 28, end: 41, step: "3 / 4", title: "Priority queue", frame: "varmq-priority-queue.svg", h: 370, offset: 1.5,
     code: `queue := worker.⟦BindPriorityQueue()⟧
 
 queue.Add("A", 1)
 queue.Add("B", 1)
 queue.Add("C", ⟦0⟧) // lower runs first`,
     cap: "Lower number jumps the line: C is added last but runs first." },
-  { start: 42, end: 56, step: "4 / 4", title: "Multiple queues", frame: "varmq-multi-queue.svg", h: 440, offset: .8,
+  { start: 41, end: 56, step: "4 / 4", title: "Multiple queues", frame: "varmq-multi-queue.svg", h: 440, offset: .8,
     code: `worker := varmq.NewWorker(process, 2,
     varmq.WithStrategy(varmq.⟦RoundRobin⟧))
 
@@ -100,10 +97,7 @@ const at = (el, keyframes, start, dur, easing = "cubic-bezier(.2, .7, .2, 1)") =
 for (const s of SCENES) {
   const el = document.createElement("div");
   el.className = "scene";
-  if (s.intro) {
-    el.innerHTML = `<div class="center"><img src="../text-logo-dark.svg" alt="VarMQ">
-      <div class="tag">Job queues + worker pool for Go</div><div class="sub">from basic to advanced in 60 seconds</div></div>`;
-  } else if (s.outro) {
+  if (s.outro) {
     el.innerHTML = `<div class="center"><img src="../text-logo-dark.svg" alt="VarMQ">
       <pre><span class="fn">go get</span> github.com/goptics/varmq</pre><div class="star">⭐ github.com/goptics/varmq</div></div>`;
   } else {
@@ -121,9 +115,9 @@ for (const s of SCENES) {
     el.querySelector(".cap").style.top = `${top + s.h * 1.125 + 48}px`;
   }
 
-  // scene in/out: 0.35s fade + slide
-  const len = s.end - s.start, f = .35 / len;
-  at(el, [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "none", offset: f },
+  // scene in/out: 0.35s fade + slide; the first scene is already on screen at frame 0 (it is the reel's first impression)
+  const len = s.end - s.start, f = .35 / len, enter = s.start ? { opacity: 0, transform: "translateY(24px)" } : { opacity: 1, transform: "none" };
+  at(el, [enter, { opacity: 1, transform: "none", offset: f },
           { opacity: 1, transform: "none", offset: 1 - f }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
   if (s.code) {
     el.querySelectorAll(".ln").forEach((ln, i) =>

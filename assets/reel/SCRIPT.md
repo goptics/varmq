@@ -4,11 +4,10 @@ Timings match `index.html` (`SCENES`). About 2.5 words per second keeps the pace
 
 | Time | Scene | Say |
 |---|---|---|
-| 0:00–0:04 | Intro | "VarMQ: job queues and a worker pool for Go. Basic to advanced in sixty seconds." |
-| 0:04–0:16 | 1 · Basic usage | "Create a worker with your job function and bind a queue. Every `Add` wakes a single event loop. If a worker is free, the job goes straight to it; if not, it waits its turn." |
-| 0:16–0:30 | 2 · Concurrency | "Pass a concurrency, say four. That's a limit, not a pool size: workers spawn only when jobs are waiting, and retire one by one as the queue drains. One wake-up is enough to fill every free slot." |
-| 0:30–0:42 | 3 · Priority queue | "Need ordering? Bind a priority queue. Lower number wins, so C, added last with priority zero, jumps ahead of B." |
-| 0:42–0:56 | 4 · Multiple queues | "Bind several queues to one worker. The queue manager picks the next job by strategy. Here RoundRobin takes turns and skips empty queues, all on the same pool." |
+| 0:00–0:13 | 1 · Basic usage | "VarMQ, in sixty seconds. Create a worker with your job function and bind a queue. Every `Add` wakes a single event loop. If a worker is free, the job goes straight to it; if not, it waits its turn." |
+| 0:13–0:28 | 2 · Concurrency | "Pass a concurrency, say four. That's a limit, not a pool size: workers spawn only when jobs are waiting, and retire one by one as the queue drains. One wake-up is enough to fill every free slot." |
+| 0:28–0:41 | 3 · Priority queue | "Need ordering? Bind a priority queue. Lower number wins, so C, added last with priority zero, jumps ahead of B." |
+| 0:41–0:56 | 4 · Multiple queues | "Bind several queues to one worker. The queue manager picks the next job by strategy. Here RoundRobin takes turns and skips empty queues, all on the same pool." |
 | 0:56–1:00 | Outro | "go get github.com/goptics/varmq, and drop a star if it helps." |
 
 ## Make the video
