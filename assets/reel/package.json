@@ -1,0 +1,12 @@
+{
+  "name": "varmq-reel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs",
+    "serve": "node render.mjs --serve"
+  },
+  "devDependencies": {
+    "playwright-core": "1.48.2"
+  }
+}

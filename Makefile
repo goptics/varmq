@@ -1,4 +1,4 @@
-.PHONY: help init test bench format diagrams release
+.PHONY: help init test bench format diagrams reel release
 
 # Default target - list available targets
 help:
@@ -8,6 +8,7 @@ help:
 	@echo "  test     - Run all tests (no cache)"
 	@echo "  format   - Format codes"
 	@echo "  diagrams - Regenerate animated README diagrams (assets/diagrams/gen)"
+	@echo "  reel     - Render the 60s vertical promo video (assets/reel/reel.mp4)"
 	@echo "  release  - Create and push a new tag to trigger release (usage: make release VERSION=v1.0.0)"
 
 # Install dependencies and setup git hooks
@@ -34,6 +35,10 @@ diagrams:
 	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority; do \
 		python3 gen_$${d#*:}.py $${d%:*}.tpl.svg ../varmq-$${d%:*}.svg > /dev/null || exit 1; \
 	done
+
+# Render the 60s vertical promo video (needs Node, Chrome, ffmpeg)
+reel:
+	cd assets/reel && npm install --silent && npm run render
 
 # Create and push a new tag to trigger release
 release:

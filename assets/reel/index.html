@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080">
+<title>VarMQ reel</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #9198a1;
+    --accent: #3fb950; --mark: rgba(210, 153, 34, .28);
+    --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e; --num: #79c0ff; --fn: #d2a8ff; --pkg: #ffa657;
+    --sans: system-ui, -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #000; }
+  body { display: grid; place-items: center; min-height: 100vh; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+  .render #stage { cursor: none; }
+  #progress { position: absolute; left: 0; top: 0; height: 8px; width: 1080px; background: var(--accent); transform-origin: left; z-index: 2; }
+
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .head { position: absolute; left: 60px; top: 110px; right: 60px; }
+  .chip { display: inline-block; font: 600 30px var(--mono); color: var(--accent); border: 2px solid var(--accent); border-radius: 999px; padding: 6px 22px; }
+  .title { font-size: 76px; font-weight: 800; letter-spacing: -1px; margin-top: 22px; }
+  pre { position: absolute; left: 40px; right: 40px; top: 330px; background: var(--panel); border: 2px solid var(--border); border-radius: 22px; padding: 34px 36px; font: 30px/1.5 var(--mono); color: var(--fg); white-space: pre; }
+  pre .ln { display: block; min-height: 1.5em; }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); } .num { color: var(--num); } .fn { color: var(--fn); } .pkg { color: var(--pkg); }
+  mark { color: inherit; background: var(--mark); border-radius: 6px; padding: 0 4px; outline: 2px solid transparent; }
+  .diagram { position: absolute; left: 0; width: 960px; border: 0; transform-origin: 0 0; transform: scale(1.125); }
+  .cap { position: absolute; left: 60px; right: 120px; font-size: 52px; line-height: 1.25; font-weight: 700; }
+  .cap code { font: 600 .9em var(--mono); color: var(--pkg); }
+
+  .center { position: absolute; left: 60px; right: 60px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 48px; }
+  .center img { width: 760px; }
+  .center .tag { font-size: 60px; font-weight: 800; line-height: 1.2; }
+  .center .sub { font-size: 40px; color: var(--muted); }
+  .center pre { position: static; font-size: 34px; }
+  .star { font-size: 52px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="progress"></div></div>
+<script>
+// One timeline (seconds). Every motion is a Web Animation or a CSS animation inside a diagram,
+// so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
+const TOTAL = 60;
+const SCENES = [
+  { start: 0, end: 4, intro: true },
+  { start: 4, end: 16, step: "1 / 4", title: "Basic usage", frame: "varmq-single-worker.svg", h: 370, offset: 1,
+    code: `worker := varmq.NewWorker(func(j varmq.Job[int]) {
+    fmt.Println("Processing", j.Data())
+    time.Sleep(time.Second)
+}) // default concurrency: 1
+
+queue := worker.BindQueue()
+queue.Add(1)
+queue.Add(2)`,
+    cap: "One event loop. <code>Add()</code> wakes it, and it hands the job to a free worker." },
+  { start: 16, end: 30, step: "2 / 4", title: "Concurrency", frame: "varmq-worker-pool.svg", h: 420, offset: .5,
+    code: `worker := varmq.NewWorker(process, ⟦4⟧)
+
+queue := worker.BindQueue()
+for i := range 6 {
+    queue.Add(i)
+}`,
+    cap: "Concurrency is a limit: workers spawn on demand and retire when the queue drains." },
+  { start: 30, end: 42, step: "3 / 4", title: "Priority queue", frame: "varmq-priority-queue.svg", h: 370, offset: 1.5,
+    code: `queue := worker.⟦BindPriorityQueue()⟧
+
+queue.Add("A", 1)
+queue.Add("B", 1)
+queue.Add("C", ⟦0⟧) // lower runs first`,
+    cap: "Lower number jumps the line: C is added last but runs first." },
+  { start: 42, end: 56, step: "4 / 4", title: "Multiple queues", frame: "varmq-multi-queue.svg", h: 440, offset: .8,
+    code: `worker := varmq.NewWorker(process, 2,
+    varmq.WithStrategy(varmq.⟦RoundRobin⟧))
+
+q1 := worker.BindQueue()
+q2 := worker.BindQueue()
+q3 := worker.BindQueue()`,
+    cap: "Many queues, one pool. RoundRobin takes turns and skips empty queues." },
+  { start: 56, end: 60, outro: true },
+];
+
+const TOKEN = /(\/\/.*)|("(?:[^"\\]|\\.)*")|\b(func|range|for|return|package|import|var|const|type|if|else)\b|\b(varmq|fmt|time)\b(?=\.)|\b(\d+)\b|\b([A-Za-z_]\w*)(?=\()/g;
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function highlight(line) {
+  return esc(line).replace(TOKEN, (m, com, str, kw, pkg, num, fn) =>
+    `<span class="${com ? "com" : str ? "str" : kw ? "kw" : pkg ? "pkg" : num ? "num" : "fn"}">${m}</span>`)
+    .replace(/⟦/g, "<mark>").replace(/⟧/g, "</mark>");
+}
+
+const stage = document.getElementById("stage");
+const anims = [];          // page-level Web Animations, all on the reel timeline (delay = absolute start)
+const frames = [];         // { el, scene } diagram iframes, seeked separately
+const at = (el, keyframes, start, dur, easing = "cubic-bezier(.2, .7, .2, 1)") =>
+  anims.push(el.animate(keyframes, { delay: start * 1000, duration: dur * 1000, fill: "both", easing }));
+
+for (const s of SCENES) {
+  const el = document.createElement("div");
+  el.className = "scene";
+  if (s.intro) {
+    el.innerHTML = `<div class="center"><img src="../text-logo-dark.svg" alt="VarMQ">
+      <div class="tag">Job queues + worker pool for Go</div><div class="sub">from basic to advanced in 60 seconds</div></div>`;
+  } else if (s.outro) {
+    el.innerHTML = `<div class="center"><img src="../text-logo-dark.svg" alt="VarMQ">
+      <pre><span class="fn">go get</span> github.com/goptics/varmq</pre><div class="star">⭐ github.com/goptics/varmq</div></div>`;
+  } else {
+    const lines = s.code.split("\n").map(l => `<span class="ln">${highlight(l)}</span>`).join("");
+    el.innerHTML = `<div class="head"><span class="chip">${s.step}</span><div class="title">${s.title}</div></div>
+      <pre>${lines}</pre>
+      <iframe class="diagram" src="../diagrams/${s.frame}" style="height:${s.h}px" scrolling="no" tabindex="-1"></iframe>
+      <div class="cap">${s.cap}</div>`;
+    frames.push({ el: el.querySelector("iframe"), scene: s });
+  }
+  stage.appendChild(el);
+  if (s.code) {              // stack: code, diagram (scaled 1.125, full bleed), caption
+    const pre = el.querySelector("pre"), top = pre.offsetTop + pre.offsetHeight + 44;
+    el.querySelector(".diagram").style.top = `${top}px`;
+    el.querySelector(".cap").style.top = `${top + s.h * 1.125 + 48}px`;
+  }
+
+  // scene in/out: 0.35s fade + slide
+  const len = s.end - s.start, f = .35 / len;
+  at(el, [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "none", offset: f },
+          { opacity: 1, transform: "none", offset: 1 - f }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
+  if (s.code) {
+    el.querySelectorAll(".ln").forEach((ln, i) =>
+      at(ln, [{ opacity: 0, transform: "translateX(-16px)" }, { opacity: 1, transform: "none" }], s.start + .3 + i * .12, .35));
+    el.querySelectorAll("mark").forEach(mk =>
+      at(mk, [{ outlineColor: "transparent" }, { outlineColor: "#d29922" }, { outlineColor: "transparent" }], s.start + 1.6, 1.4));
+    at(el.querySelector(".diagram"), [{ opacity: 0 }, { opacity: 1 }], s.start + .6, .5);
+    at(el.querySelector(".cap"), [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], s.start + 1.2, .5);
+  }
+}
+at(document.getElementById("progress"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 0, TOTAL, "linear");
+anims.forEach(a => a.pause());
+
+// Diagrams follow prefers-color-scheme and prefers-reduced-motion; pin them to dark + full motion.
+function prepare(doc) {
+  for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) {
+    if (!rule.media) continue;
+    if (rule.media.mediaText.includes("prefers-color-scheme: dark")) rule.media.mediaText = "all";
+    if (rule.media.mediaText.includes("prefers-reduced-motion")) rule.media.mediaText = "not all";
+  }
+}
+window.ready = Promise.all(frames.map(({ el }) => new Promise(ok => {
+  const done = () => { prepare(el.contentDocument); ok(); };
+  el.contentDocument?.readyState === "complete" && el.contentDocument.styleSheets.length ? done() : el.addEventListener("load", done, { once: true });
+})).concat(document.fonts.ready, ...[...document.images].map(i => i.decode())));
+
+window.seek = t => {
+  for (const a of anims) a.currentTime = t * 1000;
+  for (const { el, scene } of frames) {
+    if (t < scene.start - .5 || t > scene.end + .5) continue;
+    const local = Math.max(0, t - scene.start + scene.offset) * 1000;
+    for (const a of el.contentDocument.getAnimations()) { a.pause(); a.currentTime = local; }
+  }
+};
+
+// Live mode: play in real time. ←/→ jump scenes, space pauses. ?render leaves control to render.mjs.
+if (new URLSearchParams(location.search).has("render")) {
+  document.documentElement.classList.add("render");
+} else {
+  const fit = () => stage.style.zoom = Math.min(innerWidth / 1080, innerHeight / 1920);  // whole 9:16 frame on screen
+  fit(); addEventListener("resize", fit);
+  document.body.style.overflow = "hidden";
+  let t0 = performance.now(), paused = null;
+  const now = () => paused ?? ((performance.now() - t0) / 1000) % TOTAL;
+  const jump = t => { t0 = performance.now() - t * 1000; if (paused !== null) paused = t; };
+  addEventListener("keydown", e => {
+    const t = now(), i = SCENES.findIndex(s => t >= s.start && t < s.end);
+    if (e.key === "ArrowRight") jump(SCENES[(i + 1) % SCENES.length].start);
+    else if (e.key === "ArrowLeft") jump(SCENES[t - SCENES[i].start < 1 ? Math.max(0, i - 1) : i].start);
+    else if (e.key === " ") { if (paused === null) paused = t; else { paused = null; jump(t); } }
+    else return;
+    e.preventDefault();
+  });
+  window.ready.then(function tick() { seek(now()); requestAnimationFrame(tick); });
+}
+</script>
+</body>
+</html>
