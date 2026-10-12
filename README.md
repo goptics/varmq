@@ -343,6 +343,10 @@ Workers operate independently - they process jobs and immediately signal back wh
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
+When several queues are bound to the same worker, the Queue Manager decides which queue the next job comes from, based on the configured [strategy](#multi-queue-binds). With `RoundRobin` it takes turns across the queues and skips any that are empty.
+
+![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
+
 The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ## Star History
