@@ -337,11 +337,13 @@ VarMQ's concurrency model is built around a smart event loop that keeps everythi
 
 The event loop continuously monitors for pending jobs in queues and available workers in the pool. When both conditions are met, jobs get distributed to workers instantly. When there's no work to distribute, the system enters a low-power wait state.
 
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+
 Workers operate independently - they process jobs and immediately signal back when they're ready for more work. This triggers the event loop to check for new jobs and distribute them right away.
 
-The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
+![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
-![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+The system handles worker lifecycle automatically. Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
 
 ## Star History
 
