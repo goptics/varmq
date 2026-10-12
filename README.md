@@ -117,7 +117,8 @@ Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the si
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
-Idle workers either stay in the pool or get cleaned up based on your configuration, so you never waste resources or run short on capacity.
+> [!Note]
+> Concurrency is a limit, not a pool size. A worker starts with a single goroutine and spawns more only while jobs are waiting, up to the limit. As the queue drains, the extra goroutines exit one by one, keeping one idle (or the share set by `varmq.WithMinIdleWorkerRatio`). To keep idle goroutines around for reuse, set `varmq.WithIdleWorkerExpiryDuration`: they are then removed only after sitting idle that long.
 
 ### Priority Queue
 
