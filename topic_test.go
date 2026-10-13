@@ -326,4 +326,69 @@ func TestTopic(t *testing.T) {
 		assert.False(t, ok)
 		assert.Nil(t, gj)
 	})
+
+	t.Run("panicking subscriber still completes the group", func(t *testing.T) {
+		topic := NewTopic[int]()
+
+		ok := NewWorker(func(j Job[int]) {})
+		bad := NewWorker(func(j Job[int]) { panic("boom") })
+		ok.WithTopic(topic)
+		bad.WithTopic(topic)
+
+		gj, delivered := topic.Publish(1)
+		assert.True(t, delivered)
+		waitOrTimeout(t, time.Second, gj.Wait)
+
+		bad.Wait()
+		assert.Equal(t, uint64(1), bad.Metrics().Failed())
+		assert.Equal(t, uint64(1), ok.Metrics().Successful())
+	})
+
+	t.Run("concurrent publish with subscribe and unsubscribe", func(t *testing.T) {
+		topic := NewTopic[int]()
+		defer topic.Close()
+
+		const publishers = 4
+		const perPublisher = 200
+		const churn = 50
+
+		NewWorker(func(j Job[int]) {}).WithTopic(topic)
+
+		var wg sync.WaitGroup
+		var groups []EnqueuedGroupJob
+		var gmu sync.Mutex
+
+		for p := 0; p < publishers; p++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < perPublisher; i++ {
+					if gj, ok := topic.Publish(i); ok {
+						gmu.Lock()
+						groups = append(groups, gj)
+						gmu.Unlock()
+					}
+				}
+			}()
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < churn; i++ {
+				sub := NewWorker(func(j Job[int]) {}).WithTopic(topic)
+				sub.Unsubscribe()
+			}
+		}()
+
+		waitOrTimeout(t, 10*time.Second, wg.Wait)
+
+		gmu.Lock()
+		defer gmu.Unlock()
+		assert.Equal(t, publishers*perPublisher, len(groups), "the permanent subscriber accepts every publish")
+		for _, gj := range groups {
+			waitOrTimeout(t, 5*time.Second, gj.Wait)
+		}
+		assert.Equal(t, 1, topic.NumSubscribers())
+	})
 }
