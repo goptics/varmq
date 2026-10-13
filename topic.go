@@ -160,5 +160,15 @@ func newSubscription[T any](w *worker[T, iJob[T]], t Topic[T]) *subscription[T] 
 	}
 }
 
-// Unsubscribe is implemented in Task 4.
-func (s *subscription[T]) Unsubscribe() {}
+func (s *subscription[T]) Unsubscribe() {
+	s.once.Do(func() {
+		// Reject further enqueues. queues.Queue.Close only flips a flag,
+		// pending items would still drain, so purge them next.
+		s.internalQueue.Close()
+		// Close every pending copy; each close decrements its group counter,
+		// so any Wait on a published group job completes.
+		s.Purge()
+		s.t.remove(s)
+		s.worker.queues.UnregisterItem(s.internalQueue)
+	})
+}

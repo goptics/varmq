@@ -233,4 +233,97 @@ func TestTopic(t *testing.T) {
 
 		assert.Panics(t, func() { w.WithTopic(nil) })
 	})
+
+	t.Run("unsubscribe stops delivery and is idempotent", func(t *testing.T) {
+		topic := NewTopic[int]()
+
+		var count int32
+		keep := NewWorker(func(j Job[int]) { atomic.AddInt32(&count, 1) })
+		drop := NewWorker(func(j Job[int]) { t.Error("unsubscribed worker must not receive") })
+
+		keep.WithTopic(topic)
+		sub := drop.WithTopic(topic)
+		assert.Equal(t, 2, topic.NumSubscribers())
+
+		sub.Unsubscribe()
+		sub.Unsubscribe()
+		assert.Equal(t, 1, topic.NumSubscribers())
+
+		gj, ok := topic.Publish(1)
+		assert.True(t, ok)
+		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&count))
+		assert.Equal(t, 0, drop.NumPending(), "queue was unregistered from the worker")
+	})
+
+	t.Run("unsubscribe releases waiters on pending copies", func(t *testing.T) {
+		topic := NewTopic[int]()
+		w := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		sub := w.WithTopic(topic)
+
+		gj, ok := topic.Publish(1)
+		assert.True(t, ok)
+		assert.Equal(t, 1, gj.NumPending())
+		assert.Equal(t, 1, sub.Len())
+
+		sub.Unsubscribe()
+
+		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.Equal(t, 0, gj.NumPending())
+		assert.Equal(t, 0, sub.Len())
+		assert.Equal(t, 0, w.NumPending())
+	})
+
+	t.Run("purge releases waiters on pending copies", func(t *testing.T) {
+		topic := NewTopic[int]()
+		w := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		sub := w.WithTopic(topic)
+
+		gj, _ := topic.Publish(1)
+		assert.Equal(t, 1, gj.NumPending())
+
+		sub.Purge()
+
+		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.Equal(t, 0, sub.Len())
+		assert.Equal(t, 1, topic.NumSubscribers(), "purge does not unsubscribe")
+	})
+
+	t.Run("close detaches all subscriptions", func(t *testing.T) {
+		topic := NewTopic[int]()
+		w1 := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		w2 := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		w1.WithTopic(topic)
+		w2.WithTopic(topic)
+
+		gj, _ := topic.Publish(1)
+		assert.Equal(t, 2, gj.NumPending())
+
+		assert.NoError(t, topic.Close())
+
+		assert.Equal(t, 0, topic.NumSubscribers())
+		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.Equal(t, 0, w1.NumPending())
+		assert.Equal(t, 0, w2.NumPending())
+
+		gj2, ok := topic.Publish(2)
+		assert.False(t, ok)
+		assert.Nil(t, gj2)
+	})
+
+	t.Run("subscribe after close returns an inert handle", func(t *testing.T) {
+		topic := NewTopic[int]()
+		assert.NoError(t, topic.Close())
+
+		w := NewWorker(func(j Job[int]) { t.Error("must never run") })
+		sub := w.WithTopic(topic)
+
+		assert.NotNil(t, sub)
+		assert.Equal(t, 0, topic.NumSubscribers())
+		assert.Equal(t, 0, w.NumPending())
+
+		gj, ok := topic.Publish(1)
+		assert.False(t, ok)
+		assert.Nil(t, gj)
+	})
 }
