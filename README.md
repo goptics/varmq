@@ -244,7 +244,7 @@ Semantics are those of a fanout exchange, not a log:
 - No history. A worker that subscribes after a `Publish` never sees that payload.
 - Each subscriber buffers in its own queue, so a slow worker never blocks the publisher or the others.
 - The payload is copied by value. Pointer payloads are shared between subscribers.
-- `WithTopic` returns a `Subscription` with `Len`, `Purge` and `Unsubscribe`, but no `Add`: the topic is the only producer.
+- `WithTopic` returns a `Subscription` with `Len`, `Purge`, `Unsubscribe` (alias `Close`), but no `Add`: the topic is the only producer.
 - A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
 
 ### Result and Error Worker
