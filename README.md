@@ -246,19 +246,25 @@ Semantics are those of a fanout exchange, not a replayable log:
 
 #### Persistent topics
 
-Back a topic with durable storage and give each subscriber a **group** name. Every group gets every payload, workers on the same group share its payloads, and a group resumes where it stopped after a restart.
+Back a topic with durable storage and give each subscriber a **group** name. Every group gets every payload published after it first joined, workers on the same group share its payloads, and a group resumes where it stopped after a restart.
 
 ```go
 topic := varmq.NewPersistentTopic[Order](storage) // storage implements varmq.IPersistentTopic
 
-varmq.NewWorker(sendEmail).WithPersistentTopic(topic, "email")
-varmq.NewWorker(updateStock, 4).WithPersistentTopic(topic, "stock")
+varmq.NewWorker(func(j varmq.Job[Order]) {
+	sendEmail(j.Data())
+}).WithPersistentTopic(topic, "email")
+
+varmq.NewWorker(func(j varmq.Job[Order]) {
+	updateStock(j.Data())
+}, 4).WithPersistentTopic(topic, "stock")
 
 topic.Publish(order, varmq.WithJobId(order.ID))
 ```
 
 - `Close` on a subscription detaches it and keeps the group's position. `Unsubscribe` deletes the group, which also detaches every subscription on that group in this process.
-- Delivery is at least once: a group's position is committed when its worker finishes the job.
+- Delivery is at least once: a message is acknowledged when its worker finishes the job, and the storage delivers unacknowledged messages again, so handlers should be idempotent.
+- Stop the workers before closing the topic.
 
 ### Result and Error Worker
 
