@@ -150,6 +150,25 @@ type IWorkerBinder[T any] interface {
 	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
 	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
 	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
+
+	// WithTopic subscribes the worker to a Topic. A new in-memory FIFO queue is
+	// created, registered with the worker exactly like BindQueue, and attached
+	// to the topic. Every payload published after this call is copied into
+	// that queue and processed by this worker under its normal strategy and
+	// concurrency.
+	//
+	// Parameters:
+	//   - t Topic[T]: The topic to subscribe to, created with NewTopic.
+	//
+	// Returns:
+	//   - Subscription[T]: The inbox handle. It has no Add; use Topic.Publish.
+	//
+	// Example usage:
+	//   topic := varmq.NewTopic[Order]()
+	//   sub := worker.WithTopic(topic)
+	//   topic.Publish(order) // the worker receives a copy
+	//   sub.Unsubscribe()    // stop receiving
+	WithTopic(t Topic[T]) Subscription[T]
 }
 
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
@@ -213,6 +232,13 @@ func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriority
 	defer wb.queues.Register(dpq, c.priority)
 
 	return NewDistributedPriorityQueue[T](dpq, configs...)
+}
+
+func (wb *workerBinder[T]) WithTopic(t Topic[T]) Subscription[T] {
+	s := newSubscription(wb.worker, t)
+	t.add(s)
+
+	return s
 }
 
 type errWorkerBinder[T any] struct {

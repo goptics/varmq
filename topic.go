@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+
+	"github.com/goptics/varmq/internal/queues"
 )
 
 // Topic fans out every published payload to all current subscriptions.
@@ -130,7 +132,17 @@ func (t *topic[T]) Close() error {
 	return nil
 }
 
-// subscription is filled in by WithTopic. See worker_binder.go.
+// Subscription is one worker's inbox for one [Topic]. It is returned by
+// [IWorkerBinder.WithTopic]. It has no Add: the topic is the only producer.
+type Subscription[T any] interface {
+	IExternalBaseQueue
+	// Worker returns the bound worker.
+	Worker() Worker
+	// Unsubscribe closes the inbox, drops any copies still waiting in it,
+	// and detaches it from both the topic and the worker. It is idempotent.
+	Unsubscribe()
+}
+
 type subscription[T any] struct {
 	*queue[T]
 	worker *worker[T, iJob[T]]
@@ -138,5 +150,15 @@ type subscription[T any] struct {
 	once   sync.Once
 }
 
-// Unsubscribe is implemented in Task 3.
+func newSubscription[T any](w *worker[T, iJob[T]], t Topic[T]) *subscription[T] {
+	q := queues.NewQueue[iJob[T]]()
+
+	return &subscription[T]{
+		queue:  newQueue(w, q),
+		worker: w,
+		t:      t,
+	}
+}
+
+// Unsubscribe is implemented in Task 4.
 func (s *subscription[T]) Unsubscribe() {}
