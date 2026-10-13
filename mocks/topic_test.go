@@ -103,4 +103,15 @@ func TestMockPersistentTopic(t *testing.T) {
 		assert.NoError(t, m.Close())
 		assert.False(t, m.Publish("x"))
 	})
+
+	t.Run("unknown group reads as empty", func(t *testing.T) {
+		m := NewMockPersistentTopic()
+
+		assert.Equal(t, 0, m.GroupLen("missing"))
+		assert.Equal(t, 0, m.PendingCount("missing"))
+		_, ok, _ := m.DequeueGroup("missing")
+		assert.False(t, ok)
+		m.PurgeGroup("missing")
+		assert.NoError(t, m.DeleteGroup("missing"))
+	})
 }

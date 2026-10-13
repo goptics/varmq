@@ -348,4 +348,53 @@ func TestPersistentTopic(t *testing.T) {
 		assert.Panics(t, func() { w.WithPersistentTopic(nil, "a") })
 		assert.Panics(t, func() { w.WithPersistentTopic(topic, "") })
 	})
+
+	t.Run("group view adapts one group", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		assert.NoError(t, storage.JoinGroup("g"))
+		storage.Publish([]byte("x"))
+		storage.Publish([]byte("y"))
+
+		v := &groupView{storage: storage, group: "g"}
+		assert.Equal(t, 2, v.Len())
+		assert.Nil(t, v.Values(), "never reads storage")
+
+		item, ok := v.Dequeue()
+		assert.True(t, ok)
+		assert.Equal(t, []byte("x"), item)
+
+		item, ok, ack := v.DequeueWithAckId()
+		assert.True(t, ok)
+		assert.Equal(t, []byte("y"), item)
+		assert.True(t, v.Acknowledge(ack))
+
+		storage.Publish([]byte("z"))
+		v.Purge()
+		assert.Equal(t, 0, v.Len())
+		assert.NoError(t, v.Close())
+	})
+
+	t.Run("inert group view never touches storage", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		assert.NoError(t, storage.JoinGroup("g"))
+		storage.Publish([]byte("x"))
+
+		v := &groupView{storage: storage, group: "g", inert: true}
+		assert.Equal(t, 0, v.Len())
+		_, ok := v.Dequeue()
+		assert.False(t, ok)
+		_, ok, _ = v.DequeueWithAckId()
+		assert.False(t, ok)
+		assert.False(t, v.Acknowledge("1"))
+		v.Purge()
+
+		assert.Equal(t, 1, storage.GroupLen("g"))
+		assert.Equal(t, 0, storage.PendingCount("g"))
+	})
+
+	t.Run("publish fails when the payload cannot be serialized", func(t *testing.T) {
+		topic := NewPersistentTopic[chan int](mocks.NewMockPersistentTopic())
+
+		assert.False(t, topic.Publish(make(chan int)))
+	})
 }

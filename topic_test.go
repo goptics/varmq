@@ -424,4 +424,18 @@ func TestTopic(t *testing.T) {
 		assert.Equal(t, int32(publishers*perPublisher), atomic.LoadInt32(&received), "the permanent subscriber processes every copy")
 		assert.Equal(t, 1, topic.NumSubscribers())
 	})
+
+	t.Run("topic view exposes payloads and closes its cursor", func(t *testing.T) {
+		topic := NewTopic[int]()
+		sub := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithTopic(topic)
+		assert.True(t, topic.Publish(1))
+
+		view := sub.(*subscription[int]).view
+		assert.Equal(t, []any{1}, view.Values())
+
+		assert.NoError(t, view.Close())
+		assert.Equal(t, 0, view.Len())
+		_, ok := view.Dequeue()
+		assert.False(t, ok)
+	})
 }
