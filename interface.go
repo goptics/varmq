@@ -62,3 +62,27 @@ type IDistributedPriorityQueue interface {
 type CapacitySetter interface {
 	SetCapacity(cap int)
 }
+
+// IPersistentTopic is durable topic storage with named groups. Every group
+// reads every message; readers of the same group share its position. Method
+// signatures use only built-in types, so adapters need not import varmq.
+type IPersistentTopic interface {
+	// Publish appends one serialized message for every group.
+	Publish(item any) bool
+	// JoinGroup creates the group at the current head if it does not exist.
+	JoinGroup(group string) error
+	// GroupLen returns how many messages the group has not read.
+	GroupLen(group string) int
+	// GroupValues returns the group's unread messages without consuming them.
+	GroupValues(group string) []any
+	// DequeueGroup returns the group's next message and an ack ID.
+	DequeueGroup(group string) (any, bool, string)
+	// AcknowledgeGroup commits a message the group finished processing.
+	AcknowledgeGroup(group, ackID string) bool
+	// PurgeGroup skips the group's position to the head.
+	PurgeGroup(group string)
+	// DeleteGroup forgets the group and its position.
+	DeleteGroup(group string) error
+	// Close releases the storage.
+	Close() error
+}
