@@ -220,7 +220,7 @@ The Queue Manager picks which bound queue the next job comes from. With `varmq.W
 
 ### Topic (Fan-out)
 
-A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` copies the payload into each subscribed worker's own queue, and the returned group job lets you wait until all of them are done.
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` copies the payload into each subscribed worker's own queue. `Publish` returns `false` when no subscriber accepted the copy.
 
 ```go
 topic := varmq.NewTopic[Order]()
@@ -233,10 +233,7 @@ varmq.NewWorker(func(j varmq.Job[Order]) {
 	updateStock(j.Data())
 }, 4).WithTopic(topic)
 
-gj, ok := topic.Publish(order)
-if ok {
-	gj.Wait() // both workers processed their copy
-}
+topic.Publish(order) // both workers receive their own copy
 ```
 
 Semantics are those of a fanout exchange, not a log:

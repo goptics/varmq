@@ -27,25 +27,19 @@ import (
 //	varmq.NewWorker(sendEmail).WithTopic(topic)
 //	varmq.NewWorker(updateStock, 4).WithTopic(topic)
 //
-//	if gj, ok := topic.Publish(order); ok {
-//		gj.Wait() // both workers have processed their copy
-//	}
+//	topic.Publish(order) // both workers receive their own copy
 type Topic[T any] interface {
 	// Publish enqueues an independent copy of data into every open
 	// subscription and wakes each subscriber's worker.
 	//
-	// ok is false only when no subscription accepted the copy: zero
-	// subscribers, every subscription closed, or the topic closed. The group
-	// job is nil only when the topic is closed.
-	//
-	// The returned group job tracks every delivered copy: Wait blocks until
-	// each subscriber has finished (or closed) its copy and NumPending counts
-	// copies not yet finished.
-	Publish(data T) (EnqueuedGroupJob, bool)
+	// It returns false only when no subscription accepted the copy: zero
+	// subscribers, every subscription closed, or the topic closed. To wait
+	// for a subscriber to finish its copies, use its Worker's Wait.
+	Publish(data T) bool
 	// NumSubscribers returns the number of open subscriptions.
 	NumSubscribers() int
 	// Close unsubscribes every subscription and makes further Publish calls
-	// return (nil, false). It is idempotent and always returns nil.
+	// return false. It is idempotent and always returns nil.
 	Close() error
 
 	add(s *subscription[T])
@@ -100,22 +94,20 @@ func (t *topic[T]) remove(s *subscription[T]) {
 	}
 }
 
-func (t *topic[T]) Publish(data T) (EnqueuedGroupJob, bool) {
+func (t *topic[T]) Publish(data T) bool {
 	if t.closed.Load() {
-		return nil, false
+		return false
 	}
 
-	subs := t.snapshot()
-	gj := newGroupJob[T](len(subs))
 	delivered := 0
 
-	for _, s := range subs {
-		if s.addGroupJob(gj, data, "") {
+	for _, s := range t.snapshot() {
+		if _, ok := s.Add(data); ok {
 			delivered++
 		}
 	}
 
-	return gj, delivered > 0
+	return delivered > 0
 }
 
 func (t *topic[T]) NumSubscribers() int {

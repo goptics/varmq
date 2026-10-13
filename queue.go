@@ -61,28 +61,19 @@ func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	return j, true
 }
 
-// addGroupJob enqueues one job that belongs to gj. When the internal queue
-// rejects it (closed or full) the job is closed so gj's pending counter still
-// reaches zero. Returns true when the job was enqueued.
-func (q *queue[T]) addGroupJob(gj *groupJob[T], data T, id string) bool {
-	j := gj.newJob(data, loadJobConfigs(q.w.configs(), WithJobId(id)))
-	if ok := q.internalQueue.Enqueue(j); !ok {
-		j.Close()
-		return false
-	}
-
-	q.w.Metrics().incSubmitted()
-	j.changeStatus(queued)
-	q.w.notifyToPullNextJobs()
-
-	return true
-}
-
 func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
 	for _, item := range items {
-		q.addGroupJob(groupJob, item.Data, item.ID)
+		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		if ok := q.internalQueue.Enqueue(j); !ok {
+			j.Close()
+			continue
+		}
+
+		q.w.Metrics().incSubmitted()
+		j.changeStatus(queued)
+		q.w.notifyToPullNextJobs()
 	}
 
 	return groupJob

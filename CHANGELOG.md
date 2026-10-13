@@ -4,12 +4,8 @@
 
 ### ✨ New Features
 
-- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` copies the payload into every subscribed worker's own queue and returns an `EnqueuedGroupJob` to wait on all copies. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
+- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` copies the payload into every subscribed worker's own queue and returns `false` when no subscriber accepted it. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
   - `IWorkerBinder[T]` gained the `WithTopic` method; code that implements or mocks that interface must add it.
-
-### 🔧 Refactoring
-
-- Extracted `queue.addGroupJob` from `AddAll`; shared by `Topic.Publish`. No behaviour change.
 
 ## [v1.8.0] (2026-07-04)
 

@@ -28,13 +28,8 @@ func TestTopic(t *testing.T) {
 	t.Run("publish with zero subscribers", func(t *testing.T) {
 		topic := NewTopic[int]()
 
-		gj, ok := topic.Publish(1)
-
-		assert.False(t, ok, "nothing was delivered")
-		assert.NotNil(t, gj, "group job is still returned")
-		assert.Equal(t, 0, gj.NumPending())
+		assert.False(t, topic.Publish(1), "nothing was delivered")
 		assert.Equal(t, 0, topic.NumSubscribers())
-		waitOrTimeout(t, time.Second, gj.Wait)
 	})
 
 	t.Run("close is idempotent and rejects publish", func(t *testing.T) {
@@ -43,10 +38,7 @@ func TestTopic(t *testing.T) {
 		assert.NoError(t, topic.Close())
 		assert.NoError(t, topic.Close())
 
-		gj, ok := topic.Publish(1)
-
-		assert.False(t, ok)
-		assert.Nil(t, gj, "closed topic returns nil group job")
+		assert.False(t, topic.Publish(1))
 		assert.Equal(t, 0, topic.NumSubscribers())
 	})
 
@@ -63,17 +55,19 @@ func TestTopic(t *testing.T) {
 			}
 		}
 
-		NewWorker(record("a")).WithTopic(topic)
-		NewWorker(record("b"), 4).WithTopic(topic)
-		NewWorker(record("c")).WithTopic(topic)
+		a := NewWorker(record("a"))
+		b := NewWorker(record("b"), 4)
+		c := NewWorker(record("c"))
+		a.WithTopic(topic)
+		b.WithTopic(topic)
+		c.WithTopic(topic)
 
 		assert.Equal(t, 3, topic.NumSubscribers())
+		assert.True(t, topic.Publish(42))
 
-		gj, ok := topic.Publish(42)
-
-		assert.True(t, ok)
-		waitOrTimeout(t, time.Second, gj.Wait)
-		assert.Equal(t, 0, gj.NumPending())
+		for _, w := range []Worker{a, b, c} {
+			waitOrTimeout(t, time.Second, w.Wait)
+		}
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -88,8 +82,8 @@ func TestTopic(t *testing.T) {
 		assert.Equal(t, "topic-sub-worker", sub.Worker().Name())
 		assert.False(t, sub.IsFull(), "no capacity in v1")
 
-		gj, _ := topic.Publish(1)
-		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, w.Wait)
 
 		assert.Equal(t, 0, sub.Len())
 	})
@@ -99,21 +93,21 @@ func TestTopic(t *testing.T) {
 
 		var mu sync.Mutex
 		var late []int
-		NewWorker(func(j Job[int]) {}).WithTopic(topic)
+		early := NewWorker(func(j Job[int]) {})
+		early.WithTopic(topic)
 
-		gj1, ok := topic.Publish(1)
-		assert.True(t, ok)
-		waitOrTimeout(t, time.Second, gj1.Wait)
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, early.Wait)
 
-		NewWorker(func(j Job[int]) {
+		lateWorker := NewWorker(func(j Job[int]) {
 			mu.Lock()
 			defer mu.Unlock()
 			late = append(late, j.Data())
-		}).WithTopic(topic)
+		})
+		lateWorker.WithTopic(topic)
 
-		gj2, ok := topic.Publish(2)
-		assert.True(t, ok)
-		waitOrTimeout(t, time.Second, gj2.Wait)
+		assert.True(t, topic.Publish(2))
+		waitOrTimeout(t, time.Second, lateWorker.Wait)
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -134,13 +128,11 @@ func TestTopic(t *testing.T) {
 		q := w.BindQueue()
 		w.WithTopic(topic)
 
-		j, ok := q.Add("queue")
+		_, ok := q.Add("queue")
 		assert.True(t, ok)
-		gj, ok := topic.Publish("topic")
-		assert.True(t, ok)
+		assert.True(t, topic.Publish("topic"))
 
-		waitOrTimeout(t, time.Second, j.Wait)
-		waitOrTimeout(t, time.Second, gj.Wait)
+		waitOrTimeout(t, time.Second, w.Wait)
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -161,10 +153,9 @@ func TestTopic(t *testing.T) {
 		w.WithTopic(t1)
 		w.WithTopic(t2)
 
-		gj1, _ := t1.Publish(1)
-		gj2, _ := t2.Publish(2)
-		waitOrTimeout(t, time.Second, gj1.Wait)
-		waitOrTimeout(t, time.Second, gj2.Wait)
+		assert.True(t, t1.Publish(1))
+		assert.True(t, t2.Publish(2))
+		waitOrTimeout(t, time.Second, w.Wait)
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -181,8 +172,8 @@ func TestTopic(t *testing.T) {
 
 		assert.Equal(t, 2, topic.NumSubscribers())
 
-		gj, _ := topic.Publish(1)
-		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, w.Wait)
 
 		assert.Equal(t, int32(2), atomic.LoadInt32(&count))
 	})
@@ -198,12 +189,15 @@ func TestTopic(t *testing.T) {
 			defer mu.Unlock()
 			ptrs = append(ptrs, j.Data())
 		}
-		NewWorker(collect).WithTopic(topic)
-		NewWorker(collect).WithTopic(topic)
+		w1 := NewWorker(collect)
+		w2 := NewWorker(collect)
+		w1.WithTopic(topic)
+		w2.WithTopic(topic)
 
 		b := &box{n: 1}
-		gj, _ := topic.Publish(b)
-		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.True(t, topic.Publish(b))
+		waitOrTimeout(t, time.Second, w1.Wait)
+		waitOrTimeout(t, time.Second, w2.Wait)
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -219,13 +213,11 @@ func TestTopic(t *testing.T) {
 
 		assert.NoError(t, w.PauseAndWait())
 
-		gj, ok := topic.Publish(1)
-		assert.True(t, ok)
-		assert.Equal(t, 1, gj.NumPending())
+		assert.True(t, topic.Publish(1))
 		assert.Equal(t, 1, sub.Len())
 
 		assert.NoError(t, w.Resume())
-		waitOrTimeout(t, time.Second, gj.Wait)
+		waitOrTimeout(t, time.Second, w.Wait)
 		assert.Equal(t, 0, sub.Len())
 	})
 
@@ -252,42 +244,37 @@ func TestTopic(t *testing.T) {
 		assert.Equal(t, before-1, sub.(*subscription[int]).worker.queues.Count(), "internal queue unregistered from worker")
 		assert.Equal(t, 1, topic.NumSubscribers())
 
-		gj, ok := topic.Publish(1)
-		assert.True(t, ok)
-		waitOrTimeout(t, time.Second, gj.Wait)
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, keep.Wait)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&count))
 		assert.Equal(t, 0, drop.NumPending(), "queue was unregistered from the worker")
 	})
 
-	t.Run("unsubscribe releases waiters on pending copies", func(t *testing.T) {
+	t.Run("unsubscribe drops pending copies", func(t *testing.T) {
 		topic := NewTopic[int]()
 		w := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
 		sub := w.WithTopic(topic)
 
-		gj, ok := topic.Publish(1)
-		assert.True(t, ok)
-		assert.Equal(t, 1, gj.NumPending())
+		assert.True(t, topic.Publish(1))
 		assert.Equal(t, 1, sub.Len())
+		assert.Equal(t, 1, w.NumPending())
 
 		sub.Unsubscribe()
 
-		waitOrTimeout(t, time.Second, gj.Wait)
-		assert.Equal(t, 0, gj.NumPending())
 		assert.Equal(t, 0, sub.Len())
 		assert.Equal(t, 0, w.NumPending())
 	})
 
-	t.Run("purge releases waiters on pending copies", func(t *testing.T) {
+	t.Run("purge drops pending copies but keeps the subscription", func(t *testing.T) {
 		topic := NewTopic[int]()
 		w := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
 		sub := w.WithTopic(topic)
 
-		gj, _ := topic.Publish(1)
-		assert.Equal(t, 1, gj.NumPending())
+		assert.True(t, topic.Publish(1))
+		assert.Equal(t, 1, sub.Len())
 
 		sub.Purge()
 
-		waitOrTimeout(t, time.Second, gj.Wait)
 		assert.Equal(t, 0, sub.Len())
 		assert.Equal(t, 1, topic.NumSubscribers(), "purge does not unsubscribe")
 	})
@@ -299,19 +286,16 @@ func TestTopic(t *testing.T) {
 		w1.WithTopic(topic)
 		w2.WithTopic(topic)
 
-		gj, _ := topic.Publish(1)
-		assert.Equal(t, 2, gj.NumPending())
+		assert.True(t, topic.Publish(1))
+		assert.Equal(t, 1, w1.NumPending())
+		assert.Equal(t, 1, w2.NumPending())
 
 		assert.NoError(t, topic.Close())
 
 		assert.Equal(t, 0, topic.NumSubscribers())
-		waitOrTimeout(t, time.Second, gj.Wait)
 		assert.Equal(t, 0, w1.NumPending())
 		assert.Equal(t, 0, w2.NumPending())
-
-		gj2, ok := topic.Publish(2)
-		assert.False(t, ok)
-		assert.Nil(t, gj2)
+		assert.False(t, topic.Publish(2))
 	})
 
 	t.Run("subscribe after close returns an inert handle", func(t *testing.T) {
@@ -324,27 +308,8 @@ func TestTopic(t *testing.T) {
 		assert.NotNil(t, sub)
 		assert.Equal(t, 0, topic.NumSubscribers())
 		assert.Equal(t, 0, w.NumPending())
-
-		gj, ok := topic.Publish(1)
-		assert.False(t, ok)
-		assert.Nil(t, gj)
-	})
-
-	t.Run("panicking subscriber still completes the group", func(t *testing.T) {
-		topic := NewTopic[int]()
-
-		ok := NewWorker(func(j Job[int]) {})
-		bad := NewWorker(func(j Job[int]) { panic("boom") })
-		ok.WithTopic(topic)
-		bad.WithTopic(topic)
-
-		gj, delivered := topic.Publish(1)
-		assert.True(t, delivered)
-		waitOrTimeout(t, time.Second, gj.Wait)
-
-		bad.Wait()
-		assert.Equal(t, uint64(1), bad.Metrics().Failed())
-		assert.Equal(t, uint64(1), ok.Metrics().Successful())
+		assert.False(t, topic.Publish(1))
+		assert.Equal(t, 0, sub.Len())
 	})
 
 	t.Run("close on subscription is unsubscribe", func(t *testing.T) {
@@ -354,30 +319,43 @@ func TestTopic(t *testing.T) {
 
 		assert.NoError(t, sub.Close())
 		assert.Equal(t, 0, topic.NumSubscribers())
+		assert.False(t, topic.Publish(1))
+	})
 
-		_, ok := topic.Publish(1)
-		assert.False(t, ok)
+	t.Run("panicking subscriber does not affect the others", func(t *testing.T) {
+		topic := NewTopic[int]()
+
+		ok := NewWorker(func(j Job[int]) {})
+		bad := NewWorker(func(j Job[int]) { panic("boom") })
+		ok.WithTopic(topic)
+		bad.WithTopic(topic)
+
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, bad.Wait)
+		waitOrTimeout(t, time.Second, ok.Wait)
+
+		assert.Equal(t, uint64(1), bad.Metrics().Failed())
+		assert.Equal(t, uint64(1), ok.Metrics().Successful())
 	})
 
 	t.Run("publish racing unsubscribe never strands a copy", func(t *testing.T) {
 		topic := NewTopic[int]()
-		NewWorker(func(j Job[int]) {}).WithTopic(topic) // permanent, keeps ok=true
+		permanent := NewWorker(func(j Job[int]) {})
+		permanent.WithTopic(topic) // keeps Publish returning true
 
 		const rounds = 200
 		for i := 0; i < rounds; i++ {
 			sub := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithTopic(topic)
 
-			done := make(chan EnqueuedGroupJob, 1)
-			go func() {
-				gj, _ := topic.Publish(i)
-				done <- gj
-			}()
+			done := make(chan bool, 1)
+			go func() { done <- topic.Publish(i) }()
 			sub.Unsubscribe()
 
-			gj := <-done
-			waitOrTimeout(t, 2*time.Second, gj.Wait)
+			assert.True(t, <-done)
 			assert.Equal(t, 0, sub.Len(), "round %d: copy stranded in unsubscribed queue", i)
 		}
+
+		waitOrTimeout(t, 5*time.Second, permanent.Wait)
 	})
 
 	t.Run("concurrent publish with subscribe and unsubscribe", func(t *testing.T) {
@@ -388,21 +366,20 @@ func TestTopic(t *testing.T) {
 		const perPublisher = 200
 		const churn = 50
 
-		NewWorker(func(j Job[int]) {}).WithTopic(topic)
+		var received int32
+		permanent := NewWorker(func(j Job[int]) { atomic.AddInt32(&received, 1) })
+		permanent.WithTopic(topic)
 
 		var wg sync.WaitGroup
-		var groups []EnqueuedGroupJob
-		var gmu sync.Mutex
+		var accepted int32
 
 		for p := 0; p < publishers; p++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for i := 0; i < perPublisher; i++ {
-					if gj, ok := topic.Publish(i); ok {
-						gmu.Lock()
-						groups = append(groups, gj)
-						gmu.Unlock()
+					if topic.Publish(i) {
+						atomic.AddInt32(&accepted, 1)
 					}
 				}
 			}()
@@ -414,18 +391,15 @@ func TestTopic(t *testing.T) {
 			for i := 0; i < churn; i++ {
 				sub := NewWorker(func(j Job[int]) {}).WithTopic(topic)
 				sub.Unsubscribe()
-				assert.Equal(t, 0, sub.Len(), "copy stranded in unsubscribed queue")
+				assert.Equal(t, 0, sub.Len(), "copy stranded in churned subscription")
 			}
 		}()
 
 		waitOrTimeout(t, 10*time.Second, wg.Wait)
+		waitOrTimeout(t, 10*time.Second, permanent.Wait)
 
-		gmu.Lock()
-		defer gmu.Unlock()
-		assert.Equal(t, publishers*perPublisher, len(groups), "the permanent subscriber accepts every publish")
-		for _, gj := range groups {
-			waitOrTimeout(t, 5*time.Second, gj.Wait)
-		}
+		assert.Equal(t, int32(publishers*perPublisher), atomic.LoadInt32(&accepted), "the permanent subscriber accepts every publish")
+		assert.Equal(t, int32(publishers*perPublisher), atomic.LoadInt32(&received), "the permanent subscriber processes every copy")
 		assert.Equal(t, 1, topic.NumSubscribers())
 	})
 }
