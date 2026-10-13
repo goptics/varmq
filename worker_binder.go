@@ -180,6 +180,10 @@ type IWorkerBinder[T any] interface {
 	// the group, the error goes to the worker's error handler and the
 	// returned subscription is inert.
 	//
+	// Workers sharing a group may occasionally report ErrFailedToDequeue to
+	// their error handler when another worker took the message first; it is
+	// harmless.
+	//
 	// Example usage:
 	//   topic := varmq.NewPersistentTopic[Order](storage)
 	//   sub := worker.WithPersistentTopic(topic, "email")

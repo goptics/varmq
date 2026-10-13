@@ -147,18 +147,25 @@ func (t *topic[T]) unsubscribe(s *subscription[T]) {
 	t.subs = slices.DeleteFunc(t.subs, func(cur *subscription[T]) bool { return cur == s })
 }
 
-// Subscription is one worker's inbox for one [Topic]. It is returned by
-// [IWorkerBinder.WithTopic]. It has no Add: the topic is the only producer.
+// Subscription is a worker's handle on a topic, returned by
+// [IWorkerBinder.WithTopic] or [IWorkerBinder.WithPersistentTopic]. It has
+// no Add: the topic is the only producer.
 //
-// Len counts payloads this subscription has not read yet; Purge skips them
-// without calling Close on them.
+// Len and Purge act on what this subscription has not read yet. For a
+// persistent topic that is the group's backlog, shared with every reader of
+// the group. Purge never calls Close on payloads.
+//
+// Close detaches this handle. For an in-memory topic it is the same as
+// Unsubscribe; for a persistent topic the group keeps its position, so
+// binding the same group again resumes where it stopped.
 type Subscription[T any] interface {
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
-	// Unsubscribe stops this subscription reading the topic, drops what it
-	// has not read, and detaches it from the worker. It is idempotent.
-	// Close is equivalent to Unsubscribe.
+	// Unsubscribe ends the subscription and detaches it from the worker. For
+	// an in-memory topic it drops what this subscription has not read. For a
+	// persistent topic it deletes the group, for every reader in every
+	// process. It is idempotent.
 	Unsubscribe()
 }
 

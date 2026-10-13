@@ -8,7 +8,8 @@ import (
 	"github.com/goptics/varmq/internal/topics"
 )
 
-// MockPersistentTopic is an in-memory IPersistentTopic for tests.
+// MockPersistentTopic is an in-memory IPersistentTopic for tests. Pending
+// messages are tracked but never redelivered.
 type MockPersistentTopic struct {
 	mx     sync.Mutex
 	log    *topics.Log[any]
@@ -16,6 +17,7 @@ type MockPersistentTopic struct {
 	acked  []string
 	closed bool
 
+	// Set the ShouldFail* fields before the mock is used concurrently.
 	ShouldFailPublish     bool
 	ShouldFailAcknowledge bool
 	ShouldFailJoin        bool
@@ -24,7 +26,9 @@ type MockPersistentTopic struct {
 type mockTopicGroup struct {
 	cursor *topics.Cursor[any]
 	seq    uint64
-	subs   map[int]func(action string)
+	// pending holds the ack IDs of dequeued, unacknowledged messages.
+	pending map[string]bool
+	subs    map[int]func(action string)
 }
 
 // NewMockPersistentTopic returns an empty mock topic.
@@ -72,8 +76,9 @@ func (m *MockPersistentTopic) JoinGroup(group string) error {
 
 	if _, ok := m.groups[group]; !ok {
 		m.groups[group] = &mockTopicGroup{
-			cursor: m.log.NewCursor(),
-			subs:   make(map[int]func(action string)),
+			cursor:  m.log.NewCursor(),
+			subs:    make(map[int]func(action string)),
+			pending: make(map[string]bool),
 		}
 	}
 
@@ -90,18 +95,6 @@ func (m *MockPersistentTopic) GroupLen(group string) int {
 	}
 
 	return 0
-}
-
-// GroupValues returns the group's unread messages.
-func (m *MockPersistentTopic) GroupValues(group string) []any {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-
-	if g := m.groups[group]; g != nil {
-		return g.cursor.Values()
-	}
-
-	return nil
 }
 
 // DequeueGroup returns the next message with a per-group sequence number as
@@ -121,19 +114,29 @@ func (m *MockPersistentTopic) DequeueGroup(group string) (any, bool, string) {
 	}
 
 	g.seq++
+	ackID := strconv.FormatUint(g.seq, 10)
+	g.pending[ackID] = true
 
-	return item, true, strconv.FormatUint(g.seq, 10)
+	return item, true, ackID
 }
 
-// AcknowledgeGroup records "group:ackID".
+// AcknowledgeGroup completes a pending message and records "group:ackID". It
+// returns false when failing is switched on, the mock is closed, the group is
+// unknown or the ack ID is not pending.
 func (m *MockPersistentTopic) AcknowledgeGroup(group, ackID string) bool {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	if m.ShouldFailAcknowledge {
+	if m.ShouldFailAcknowledge || m.closed {
 		return false
 	}
 
+	g := m.groups[group]
+	if g == nil || !g.pending[ackID] {
+		return false
+	}
+
+	delete(g.pending, ackID)
 	m.acked = append(m.acked, group+":"+ackID)
 
 	return true
@@ -188,4 +191,17 @@ func (m *MockPersistentTopic) AckedIDs() []string {
 	defer m.mx.Unlock()
 
 	return append([]string(nil), m.acked...)
+}
+
+// PendingCount returns how many dequeued messages the group has not
+// acknowledged, 0 for an unknown group.
+func (m *MockPersistentTopic) PendingCount(group string) int {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	if g := m.groups[group]; g != nil {
+		return len(g.pending)
+	}
+
+	return 0
 }

@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -244,6 +245,99 @@ func TestPersistentTopic(t *testing.T) {
 		assert.False(t, storage.HasGroup("jobs"))
 		assert.Equal(t, 0, w1.NumPending())
 		assert.Equal(t, 0, w2.NumPending())
+	})
+
+	t.Run("ack happens after the handler returns", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		release := make(chan struct{})
+		w := NewWorker(func(j Job[int]) { <-release })
+		w.WithPersistentTopic(topic, "a")
+
+		assert.True(t, topic.Publish(1))
+		assert.Eventually(t, func() bool { return storage.PendingCount("a") == 1 }, time.Second, time.Millisecond)
+		assert.Empty(t, storage.AckedIDs())
+
+		close(release)
+		waitOrTimeout(t, time.Second, w.Wait)
+
+		assert.Equal(t, []string{"a:1"}, storage.AckedIDs())
+		assert.Equal(t, 0, storage.PendingCount("a"))
+	})
+
+	t.Run("ack failure reaches the error handler", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		storage.ShouldFailAcknowledge = true
+		topic := NewPersistentTopic[int](storage)
+
+		var mu sync.Mutex
+		var errs []error
+		w := NewWorker(func(j Job[int]) {}, WithErrHandler(func(_ Worker, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			errs = append(errs, err)
+		}))
+		w.WithPersistentTopic(topic, "a")
+
+		assert.True(t, topic.Publish(1))
+		waitOrTimeout(t, time.Second, w.Wait)
+
+		assert.Eventually(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, err := range errs {
+				if errors.Is(err, ErrAcknowledgeJob) {
+					return true
+				}
+			}
+			return false
+		}, time.Second, time.Millisecond)
+	})
+
+	t.Run("rebinding after unsubscribe starts at the head", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		subA := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithPersistentTopic(topic, "a")
+		assert.True(t, topic.Publish(1))
+		assert.True(t, topic.Publish(2))
+		subA.Unsubscribe()
+		assert.True(t, topic.Publish(3))
+
+		var mu sync.Mutex
+		var got []int
+		b := NewWorker(func(j Job[int]) {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, j.Data())
+		})
+		b.WithPersistentTopic(topic, "a")
+		assert.True(t, topic.Publish(4))
+		waitOrTimeout(t, time.Second, b.Wait)
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, []int{4}, got)
+	})
+
+	t.Run("stale sibling cannot delete a newer group", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		s1 := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithPersistentTopic(topic, "g")
+		s2 := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithPersistentTopic(topic, "g")
+
+		s1.Unsubscribe()
+		assert.False(t, storage.HasGroup("g"))
+
+		NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithPersistentTopic(topic, "g")
+		assert.True(t, storage.HasGroup("g"))
+
+		s2.Unsubscribe()
+
+		assert.True(t, storage.HasGroup("g"))
+		assert.Equal(t, 1, topic.NumSubscribers())
 	})
 
 	t.Run("guards", func(t *testing.T) {

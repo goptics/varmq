@@ -15,7 +15,6 @@ func TestMockPersistentTopic(t *testing.T) {
 		assert.True(t, m.Publish("x"))
 		assert.Equal(t, 1, m.GroupLen("a"))
 		assert.Equal(t, 1, m.GroupLen("b"))
-		assert.Equal(t, []any{"x"}, m.GroupValues("a"))
 
 		item, ok, ack := m.DequeueGroup("a")
 		assert.True(t, ok)
@@ -38,11 +37,18 @@ func TestMockPersistentTopic(t *testing.T) {
 
 	t.Run("acknowledge, purge, delete", func(t *testing.T) {
 		m := NewMockPersistentTopic()
-		m.JoinGroup("a")
+		assert.NoError(t, m.JoinGroup("a"))
 		m.Publish("x")
 		m.Publish("y")
 
-		assert.True(t, m.AcknowledgeGroup("a", "1"))
+		_, ok, ack := m.DequeueGroup("a")
+		assert.True(t, ok)
+		assert.Equal(t, 1, m.PendingCount("a"))
+
+		assert.True(t, m.AcknowledgeGroup("a", ack))
+		assert.Equal(t, 0, m.PendingCount("a"))
+		assert.False(t, m.AcknowledgeGroup("a", ack))
+		assert.False(t, m.AcknowledgeGroup("missing", "1"))
 		assert.Equal(t, []string{"a:1"}, m.AckedIDs())
 
 		m.PurgeGroup("a")
@@ -51,8 +57,33 @@ func TestMockPersistentTopic(t *testing.T) {
 		assert.True(t, m.HasGroup("a"))
 		assert.NoError(t, m.DeleteGroup("a"))
 		assert.False(t, m.HasGroup("a"))
-		_, ok, _ := m.DequeueGroup("a")
+		_, ok, _ = m.DequeueGroup("a")
 		assert.False(t, ok)
+	})
+
+	t.Run("acknowledge after close fails", func(t *testing.T) {
+		m := NewMockPersistentTopic()
+		assert.NoError(t, m.JoinGroup("a"))
+		m.Publish("x")
+		_, ok, ack := m.DequeueGroup("a")
+		assert.True(t, ok)
+
+		assert.NoError(t, m.Close())
+		assert.False(t, m.AcknowledgeGroup("a", ack))
+	})
+
+	t.Run("delete then rejoin starts at the head", func(t *testing.T) {
+		m := NewMockPersistentTopic()
+		assert.NoError(t, m.JoinGroup("a"))
+		m.Publish("x")
+		assert.NoError(t, m.DeleteGroup("a"))
+		assert.NoError(t, m.JoinGroup("a"))
+		assert.Equal(t, 0, m.GroupLen("a"))
+
+		m.Publish("y")
+		item, ok, _ := m.DequeueGroup("a")
+		assert.True(t, ok)
+		assert.Equal(t, "y", item)
 	})
 
 	t.Run("failure switches", func(t *testing.T) {

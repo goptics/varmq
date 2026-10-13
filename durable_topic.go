@@ -10,17 +10,26 @@ import (
 // payloads. A group's position survives restarts, so binding the same group
 // again resumes where it stopped.
 //
+// Workers sharing a group may occasionally report ErrFailedToDequeue to their
+// error handler when another worker took the message first; it is harmless.
+// The Submitted metric counts a message once per local subscription, even when
+// one group processes it once.
+//
 // Create one with [NewPersistentTopic]; subscribe a worker with
 // [IWorkerBinder.WithPersistentTopic].
 type PersistentTopic[T any] interface {
 	// Publish serializes data and appends it for every group. configs apply
-	// to the job, for example WithJobId for deduplication.
+	// to the job, for example WithJobId for deduplication. It returns false
+	// when the topic is closed, the payload cannot be serialized, or the
+	// storage rejects it. True does not mean any group exists to read it.
 	Publish(data T, configs ...JobConfigFunc) bool
 	// NumSubscribers returns the number of subscriptions attached in this
 	// process.
 	NumSubscribers() int
 	// Close detaches every local subscription, keeping their groups, and
-	// closes the storage. It is idempotent.
+	// closes the storage. It is idempotent. Stop the workers first:
+	// acknowledgements for jobs still running after Close fail and those
+	// messages are delivered again.
 	Close() error
 
 	bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string)) Subscription[T]
@@ -210,6 +219,8 @@ func (s *durableSubscription[T]) Unsubscribe() {
 		// Close takes t.mx itself, so siblings are collected first and closed
 		// after the lock is released.
 		for _, sib := range s.t.groupSubs(s.view.group) {
+			// a detached sibling must not delete a group someone binds later
+			sib.deleteOnce.Do(func() {})
 			sib.Close()
 		}
 
@@ -243,13 +254,9 @@ func (v *groupView) Len() int {
 	return v.storage.GroupLen(v.group)
 }
 
-func (v *groupView) Values() []any {
-	if v.inert {
-		return nil
-	}
-
-	return v.storage.GroupValues(v.group)
-}
+// Values returns nil without calling storage: it is only reachable through
+// externalBaseQueue.Purge, which durableSubscription overrides.
+func (v *groupView) Values() []any { return nil }
 
 func (v *groupView) Purge() {
 	if v.inert {
