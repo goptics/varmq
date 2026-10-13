@@ -4,7 +4,7 @@
 
 ### ✨ New Features
 
-- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` stores the payload once in a shared in-memory log; every subscription reads it at its own position and its worker gets its own job. `Publish` returns `false` when no subscription is attached. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
+- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` stores the payload once in a shared in-memory log; every subscription reads it at its own position and its worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
   - `IWorkerBinder[T]` gained the `WithTopic` method; code that implements or mocks that interface must add it.
 
 ### 🐛 Bug Fixes

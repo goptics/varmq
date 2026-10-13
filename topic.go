@@ -14,13 +14,15 @@ import (
 //
 // Payloads are stored once in a shared in-memory log. Each subscription reads
 // the log at its own position, so a slow subscriber never blocks the
-// publisher or other subscribers. A payload is kept until every subscription
-// has read it, so a stalled subscriber holds memory until it catches up or
-// unsubscribes.
+// publisher or other subscribers. A payload is released as soon as every
+// subscription has read, purged, or dropped it, so a stalled or paused
+// subscriber holds every payload published since it stalled until it catches
+// up or unsubscribes.
 //
 // Each subscriber's worker gets its own job wrapping the payload. The payload
 // is copied by value; if T is a pointer, or contains pointers, maps or
-// slices, subscribers share the pointee.
+// slices, subscribers share the pointee. Job IDs are generated when a
+// subscriber's worker reads the payload, using that worker's ID generator.
 //
 // Create a topic with [NewTopic]; subscribe a worker with
 // [IWorkerBinder.WithTopic].
@@ -212,6 +214,7 @@ func (v *topicView[T]) Dequeue() (any, bool) {
 	return newJob(data, loadJobConfigs(v.w.configs())), true
 }
 
+// Values returns raw payloads, not jobs. Only externalBaseQueue.Purge would call it, and Subscription overrides Purge so payloads are never closed.
 func (v *topicView[T]) Values() []any {
 	vals := v.cursor.Values()
 	out := make([]any, len(vals))

@@ -220,7 +220,7 @@ The Queue Manager picks which bound queue the next job comes from. With `varmq.W
 
 ### Topic (Fan-out)
 
-A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` reaches each subscribed worker, and each worker gets its own job. `Publish` returns `false` when no subscription is attached.
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` reaches each subscribed worker, and each worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed.
 
 ```go
 topic := varmq.NewTopic[Order]()
@@ -239,7 +239,7 @@ topic.Publish(order) // both workers receive their own copy
 Semantics are those of a fanout exchange, not a replayable log:
 
 - No history. A worker that subscribes after a `Publish` never sees that payload.
-- Payloads are stored once in a shared log. Each subscription reads it at its own position, so a slow worker never blocks the publisher or the others. A payload is kept until every subscription has read it.
+- Payloads are stored once in a shared log. Each subscription reads it at its own position, so a slow worker never blocks the publisher or the others. A payload is released once every subscription has read it, so a paused or stalled worker keeps everything published since it stalled until it catches up or unsubscribes.
 - The payload is copied by value. Pointer payloads are shared between subscribers.
 - `WithTopic` returns a `Subscription` with `Len`, `Purge`, `Unsubscribe` (alias `Close`), but no `Add`: the topic is the only producer.
 - A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
