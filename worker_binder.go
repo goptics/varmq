@@ -173,7 +173,8 @@ type IWorkerBinder[T any] interface {
 	// WithPersistentTopic subscribes the worker to a group of a persistent
 	// topic. Every group gets every payload; workers on the same group share
 	// it. Close on the returned subscription keeps the group's position;
-	// Unsubscribe deletes the group.
+	// Unsubscribe deletes the group, which also detaches every subscription on
+	// that group in this process.
 	//
 	// It panics on a nil topic or an empty group. If the storage cannot join
 	// the group, the error goes to the worker's error handler and the

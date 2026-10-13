@@ -152,6 +152,49 @@ func TestPersistentTopic(t *testing.T) {
 		sub.Unsubscribe()
 	})
 
+	t.Run("inert handle after failed join never touches a live group", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		// group "a" exists from before a restart and holds one message
+		assert.NoError(t, storage.JoinGroup("a"))
+		assert.True(t, topic.Publish(1))
+		storage.ShouldFailJoin = true
+
+		var reported atomic.Bool
+		w := NewWorker(func(j Job[int]) {}, WithErrHandler(func(Worker, error) { reported.Store(true) }))
+		sub := w.WithPersistentTopic(topic, "a")
+
+		assert.True(t, reported.Load())
+		assert.Equal(t, 0, sub.Len(), "inert handle reports no backlog")
+		sub.Purge()
+		assert.Equal(t, 1, storage.GroupLen("a"), "inert Purge must not skip the live group")
+		sub.Unsubscribe()
+		assert.True(t, storage.HasGroup("a"), "inert Unsubscribe must not delete the live group")
+	})
+
+	t.Run("join failure error handler may use the topic", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		storage.ShouldFailJoin = true
+		topic := NewPersistentTopic[int](storage)
+
+		var reported atomic.Bool
+		var seenSubs atomic.Int32
+		w := NewWorker(func(j Job[int]) {}, WithErrHandler(func(Worker, error) {
+			seenSubs.Store(int32(topic.NumSubscribers()))
+			reported.Store(true)
+		}))
+
+		var sub Subscription[int]
+		waitOrTimeout(t, time.Second, func() {
+			sub = w.WithPersistentTopic(topic, "a")
+		})
+
+		assert.True(t, reported.Load())
+		assert.Equal(t, int32(0), seenSubs.Load())
+		sub.Unsubscribe()
+	})
+
 	t.Run("closed topic rejects publish and binds inert", func(t *testing.T) {
 		storage := mocks.NewMockPersistentTopic()
 		topic := NewPersistentTopic[int](storage)
@@ -163,6 +206,44 @@ func TestPersistentTopic(t *testing.T) {
 		sub := NewWorker(func(j Job[int]) {}).WithPersistentTopic(topic, "a")
 		assert.False(t, storage.HasGroup("a"))
 		sub.Unsubscribe()
+	})
+
+	t.Run("inert handle on a closed topic never touches storage", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		assert.NoError(t, storage.JoinGroup("a"))
+		assert.True(t, topic.Publish(1))
+		assert.NoError(t, topic.Close())
+
+		sub := NewWorker(func(j Job[int]) {}).WithPersistentTopic(topic, "a")
+		assert.Equal(t, 0, sub.Len())
+		sub.Purge()
+		assert.Equal(t, 1, storage.GroupLen("a"))
+		sub.Unsubscribe()
+		assert.True(t, storage.HasGroup("a"))
+	})
+
+	t.Run("unsubscribe detaches the group's siblings", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+
+		w1 := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		w2 := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+		sub1 := w1.WithPersistentTopic(topic, "jobs")
+		w2.WithPersistentTopic(topic, "jobs")
+		assert.Equal(t, 2, topic.NumSubscribers())
+
+		topic.Publish(1)
+		assert.Equal(t, 1, w1.NumPending())
+		assert.Equal(t, 1, w2.NumPending())
+
+		sub1.Unsubscribe()
+
+		assert.Equal(t, 0, topic.NumSubscribers())
+		assert.False(t, storage.HasGroup("jobs"))
+		assert.Equal(t, 0, w1.NumPending())
+		assert.Equal(t, 0, w2.NumPending())
 	})
 
 	t.Run("guards", func(t *testing.T) {

@@ -105,9 +105,6 @@ func (t *durableTopic[T]) Close() error {
 // subscription. Lock order: t.mx, then storage, then the worker's queue
 // manager.
 func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string)) Subscription[T] {
-	t.mx.Lock()
-	defer t.mx.Unlock()
-
 	view := &groupView{storage: t.storage, group: group}
 	s := &durableSubscription[T]{
 		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
@@ -116,14 +113,21 @@ func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent
 		t:                 t,
 	}
 
+	t.mx.Lock()
+
 	if t.closed {
+		t.mx.Unlock()
+		view.inert = true
 		s.inert = true
 		return s
 	}
 
 	if err := t.storage.JoinGroup(group); err != nil {
-		w.sendError(err)
+		t.mx.Unlock()
+		view.inert = true
 		s.inert = true
+		// Sent after unlocking: the user's handler may call back into the topic.
+		w.sendError(err)
 		return s
 	}
 
@@ -136,6 +140,7 @@ func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent
 
 	// The group may already hold payloads, for example after a restart.
 	w.notifyToPullNextJobs()
+	t.mx.Unlock()
 
 	return s
 }
@@ -145,6 +150,21 @@ func (t *durableTopic[T]) remove(s *durableSubscription[T]) {
 	defer t.mx.Unlock()
 
 	t.subs = slices.DeleteFunc(t.subs, func(cur *durableSubscription[T]) bool { return cur == s })
+}
+
+// groupSubs returns the local subscriptions attached to group.
+func (t *durableTopic[T]) groupSubs(group string) []*durableSubscription[T] {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+
+	var out []*durableSubscription[T]
+	for _, s := range t.subs {
+		if s.view.group == group {
+			out = append(out, s)
+		}
+	}
+
+	return out
 }
 
 // durableSubscription is a worker's subscription to one group.
@@ -177,8 +197,8 @@ func (s *durableSubscription[T]) Close() error {
 	return nil
 }
 
-// Unsubscribe detaches this subscription and deletes its group, for every
-// reader of that group.
+// Unsubscribe detaches this subscription and deletes its group, which also
+// detaches every subscription on that group in this process.
 func (s *durableSubscription[T]) Unsubscribe() {
 	s.Close()
 
@@ -187,6 +207,12 @@ func (s *durableSubscription[T]) Unsubscribe() {
 	}
 
 	s.deleteOnce.Do(func() {
+		// Close takes t.mx itself, so siblings are collected first and closed
+		// after the lock is released.
+		for _, sib := range s.t.groupSubs(s.view.group) {
+			sib.Close()
+		}
+
 		if err := s.t.storage.DeleteGroup(s.view.group); err != nil {
 			s.worker.sendError(err)
 		}
@@ -204,16 +230,54 @@ func (s *durableSubscription[T]) Purge() {
 type groupView struct {
 	storage IPersistentTopic
 	group   string
+	// inert views never reach storage: the handle was never attached, so the
+	// group it names may belong to another reader.
+	inert bool
 }
 
-func (v *groupView) Len() int                              { return v.storage.GroupLen(v.group) }
-func (v *groupView) Values() []any                         { return v.storage.GroupValues(v.group) }
-func (v *groupView) Purge()                                { v.storage.PurgeGroup(v.group) }
-func (v *groupView) Close() error                          { return nil }
-func (v *groupView) DequeueWithAckId() (any, bool, string) { return v.storage.DequeueGroup(v.group) }
-func (v *groupView) Acknowledge(ackID string) bool         { return v.storage.AcknowledgeGroup(v.group, ackID) }
+func (v *groupView) Len() int {
+	if v.inert {
+		return 0
+	}
+
+	return v.storage.GroupLen(v.group)
+}
+
+func (v *groupView) Values() []any {
+	if v.inert {
+		return nil
+	}
+
+	return v.storage.GroupValues(v.group)
+}
+
+func (v *groupView) Purge() {
+	if v.inert {
+		return
+	}
+
+	v.storage.PurgeGroup(v.group)
+}
+
+func (v *groupView) Close() error { return nil }
+
+func (v *groupView) DequeueWithAckId() (any, bool, string) {
+	if v.inert {
+		return nil, false, ""
+	}
+
+	return v.storage.DequeueGroup(v.group)
+}
+
+func (v *groupView) Acknowledge(ackID string) bool {
+	if v.inert {
+		return false
+	}
+
+	return v.storage.AcknowledgeGroup(v.group, ackID)
+}
 
 func (v *groupView) Dequeue() (any, bool) {
-	item, ok, _ := v.storage.DequeueGroup(v.group)
+	item, ok, _ := v.DequeueWithAckId()
 	return item, ok
 }
