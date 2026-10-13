@@ -236,7 +236,7 @@ varmq.NewWorker(func(j varmq.Job[Order]) {
 topic.Publish(order) // both workers receive their own copy
 ```
 
-Semantics are those of a fanout exchange, not a log:
+Semantics are those of a fanout exchange, not a replayable log:
 
 - No history. A worker that subscribes after a `Publish` never sees that payload.
 - Payloads are stored once in a shared log. Each subscription reads it at its own position, so a slow worker never blocks the publisher or the others. A payload is kept until every subscription has read it.
