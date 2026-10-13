@@ -179,9 +179,81 @@ func TestLog(t *testing.T) {
 
 		tail := l.items[len(l.items):cap(l.items)]
 		assert.NotEmpty(t, tail)
-		for i, p := range tail {
-			assert.Nil(t, p, "slot %d past len must be zeroed", i)
+		for i, s := range tail {
+			assert.Nil(t, s.v, "slot %d past len must be zeroed", i)
+			assert.Zero(t, s.left, "slot %d past len must be zeroed", i)
 		}
+	})
+
+	t.Run("read slots are released", func(t *testing.T) {
+		l := NewLog[*int]()
+		a, b := l.NewCursor(), l.NewCursor()
+		for i := 0; i < 3; i++ {
+			v := i
+			l.Append(&v)
+		}
+
+		drain(a)
+		for i := range l.items {
+			assert.NotNil(t, l.items[i].v, "slot %d: b has not read it yet", i)
+		}
+
+		drain(b)
+		for i := range l.items {
+			assert.Nil(t, l.items[i].v, "slot %d: every cursor has read it", i)
+		}
+	})
+
+	t.Run("purge releases what it skips", func(t *testing.T) {
+		l := NewLog[*int]()
+		a, b := l.NewCursor(), l.NewCursor()
+		for i := 0; i < 2; i++ {
+			v := i
+			l.Append(&v)
+		}
+
+		drain(a)
+		b.Purge()
+
+		for i := range l.items {
+			assert.Nil(t, l.items[i].v, "slot %d", i)
+		}
+	})
+
+	t.Run("closing a cursor releases what only it was holding", func(t *testing.T) {
+		l := NewLog[*int]()
+		a, b := l.NewCursor(), l.NewCursor()
+		for i := 0; i < 2; i++ {
+			v := i
+			l.Append(&v)
+		}
+
+		drain(a)
+		b.Close()
+
+		for i := range l.items {
+			assert.Nil(t, l.items[i].v, "slot %d", i)
+		}
+		assert.NotNil(t, l.items, "a is still open")
+	})
+
+	t.Run("closing the last cursor resets the log", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewCursor()
+		for i := 0; i < 3; i++ {
+			l.Append(i)
+		}
+
+		c.Close()
+
+		assert.Nil(t, l.items)
+		assert.Equal(t, uint64(3), l.base)
+
+		n := l.NewCursor()
+		assert.Equal(t, 0, n.Len())
+		l.Append(42)
+		assert.Equal(t, 1, n.Len())
+		assert.Equal(t, []int{42}, drain(n))
 	})
 
 	t.Run("concurrent append and read", func(t *testing.T) {
@@ -196,24 +268,33 @@ func TestLog(t *testing.T) {
 
 		var wg sync.WaitGroup
 		got := make([]int, readers)
+		// Each writer appends w*perWriter+i in order, so every reader must see
+		// each writer's values strictly increasing.
 		deadline := time.Now().Add(10 * time.Second)
 
 		for w := 0; w < writers; w++ {
 			wg.Add(1)
-			go func() {
+			go func(w int) {
 				defer wg.Done()
 				for i := 0; i < perWriter; i++ {
-					l.Append(i)
+					l.Append(w*perWriter + i)
 				}
-			}()
+			}(w)
 		}
 
 		for r := range cursors {
 			wg.Add(1)
 			go func(r int) {
 				defer wg.Done()
+				last := make([]int, writers)
+				for w := range last {
+					last[w] = -1
+				}
 				for got[r] < total && time.Now().Before(deadline) {
-					if _, ok := cursors[r].Dequeue(); ok {
+					if v, ok := cursors[r].Dequeue(); ok {
+						w := v / perWriter
+						assert.Greater(t, v, last[w], "reader %d: writer %d out of order", r, w)
+						last[w] = v
 						got[r]++
 					} else {
 						runtime.Gosched()
