@@ -3,20 +3,24 @@ package varmq
 import (
 	"slices"
 	"sync"
-	"sync/atomic"
 
-	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/internal/topics"
 )
 
 // Topic fans out every published payload to all current subscriptions.
 //
-// Semantics are those of a fanout exchange, not a log: there is no history,
-// no offsets and no replay. A subscriber receives only payloads published
-// after it subscribed. Each subscription buffers in its own queue, so a slow
-// subscriber never blocks the publisher or other subscribers.
+// Semantics are those of a fanout exchange, not a replayable log: a
+// subscriber receives only payloads published after it subscribed.
 //
-// The payload is copied by value into each subscriber's job. If T is a
-// pointer, or contains pointers, maps or slices, subscribers share the pointee.
+// Payloads are stored once in a shared in-memory log. Each subscription reads
+// the log at its own position, so a slow subscriber never blocks the
+// publisher or other subscribers. A payload is kept until every subscription
+// has read it, so a stalled subscriber holds memory until it catches up or
+// unsubscribes.
+//
+// Each subscriber's worker gets its own job wrapping the payload. The payload
+// is copied by value; if T is a pointer, or contains pointers, maps or
+// slices, subscribers share the pointee.
 //
 // Create a topic with [NewTopic]; subscribe a worker with
 // [IWorkerBinder.WithTopic].
@@ -29,85 +33,54 @@ import (
 //
 //	topic.Publish(order) // both workers receive their own copy
 type Topic[T any] interface {
-	// Publish enqueues an independent copy of data into every open
-	// subscription and wakes each subscriber's worker.
+	// Publish appends data to the topic and wakes every subscriber's worker.
 	//
-	// It returns false only when no subscription accepted the copy: zero
-	// subscribers, every subscription closed, or the topic closed. To wait
-	// for a subscriber to finish its copies, use its Worker's Wait.
+	// It returns false only when nothing will read the payload: zero
+	// subscriptions, or the topic closed. To wait for a subscriber to finish
+	// its payloads, use its Worker's Wait.
 	Publish(data T) bool
-	// NumSubscribers returns the number of open subscriptions.
+	// NumSubscribers returns the number of subscriptions attached in this
+	// process.
 	NumSubscribers() int
 	// Close unsubscribes every subscription and makes further Publish calls
 	// return false. It is idempotent and always returns nil.
 	Close() error
 
-	add(s *subscription[T])
-	remove(s *subscription[T])
+	subscribe(w *worker[T, iJob[T]]) *subscription[T]
 }
 
 type topic[T any] struct {
+	// mx guards subs and closed, and is held for writing whenever a cursor is
+	// created or closed, so the log's open cursors are always exactly subs.
 	mx     sync.RWMutex
+	log    *topics.Log[T]
 	subs   []*subscription[T]
-	closed atomic.Bool
+	closed bool
 }
 
-// NewTopic creates an in-memory topic. Each subscription made through
-// [IWorkerBinder.WithTopic] gets its own FIFO queue.
+// NewTopic creates an in-memory topic. See [Topic] for its semantics.
 func NewTopic[T any]() Topic[T] {
-	return &topic[T]{}
-}
-
-func (t *topic[T]) snapshot() []*subscription[T] {
-	t.mx.RLock()
-	defer t.mx.RUnlock()
-
-	return slices.Clone(t.subs)
-}
-
-func (t *topic[T]) add(s *subscription[T]) {
-	t.mx.Lock()
-
-	// closed is re-checked under the write lock: Close sets the flag before
-	// snapshotting, so a subscription either lands in Close's snapshot or is
-	// unsubscribed here. Unsubscribe must run outside the lock because it
-	// calls remove.
-	if t.closed.Load() {
-		t.mx.Unlock()
-		s.Unsubscribe()
-		return
-	}
-
-	t.subs = append(t.subs, s)
-	t.mx.Unlock()
-}
-
-func (t *topic[T]) remove(s *subscription[T]) {
-	t.mx.Lock()
-	defer t.mx.Unlock()
-
-	for i, cur := range t.subs {
-		if cur == s {
-			t.subs = slices.Delete(t.subs, i, i+1)
-			return
-		}
-	}
+	return &topic[T]{log: topics.NewLog[T]()}
 }
 
 func (t *topic[T]) Publish(data T) bool {
-	if t.closed.Load() {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+
+	if t.closed {
 		return false
 	}
 
-	delivered := 0
-
-	for _, s := range t.snapshot() {
-		if _, ok := s.Add(data); ok {
-			delivered++
-		}
+	if t.log.Append(data) == 0 {
+		return false
 	}
 
-	return delivered > 0
+	for _, s := range t.subs {
+		s.worker.Metrics().incSubmitted()
+		s.worker.notifyToPullNextJobs()
+	}
+
+	return true
 }
 
 func (t *topic[T]) NumSubscribers() int {
@@ -118,63 +91,142 @@ func (t *topic[T]) NumSubscribers() int {
 }
 
 func (t *topic[T]) Close() error {
-	if !t.closed.CompareAndSwap(false, true) {
+	t.mx.Lock()
+	if t.closed {
+		t.mx.Unlock()
 		return nil
 	}
 
-	for _, s := range t.snapshot() {
+	t.closed = true
+	subs := slices.Clone(t.subs)
+	t.mx.Unlock()
+
+	// Unsubscribe takes t.mx itself, so it runs after the unlock.
+	for _, s := range subs {
 		s.Unsubscribe()
 	}
 
 	return nil
 }
 
+// subscribe attaches a new cursor for w. The view is registered with the
+// worker while t.mx is held, so no payload can land in a cursor whose worker
+// cannot see it yet. Lock order: t.mx, then the worker's queue manager, then
+// the log.
+func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+
+	view := &topicView[T]{cursor: t.log.NewCursor(), w: w}
+	s := &subscription[T]{
+		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
+		worker:            w,
+		view:              view,
+		t:                 t,
+	}
+
+	if t.closed {
+		// Inert handle: reads nothing, not registered, not listed.
+		view.cursor.Close()
+		return s
+	}
+
+	w.queues.Register(view, loadQueueConfigs().priority)
+	t.subs = append(t.subs, s)
+
+	return s
+}
+
+func (t *topic[T]) unsubscribe(s *subscription[T]) {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+
+	s.view.cursor.Close()
+	t.subs = slices.DeleteFunc(t.subs, func(cur *subscription[T]) bool { return cur == s })
+}
+
 // Subscription is one worker's inbox for one [Topic]. It is returned by
 // [IWorkerBinder.WithTopic]. It has no Add: the topic is the only producer.
+//
+// Len counts payloads this subscription has not read yet; Purge skips them
+// without calling Close on them.
 type Subscription[T any] interface {
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
-	// Unsubscribe closes the inbox, drops any copies still waiting in it,
-	// and detaches it from both the topic and the worker. It is idempotent.
+	// Unsubscribe stops this subscription reading the topic, drops what it
+	// has not read, and detaches it from the worker. It is idempotent.
 	// Close is equivalent to Unsubscribe.
 	Unsubscribe()
 }
 
 type subscription[T any] struct {
-	*queue[T]
+	*externalBaseQueue
 	worker *worker[T, iJob[T]] // concrete worker, needed for queues.UnregisterItem; externalBaseQueue.w is only the Worker interface
-	t      Topic[T]
+	view   *topicView[T]
+	t      *topic[T]
 	once   sync.Once
-}
-
-func newSubscription[T any](w *worker[T, iJob[T]], t Topic[T]) *subscription[T] {
-	q := queues.NewQueue[iJob[T]]()
-
-	return &subscription[T]{
-		queue:  newQueue(w, q),
-		worker: w,
-		t:      t,
-	}
 }
 
 func (s *subscription[T]) Unsubscribe() {
 	s.once.Do(func() {
-		// Reject further enqueues. queues.Queue.Close only flips a flag,
-		// pending items would still drain, so purge them next.
-		s.internalQueue.Close()
-		// Close every pending copy; each close decrements its group counter,
-		// so any Wait on a published group job completes.
-		s.Purge()
-		s.t.remove(s)
-		s.worker.queues.UnregisterItem(s.internalQueue)
+		s.t.unsubscribe(s)
+		s.worker.queues.UnregisterItem(s.view)
 	})
 }
 
 // Close detaches the subscription. It is the same as Unsubscribe and exists so
 // that the IExternalBaseQueue contract (and `defer sub.Close()`) does the
-// expected thing: no copies are delivered or allocated for it afterwards.
+// expected thing.
 func (s *subscription[T]) Close() error {
 	s.Unsubscribe()
+	return nil
+}
+
+// Purge skips everything this subscription has not read. It does not use
+// externalBaseQueue.Purge, which calls Close on every pending value that
+// implements io.Closer; here those values are user payloads.
+func (s *subscription[T]) Purge() {
+	s.view.Purge()
+}
+
+// topicView adapts a log cursor to IBaseQueue so the worker's queue manager
+// and event loop read it like any bound queue.
+type topicView[T any] struct {
+	cursor *topics.Cursor[T]
+	w      *worker[T, iJob[T]]
+}
+
+func (v *topicView[T]) Len() int {
+	return v.cursor.Len()
+}
+
+// Dequeue wraps the next payload in a fresh job, so every subscriber gets its
+// own job with an ID from its worker's generator.
+func (v *topicView[T]) Dequeue() (any, bool) {
+	data, ok := v.cursor.Dequeue()
+	if !ok {
+		return nil, false
+	}
+
+	return newJob(data, loadJobConfigs(v.w.configs())), true
+}
+
+func (v *topicView[T]) Values() []any {
+	vals := v.cursor.Values()
+	out := make([]any, len(vals))
+	for i, val := range vals {
+		out[i] = val
+	}
+
+	return out
+}
+
+func (v *topicView[T]) Purge() {
+	v.cursor.Purge()
+}
+
+func (v *topicView[T]) Close() error {
+	v.cursor.Close()
 	return nil
 }

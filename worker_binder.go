@@ -239,10 +239,7 @@ func (wb *workerBinder[T]) WithTopic(t Topic[T]) Subscription[T] {
 		panic("varmq: WithTopic called with nil Topic")
 	}
 
-	s := newSubscription(wb.worker, t)
-	t.add(s)
-
-	return s
+	return t.subscribe(wb.worker)
 }
 
 type errWorkerBinder[T any] struct {

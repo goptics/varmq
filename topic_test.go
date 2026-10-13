@@ -24,6 +24,14 @@ func waitOrTimeout(t *testing.T, d time.Duration, fn func()) {
 	}
 }
 
+// closeTracker records whether Close was called on it.
+type closeTracker struct{ closed atomic.Bool }
+
+func (c *closeTracker) Close() error {
+	c.closed.Store(true)
+	return nil
+}
+
 func TestTopic(t *testing.T) {
 	t.Run("publish with zero subscribers", func(t *testing.T) {
 		topic := NewTopic[int]()
@@ -277,6 +285,20 @@ func TestTopic(t *testing.T) {
 
 		assert.Equal(t, 0, sub.Len())
 		assert.Equal(t, 1, topic.NumSubscribers(), "purge does not unsubscribe")
+	})
+
+	t.Run("purge does not close payloads", func(t *testing.T) {
+		topic := NewTopic[*closeTracker]()
+		sub := NewWorker(func(j Job[*closeTracker]) {}, WithAutoRun(false)).WithTopic(topic)
+
+		payload := &closeTracker{}
+		assert.True(t, topic.Publish(payload))
+		assert.Equal(t, 1, sub.Len())
+
+		sub.Purge()
+
+		assert.Equal(t, 0, sub.Len())
+		assert.False(t, payload.closed.Load(), "Purge must not call Close on user payloads")
 	})
 
 	t.Run("close detaches all subscriptions", func(t *testing.T) {
