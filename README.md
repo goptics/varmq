@@ -40,6 +40,7 @@
   - `NewResultWorker` - Returns result and error
 - **🚦 Concurrency control**: Fine-grained control over worker pool size, dynamic tuning and idle workers management
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
+- **📢 Topic Fan-out**: Publish once, every subscribed worker gets its own copy
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
 - **📡 REST API**: Built-in HTTP endpoints to inspect worker status and manage state (pause, resume, stop, restart)
@@ -216,6 +217,35 @@ for i := range 10 {
 The Queue Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
 
 ![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
+
+### Topic (Fan-out)
+
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` copies the payload into each subscribed worker's own queue, and the returned group job lets you wait until all of them are done.
+
+```go
+topic := varmq.NewTopic[Order]()
+
+varmq.NewWorker(func(j varmq.Job[Order]) {
+	sendEmail(j.Data())
+}).WithTopic(topic)
+
+varmq.NewWorker(func(j varmq.Job[Order]) {
+	updateStock(j.Data())
+}, 4).WithTopic(topic)
+
+gj, ok := topic.Publish(order)
+if ok {
+	gj.Wait() // both workers processed their copy
+}
+```
+
+Semantics are those of a fanout exchange, not a log:
+
+- No history. A worker that subscribes after a `Publish` never sees that payload.
+- Each subscriber buffers in its own queue, so a slow worker never blocks the publisher or the others.
+- The payload is copied by value. Pointer payloads are shared between subscribers.
+- `WithTopic` returns a `Subscription` with `Len`, `Purge` and `Unsubscribe`, but no `Add`: the topic is the only producer.
+- A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
 
 ### Result and Error Worker
 
