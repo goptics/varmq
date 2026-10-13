@@ -244,6 +244,22 @@ Semantics are those of a fanout exchange, not a replayable log:
 - `WithTopic` returns a `Subscription` with `Len`, `Purge`, `Unsubscribe` (alias `Close`), but no `Add`: the topic is the only producer.
 - A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
 
+#### Persistent topics
+
+Back a topic with durable storage and give each subscriber a **group** name. Every group gets every payload, workers on the same group share its payloads, and a group resumes where it stopped after a restart.
+
+```go
+topic := varmq.NewPersistentTopic[Order](storage) // storage implements varmq.IPersistentTopic
+
+varmq.NewWorker(sendEmail).WithPersistentTopic(topic, "email")
+varmq.NewWorker(updateStock, 4).WithPersistentTopic(topic, "stock")
+
+topic.Publish(order, varmq.WithJobId(order.ID))
+```
+
+- `Close` on a subscription detaches it and keeps the group's position. `Unsubscribe` deletes the group, which also detaches every subscription on that group in this process.
+- Delivery is at least once: a group's position is committed when its worker finishes the job.
+
 ### Result and Error Worker
 
 VarMQ provides a `NewResultWorker` that returns both the result and error for each job processed. This is useful when you need to handle both success and failure cases.

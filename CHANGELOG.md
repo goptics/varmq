@@ -6,6 +6,7 @@
 
 - **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` stores the payload once in a shared in-memory log; every subscription reads it at its own position and its worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
   - `IWorkerBinder[T]` gained the `WithTopic` method; code that implements or mocks that interface must add it.
+- **Persistent Topics**: Added `NewPersistentTopic[T](IPersistentTopic)` and `IWorkerBinder.WithPersistentTopic(topic, group)`. Groups get every payload, workers in one group share it, positions survive restarts, and completed jobs are acknowledged. `IPersistentTopic` uses only built-in types so adapters need not import varmq. A test adapter is available as `mocks.NewMockPersistentTopic()`.
 
 ### 🐛 Bug Fixes
 
