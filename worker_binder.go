@@ -169,6 +169,20 @@ type IWorkerBinder[T any] interface {
 	//   topic.Publish(order) // the worker receives a copy
 	//   sub.Unsubscribe()    // stop receiving
 	WithTopic(t Topic[T]) Subscription[T]
+
+	// WithPersistentTopic subscribes the worker to a group of a persistent
+	// topic. Every group gets every payload; workers on the same group share
+	// it. Close on the returned subscription keeps the group's position;
+	// Unsubscribe deletes the group.
+	//
+	// It panics on a nil topic or an empty group. If the storage cannot join
+	// the group, the error goes to the worker's error handler and the
+	// returned subscription is inert.
+	//
+	// Example usage:
+	//   topic := varmq.NewPersistentTopic[Order](storage)
+	//   sub := worker.WithPersistentTopic(topic, "email")
+	WithPersistentTopic(t PersistentTopic[T], group string) Subscription[T]
 }
 
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
@@ -240,6 +254,18 @@ func (wb *workerBinder[T]) WithTopic(t Topic[T]) Subscription[T] {
 	}
 
 	return t.subscribe(wb.worker)
+}
+
+func (wb *workerBinder[T]) WithPersistentTopic(t PersistentTopic[T], group string) Subscription[T] {
+	if t == nil {
+		panic("varmq: WithPersistentTopic called with nil PersistentTopic")
+	}
+
+	if group == "" {
+		panic("varmq: WithPersistentTopic called with empty group")
+	}
+
+	return t.bindGroup(wb.worker, group, wb.handleQueueSubscription)
 }
 
 type errWorkerBinder[T any] struct {
