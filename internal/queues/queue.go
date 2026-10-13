@@ -58,10 +58,6 @@ func (q *Queue[T]) Len() int {
 // Enqueue adds an item to the back of the queue
 // Time complexity: O(1) amortized - only allocates new chunks when needed
 func (q *Queue[T]) Enqueue(item any) bool {
-	if q.closed.Load() {
-		return false
-	}
-
 	typedItem, ok := item.(T)
 
 	if !ok {
@@ -70,6 +66,12 @@ func (q *Queue[T]) Enqueue(item any) bool {
 
 	q.mx.Lock()
 	defer q.mx.Unlock()
+
+	// closed is checked under the lock so a Close followed by Purge cannot
+	// interleave with an in-flight Enqueue (see Subscription.Unsubscribe).
+	if q.closed.Load() {
+		return false
+	}
 
 	if q.capacity > 0 && q.Len() == q.capacity {
 		return false

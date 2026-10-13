@@ -49,6 +49,7 @@ func TestTopic(t *testing.T) {
 		assert.Nil(t, gj, "closed topic returns nil group job")
 		assert.Equal(t, 0, topic.NumSubscribers())
 	})
+
 	t.Run("publish reaches every subscriber exactly once", func(t *testing.T) {
 		topic := NewTopic[int]()
 
@@ -245,8 +246,10 @@ func TestTopic(t *testing.T) {
 		sub := drop.WithTopic(topic)
 		assert.Equal(t, 2, topic.NumSubscribers())
 
+		before := sub.(*subscription[int]).worker.queues.Count()
 		sub.Unsubscribe()
 		sub.Unsubscribe()
+		assert.Equal(t, before-1, sub.(*subscription[int]).worker.queues.Count(), "internal queue unregistered from worker")
 		assert.Equal(t, 1, topic.NumSubscribers())
 
 		gj, ok := topic.Publish(1)
@@ -344,6 +347,39 @@ func TestTopic(t *testing.T) {
 		assert.Equal(t, uint64(1), ok.Metrics().Successful())
 	})
 
+	t.Run("close on subscription is unsubscribe", func(t *testing.T) {
+		topic := NewTopic[int]()
+		w := NewWorker(func(j Job[int]) { t.Error("closed subscription must not receive") })
+		sub := w.WithTopic(topic)
+
+		assert.NoError(t, sub.Close())
+		assert.Equal(t, 0, topic.NumSubscribers())
+
+		_, ok := topic.Publish(1)
+		assert.False(t, ok)
+	})
+
+	t.Run("publish racing unsubscribe never strands a copy", func(t *testing.T) {
+		topic := NewTopic[int]()
+		NewWorker(func(j Job[int]) {}).WithTopic(topic) // permanent, keeps ok=true
+
+		const rounds = 200
+		for i := 0; i < rounds; i++ {
+			sub := NewWorker(func(j Job[int]) {}, WithAutoRun(false)).WithTopic(topic)
+
+			done := make(chan EnqueuedGroupJob, 1)
+			go func() {
+				gj, _ := topic.Publish(i)
+				done <- gj
+			}()
+			sub.Unsubscribe()
+
+			gj := <-done
+			waitOrTimeout(t, 2*time.Second, gj.Wait)
+			assert.Equal(t, 0, sub.Len(), "round %d: copy stranded in unsubscribed queue", i)
+		}
+	})
+
 	t.Run("concurrent publish with subscribe and unsubscribe", func(t *testing.T) {
 		topic := NewTopic[int]()
 		defer topic.Close()
@@ -378,6 +414,7 @@ func TestTopic(t *testing.T) {
 			for i := 0; i < churn; i++ {
 				sub := NewWorker(func(j Job[int]) {}).WithTopic(topic)
 				sub.Unsubscribe()
+				assert.Equal(t, 0, sub.Len(), "copy stranded in unsubscribed queue")
 			}
 		}()
 

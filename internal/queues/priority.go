@@ -55,10 +55,6 @@ func (q *PriorityQueue[T]) Values() []any {
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
 func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
-	if q.closed.Load() {
-		return false
-	}
-
 	typedValue, ok := item.(T)
 
 	if !ok {
@@ -66,6 +62,14 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 	}
 
 	q.mx.Lock()
+
+	// closed is checked under the lock so a Close followed by Purge cannot
+	// interleave with an in-flight Enqueue (see Subscription.Unsubscribe).
+	if q.closed.Load() {
+		q.mx.Unlock()
+		return false
+	}
+
 	if q.capacity > 0 && q.internal.Len() == q.capacity {
 		q.mx.Unlock()
 		return false

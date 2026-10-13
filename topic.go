@@ -27,8 +27,9 @@ import (
 //	varmq.NewWorker(sendEmail).WithTopic(topic)
 //	varmq.NewWorker(updateStock, 4).WithTopic(topic)
 //
-//	gj, ok := topic.Publish(order)
-//	gj.Wait() // both workers have processed their copy
+//	if gj, ok := topic.Publish(order); ok {
+//		gj.Wait() // both workers have processed their copy
+//	}
 type Topic[T any] interface {
 	// Publish enqueues an independent copy of data into every open
 	// subscription and wakes each subscriber's worker.
@@ -73,6 +74,10 @@ func (t *topic[T]) snapshot() []*subscription[T] {
 func (t *topic[T]) add(s *subscription[T]) {
 	t.mx.Lock()
 
+	// closed is re-checked under the write lock: Close sets the flag before
+	// snapshotting, so a subscription either lands in Close's snapshot or is
+	// unsubscribed here. Unsubscribe must run outside the lock because it
+	// calls remove.
 	if t.closed.Load() {
 		t.mx.Unlock()
 		s.Unsubscribe()
@@ -140,12 +145,13 @@ type Subscription[T any] interface {
 	Worker() Worker
 	// Unsubscribe closes the inbox, drops any copies still waiting in it,
 	// and detaches it from both the topic and the worker. It is idempotent.
+	// Close is equivalent to Unsubscribe.
 	Unsubscribe()
 }
 
 type subscription[T any] struct {
 	*queue[T]
-	worker *worker[T, iJob[T]]
+	worker *worker[T, iJob[T]] // concrete worker, needed for queues.UnregisterItem; externalBaseQueue.w is only the Worker interface
 	t      Topic[T]
 	once   sync.Once
 }
@@ -171,4 +177,12 @@ func (s *subscription[T]) Unsubscribe() {
 		s.t.remove(s)
 		s.worker.queues.UnregisterItem(s.internalQueue)
 	})
+}
+
+// Close detaches the subscription. It is the same as Unsubscribe and exists so
+// that the IExternalBaseQueue contract (and `defer sub.Close()`) does the
+// expected thing: no copies are delivered or allocated for it afterwards.
+func (s *subscription[T]) Close() error {
+	s.Unsubscribe()
+	return nil
 }

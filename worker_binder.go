@@ -235,6 +235,10 @@ func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriority
 }
 
 func (wb *workerBinder[T]) WithTopic(t Topic[T]) Subscription[T] {
+	if t == nil {
+		panic("varmq: WithTopic called with nil Topic")
+	}
+
 	s := newSubscription(wb.worker, t)
 	t.add(s)
 
