@@ -4,8 +4,12 @@
 
 ### ✨ New Features
 
-- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` copies the payload into every subscribed worker's own queue and returns `false` when no subscriber accepted it. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
+- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` stores the payload once in a shared in-memory log; every subscription reads it at its own position and its worker gets its own job. `Publish` returns `false` when no subscription is attached. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
   - `IWorkerBinder[T]` gained the `WithTopic` method; code that implements or mocks that interface must add it.
+
+### 🐛 Bug Fixes
+
+- **Enqueue racing Close**: `Queue.Enqueue` and `PriorityQueue.Enqueue` in `internal/queues` now check the closed flag while holding the queue lock, so an item can no longer land after `Close` followed by `Purge`.
 
 ## [v1.8.0] (2026-07-04)
 
