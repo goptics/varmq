@@ -8,8 +8,8 @@ import (
 )
 
 // Log is an append-only, in-memory log. Each Cursor reads it at its own
-// offset. Items every open cursor has read are dropped the next time the log
-// would grow.
+// offset. Items every open cursor has read are dropped when the log would
+// grow, but only once at least half of the log is read by every open cursor.
 //
 // ponytail: one mutex guards everything, so every Dequeue from every cursor
 // serialises on it, and the backing array never shrinks after a burst.
@@ -45,6 +45,7 @@ func (l *Log[T]) Append(item T) int {
 
 	n := len(l.cursors)
 	if n == 0 {
+		// No readers: nothing is kept, so trim empties the log.
 		l.trim()
 		return 0
 	}
@@ -59,7 +60,10 @@ func (l *Log[T]) Append(item T) int {
 }
 
 // trim drops every item below the lowest open cursor offset and zeroes the
-// freed slots so the GC can reclaim what they pointed to. Caller holds l.mx.
+// freed slots so the GC can reclaim what they pointed to. It only compacts
+// when that frees at least half of the log, so a backlog near capacity does
+// not copy on every append; otherwise it changes nothing and the caller grows
+// the slice. Caller holds l.mx.
 func (l *Log[T]) trim() {
 	low := l.head()
 	for c := range l.cursors {
@@ -67,7 +71,7 @@ func (l *Log[T]) trim() {
 	}
 
 	drop := int(low - l.base)
-	if drop == 0 {
+	if drop == 0 || drop < len(l.items)/2 {
 		return
 	}
 

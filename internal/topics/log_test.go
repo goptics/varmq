@@ -110,16 +110,43 @@ func TestLog(t *testing.T) {
 			l.Append(i)
 		}
 		drain(fast)
-		for i := 0; i < 3; i++ {
+		for i := 0; i < 5; i++ {
 			slow.Dequeue()
 		}
 
 		appendUntilTrim(t, l, 100, 64)
 
-		assert.Equal(t, uint64(3), l.base)
+		assert.Equal(t, uint64(5), l.base)
 		v, ok := slow.Dequeue()
 		assert.True(t, ok)
-		assert.Equal(t, 3, v)
+		assert.Equal(t, 5, v)
+	})
+
+	t.Run("trim waits until half the log is read", func(t *testing.T) {
+		l := NewLog[int]()
+		fast, slow := l.NewCursor(), l.NewCursor()
+		for i := 0; i < 8; i++ {
+			l.Append(i)
+		}
+		drain(fast)
+		for i := 0; i < 3; i++ {
+			slow.Dequeue()
+		}
+
+		for i := 8; i < 16; i++ {
+			l.Append(i)
+		}
+		assert.Equal(t, uint64(0), l.base, "3 of 16 read is under half, so no trim")
+
+		// fast must also read the second batch, or it holds the trim at 8.
+		drain(fast)
+		for i := 0; i < 10; i++ {
+			slow.Dequeue()
+		}
+
+		appendUntilTrim(t, l, 100, 64)
+
+		assert.Equal(t, uint64(13), l.base)
 	})
 
 	t.Run("closed cursor stops pinning memory", func(t *testing.T) {
@@ -151,6 +178,7 @@ func TestLog(t *testing.T) {
 		appendUntilTrim(t, l, new(int), 64)
 
 		tail := l.items[len(l.items):cap(l.items)]
+		assert.NotEmpty(t, tail)
 		for i, p := range tail {
 			assert.Nil(t, p, "slot %d past len must be zeroed", i)
 		}
