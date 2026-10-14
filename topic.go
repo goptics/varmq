@@ -203,9 +203,10 @@ func (s *subscription[T]) Purge() {
 	s.view.Purge()
 }
 
-// topicView adapts a log cursor to IBaseQueue so the Subscription handle's
-// Len, Values, Purge and Close work through externalBaseQueue. The scheduler
-// does not read it; jobs come from topicSource over the same cursor.
+// topicView adapts a log cursor to IBaseQueue so the Subscription handle can
+// embed externalBaseQueue (Len, NumPending, IsFull). Purge and Close are
+// overridden on subscription. The scheduler does not read it; jobs come from
+// topicSource over the same cursor.
 type topicView[T any] struct {
 	cursor *topics.Cursor[T]
 }
@@ -214,7 +215,7 @@ func (v *topicView[T]) Len() int {
 	return v.cursor.Len()
 }
 
-// Dequeue hands out the raw payload. It is not on the hot path.
+// Dequeue hands out the raw payload. Nothing in the scheduler calls it; it exists to satisfy IBaseQueue.
 func (v *topicView[T]) Dequeue() (any, bool) {
 	data, ok := v.cursor.Dequeue()
 	if !ok {
