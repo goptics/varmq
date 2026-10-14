@@ -60,3 +60,12 @@ func (c *Chunk[T]) Pop() (T, bool) {
 
 	return item, true
 }
+
+// Grow allocates the chunk that follows c, 1.5x its capacity up to maxCap,
+// links it as c.Next and returns it. Nothing in c is copied.
+func (c *Chunk[T]) Grow(maxCap int) *Chunk[T] {
+	next := NewChunk[T](min(c.Cap()+c.Cap()/2, maxCap))
+	c.Next = next
+
+	return next
+}

@@ -83,13 +83,7 @@ func (q *Queue[T]) Enqueue(item any) bool {
 		return true
 	}
 
-	currentCap := q.writeChunk.Cap()
-	newCapacity := min(currentCap+currentCap/2, q.maxChunkCapacity)
-
-	newChunk := linkedbuffer.NewChunk[T](newCapacity)
-
-	q.writeChunk.Next = newChunk
-	q.writeChunk = newChunk
+	q.writeChunk = q.writeChunk.Grow(q.maxChunkCapacity)
 
 	if q.writeChunk.Push(typedItem) {
 		q.writeCount.Add(1)

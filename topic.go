@@ -12,12 +12,12 @@ import (
 // Semantics are those of a fanout exchange, not a replayable log: a
 // subscriber receives only payloads published after it subscribed.
 //
-// Payloads are stored once in a shared in-memory log. Each subscription reads
-// the log at its own position, so a slow subscriber never blocks the
-// publisher or other subscribers. A payload is released as soon as every
-// subscription has read, purged, or dropped it, so a stalled or paused
-// subscriber holds every payload published since it stalled until it catches
-// up or unsubscribes.
+// Payloads are stored once in a shared in-memory log built from linked
+// chunks. Each subscription reads at its own position, so a slow subscriber
+// never blocks the publisher or other subscribers. A chunk is freed once the
+// slowest subscriber has moved past it, so a stalled or paused subscriber
+// holds every chunk published since it stalled until it catches up or
+// unsubscribes.
 //
 // Each subscriber's worker gets its own job wrapping the payload. The payload
 // is copied by value; if T is a pointer, or contains pointers, maps or

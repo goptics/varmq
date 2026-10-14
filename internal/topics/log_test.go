@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -20,30 +21,7 @@ func drain[T any](c *Cursor[T]) []T {
 	}
 }
 
-// appendUntilTrim appends v until the log's base moves, failing after max appends.
-func appendUntilTrim[T any](t *testing.T, l *Log[T], v T, max int) {
-	t.Helper()
-	start := l.base
-	for i := 0; i < max; i++ {
-		l.Append(v)
-		if l.base != start {
-			return
-		}
-	}
-	t.Fatalf("log did not trim after %d appends", max)
-}
-
 func TestLog(t *testing.T) {
-	t.Run("append without cursors stores nothing", func(t *testing.T) {
-		l := NewLog[int]()
-
-		assert.Equal(t, 0, l.Append(1))
-		assert.Empty(t, l.items)
-
-		c := l.NewCursor()
-		assert.Equal(t, 0, c.Len())
-	})
-
 	t.Run("every cursor reads every item at its own pace", func(t *testing.T) {
 		l := NewLog[int]()
 		a, b := l.NewCursor(), l.NewCursor()
@@ -103,157 +81,102 @@ func TestLog(t *testing.T) {
 		assert.Equal(t, []int{1, 2}, drain(b))
 	})
 
-	t.Run("trim drops items below the slowest open cursor", func(t *testing.T) {
+	t.Run("append without cursors stores nothing", func(t *testing.T) {
 		l := NewLog[int]()
-		fast, slow := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 8; i++ {
-			l.Append(i)
-		}
-		drain(fast)
-		for i := 0; i < 5; i++ {
-			slow.Dequeue()
-		}
-
-		appendUntilTrim(t, l, 100, 64)
-
-		assert.Equal(t, uint64(5), l.base)
-		v, ok := slow.Dequeue()
-		assert.True(t, ok)
-		assert.Equal(t, 5, v)
+		assert.Equal(t, 0, l.Append(1))
+		assert.Nil(t, l.tail, "no chunk is allocated while nobody can read")
 	})
 
-	t.Run("trim waits until half the log is read", func(t *testing.T) {
+	t.Run("append links chunks and never copies the one a cursor sits on", func(t *testing.T) {
 		l := NewLog[int]()
-		fast, slow := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 8; i++ {
+		c := l.NewCursor()
+		first := c.chunk
+		assert.NotNil(t, first)
+		assert.Equal(t, initialChunkCapacity, first.Cap())
+
+		for i := 0; i < 3*initialChunkCapacity; i++ {
 			l.Append(i)
 		}
-		drain(fast)
-		for i := 0; i < 3; i++ {
-			slow.Dequeue()
-		}
 
-		for i := 8; i < 16; i++ {
-			l.Append(i)
-		}
-		assert.Equal(t, uint64(0), l.base, "3 of 16 read is under half, so no trim")
-
-		// fast must also read the second batch, or it holds the trim at 8.
-		drain(fast)
-		for i := 0; i < 10; i++ {
-			slow.Dequeue()
-		}
-
-		appendUntilTrim(t, l, 100, 64)
-
-		assert.Equal(t, uint64(13), l.base)
+		assert.Same(t, first, c.chunk, "unread cursor still sits on its first chunk")
+		assert.Equal(t, initialChunkCapacity, first.Cap(), "first chunk was not reallocated")
+		assert.NotNil(t, first.Next, "later items live in linked chunks")
+		assert.Greater(t, first.Next.Cap(), first.Cap(), "chunks grow 1.5x")
+		assert.Equal(t, 3*initialChunkCapacity, c.Len())
+		assert.Equal(t, 3*initialChunkCapacity, len(drain(c)))
 	})
 
-	t.Run("closed cursor stops pinning memory", func(t *testing.T) {
+	t.Run("chunks behind the slowest cursor are garbage collected", func(t *testing.T) {
 		l := NewLog[int]()
-		stuck, reader := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 8; i++ {
-			l.Append(i)
-		}
-		drain(reader)
-		stuck.Close()
-
-		appendUntilTrim(t, l, 100, 64)
-
-		assert.Equal(t, uint64(8), l.base)
-	})
-
-	t.Run("trim zeroes the freed tail", func(t *testing.T) {
-		l := NewLog[*int]()
-		fast, slow := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 8; i++ {
-			v := i
-			l.Append(&v)
-		}
-		drain(fast)
-		for i := 0; i < 6; i++ {
-			slow.Dequeue()
-		}
-
-		appendUntilTrim(t, l, new(int), 64)
-
-		tail := l.items[len(l.items):cap(l.items)]
-		assert.NotEmpty(t, tail)
-		for i, s := range tail {
-			assert.Nil(t, s.v, "slot %d past len must be zeroed", i)
-			assert.Zero(t, s.left, "slot %d past len must be zeroed", i)
-		}
-	})
-
-	t.Run("read slots are released", func(t *testing.T) {
-		l := NewLog[*int]()
 		a, b := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 3; i++ {
-			v := i
-			l.Append(&v)
+		first := weak.Make(a.chunk)
+
+		for i := 0; i < 2*initialChunkCapacity; i++ {
+			l.Append(i)
 		}
 
-		drain(a)
-		for i := range l.items {
-			assert.NotNil(t, l.items[i].v, "slot %d: b has not read it yet", i)
+		for i := 0; i < initialChunkCapacity; i++ {
+			a.Dequeue()
+			b.Dequeue()
 		}
+		// both cursors have consumed the first chunk; the next Dequeue steps off it
+		a.Dequeue()
+		b.Dequeue()
 
+		runtime.GC()
+		runtime.GC()
+		assert.Nil(t, first.Value(), "nothing references the first chunk once every cursor left it")
+	})
+
+	t.Run("a slow cursor keeps its chunk alive", func(t *testing.T) {
+		l := NewLog[int]()
+		fast, slow := l.NewCursor(), l.NewCursor()
+		first := weak.Make(slow.chunk)
+
+		for i := 0; i < 2*initialChunkCapacity; i++ {
+			l.Append(i)
+		}
+		drain(fast)
+
+		runtime.GC()
+		runtime.GC()
+		assert.NotNil(t, first.Value(), "slow cursor still has to read it")
+
+		drain(slow)
+		runtime.GC()
+		runtime.GC()
+		assert.Nil(t, first.Value())
+	})
+
+	t.Run("closing a cursor drops its chunk reference", func(t *testing.T) {
+		l := NewLog[int]()
+		a, b := l.NewCursor(), l.NewCursor()
+		first := weak.Make(a.chunk)
+
+		for i := 0; i < 2*initialChunkCapacity; i++ {
+			l.Append(i)
+		}
 		drain(b)
-		for i := range l.items {
-			assert.Nil(t, l.items[i].v, "slot %d: every cursor has read it", i)
-		}
-	})
+		a.Close()
 
-	t.Run("purge releases what it skips", func(t *testing.T) {
-		l := NewLog[*int]()
-		a, b := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 2; i++ {
-			v := i
-			l.Append(&v)
-		}
-
-		drain(a)
-		b.Purge()
-
-		for i := range l.items {
-			assert.Nil(t, l.items[i].v, "slot %d", i)
-		}
-	})
-
-	t.Run("closing a cursor releases what only it was holding", func(t *testing.T) {
-		l := NewLog[*int]()
-		a, b := l.NewCursor(), l.NewCursor()
-		for i := 0; i < 2; i++ {
-			v := i
-			l.Append(&v)
-		}
-
-		drain(a)
-		b.Close()
-
-		for i := range l.items {
-			assert.Nil(t, l.items[i].v, "slot %d", i)
-		}
-		assert.NotNil(t, l.items, "a is still open")
+		runtime.GC()
+		runtime.GC()
+		assert.Nil(t, first.Value(), "closed cursor must not pin memory")
 	})
 
 	t.Run("closing the last cursor resets the log", func(t *testing.T) {
 		l := NewLog[int]()
-		c := l.NewCursor()
-		for i := 0; i < 3; i++ {
-			l.Append(i)
-		}
+		a := l.NewCursor()
+		l.Append(1)
+		l.Append(2)
+		a.Close()
 
-		c.Close()
+		assert.Nil(t, l.tail)
 
-		assert.Nil(t, l.items)
-		assert.Equal(t, uint64(3), l.base)
-
-		n := l.NewCursor()
-		assert.Equal(t, 0, n.Len())
-		l.Append(42)
-		assert.Equal(t, 1, n.Len())
-		assert.Equal(t, []int{42}, drain(n))
+		b := l.NewCursor()
+		assert.Equal(t, 0, b.Len(), "new cursor starts after everything published before it")
+		assert.Equal(t, 1, l.Append(3))
+		assert.Equal(t, []int{3}, drain(b))
 	})
 
 	t.Run("concurrent append and read", func(t *testing.T) {

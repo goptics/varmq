@@ -239,7 +239,7 @@ topic.Publish(order) // both workers receive their own copy
 Semantics are those of a fanout exchange, not a replayable log:
 
 - No history. A worker that subscribes after a `Publish` never sees that payload.
-- Payloads are stored once in a shared log. Each subscription reads it at its own position, so a slow worker never blocks the publisher or the others. A payload is released once every subscription has read it, so a paused or stalled worker keeps everything published since it stalled until it catches up or unsubscribes.
+- Payloads are stored once in a shared log of linked chunks, the same buffer the queues use, so publishing never copies what is already buffered. Each subscription reads at its own position, so a slow worker never blocks the publisher or the others. A chunk is freed once the slowest subscription has moved past it, so a paused or stalled worker keeps everything published since it stalled until it catches up or unsubscribes.
 - The payload is copied by value. Pointer payloads are shared between subscribers.
 - `WithTopic` returns a `Subscription` with `Len`, `Purge`, `Unsubscribe` (alias `Close`), but no `Add`: the topic is the only producer.
 - A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
