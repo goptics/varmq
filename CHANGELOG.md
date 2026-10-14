@@ -12,6 +12,11 @@
 
 - **Enqueue racing Close**: `Queue.Enqueue` and `PriorityQueue.Enqueue` in `internal/queues` now check the closed flag while holding the queue lock, so an item can no longer land after `Close` followed by `Purge`.
 
+### 🔧 Refactoring
+
+- **Job sources**: The worker event loop now pulls from an internal `source` interface. In-memory queues, acknowledgeable queues (persistent, distributed, persistent topic groups) and topic subscriptions are adapters chosen once at bind time, so the loop no longer inspects storage per job. No public API change.
+  - Side effect fixed: a custom queue that implements `IAcknowledgeable` but stores ready job objects (not JSON bytes) now has its jobs acknowledged on completion. Previously those jobs never acked.
+
 ## [v1.8.0] (2026-07-04)
 
 ### ✨ New Features

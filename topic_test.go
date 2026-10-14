@@ -433,9 +433,14 @@ func TestTopic(t *testing.T) {
 		view := sub.(*subscription[int]).view
 		assert.Equal(t, []any{1}, view.Values())
 
+		data, ok := view.Dequeue()
+		assert.True(t, ok)
+		assert.Equal(t, 1, data, "view hands out the raw payload, not a job")
+		assert.True(t, topic.Publish(2), "refill so Close still has something to drop")
+
 		assert.NoError(t, view.Close())
 		assert.Equal(t, 0, view.Len())
-		_, ok := view.Dequeue()
+		_, ok = view.Dequeue()
 		assert.False(t, ok)
 	})
 }

@@ -120,7 +120,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
 	defer t.mx.Unlock()
 
 	cursor := t.log.NewCursor()
-	view := &topicView[T]{cursor: cursor, w: w}
+	view := &topicView[T]{cursor: cursor}
 	src := &topicSource[T]{cursor: cursor, w: w}
 	s := &subscription[T]{
 		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
@@ -203,26 +203,25 @@ func (s *subscription[T]) Purge() {
 	s.view.Purge()
 }
 
-// topicView adapts a log cursor to IBaseQueue so the worker's queue manager
-// and event loop read it like any bound queue.
+// topicView adapts a log cursor to IBaseQueue so the Subscription handle's
+// Len, Values, Purge and Close work through externalBaseQueue. The scheduler
+// does not read it; jobs come from topicSource over the same cursor.
 type topicView[T any] struct {
 	cursor *topics.Cursor[T]
-	w      *worker[T, iJob[T]]
 }
 
 func (v *topicView[T]) Len() int {
 	return v.cursor.Len()
 }
 
-// Dequeue wraps the next payload in a fresh job, so every subscriber gets its
-// own job with an ID from its worker's generator.
+// Dequeue hands out the raw payload. It is not on the hot path.
 func (v *topicView[T]) Dequeue() (any, bool) {
 	data, ok := v.cursor.Dequeue()
 	if !ok {
 		return nil, false
 	}
 
-	return newJob(data, loadJobConfigs(v.w.configs())), true
+	return data, true
 }
 
 // Values returns raw payloads, not jobs. Only externalBaseQueue.Purge would call it, and Subscription overrides Purge so payloads are never closed.
