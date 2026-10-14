@@ -14,8 +14,9 @@
 
 ### 🔧 Refactoring
 
-- **Job sources**: The worker event loop now pulls from an internal `source` interface. In-memory queues, acknowledgeable queues (persistent, distributed, persistent topic groups) and topic subscriptions are adapters chosen once at bind time, so the loop no longer inspects storage per job. No public API change.
+- **Job sources**: The worker event loop now pulls from an internal `source` interface. In-memory queues and acknowledgeable queues (persistent, distributed, persistent topic groups) are adapters chosen once at bind time, and topic subscriptions read through a `topicSource`, so the loop no longer inspects storage per job. No public API change.
   - Side effect fixed: a custom queue that implements `IAcknowledgeable` but stores ready job objects (not JSON bytes) now has its jobs acknowledged on completion. Previously those jobs never acked.
+  - If `Acknowledge` returns false for such a job, `ErrAcknowledgeJob` is reported through the worker's error channel and handler and the job stays `Finished` rather than `Closed`, so `Wait` on its handle does not return. This matches how persistent queues have always treated a failed acknowledgement.
 
 ## [v1.8.0] (2026-07-04)
 

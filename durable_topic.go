@@ -110,8 +110,8 @@ func (t *durableTopic[T]) Close() error {
 	return t.storage.Close()
 }
 
-// bindGroup joins the group, registers a view of it with w, and records the
-// subscription. Lock order: t.mx, then storage, then the worker's queue
+// bindGroup joins the group, binds a view of it to w as a source, and records
+// the subscription. Lock order: t.mx, then storage, then the worker's source
 // manager.
 func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string)) Subscription[T] {
 	view := &groupView{storage: t.storage, group: group}
@@ -237,7 +237,7 @@ func (s *durableSubscription[T]) Purge() {
 }
 
 // groupView adapts one group of a durable topic adapter to IBaseQueue and
-// IAcknowledgeable, so the event loop reads and acknowledges it like a
+// IAcknowledgeable, so an ackSource reads and acknowledges it like a
 // persistent queue.
 type groupView struct {
 	storage IPersistentTopic

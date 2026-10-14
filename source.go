@@ -93,7 +93,12 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 
 	j, err := toJob[T, JobType](v)
 	if err != nil {
-		return j, err
+		var zero JobType
+		return zero, err
+	}
+
+	if j.IsClosed() {
+		return j, nil // scheduler skips it; never mutate a job the user already closed
 	}
 
 	j.setInternalQueue(s.q)
@@ -122,6 +127,12 @@ func (s *topicSource[T]) Next() (iJob[T], error) {
 
 	return newJob(data, loadJobConfigs(s.w.configs())), nil
 }
+
+var (
+	_ source[iJob[int]] = (*queueSource[int, iJob[int]])(nil)
+	_ source[iJob[int]] = (*ackSource[int, iJob[int]])(nil)
+	_ source[iJob[int]] = (*topicSource[int])(nil)
+)
 
 // bind wraps q in the matching source and registers it with the worker. The
 // storage kind is decided once here, not per job. The returned source is what
