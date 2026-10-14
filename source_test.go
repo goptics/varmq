@@ -213,3 +213,34 @@ func TestTopicSource(t *testing.T) {
 		assert.ErrorIs(t, err, ErrFailedToDequeue)
 	})
 }
+
+func TestBind(t *testing.T) {
+	t.Run("custom acknowledgeable queue bound through newQueue acks on completion", func(t *testing.T) {
+		aq := newAckTestQueue()
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+		q := newQueue(w, aq)
+
+		job, ok := q.Add("x")
+		assert.True(t, ok)
+
+		assert.NoError(t, w.Start())
+		defer w.Stop()
+		job.Wait()
+
+		assert.Equal(t, []string{"ack-1"}, aq.ackedIDs())
+	})
+
+	t.Run("plain queue binds as queueSource, ack queue as ackSource", func(t *testing.T) {
+		w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+
+		plain := w.bind(queues.NewQueue[any](), 1)
+		_, isQueue := plain.(*queueSource[string, iJob[string]])
+		assert.True(t, isQueue)
+
+		acked := w.bind(newAckTestQueue(), 1)
+		_, isAck := acked.(*ackSource[string, iJob[string]])
+		assert.True(t, isAck)
+
+		assert.Equal(t, 2, w.sources.Count())
+	})
+}

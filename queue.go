@@ -38,7 +38,7 @@ type Item[T any] struct {
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
 func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc) *queue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.priority)
+	w.bind(q, c.priority)
 
 	return &queue[T]{
 		externalBaseQueue: newExternalQueue(q, w, c),
@@ -99,7 +99,7 @@ type ErrQueue[T any] interface {
 
 func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...QueueConfigFunc) *errorQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.priority)
+	w.bind(q, c.priority)
 
 	return &errorQueue[T]{
 		externalBaseQueue: newExternalQueue(q, w, c),
@@ -159,7 +159,7 @@ type ResultQueue[T, R any] interface {
 
 func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs ...QueueConfigFunc) *resultQueue[T, R] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(q, c.priority)
+	w.bind(q, c.priority)
 
 	return &resultQueue[T, R]{
 		externalBaseQueue: newExternalQueue(q, w, c),

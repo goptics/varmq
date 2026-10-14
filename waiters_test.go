@@ -33,7 +33,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 
 			defer w.Stop()
 
@@ -75,7 +75,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 
 			defer w.Stop()
 
@@ -136,7 +136,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("block", loadJobConfigs(w.configs())))
 			w.notifyToPullNextJobs()
 
@@ -187,7 +187,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 
 			defer w.Stop()
 
@@ -277,7 +277,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("block", loadJobConfigs(w.configs())))
 			w.notifyToPullNextJobs()
 
@@ -340,7 +340,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("block", loadJobConfigs(w.configs())))
 			w.notifyToPullNextJobs()
 
@@ -391,7 +391,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("block", loadJobConfigs(w.configs())))
 			w.notifyToPullNextJobs()
 
@@ -447,7 +447,7 @@ func TestWaiters(t *testing.T) {
 			}, WithAutoRun(false))
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 			w.Start()
 			defer w.Stop()
@@ -479,7 +479,7 @@ func TestWaiters(t *testing.T) {
 			}, WithAutoRun(false))
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("block", loadJobConfigs(w.configs())))
 			w.Start()
 
@@ -535,7 +535,7 @@ func TestWaiters(t *testing.T) {
 			})
 
 			q := queues.NewQueue[iJob[string]]()
-			w.queues.Register(q, 1)
+			w.bind(q, 1)
 			q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 			w.notifyToPullNextJobs()
 
@@ -621,7 +621,7 @@ func TestWaiters(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[int]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 		q.Enqueue(newJob(1, loadJobConfigs(w.configs())))
 		w.Start()
 

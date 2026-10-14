@@ -35,7 +35,7 @@ func TestWorkers(t *testing.T) {
 				assert.NotNil(w.workerFunc, "worker function should not be nil")
 				assert.Equal(1, w.NumConcurrency(), "concurrency should match expected value")
 				assert.Equal(initiated, w.status.Load(), "status should be 'initiated'")
-				assert.NotNil(&w.queues, "queues should not be nil, expected null queue")
+				assert.NotNil(&w.sources, "queues should not be nil, expected null queue")
 				assert.False(reflect.ValueOf(w.eventLoopSignal).IsNil(), "eventLoopSignal should be initialized")
 				assert.NotNil(w.waiters, "waiters cond should be initialized")
 				assert.NotNil(w.pool, "worker pool should be initialized")
@@ -189,7 +189,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue for testing
 				q := queues.NewQueue[iJob[string]]()
-				w.queues.Register(q, math.MaxInt)
+				w.bind(q, math.MaxInt)
 				defer w.Stop()
 
 				// Verify idleWorkerExpiryDuration is set
@@ -291,7 +291,7 @@ func TestWorkers(t *testing.T) {
 				assert := assert.New(t)
 
 				q := queues.NewQueue[iJob[string]]()
-				w.queues.Register(q, math.MaxInt)
+				w.bind(q, math.MaxInt)
 
 				// Test Start on paused
 				w.Start()
@@ -308,7 +308,7 @@ func TestWorkers(t *testing.T) {
 					<-blockCh
 				}, WithAutoRun(false))
 				q2 := queues.NewQueue[iJob[string]]()
-				w2.queues.Register(q2, math.MaxInt)
+				w2.bind(q2, math.MaxInt)
 				q2.Enqueue(newJob("job", loadJobConfigs(w2.configs())))
 				w2.Start()
 				assert.Eventually(func() bool { return w2.NumProcessing() > 0 }, 200*time.Millisecond, 5*time.Millisecond)
@@ -321,7 +321,7 @@ func TestWorkers(t *testing.T) {
 					<-blockCh
 				}, WithAutoRun(false))
 				q3 := queues.NewQueue[iJob[string]]()
-				w3.queues.Register(q3, math.MaxInt)
+				w3.bind(q3, math.MaxInt)
 				q3.Enqueue(newJob("job", loadJobConfigs(w3.configs())))
 				w3.Start()
 				assert.Eventually(func() bool { return w3.NumProcessing() > 0 }, 200*time.Millisecond, 5*time.Millisecond)
@@ -347,7 +347,7 @@ func TestWorkers(t *testing.T) {
 				assert := assert.New(t)
 
 				q := queues.NewQueue[iJob[int]]()
-				w.queues.Register(q, math.MaxInt)
+				w.bind(q, math.MaxInt)
 
 				w.Start()
 
@@ -417,7 +417,7 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("event loop stops when no eligible queue", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
-				w.queues.Register(&lenDriftQueue{}, math.MaxInt)
+				w.bind(&lenDriftQueue{}, math.MaxInt)
 
 				w.Start()
 				defer w.StopAndWait()
@@ -437,7 +437,7 @@ func TestWorkers(t *testing.T) {
 				mockQueue.ShouldFailDequeue = true
 				mockQueue.Queue.Enqueue("trigger")
 
-				w.queues.Register(newQueue(w, mockQueue).internalQueue, math.MaxInt)
+				w.bind(newQueue(w, mockQueue).internalQueue, math.MaxInt)
 
 				w.Start()
 				defer w.Stop()
@@ -517,7 +517,7 @@ func TestWorkers(t *testing.T) {
 
 				// Create a queue
 				q := queues.NewQueue[iJob[string]]()
-				w.queues.Register(q, math.MaxInt)
+				w.bind(q, math.MaxInt)
 
 				// Initial check
 				assert.Equal(0, w.NumPending(), "NumPending should be 0 initially")
@@ -617,7 +617,7 @@ func TestWorkers(t *testing.T) {
 				defer w.Stop()
 
 				persistentQueue := mocks.NewMockPersistentQueue()
-				w.queues.Register(persistentQueue, math.MaxInt)
+				w.bind(persistentQueue, math.MaxInt)
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
 
@@ -637,7 +637,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(jobBytes)
-				w.queues.Register(testQueue, math.MaxInt)
+				w.bind(testQueue, math.MaxInt)
 
 				w.processNextJob()
 				w.Wait()
@@ -656,7 +656,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(job)
-				w.queues.Register(testQueue, math.MaxInt)
+				w.bind(testQueue, math.MaxInt)
 
 				w.processNextJob()
 				w.Wait()
@@ -672,7 +672,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue([]byte("invalid json"))
-				w.queues.Register(testQueue, math.MaxInt)
+				w.bind(testQueue, math.MaxInt)
 
 				w.processNextJob()
 				w.Wait()
@@ -688,7 +688,7 @@ func TestWorkers(t *testing.T) {
 
 				testQueue := queues.NewQueue[any]()
 				testQueue.Enqueue(123)
-				w.queues.Register(testQueue, math.MaxInt)
+				w.bind(testQueue, math.MaxInt)
 
 				w.processNextJob()
 				w.Wait()
@@ -825,7 +825,7 @@ func TestWorkers(t *testing.T) {
 				mockQueue.Queue.Enqueue(jobData)
 
 				queue := newErrorQueue(w, mockQueue)
-				w.queues.Register(queue.internalQueue, math.MaxInt)
+				w.bind(queue.internalQueue, math.MaxInt)
 
 				_, err := w.processNextJob()
 				assert.Error(t, err)
@@ -837,7 +837,7 @@ func TestWorkers(t *testing.T) {
 				defer w.StopAndWait()
 
 				mockQueue := mocks.NewMockPersistentQueue()
-				w.queues.Register(mockQueue, math.MaxInt)
+				w.bind(mockQueue, math.MaxInt)
 
 				cont, err := w.processNextJob()
 				assert.False(t, cont)
@@ -964,7 +964,6 @@ func TestWorkers(t *testing.T) {
 	})
 }
 
-
 // ponytail: Len() reports 1 once so Manager.Len() enters the pull loop, then 0 so next() returns !found
 type lenDriftQueue struct {
 	lenCalls atomic.Int32
@@ -1080,6 +1079,7 @@ func TestErrHandler(t *testing.T) {
 		wg.Wait()
 	})
 }
+
 type mockJob struct {
 	*job[string]
 	shouldFailClose bool
@@ -1117,7 +1117,7 @@ func TestWorkerLifecycle(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[string]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 
 		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 		w.Start()
@@ -1142,7 +1142,7 @@ func TestWorkerLifecycle(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[string]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 
 		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 		w.Start()
@@ -1181,7 +1181,7 @@ func TestWorkerLifecycle(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[string]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 
 		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 		w.Start()
@@ -1223,7 +1223,7 @@ func TestWorkerLifecycle(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[string]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 
 		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 		w.Start()
@@ -1287,7 +1287,7 @@ func TestWorkerLifecycle(t *testing.T) {
 			<-blockCh
 		}, WithAutoRun(false))
 		q := queues.NewQueue[iJob[string]]()
-		w.queues.Register(q, 1)
+		w.bind(q, 1)
 
 		q.Enqueue(newJob("job", loadJobConfigs(w.configs())))
 		w.Start()

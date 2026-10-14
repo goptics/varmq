@@ -144,7 +144,7 @@ func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent
 		s.cancel = t.subscribe(group, onEvent)
 	}
 
-	w.queues.Register(view, loadQueueConfigs().priority)
+	s.src = w.bind(view, loadQueueConfigs().priority)
 	t.subs = append(t.subs, s)
 
 	// The group may already hold payloads, for example after a restart.
@@ -181,6 +181,7 @@ type durableSubscription[T any] struct {
 	*externalBaseQueue
 	worker *worker[T, iJob[T]]
 	view   *groupView
+	src    source[iJob[T]]
 	t      *durableTopic[T]
 	cancel func() // stops adapter wake-ups; nil for persistent topics
 	inert  bool   // never attached: closed topic or failed join
@@ -200,7 +201,7 @@ func (s *durableSubscription[T]) Close() error {
 		if s.cancel != nil {
 			s.cancel()
 		}
-		s.worker.queues.UnregisterItem(s.view)
+		s.worker.sources.UnregisterItem(s.src)
 	})
 
 	return nil

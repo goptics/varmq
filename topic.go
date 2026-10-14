@@ -111,29 +111,32 @@ func (t *topic[T]) Close() error {
 	return nil
 }
 
-// subscribe attaches a new cursor for w. The view is registered with the
+// subscribe attaches a new cursor for w. The source is registered with the
 // worker while t.mx is held, so no payload can land in a cursor whose worker
-// cannot see it yet. Lock order: t.mx, then the worker's queue manager, then
+// cannot see it yet. Lock order: t.mx, then the worker's source manager, then
 // the log.
 func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
-	view := &topicView[T]{cursor: t.log.NewCursor(), w: w}
+	cursor := t.log.NewCursor()
+	view := &topicView[T]{cursor: cursor, w: w}
+	src := &topicSource[T]{cursor: cursor, w: w}
 	s := &subscription[T]{
 		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
 		worker:            w,
 		view:              view,
+		src:               src,
 		t:                 t,
 	}
 
 	if t.closed {
 		// Inert handle: reads nothing, not registered, not listed.
-		view.cursor.Close()
+		cursor.Close()
 		return s
 	}
 
-	w.queues.Register(view, loadQueueConfigs().priority)
+	w.sources.Register(src, loadQueueConfigs().priority)
 	t.subs = append(t.subs, s)
 
 	return s
@@ -171,8 +174,9 @@ type Subscription[T any] interface {
 
 type subscription[T any] struct {
 	*externalBaseQueue
-	worker *worker[T, iJob[T]] // concrete worker, needed for queues.UnregisterItem; externalBaseQueue.w is only the Worker interface
+	worker *worker[T, iJob[T]] // concrete worker, needed for sources.UnregisterItem; externalBaseQueue.w is only the Worker interface
 	view   *topicView[T]
+	src    *topicSource[T]
 	t      *topic[T]
 	once   sync.Once
 }
@@ -180,7 +184,7 @@ type subscription[T any] struct {
 func (s *subscription[T]) Unsubscribe() {
 	s.once.Do(func() {
 		s.t.unsubscribe(s)
-		s.worker.queues.UnregisterItem(s.view)
+		s.worker.sources.UnregisterItem(s.src)
 	})
 }
 

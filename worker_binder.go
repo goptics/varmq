@@ -240,7 +240,7 @@ func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQue
 func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
 	c := loadQueueConfigs(configs...)
 	defer dq.Subscribe(wb.handleQueueSubscription)
-	defer wb.queues.Register(dq, c.priority)
+	defer wb.bind(dq, c.priority)
 
 	return NewDistributedQueue[T](dq, configs...)
 }
@@ -248,7 +248,7 @@ func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ..
 func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	defer dpq.Subscribe(wb.handleQueueSubscription)
-	defer wb.queues.Register(dpq, c.priority)
+	defer wb.bind(dpq, c.priority)
 
 	return NewDistributedPriorityQueue[T](dpq, configs...)
 }

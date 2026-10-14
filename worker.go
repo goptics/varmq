@@ -32,7 +32,7 @@ var (
 type worker[T any, JobType iJob[T]] struct {
 	workerFunc      func(j JobType)
 	pool            *pool.Pool[JobType]
-	queues          *queueManager
+	sources         *sourceManager[JobType]
 	metrics         Metrics
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32
@@ -290,7 +290,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iJob[T]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
+		sources:         newSourceManager[iJob[T]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -315,7 +315,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
+		sources:         newSourceManager[iErrorJob[T]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -340,7 +340,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
+		sources:         newSourceManager[iResultJob[T, R]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -395,7 +395,7 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.queues.Len()
+	return w.sources.Len()
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {

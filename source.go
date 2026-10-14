@@ -122,3 +122,20 @@ func (s *topicSource[T]) Next() (iJob[T], error) {
 
 	return newJob(data, loadJobConfigs(s.w.configs())), nil
 }
+
+// bind wraps q in the matching source and registers it with the worker. The
+// storage kind is decided once here, not per job. The returned source is what
+// callers must pass to sources.UnregisterItem later.
+func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
+	var src source[JobType]
+
+	if aq, ok := q.(ackQueue); ok {
+		src = &ackSource[T, JobType]{q: aq}
+	} else {
+		src = &queueSource[T, JobType]{q: q}
+	}
+
+	w.sources.Register(src, priority)
+
+	return src
+}
