@@ -24,7 +24,7 @@ func (w *worker[T, JobType]) Wait() {
 		s := w.status.Load()
 		switch s {
 		case running, idle:
-			if w.sources.Len() == 0 && w.curProcessing.Load() == 0 {
+			if w.pendingLen() == 0 && w.curProcessing.Load() == 0 {
 				return
 			}
 		case paused, stopped, pausing, stopping:
@@ -43,7 +43,7 @@ func (w *worker[T, JobType]) WaitUntilIdle() {
 	defer w.mx.Unlock()
 
 	for {
-		if w.status.Load() == idle && w.sources.Len() == 0 && w.curProcessing.Load() == 0 {
+		if w.status.Load() == idle && w.pendingLen() == 0 && w.curProcessing.Load() == 0 {
 			return
 		}
 

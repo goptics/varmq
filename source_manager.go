@@ -1,8 +1,14 @@
 package varmq
 
 import (
+	"errors"
+
 	"github.com/goptics/varmq/internal/helpers"
 )
+
+// errNoReadySource is returned by sourceManager.Next when no registered
+// source has a job. The scheduler treats it as "stop pulling", not an error.
+var errNoReadySource = errors.New("no source has a ready job")
 
 type Strategy uint8
 
@@ -19,7 +25,8 @@ const (
 
 // sourceManager holds every source bound to a worker and picks the next one
 // to pull from according to the configured strategy (RoundRobin, MaxLen,
-// MinLen, or Priority).
+// MinLen, or Priority). It is itself a source, so the scheduler never knows
+// whether it pulls from one adapter or from a set of them.
 type sourceManager[JobType any] struct {
 	*helpers.Manager[source[JobType]]
 	strategy Strategy
@@ -44,3 +51,17 @@ func (sm *sourceManager[JobType]) next() (source[JobType], bool) {
 		return sm.GetPriorityItem()
 	}
 }
+
+// Next pulls from the source the strategy picks. errNoReadySource means every
+// registered source is empty.
+func (sm *sourceManager[JobType]) Next() (JobType, error) {
+	src, ok := sm.next()
+	if !ok {
+		var zero JobType
+		return zero, errNoReadySource
+	}
+
+	return src.Next()
+}
+
+var _ source[iJob[int]] = (*sourceManager[iJob[int]])(nil)

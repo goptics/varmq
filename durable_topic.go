@@ -201,7 +201,7 @@ func (s *durableSubscription[T]) Close() error {
 		if s.cancel != nil {
 			s.cancel()
 		}
-		s.worker.sources.UnregisterItem(s.src)
+		s.worker.detach(s.src)
 	})
 
 	return nil

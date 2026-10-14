@@ -146,7 +146,89 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		src = &queueSource[T, JobType]{q: q}
 	}
 
-	w.sources.Register(src, priority)
+	w.attach(src, priority)
 
 	return src
+}
+
+// attach makes src pullable by the scheduler. The first source is stored as
+// is; the second promotes both into a sourceManager that applies the worker's
+// strategy; later ones register into that manager.
+func (w *worker[T, JobType]) attach(src source[JobType], priority int) {
+	w.srcMx.Lock()
+	defer w.srcMx.Unlock()
+
+	cur := w.src.Load()
+
+	switch {
+	case cur == nil:
+		w.srcPriority = priority
+		w.src.Store(&src)
+	default:
+		if m, ok := (*cur).(*sourceManager[JobType]); ok {
+			m.Register(src, priority)
+			return
+		}
+
+		m := newSourceManager[JobType](w.Configs.strategy)
+		m.Register(*cur, w.srcPriority)
+		m.Register(src, priority)
+
+		var promoted source[JobType] = m
+		w.src.Store(&promoted)
+	}
+}
+
+// detach stops the scheduler from pulling src. A manager stays a manager
+// even when it drops to one source; collapsing back is not worth the code.
+func (w *worker[T, JobType]) detach(src source[JobType]) {
+	w.srcMx.Lock()
+	defer w.srcMx.Unlock()
+
+	cur := w.src.Load()
+	if cur == nil {
+		return
+	}
+
+	if m, ok := (*cur).(*sourceManager[JobType]); ok {
+		m.UnregisterItem(src)
+		return
+	}
+
+	if *cur == src {
+		w.src.Store(nil)
+	}
+}
+
+// currentSource returns what the scheduler pulls from, if anything is bound.
+func (w *worker[T, JobType]) currentSource() (source[JobType], bool) {
+	cur := w.src.Load()
+	if cur == nil {
+		return nil, false
+	}
+
+	return *cur, true
+}
+
+// pendingLen is the number of jobs waiting across every bound source.
+func (w *worker[T, JobType]) pendingLen() int {
+	if cur, ok := w.currentSource(); ok {
+		return cur.Len()
+	}
+
+	return 0
+}
+
+// numSources counts bound sources: 0, 1, or the manager's count.
+func (w *worker[T, JobType]) numSources() int {
+	cur, ok := w.currentSource()
+	if !ok {
+		return 0
+	}
+
+	if m, ok := cur.(*sourceManager[JobType]); ok {
+		return m.Count()
+	}
+
+	return 1
 }

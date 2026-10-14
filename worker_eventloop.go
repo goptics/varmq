@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.sources.Len() > 0 {
+				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.pendingLen() > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -35,9 +36,11 @@ func (w *worker[T, JobType]) goEventLoop() {
 }
 
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	src, found := w.sources.next()
+	src, found := w.currentSource()
 
-	if !found {
+	// An empty source is "nothing to do", not a dequeue failure. The manager
+	// made this check while picking; a single adapter needs it here.
+	if !found || src.Len() == 0 {
 		return false, nil
 	}
 
@@ -47,6 +50,9 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	j, err := src.Next()
 	if err != nil {
 		w.releaseProcessingSlot()
+		if errors.Is(err, errNoReadySource) {
+			return false, nil
+		}
 		return true, err
 	}
 

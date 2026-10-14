@@ -30,9 +30,14 @@ var (
 )
 
 type worker[T any, JobType iJob[T]] struct {
-	workerFunc      func(j JobType)
-	pool            *pool.Pool[JobType]
-	sources         *sourceManager[JobType]
+	workerFunc func(j JobType)
+	pool       *pool.Pool[JobType]
+	// src is the one thing the scheduler pulls from: the bound adapter when
+	// there is a single source, or a sourceManager once there are several.
+	// nil until the first bind.
+	src             atomic.Pointer[source[JobType]]
+	srcMx           sync.Mutex // serializes attach and detach
+	srcPriority     int        // priority of the single source, kept for promotion into a manager
 	metrics         Metrics
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32
@@ -290,7 +295,6 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iJob[T]](poolChanCap),
-		sources:         newSourceManager[iJob[T]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -315,7 +319,6 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
-		sources:         newSourceManager[iErrorJob[T]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -340,7 +343,6 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
-		sources:         newSourceManager[iResultJob[T, R]](c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
@@ -395,7 +397,7 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.sources.Len()
+	return w.pendingLen()
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
