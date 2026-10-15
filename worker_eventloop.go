@@ -36,18 +36,10 @@ func (w *worker[T, JobType]) goEventLoop() {
 }
 
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	src, found := w.currentSource()
-
-	// An empty source is "nothing to do", not a dequeue failure. The manager
-	// made this check while picking; a single adapter needs it here.
-	if !found || src.Len() == 0 {
-		return false, nil
-	}
-
 	w.curProcessing.Add(1)
 	w.status.CompareAndSwap(idle, running)
 
-	j, err := src.Next()
+	j, err := w.sources.Next()
 	if err != nil {
 		w.releaseProcessingSlot()
 		if errors.Is(err, errNoReadySource) {

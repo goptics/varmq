@@ -136,7 +136,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
 		return s
 	}
 
-	w.attach(src, loadQueueConfigs().priority)
+	w.sources.Register(src, loadQueueConfigs().priority)
 	t.subs = append(t.subs, s)
 
 	return s
@@ -174,7 +174,7 @@ type Subscription[T any] interface {
 
 type subscription[T any] struct {
 	*externalBaseQueue
-	worker *worker[T, iJob[T]] // concrete worker, needed for detach; externalBaseQueue.w is only the Worker interface
+	worker *worker[T, iJob[T]] // concrete worker, needed to unregister its source; externalBaseQueue.w is only the Worker interface
 	view   *topicView[T]
 	src    *topicSource[T]
 	t      *topic[T]
@@ -184,7 +184,7 @@ type subscription[T any] struct {
 func (s *subscription[T]) Unsubscribe() {
 	s.once.Do(func() {
 		s.t.unsubscribe(s)
-		s.worker.detach(s.src)
+		s.worker.sources.UnregisterItem(s.src)
 	})
 }
 

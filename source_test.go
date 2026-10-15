@@ -245,7 +245,7 @@ func TestBind(t *testing.T) {
 		_, isAck := acked.(*ackSource[string, iJob[string]])
 		assert.True(t, isAck)
 
-		assert.Equal(t, 2, w.numSources())
+		assert.Equal(t, 2, w.sources.Count())
 	})
 
 	t.Run("closing a queued job while the ack source dequeues it does not race", func(t *testing.T) {
@@ -341,32 +341,29 @@ func TestWorkerSources(t *testing.T) {
 		return newWorker(func(j iJob[string]) {}, WithAutoRun(false))
 	}
 
-	t.Run("fresh worker has no source", func(t *testing.T) {
+	t.Run("fresh worker has an empty manager", func(t *testing.T) {
 		w := newTestWorker()
 
-		_, ok := w.currentSource()
-		assert.False(t, ok)
-		assert.Equal(t, 0, w.numSources())
+		assert.NotNil(t, w.sources)
+		assert.Equal(t, 0, w.sources.Count())
 		assert.Equal(t, 0, w.NumPending())
 	})
 
-	t.Run("single bind attaches the adapter directly, no manager", func(t *testing.T) {
+	t.Run("bind registers into the manager", func(t *testing.T) {
 		w := newTestWorker()
 		q := queues.NewQueue[any]()
 		q.Enqueue(newJob("x", jobConfigs{Id: "x"}))
 
 		src := w.bind(q, 1)
 
-		cur, ok := w.currentSource()
-		assert.True(t, ok)
-		assert.Same(t, src, cur)
-		_, isManager := cur.(*sourceManager[iJob[string]])
-		assert.False(t, isManager, "one source must not be wrapped in a manager")
-		assert.Equal(t, 1, w.numSources())
+		assert.Equal(t, 1, w.sources.Count())
 		assert.Equal(t, 1, w.NumPending())
+		picked, found := w.sources.next()
+		assert.True(t, found)
+		assert.Same(t, src, picked)
 	})
 
-	t.Run("second bind promotes to a manager and keeps the first priority", func(t *testing.T) {
+	t.Run("the manager orders sources by priority", func(t *testing.T) {
 		w := newTestWorker()
 		q1 := queues.NewQueue[any]()
 		q2 := queues.NewQueue[any]()
@@ -376,40 +373,28 @@ func TestWorkerSources(t *testing.T) {
 		w.bind(q1, 5)
 		s2 := w.bind(q2, 1)
 
-		cur, _ := w.currentSource()
-		m, ok := cur.(*sourceManager[iJob[string]])
-		assert.True(t, ok, "two sources live behind a manager")
-		assert.Equal(t, 2, m.Count())
-		assert.Equal(t, 2, w.numSources())
+		assert.Equal(t, 2, w.sources.Count())
 		assert.Equal(t, 2, w.NumPending())
 
-		picked, found := m.next()
+		picked, found := w.sources.next()
 		assert.True(t, found)
-		assert.Same(t, s2, picked, "priority 1 beats the first source's priority 5")
+		assert.Same(t, s2, picked, "priority 1 beats priority 5")
 
-		q3 := queues.NewQueue[any]()
-		w.bind(q3, 3)
-
-		cur2, _ := w.currentSource()
-		assert.Same(t, m, cur2, "third bind reuses the same manager")
-		assert.Equal(t, 3, m.Count())
+		w.bind(queues.NewQueue[any](), 3)
+		assert.Equal(t, 3, w.sources.Count())
 	})
 
-	t.Run("detach clears a single source and drops one from a manager", func(t *testing.T) {
+	t.Run("unregister drops a source, down to none", func(t *testing.T) {
 		w := newTestWorker()
-		s := w.bind(queues.NewQueue[any](), 1)
-		w.detach(s)
-		assert.Equal(t, 0, w.numSources())
-		_, ok := w.currentSource()
-		assert.False(t, ok)
-
 		a := w.bind(queues.NewQueue[any](), 1)
-		w.bind(queues.NewQueue[any](), 2)
-		w.detach(a)
-		assert.Equal(t, 1, w.numSources())
-		cur, _ := w.currentSource()
-		_, isManager := cur.(*sourceManager[iJob[string]])
-		assert.True(t, isManager, "manager stays once created")
+		b := w.bind(queues.NewQueue[any](), 2)
+
+		w.sources.UnregisterItem(a)
+		assert.Equal(t, 1, w.sources.Count())
+
+		w.sources.UnregisterItem(b)
+		assert.Equal(t, 0, w.sources.Count())
+		assert.Equal(t, 0, w.NumPending())
 	})
 
 	t.Run("manager Next pulls from the chosen source or reports nothing ready", func(t *testing.T) {
@@ -427,15 +412,17 @@ func TestWorkerSources(t *testing.T) {
 		assert.Equal(t, 0, m.Len())
 	})
 
-	t.Run("topic-only worker pulls straight from its topicSource", func(t *testing.T) {
+	t.Run("topic subscription registers a topicSource", func(t *testing.T) {
 		topic := NewTopic[int]()
 		wb := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
 		wb.WithTopic(topic)
+		topic.Publish(1)
 
 		w := wb.(*workerBinder[int]).worker
-		cur, ok := w.currentSource()
-		assert.True(t, ok)
-		_, isTopic := cur.(*topicSource[int])
-		assert.True(t, isTopic, "no manager between the scheduler and the topic")
+		assert.Equal(t, 1, w.sources.Count())
+		picked, found := w.sources.next()
+		assert.True(t, found)
+		_, isTopic := picked.(*topicSource[int])
+		assert.True(t, isTopic)
 	})
 }

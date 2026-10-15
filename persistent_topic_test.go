@@ -59,9 +59,9 @@ func TestPersistentTopic(t *testing.T) {
 		topic.Publish(1)
 		topic.Publish(2)
 
-		before := sub.(*durableSubscription[int]).worker.numSources()
+		before := sub.(*durableSubscription[int]).worker.sources.Count()
 		assert.NoError(t, sub.Close())
-		assert.Equal(t, before-1, sub.(*durableSubscription[int]).worker.numSources(), "source unregistered from worker")
+		assert.Equal(t, before-1, sub.(*durableSubscription[int]).worker.sources.Count(), "source unregistered from worker")
 		assert.Equal(t, 0, topic.NumSubscribers())
 		assert.Equal(t, 0, first.NumPending())
 		assert.Equal(t, 2, storage.GroupLen("a"))

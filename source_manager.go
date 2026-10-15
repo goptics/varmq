@@ -25,8 +25,8 @@ const (
 
 // sourceManager holds every source bound to a worker and picks the next one
 // to pull from according to the configured strategy (RoundRobin, MaxLen,
-// MinLen, or Priority). It is itself a source, so the scheduler never knows
-// whether it pulls from one adapter or from a set of them.
+// MinLen, or Priority). Every worker owns one, created with the worker, and
+// the scheduler always pulls through it.
 type sourceManager[JobType any] struct {
 	*helpers.Manager[source[JobType]]
 	strategy Strategy
