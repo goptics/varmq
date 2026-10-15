@@ -2,3 +2,6 @@
 experiments/*
 *.db*
 vendor
+
+# motion-explainer sources and output (SVGs, reel, frames)
+assets/explainers/
