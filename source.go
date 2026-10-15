@@ -167,7 +167,7 @@ func (w *worker[T, JobType]) addSource(src source[JobType], priority int) {
 	w.sourcesMx.Lock()
 	defer w.sourcesMx.Unlock()
 
-	w.sources.Store(managerBox[JobType]{w.manager().add(src, priority)})
+	w.sources.Store(managerBox[JobType]{w.manager().add(src, priority, w.Configs.strategy)})
 }
 
 // removeSource unbinds src, swapping in the manager for the remaining sources.

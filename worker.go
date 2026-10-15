@@ -300,7 +300,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		Configs:         c,
 	}
 
-	w.sources.Store(managerBox[iJob[T]]{newSourceManager[iJob[T]](c.strategy)})
+	w.sources.Store(managerBox[iJob[T]]{newSourceManager[iJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
@@ -325,7 +325,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		Configs:         c,
 	}
 
-	w.sources.Store(managerBox[iErrorJob[T]]{newSourceManager[iErrorJob[T]](c.strategy)})
+	w.sources.Store(managerBox[iErrorJob[T]]{newSourceManager[iErrorJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
@@ -350,7 +350,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		Configs:         c,
 	}
 
-	w.sources.Store(managerBox[iResultJob[T, R]]{newSourceManager[iResultJob[T, R]](c.strategy)})
+	w.sources.Store(managerBox[iResultJob[T, R]]{newSourceManager[iResultJob[T, R]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)

@@ -34,20 +34,18 @@ const (
 // worker swaps implementations as sources come and go, in both directions.
 type sourceManager[JobType any] interface {
 	source[JobType]
-	add(src source[JobType], priority int) sourceManager[JobType]
+	add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType]
 	remove(src source[JobType]) sourceManager[JobType]
 	count() int
 }
 
 // newSourceManager returns the manager of a worker with nothing bound yet.
-func newSourceManager[JobType any](strategy Strategy) sourceManager[JobType] {
-	return &emptyManager[JobType]{strategy: strategy}
+func newSourceManager[JobType any]() sourceManager[JobType] {
+	return &emptyManager[JobType]{}
 }
 
 // emptyManager is the manager of a worker with no bound source.
-type emptyManager[JobType any] struct {
-	strategy Strategy
-}
+type emptyManager[JobType any] struct{}
 
 func (m *emptyManager[JobType]) Len() int { return 0 }
 
@@ -56,8 +54,8 @@ func (m *emptyManager[JobType]) Next() (JobType, error) {
 	return zero, errNoReadySource
 }
 
-func (m *emptyManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
-	return &directManager[JobType]{src: src, priority: priority, strategy: m.strategy}
+func (m *emptyManager[JobType]) add(src source[JobType], priority int, _ Strategy) sourceManager[JobType] {
+	return &directManager[JobType]{src: src, priority: priority}
 }
 
 func (m *emptyManager[JobType]) remove(source[JobType]) sourceManager[JobType] { return m }
@@ -69,13 +67,14 @@ func (m *emptyManager[JobType]) count() int { return 0 }
 type directManager[JobType any] struct {
 	src      source[JobType]
 	priority int // kept so the source keeps its rank if a second one is bound
-	strategy Strategy
 }
 
 func (m *directManager[JobType]) Len() int { return m.src.Len() }
 
-// Next reports an empty source as errNoReadySource, like strategyManager,
-// so the scheduler treats it as "nothing to do" rather than a failure.
+// Next reports an empty source as errNoReadySource, as strategyManager's
+// pick does, so the scheduler treats it as "nothing to do". Without the
+// check the source would return ErrFailedToDequeue, which the event loop
+// reports as a failure; storage cannot tell "empty" from "failed" itself.
 func (m *directManager[JobType]) Next() (JobType, error) {
 	if m.src.Len() == 0 {
 		var zero JobType
@@ -85,8 +84,8 @@ func (m *directManager[JobType]) Next() (JobType, error) {
 	return m.src.Next()
 }
 
-func (m *directManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
-	s := newStrategyManager[JobType](m.strategy)
+func (m *directManager[JobType]) add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType] {
+	s := newStrategyManager[JobType](strategy)
 	s.Register(m.src, m.priority)
 	s.Register(src, priority)
 
@@ -98,12 +97,13 @@ func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 		return m
 	}
 
-	return &emptyManager[JobType]{strategy: m.strategy}
+	return &emptyManager[JobType]{}
 }
 
 func (m *directManager[JobType]) count() int { return 1 }
 
 // strategyManager is the manager of a worker with two or more bound sources.
+// A remove leaves at least one, so it only ever steps down to directManager.
 // It picks the next source by strategy (RoundRobin, MaxLen, MinLen, or
 // Priority).
 type strategyManager[JobType any] struct {
@@ -143,7 +143,7 @@ func (sm *strategyManager[JobType]) Next() (JobType, error) {
 	return src.Next()
 }
 
-func (sm *strategyManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
+func (sm *strategyManager[JobType]) add(src source[JobType], priority int, _ Strategy) sourceManager[JobType] {
 	sm.Register(src, priority)
 	return sm
 }
@@ -152,11 +152,7 @@ func (sm *strategyManager[JobType]) remove(src source[JobType]) sourceManager[Jo
 	sm.UnregisterItem(src)
 
 	if only, priority, ok := sm.Only(); ok {
-		return &directManager[JobType]{src: only, priority: priority, strategy: sm.strategy}
-	}
-
-	if sm.Count() == 0 {
-		return &emptyManager[JobType]{strategy: sm.strategy}
+		return &directManager[JobType]{src: only, priority: priority}
 	}
 
 	return sm

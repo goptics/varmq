@@ -444,3 +444,66 @@ func TestTopic(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+
+// TestSourceManagerSwapsUnderLoad binds and unbinds a second subscription on a
+// running worker, so its source manager steps between direct and strategy
+// while jobs flow. No job may be lost or delivered twice.
+func TestSourceManagerSwapsUnderLoad(t *testing.T) {
+	cases := []struct {
+		name     string
+		strategy Strategy
+		withQ    bool // a permanent queue as well: churn moves strategy<->strategy
+	}{
+		{"direct<->strategy", Priority, false},
+		{"Priority", Priority, true},
+		{"RoundRobin", RoundRobin, true},
+		{"MaxLen", MaxLen, true},
+		{"MinLen", MinLen, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			const n = 1000
+			const churn = 300
+
+			var received atomic.Int64
+			w := NewWorker(func(j Job[int]) { received.Add(1) }, 4, WithStrategy(tc.strategy))
+
+			topic := NewTopic[int]()
+			w.WithTopic(topic)
+
+			var q Queue[int]
+			if tc.withQ {
+				q = w.BindQueue()
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < n; i++ {
+					topic.Publish(i)
+					if q != nil {
+						q.Add(i)
+					}
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				other := NewTopic[int]()
+				for i := 0; i < churn; i++ {
+					w.WithTopic(other).Unsubscribe()
+				}
+			}()
+
+			waitOrTimeout(t, 10*time.Second, wg.Wait)
+			waitOrTimeout(t, 10*time.Second, w.Wait)
+
+			want := int64(n)
+			if tc.withQ {
+				want = 2 * n
+			}
+			assert.Equal(t, want, received.Load())
+		})
+	}
+}
