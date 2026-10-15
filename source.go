@@ -136,7 +136,7 @@ var (
 
 // bind wraps q in the matching source and registers it with the worker. The
 // storage kind is decided once here, not per job. The returned source is what
-// callers must pass to sources.UnregisterItem later.
+// callers must pass to removeSource later.
 func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	var src source[JobType]
 
@@ -146,7 +146,34 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		src = &queueSource[T, JobType]{q: q}
 	}
 
-	w.sources.Register(src, priority)
+	w.addSource(src, priority)
 
 	return src
+}
+
+// managerBox gives atomic.Value one concrete type to hold, whichever
+// sourceManager implementation is current.
+type managerBox[JobType any] struct {
+	sourceManager[JobType]
+}
+
+// manager returns the worker's current sourceManager.
+func (w *worker[T, JobType]) manager() sourceManager[JobType] {
+	return w.sources.Load().(managerBox[JobType]).sourceManager
+}
+
+// addSource binds src, swapping in the manager for the new set of sources.
+func (w *worker[T, JobType]) addSource(src source[JobType], priority int) {
+	w.sourcesMx.Lock()
+	defer w.sourcesMx.Unlock()
+
+	w.sources.Store(managerBox[JobType]{w.manager().add(src, priority)})
+}
+
+// removeSource unbinds src, swapping in the manager for the remaining sources.
+func (w *worker[T, JobType]) removeSource(src source[JobType]) {
+	w.sourcesMx.Lock()
+	defer w.sourcesMx.Unlock()
+
+	w.sources.Store(managerBox[JobType]{w.manager().remove(src)})
 }

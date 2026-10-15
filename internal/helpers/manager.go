@@ -6,7 +6,6 @@ import (
 	"sync"
 )
 
-
 // Sizer is an interface for anything that has a Len method
 type Sizer interface {
 	Len() int
@@ -191,6 +190,19 @@ func (m *Manager[T]) GetRoundRobinItem() (T, bool) {
 			return *new(T), false
 		}
 	}
+}
+
+// Only returns the single registered item and its priority. ok is false
+// unless exactly one item is registered.
+func (m *Manager[T]) Only() (T, int, bool) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	if len(m.items) != 1 {
+		return *new(T), 0, false
+	}
+
+	return m.items[0].item, m.items[0].priority, true
 }
 
 // Count returns the number of registered items

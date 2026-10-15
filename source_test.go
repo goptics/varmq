@@ -245,7 +245,7 @@ func TestBind(t *testing.T) {
 		_, isAck := acked.(*ackSource[string, iJob[string]])
 		assert.True(t, isAck)
 
-		assert.Equal(t, 2, w.sources.Count())
+		assert.Equal(t, 2, w.manager().count())
 	})
 
 	t.Run("closing a queued job while the ack source dequeues it does not race", func(t *testing.T) {
@@ -341,29 +341,40 @@ func TestWorkerSources(t *testing.T) {
 		return newWorker(func(j iJob[string]) {}, WithAutoRun(false))
 	}
 
-	t.Run("fresh worker has an empty manager", func(t *testing.T) {
+	t.Run("fresh worker has an emptyManager", func(t *testing.T) {
 		w := newTestWorker()
 
-		assert.NotNil(t, w.sources)
-		assert.Equal(t, 0, w.sources.Count())
+		_, isEmpty := w.manager().(*emptyManager[iJob[string]])
+		assert.True(t, isEmpty)
+		assert.Equal(t, 0, w.manager().count())
 		assert.Equal(t, 0, w.NumPending())
+
+		_, err := w.manager().Next()
+		assert.ErrorIs(t, err, errNoReadySource)
 	})
 
-	t.Run("bind registers into the manager", func(t *testing.T) {
+	t.Run("one source is pulled directly, without a strategy", func(t *testing.T) {
 		w := newTestWorker()
 		q := queues.NewQueue[any]()
 		q.Enqueue(newJob("x", jobConfigs{Id: "x"}))
 
 		src := w.bind(q, 1)
 
-		assert.Equal(t, 1, w.sources.Count())
+		d, isDirect := w.manager().(*directManager[iJob[string]])
+		assert.True(t, isDirect)
+		assert.Same(t, src, d.src)
+		assert.Equal(t, 1, w.manager().count())
 		assert.Equal(t, 1, w.NumPending())
-		picked, found := w.sources.next()
-		assert.True(t, found)
-		assert.Same(t, src, picked)
+
+		j, err := w.manager().Next()
+		assert.NoError(t, err)
+		assert.Equal(t, "x", j.ID())
+
+		_, err = w.manager().Next()
+		assert.ErrorIs(t, err, errNoReadySource, "an empty direct source is nothing to do, not a failure")
 	})
 
-	t.Run("the manager orders sources by priority", func(t *testing.T) {
+	t.Run("a second source switches to a strategyManager", func(t *testing.T) {
 		w := newTestWorker()
 		q1 := queues.NewQueue[any]()
 		q2 := queues.NewQueue[any]()
@@ -373,32 +384,70 @@ func TestWorkerSources(t *testing.T) {
 		w.bind(q1, 5)
 		s2 := w.bind(q2, 1)
 
-		assert.Equal(t, 2, w.sources.Count())
+		m, isStrategy := w.manager().(*strategyManager[iJob[string]])
+		assert.True(t, isStrategy)
+		assert.Equal(t, 2, m.count())
 		assert.Equal(t, 2, w.NumPending())
 
-		picked, found := w.sources.next()
+		picked, found := m.next()
 		assert.True(t, found)
-		assert.Same(t, s2, picked, "priority 1 beats priority 5")
+		assert.Same(t, s2, picked, "priority 1 beats the first source's priority 5")
 
 		w.bind(queues.NewQueue[any](), 3)
-		assert.Equal(t, 3, w.sources.Count())
+		assert.Same(t, m, w.manager(), "a third source joins the same strategyManager")
+		assert.Equal(t, 3, w.manager().count())
 	})
 
-	t.Run("unregister drops a source, down to none", func(t *testing.T) {
+	t.Run("removing sources steps back down to direct, then empty", func(t *testing.T) {
 		w := newTestWorker()
-		a := w.bind(queues.NewQueue[any](), 1)
-		b := w.bind(queues.NewQueue[any](), 2)
+		a := w.bind(queues.NewQueue[any](), 5)
+		b := w.bind(queues.NewQueue[any](), 1)
 
-		w.sources.UnregisterItem(a)
-		assert.Equal(t, 1, w.sources.Count())
+		w.removeSource(b)
+		d, isDirect := w.manager().(*directManager[iJob[string]])
+		assert.True(t, isDirect, "one source left: no strategy")
+		assert.Same(t, a, d.src)
+		assert.Equal(t, 5, d.priority, "the remaining source keeps its priority")
 
-		w.sources.UnregisterItem(b)
-		assert.Equal(t, 0, w.sources.Count())
+		w.removeSource(a)
+		_, isEmpty := w.manager().(*emptyManager[iJob[string]])
+		assert.True(t, isEmpty)
 		assert.Equal(t, 0, w.NumPending())
 	})
 
+	t.Run("a source kept through direct keeps its rank when another joins", func(t *testing.T) {
+		w := newTestWorker()
+		qa := queues.NewQueue[any]()
+		qc := queues.NewQueue[any]()
+		qa.Enqueue(newJob("a", jobConfigs{Id: "a"}))
+		qc.Enqueue(newJob("c", jobConfigs{Id: "c"}))
+
+		w.bind(qa, 5)
+		b := w.bind(queues.NewQueue[any](), 1)
+		w.removeSource(b)
+		sc := w.bind(qc, 3)
+
+		m, isStrategy := w.manager().(*strategyManager[iJob[string]])
+		assert.True(t, isStrategy)
+		picked, found := m.next()
+		assert.True(t, found)
+		assert.Same(t, sc, picked, "priority 3 beats the kept source's priority 5")
+	})
+
+	t.Run("removing an unknown source changes nothing", func(t *testing.T) {
+		w := newTestWorker()
+		a := w.bind(queues.NewQueue[any](), 1)
+		other := &queueSource[string, iJob[string]]{q: queues.NewQueue[any]()}
+
+		w.removeSource(other)
+
+		d, isDirect := w.manager().(*directManager[iJob[string]])
+		assert.True(t, isDirect)
+		assert.Same(t, a, d.src)
+	})
+
 	t.Run("manager Next pulls from the chosen source or reports nothing ready", func(t *testing.T) {
-		m := newSourceManager[iJob[string]](Priority)
+		m := newStrategyManager[iJob[string]](Priority)
 		m.Register(newTestSource(), 1)
 
 		_, err := m.Next()
@@ -412,17 +461,15 @@ func TestWorkerSources(t *testing.T) {
 		assert.Equal(t, 0, m.Len())
 	})
 
-	t.Run("topic subscription registers a topicSource", func(t *testing.T) {
+	t.Run("a topic-only worker pulls its topicSource directly", func(t *testing.T) {
 		topic := NewTopic[int]()
 		wb := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
 		wb.WithTopic(topic)
-		topic.Publish(1)
 
 		w := wb.(*workerBinder[int]).worker
-		assert.Equal(t, 1, w.sources.Count())
-		picked, found := w.sources.next()
-		assert.True(t, found)
-		_, isTopic := picked.(*topicSource[int])
+		d, isDirect := w.manager().(*directManager[iJob[int]])
+		assert.True(t, isDirect, "no strategy between the scheduler and the topic")
+		_, isTopic := d.src.(*topicSource[int])
 		assert.True(t, isTopic)
 	})
 }

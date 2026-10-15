@@ -136,7 +136,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
 		return s
 	}
 
-	w.sources.Register(src, loadQueueConfigs().priority)
+	w.addSource(src, loadQueueConfigs().priority)
 	t.subs = append(t.subs, s)
 
 	return s
@@ -184,7 +184,7 @@ type subscription[T any] struct {
 func (s *subscription[T]) Unsubscribe() {
 	s.once.Do(func() {
 		s.t.unsubscribe(s)
-		s.worker.sources.UnregisterItem(s.src)
+		s.worker.removeSource(s.src)
 	})
 }
 

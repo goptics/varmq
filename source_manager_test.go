@@ -19,7 +19,7 @@ func newTestSource(items ...string) *queueSource[string, iJob[string]] {
 
 func TestSourceManagerNext(t *testing.T) {
 	t.Run("Strategy: RoundRobin", func(t *testing.T) {
-		sm := newSourceManager[iJob[string]](RoundRobin)
+		sm := newStrategyManager[iJob[string]](RoundRobin)
 
 		s1 := newTestSource("s1-item")
 		s2 := newTestSource("s2-item1", "s2-item2")
@@ -44,7 +44,7 @@ func TestSourceManagerNext(t *testing.T) {
 	})
 
 	t.Run("Strategy: MaxLen", func(t *testing.T) {
-		sm := newSourceManager[iJob[string]](MaxLen)
+		sm := newStrategyManager[iJob[string]](MaxLen)
 
 		s1 := newTestSource("a")
 		s2 := newTestSource("a", "b")
@@ -61,7 +61,7 @@ func TestSourceManagerNext(t *testing.T) {
 	})
 
 	t.Run("Strategy: MinLen", func(t *testing.T) {
-		sm := newSourceManager[iJob[string]](MinLen)
+		sm := newStrategyManager[iJob[string]](MinLen)
 
 		s1 := newTestSource("a")
 		s2 := newTestSource("a", "b")
@@ -78,7 +78,7 @@ func TestSourceManagerNext(t *testing.T) {
 	})
 
 	t.Run("Strategy: Priority", func(t *testing.T) {
-		sm := newSourceManager[iJob[string]](Priority)
+		sm := newStrategyManager[iJob[string]](Priority)
 
 		s1 := newTestSource("a")
 		s2 := newTestSource("a", "b")
@@ -102,7 +102,7 @@ func TestSourceManagerNext(t *testing.T) {
 
 	t.Run("No Sources Registered", func(t *testing.T) {
 		for _, strategy := range []Strategy{RoundRobin, MaxLen, MinLen, Priority} {
-			sm := newSourceManager[iJob[string]](strategy)
+			sm := newStrategyManager[iJob[string]](strategy)
 			src, ok := sm.next()
 			assert.False(t, ok)
 			assert.Nil(t, src)
@@ -111,7 +111,7 @@ func TestSourceManagerNext(t *testing.T) {
 
 	t.Run("Invalid Strategy", func(t *testing.T) {
 		// An out-of-range strategy falls back to the default (Priority).
-		sm := newSourceManager[iJob[string]](Strategy(99))
+		sm := newStrategyManager[iJob[string]](Strategy(99))
 		sm.Register(newTestSource(), math.MaxInt)
 
 		src, ok := sm.next()

@@ -39,7 +39,7 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	w.curProcessing.Add(1)
 	w.status.CompareAndSwap(idle, running)
 
-	j, err := w.sources.Next()
+	j, err := w.manager().Next()
 	if err != nil {
 		w.releaseProcessingSlot()
 		if errors.Is(err, errNoReadySource) {

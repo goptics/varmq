@@ -246,10 +246,10 @@ func TestTopic(t *testing.T) {
 		sub := drop.WithTopic(topic)
 		assert.Equal(t, 2, topic.NumSubscribers())
 
-		before := sub.(*subscription[int]).worker.sources.Count()
+		before := sub.(*subscription[int]).worker.manager().count()
 		sub.Unsubscribe()
 		sub.Unsubscribe()
-		assert.Equal(t, before-1, sub.(*subscription[int]).worker.sources.Count(), "source unregistered from worker")
+		assert.Equal(t, before-1, sub.(*subscription[int]).worker.manager().count(), "source unregistered from worker")
 		assert.Equal(t, 1, topic.NumSubscribers())
 
 		assert.True(t, topic.Publish(1))

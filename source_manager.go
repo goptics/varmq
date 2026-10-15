@@ -23,23 +23,102 @@ const (
 	Priority
 )
 
-// sourceManager holds every source bound to a worker and picks the next one
-// to pull from according to the configured strategy (RoundRobin, MaxLen,
-// MinLen, or Priority). Every worker owns one, created with the worker, and
-// the scheduler always pulls through it.
-type sourceManager[JobType any] struct {
+// sourceManager is what a worker pulls jobs from. Which implementation is
+// current depends on how many sources are bound:
+//
+//   - emptyManager: nothing bound; there is never a job.
+//   - directManager: one source; pulls from it directly, with no strategy.
+//   - strategyManager: two or more; picks a source by the worker's Strategy.
+//
+// add and remove return the manager for the new set of sources, so the
+// worker swaps implementations as sources come and go, in both directions.
+type sourceManager[JobType any] interface {
+	source[JobType]
+	add(src source[JobType], priority int) sourceManager[JobType]
+	remove(src source[JobType]) sourceManager[JobType]
+	count() int
+}
+
+// newSourceManager returns the manager of a worker with nothing bound yet.
+func newSourceManager[JobType any](strategy Strategy) sourceManager[JobType] {
+	return &emptyManager[JobType]{strategy: strategy}
+}
+
+// emptyManager is the manager of a worker with no bound source.
+type emptyManager[JobType any] struct {
+	strategy Strategy
+}
+
+func (m *emptyManager[JobType]) Len() int { return 0 }
+
+func (m *emptyManager[JobType]) Next() (JobType, error) {
+	var zero JobType
+	return zero, errNoReadySource
+}
+
+func (m *emptyManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
+	return &directManager[JobType]{src: src, priority: priority, strategy: m.strategy}
+}
+
+func (m *emptyManager[JobType]) remove(source[JobType]) sourceManager[JobType] { return m }
+
+func (m *emptyManager[JobType]) count() int { return 0 }
+
+// directManager is the manager of a worker with exactly one bound source. It
+// forwards to that source; there is nothing to choose between.
+type directManager[JobType any] struct {
+	src      source[JobType]
+	priority int // kept so the source keeps its rank if a second one is bound
+	strategy Strategy
+}
+
+func (m *directManager[JobType]) Len() int { return m.src.Len() }
+
+// Next reports an empty source as errNoReadySource, like strategyManager,
+// so the scheduler treats it as "nothing to do" rather than a failure.
+func (m *directManager[JobType]) Next() (JobType, error) {
+	if m.src.Len() == 0 {
+		var zero JobType
+		return zero, errNoReadySource
+	}
+
+	return m.src.Next()
+}
+
+func (m *directManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
+	s := newStrategyManager[JobType](m.strategy)
+	s.Register(m.src, m.priority)
+	s.Register(src, priority)
+
+	return s
+}
+
+func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobType] {
+	if src != m.src {
+		return m
+	}
+
+	return &emptyManager[JobType]{strategy: m.strategy}
+}
+
+func (m *directManager[JobType]) count() int { return 1 }
+
+// strategyManager is the manager of a worker with two or more bound sources.
+// It picks the next source by strategy (RoundRobin, MaxLen, MinLen, or
+// Priority).
+type strategyManager[JobType any] struct {
 	*helpers.Manager[source[JobType]]
 	strategy Strategy
 }
 
-func newSourceManager[JobType any](strategy Strategy) *sourceManager[JobType] {
-	return &sourceManager[JobType]{
+func newStrategyManager[JobType any](strategy Strategy) *strategyManager[JobType] {
+	return &strategyManager[JobType]{
 		Manager:  helpers.NewManager[source[JobType]](),
 		strategy: strategy,
 	}
 }
 
-func (sm *sourceManager[JobType]) next() (source[JobType], bool) {
+func (sm *strategyManager[JobType]) next() (source[JobType], bool) {
 	switch sm.strategy {
 	case RoundRobin:
 		return sm.GetRoundRobinItem()
@@ -54,7 +133,7 @@ func (sm *sourceManager[JobType]) next() (source[JobType], bool) {
 
 // Next pulls from the source the strategy picks. errNoReadySource means every
 // registered source is empty.
-func (sm *sourceManager[JobType]) Next() (JobType, error) {
+func (sm *strategyManager[JobType]) Next() (JobType, error) {
 	src, ok := sm.next()
 	if !ok {
 		var zero JobType
@@ -64,4 +143,29 @@ func (sm *sourceManager[JobType]) Next() (JobType, error) {
 	return src.Next()
 }
 
-var _ source[iJob[int]] = (*sourceManager[iJob[int]])(nil)
+func (sm *strategyManager[JobType]) add(src source[JobType], priority int) sourceManager[JobType] {
+	sm.Register(src, priority)
+	return sm
+}
+
+func (sm *strategyManager[JobType]) remove(src source[JobType]) sourceManager[JobType] {
+	sm.UnregisterItem(src)
+
+	if only, priority, ok := sm.Only(); ok {
+		return &directManager[JobType]{src: only, priority: priority, strategy: sm.strategy}
+	}
+
+	if sm.Count() == 0 {
+		return &emptyManager[JobType]{strategy: sm.strategy}
+	}
+
+	return sm
+}
+
+func (sm *strategyManager[JobType]) count() int { return sm.Count() }
+
+var (
+	_ sourceManager[iJob[int]] = (*emptyManager[iJob[int]])(nil)
+	_ sourceManager[iJob[int]] = (*directManager[iJob[int]])(nil)
+	_ sourceManager[iJob[int]] = (*strategyManager[iJob[int]])(nil)
+)
