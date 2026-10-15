@@ -397,7 +397,11 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.pendingLen()
+	if cur, ok := w.currentSource(); ok {
+		return cur.Len()
+	}
+
+	return 0
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {

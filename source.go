@@ -210,15 +210,6 @@ func (w *worker[T, JobType]) currentSource() (source[JobType], bool) {
 	return *cur, true
 }
 
-// pendingLen is the number of jobs waiting across every bound source.
-func (w *worker[T, JobType]) pendingLen() int {
-	if cur, ok := w.currentSource(); ok {
-		return cur.Len()
-	}
-
-	return 0
-}
-
 // numSources counts bound sources: 0, 1, or the manager's count.
 func (w *worker[T, JobType]) numSources() int {
 	cur, ok := w.currentSource()
