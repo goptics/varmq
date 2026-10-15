@@ -170,20 +170,86 @@ func TestTopic(t *testing.T) {
 		assert.ElementsMatch(t, []int{1, 2}, seen)
 	})
 
-	t.Run("double subscribe gives two copies", func(t *testing.T) {
+	t.Run("subscribing the same worker twice panics", func(t *testing.T) {
 		topic := NewTopic[int]()
+		w := NewWorker(func(j Job[int]) {})
+		sub := w.WithTopic(topic)
 
-		var count int32
-		w := NewWorker(func(j Job[int]) { atomic.AddInt32(&count, 1) })
-		w.WithTopic(topic)
-		w.WithTopic(topic)
+		assert.Panics(t, func() { w.WithTopic(topic) })
+		assert.Equal(t, 1, topic.NumSubscribers())
+		assert.Equal(t, 1, w.(*workerBinder[int]).manager().count(), "no second source registered")
 
-		assert.Equal(t, 2, topic.NumSubscribers())
+		sub.Unsubscribe()
+		assert.NotPanics(t, func() { w.WithTopic(topic) }, "resubscribing after unsubscribe is allowed")
+		assert.Equal(t, 1, topic.NumSubscribers())
+	})
 
-		assert.True(t, topic.Publish(1))
+	t.Run("topic priority orders a worker's topics", func(t *testing.T) {
+		low := NewTopic[int]()
+		high := NewTopic[int]()
+
+		var mu sync.Mutex
+		var seen []int
+		w := NewWorker(func(j Job[int]) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = append(seen, j.Data())
+		})
+		assert.NoError(t, w.PauseAndWait())
+		w.WithTopic(low, WithTopicPriority(5))
+		w.WithTopic(high, WithTopicPriority(1))
+
+		assert.True(t, low.Publish(1))
+		assert.True(t, low.Publish(2))
+		assert.True(t, high.Publish(10))
+		assert.True(t, high.Publish(20))
+
+		assert.NoError(t, w.Resume())
 		waitOrTimeout(t, time.Second, w.Wait)
 
-		assert.Equal(t, int32(2), atomic.LoadInt32(&count))
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, []int{10, 20, 1, 2}, seen)
+	})
+
+	t.Run("capacity makes publish return false while a subscriber is behind", func(t *testing.T) {
+		topic := NewTopic[int](WithTopicCapacity(2))
+
+		fast := NewWorker(func(j Job[int]) {})
+		slow := NewWorker(func(j Job[int]) {})
+		fastSub := fast.WithTopic(topic)
+		slowSub := slow.WithTopic(topic)
+		assert.NoError(t, slow.PauseAndWait())
+
+		assert.False(t, topic.IsFull())
+		assert.True(t, topic.Publish(1))
+		assert.False(t, slowSub.IsFull())
+		assert.True(t, topic.Publish(2))
+		waitOrTimeout(t, time.Second, fast.Wait)
+		assert.True(t, topic.IsFull())
+		assert.False(t, topic.Publish(3), "the paused subscriber already has 2 unread")
+		assert.Equal(t, 2, slowSub.Len(), "a refused payload reaches nobody")
+		assert.True(t, slowSub.IsFull(), "IsFull names the subscription holding the topic full")
+		assert.False(t, fastSub.IsFull())
+
+		assert.NoError(t, slow.Resume())
+		waitOrTimeout(t, time.Second, slow.Wait)
+		assert.False(t, slowSub.IsFull())
+		assert.False(t, topic.IsFull())
+		assert.True(t, topic.Publish(3), "room again once it caught up")
+	})
+
+	t.Run("capacity below 1 is unbounded", func(t *testing.T) {
+		topic := NewTopic[int](WithTopicCapacity(-1))
+		w := NewWorker(func(j Job[int]) {})
+		assert.NoError(t, w.PauseAndWait())
+
+		sub := w.WithTopic(topic)
+		for i := range 100 {
+			assert.True(t, topic.Publish(i))
+		}
+		assert.False(t, sub.IsFull())
+		assert.False(t, topic.IsFull())
 	})
 
 	t.Run("pointer payload is shared between subscribers", func(t *testing.T) {

@@ -3,10 +3,9 @@
 package topics
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
-
-	"github.com/goptics/varmq/internal/linkedbuffer"
 )
 
 const (
@@ -14,61 +13,112 @@ const (
 	maxChunkCapacity     = 100 * 1024 // items per chunk, cap for growth
 )
 
-// Log is an append-only, in-memory log stored in linked chunks, the same
-// chunks the queue uses. Each Cursor reads at its own position. The log keeps
-// only the write chunk; chunks link forward, so a chunk stays reachable only
-// while a cursor sits on it or on an earlier one. Once the slowest cursor
-// moves past a chunk nothing references it and the garbage collector frees
-// it. Appending never copies: a full chunk links a new one.
-//
-// ponytail: Len is lock-free, but Append, Dequeue, Purge, Close and Values
-// still serialise on one mutex. Upgrade path: per-cursor atomic positions
-// with the lock taken only to link a new chunk.
-type Log[T any] struct {
-	mx      sync.Mutex
-	tail    *linkedbuffer.Chunk[T] // write chunk; nil while no cursor is open
-	cursors int
-	head    uint64        // items ever appended, so the offset of the next one
-	headA   atomic.Uint64 // mirror of head, stored under mx, read by Len
+// chunk is one block of the log. The writer fills data[n] and then publishes
+// it by storing n+1; a reader loads n and reads only below it, so readers and
+// the writer never touch the same slot. next is linked only once the chunk is
+// full.
+type chunk[T any] struct {
+	data []T
+	n    atomic.Int64 // published items
+	next atomic.Pointer[chunk[T]]
 }
 
-// Cursor reads a Log from its own position.
+func newChunk[T any](capacity int) *chunk[T] {
+	return &chunk[T]{data: make([]T, capacity)}
+}
+
+// Log is an append-only, in-memory log stored in linked chunks. Each Cursor
+// reads at its own position. The log keeps only the write chunk; chunks link
+// forward, so a chunk stays reachable only while a cursor sits on it or on an
+// earlier one. Once the slowest cursor moves past a chunk nothing references
+// it and the garbage collector frees it. Appending never copies: a full chunk
+// links a new one.
+//
+// Reads never block writes and writes never block reads. Append serialises
+// only with other Appends and with opening, closing or purging a cursor;
+// Dequeue takes only its own cursor's lock.
+type Log[T any] struct {
+	mx    sync.Mutex    // writers and cursor bookkeeping: tail, open
+	tail  *chunk[T]     // write chunk; nil while no cursor is open
+	open  []*Cursor[T]  // open cursors
+	limit uint64        // max unread items for the slowest cursor; 0 means unbounded
+	head  atomic.Uint64 // items ever published, so the offset of the next one
+}
+
+// Cursor reads a Log from its own position. One goroutine reads it at a time;
+// mx only orders that reader against Values, Purge and Close.
 type Cursor[T any] struct {
 	log    *Log[T]
-	chunk  *linkedbuffer.Chunk[T] // holds the next unread item; nil once closed
-	idx    int                    // index into chunk.Data
-	offset uint64                 // absolute position, for Len
-	closed bool
-
-	// Mirrors of offset and closed, stored under log.mx, read lock-free by Len.
-	offA    atomic.Uint64
-	closedA atomic.Bool
+	mx     sync.Mutex
+	chunk  *chunk[T] // holds the next unread item; nil once closed
+	idx    int       // index into chunk.data
+	offset atomic.Uint64
+	closed atomic.Bool
 }
 
-// NewLog returns an empty log.
+// NewLog returns an empty, unbounded log.
 func NewLog[T any]() *Log[T] {
 	return &Log[T]{}
 }
 
-// Append stores item once and returns how many open cursors will read it.
-// With no open cursors nothing is stored and it returns 0.
+// NewBoundedLog returns an empty log that refuses an Append while its slowest
+// open cursor already has limit unread items. A limit below 1 is unbounded.
+func NewBoundedLog[T any](limit int) *Log[T] {
+	return &Log[T]{limit: uint64(max(0, limit))}
+}
+
+// Append stores item once and returns how many open cursors will read it. It
+// stores nothing and returns 0 when no cursor is open, or when the log is
+// bounded and its slowest cursor already has limit unread items.
 func (l *Log[T]) Append(item T) int {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	if l.cursors == 0 {
+	if len(l.open) == 0 || l.full() {
 		return 0
 	}
 
-	if !l.tail.Push(item) {
-		l.tail = l.tail.Grow(maxChunkCapacity)
-		l.tail.Push(item)
+	n := l.tail.n.Load()
+	if int(n) == len(l.tail.data) {
+		next := newChunk[T](min(len(l.tail.data)+len(l.tail.data)/2, maxChunkCapacity))
+		l.tail.next.Store(next)
+		l.tail, n = next, 0
 	}
 
-	l.head++
-	l.headA.Store(l.head)
+	l.tail.data[n] = item
+	l.tail.n.Store(n + 1) // publish: readers may read data[n] from here on
+	l.head.Add(1)         // after publishing, so Len never promises an item Dequeue cannot see
 
-	return l.cursors
+	return len(l.open)
+}
+
+// Full reports whether an Append would be refused for lack of room: the log
+// is bounded and its slowest open cursor already has limit unread items. It is
+// false with no open cursor.
+func (l *Log[T]) Full() bool {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	return len(l.open) > 0 && l.full()
+}
+
+// full reports whether the slowest open cursor is limit items behind. Callers
+// hold mx and have at least one open cursor. Offsets only grow, so a stale
+// read can refuse an Append early but never lets one through late.
+//
+// ponytail: O(open cursors) per Append on a bounded log, fine for tens of
+// subscribers; keep the minimum offset in a heap if that ever shows up.
+func (l *Log[T]) full() bool {
+	if l.limit == 0 {
+		return false
+	}
+
+	slowest := l.open[0].offset.Load()
+	for _, c := range l.open[1:] {
+		slowest = min(slowest, c.offset.Load())
+	}
+
+	return l.head.Load()-slowest >= l.limit
 }
 
 // NewCursor returns a cursor positioned at the head: it reads only items
@@ -78,67 +128,71 @@ func (l *Log[T]) NewCursor() *Cursor[T] {
 	defer l.mx.Unlock()
 
 	if l.tail == nil {
-		l.tail = linkedbuffer.NewChunk[T](initialChunkCapacity)
+		l.tail = newChunk[T](initialChunkCapacity)
 	}
 
-	c := &Cursor[T]{log: l, chunk: l.tail, idx: l.tail.NextWriteIndex, offset: l.head}
-	c.offA.Store(c.offset)
-	l.cursors++
+	c := &Cursor[T]{log: l, chunk: l.tail, idx: int(l.tail.n.Load())}
+	c.offset.Store(l.head.Load())
+	l.open = append(l.open, c)
 
 	return c
 }
 
 // Len returns how many items the cursor has not read. It is 0 once closed. It
-// does not take the log's mutex.
+// takes no lock.
 func (c *Cursor[T]) Len() int {
-	if c.closedA.Load() {
+	if c.closed.Load() {
 		return 0
 	}
 
-	return int(c.log.headA.Load() - c.offA.Load())
+	return int(max(0, int64(c.log.head.Load()-c.offset.Load())))
 }
 
 // Dequeue returns the next unread item and advances the cursor. Stepping off
-// a fully read chunk drops this cursor's reference to it.
+// a fully read chunk drops this cursor's reference to it. It never takes the
+// log's lock.
 func (c *Cursor[T]) Dequeue() (T, bool) {
-	c.log.mx.Lock()
-	defer c.log.mx.Unlock()
+	c.mx.Lock()
+	defer c.mx.Unlock()
 
 	var zero T
 
-	if c.closed {
+	if c.chunk == nil {
 		return zero, false
 	}
 
-	for c.idx == c.chunk.NextWriteIndex {
-		if c.chunk.Next == nil {
+	for {
+		if c.idx < int(c.chunk.n.Load()) {
+			item := c.chunk.data[c.idx]
+			c.idx++
+			c.offset.Add(1)
+
+			return item, true
+		}
+
+		// Move on only from a fully read chunk: next is linked once a chunk
+		// is full, and a partly read chunk may still be filling.
+		next := c.chunk.next.Load()
+		if c.idx < len(c.chunk.data) || next == nil {
 			return zero, false
 		}
 
-		c.chunk = c.chunk.Next
-		c.idx = 0
+		c.chunk, c.idx = next, 0
 	}
-
-	item := c.chunk.Data[c.idx]
-	c.idx++
-	c.offset++
-	c.offA.Store(c.offset)
-
-	return item, true
 }
 
 // Values returns a copy of the unread items without consuming them.
 func (c *Cursor[T]) Values() []T {
-	c.log.mx.Lock()
-	defer c.log.mx.Unlock()
+	c.mx.Lock()
+	defer c.mx.Unlock()
 
-	if c.closed {
+	if c.chunk == nil {
 		return nil
 	}
 
-	out := make([]T, 0, int(c.log.head-c.offset))
-	for ch, i := c.chunk, c.idx; ch != nil; ch, i = ch.Next, 0 {
-		out = append(out, ch.Data[i:ch.NextWriteIndex]...)
+	out := make([]T, 0, c.Len())
+	for ch, i := c.chunk, c.idx; ch != nil; ch, i = ch.next.Load(), 0 {
+		out = append(out, ch.data[i:ch.n.Load()]...)
 	}
 
 	return out
@@ -146,35 +200,40 @@ func (c *Cursor[T]) Values() []T {
 
 // Purge skips every unread item.
 func (c *Cursor[T]) Purge() {
-	c.log.mx.Lock()
-	defer c.log.mx.Unlock()
+	c.mx.Lock()
+	defer c.mx.Unlock()
 
-	if c.closed {
+	if c.chunk == nil {
 		return
 	}
 
-	c.chunk = c.log.tail
-	c.idx = c.log.tail.NextWriteIndex
-	c.offset = c.log.head
-	c.offA.Store(c.offset)
+	l := c.log
+	l.mx.Lock() // tail, its count and head move together only under the writer lock
+	defer l.mx.Unlock()
+
+	c.chunk, c.idx = l.tail, int(l.tail.n.Load())
+	c.offset.Store(l.head.Load())
 }
 
 // Close detaches the cursor so it no longer holds chunks. When it was the
 // last open cursor the log drops its write chunk too. It is idempotent.
 func (c *Cursor[T]) Close() {
-	c.log.mx.Lock()
-	defer c.log.mx.Unlock()
+	c.mx.Lock()
+	defer c.mx.Unlock()
 
-	if c.closed {
+	if c.chunk == nil {
 		return
 	}
 
-	c.closed = true
-	c.closedA.Store(true)
+	c.closed.Store(true)
 	c.chunk = nil
-	c.log.cursors--
 
-	if c.log.cursors == 0 {
-		c.log.tail = nil
+	l := c.log
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	l.open = slices.DeleteFunc(l.open, func(o *Cursor[T]) bool { return o == c })
+	if len(l.open) == 0 {
+		l.tail = nil
 	}
 }

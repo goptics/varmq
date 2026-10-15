@@ -342,6 +342,50 @@ func TestPersistentTopic(t *testing.T) {
 		assert.Equal(t, 1, topic.NumSubscribers())
 	})
 
+	t.Run("subscribing the same worker twice panics", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+		w := NewWorker(func(j Job[int]) {})
+		sub := w.WithPersistentTopic(topic, "a")
+
+		assert.Panics(t, func() { w.WithPersistentTopic(topic, "a") }, "same group")
+		assert.Panics(t, func() { w.WithPersistentTopic(topic, "b") }, "another group would process every payload twice")
+		assert.False(t, storage.HasGroup("b"), "the rejected bind joins nothing")
+		assert.Equal(t, 1, topic.NumSubscribers())
+
+		assert.NoError(t, sub.Close())
+		assert.NotPanics(t, func() { w.WithPersistentTopic(topic, "a") }, "rebinding after close is allowed")
+		assert.Equal(t, 1, topic.NumSubscribers())
+	})
+
+	t.Run("topic priority orders a worker's topics", func(t *testing.T) {
+		low := NewPersistentTopic[int](mocks.NewMockPersistentTopic())
+		high := NewPersistentTopic[int](mocks.NewMockPersistentTopic())
+
+		var mu sync.Mutex
+		var seen []int
+		w := NewWorker(func(j Job[int]) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = append(seen, j.Data())
+		})
+		assert.NoError(t, w.PauseAndWait())
+		w.WithPersistentTopic(low, "g", WithTopicPriority(5))
+		w.WithPersistentTopic(high, "g", WithTopicPriority(1))
+
+		assert.True(t, low.Publish(1))
+		assert.True(t, low.Publish(2))
+		assert.True(t, high.Publish(10))
+		assert.True(t, high.Publish(20))
+
+		assert.NoError(t, w.Resume())
+		waitOrTimeout(t, time.Second, w.Wait)
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, []int{10, 20, 1, 2}, seen)
+	})
+
 	t.Run("guards", func(t *testing.T) {
 		w := NewWorker(func(j Job[int]) {})
 		topic := NewPersistentTopic[int](mocks.NewMockPersistentTopic())

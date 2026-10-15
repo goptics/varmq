@@ -420,6 +420,68 @@ func WithQueuePriority(priority int) QueueConfigFunc {
 	}
 }
 
+// TopicConfigFunc configures a topic or a worker's subscription to one, like
+// QueueConfigFunc does for queues: NewTopic reads the capacity, WithTopic and
+// WithPersistentTopic read the priority.
+type TopicConfigFunc func(*topicConfig)
+
+type topicConfig struct {
+	priority int
+	capacity int
+}
+
+func loadTopicConfigs(configs ...TopicConfigFunc) topicConfig {
+	c := topicConfig{
+		priority: math.MaxInt,
+	}
+	for _, config := range configs {
+		config(&c)
+	}
+	return c
+}
+
+// WithTopicPriority sets the priority of a topic subscription among the
+// worker's sources, the same way WithQueuePriority does for a bound queue.
+//
+// A worker can read from several topics and queues. Under the default
+// Priority strategy it takes the next job from the source with the lowest
+// number that has pending payloads; ties keep subscription order. Other
+// strategies (RoundRobin, MaxLen, MinLen) ignore it.
+//
+// Example:
+//   - worker.WithTopic(orders, varmq.WithTopicPriority(1)): read orders first.
+//
+// Default behavior: without this option the subscription gets the lowest
+// possible priority (math.MaxInt).
+func WithTopicPriority(priority int) TopicConfigFunc {
+	return func(c *topicConfig) {
+		c.priority = priority
+	}
+}
+
+// WithTopicCapacity bounds an in-memory topic, passed to NewTopic.
+//
+// A payload stays in the topic until every subscription has read it, so one
+// slow, paused or starved subscriber makes the topic keep everything published
+// since it fell behind. With a capacity, Publish returns false once the
+// slowest subscription has that many unread payloads, the way Add does on a
+// full queue. The refused payload reaches no subscriber. Room comes back as
+// that subscription reads, purges or unsubscribes.
+//
+// Parameters:
+//   - capacity: The maximum number of unread payloads for the slowest
+//     subscription. Values less than 1 mean unlimited.
+//
+// Example:
+//   - varmq.NewTopic[Order](varmq.WithTopicCapacity(10_000))
+//
+// Default behavior: unlimited.
+func WithTopicCapacity(capacity int) TopicConfigFunc {
+	return func(c *topicConfig) {
+		c.capacity = max(0, capacity)
+	}
+}
+
 // WithQueueCapacity configures the maximum number of pending items a queue can hold.
 //
 // When the queue reaches its capacity, subsequent Add calls will return false,

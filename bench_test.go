@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -19,6 +20,31 @@ func errTask(j Job[int]) error {
 		return errors.New("odd number error")
 	}
 	return nil
+}
+
+// BenchmarkPublish benchmarks topic fan-out: one op is one Publish, and the
+// timer runs until every subscribed worker has processed every payload.
+func BenchmarkPublish(b *testing.B) {
+	for _, subscribers := range []int{1, 10} {
+		b.Run(fmt.Sprintf("Subscribers=%d", subscribers), func(b *testing.B) {
+			topic := NewTopic[int]()
+			workers := make([]IWorkerBinder[int], subscribers)
+			for i := range workers {
+				workers[i] = NewWorker(task)
+				workers[i].WithTopic(topic)
+				defer workers[i].StopAndWait()
+			}
+
+			b.ResetTimer()
+			for i := range b.N {
+				topic.Publish(i)
+			}
+
+			for _, w := range workers {
+				w.Wait()
+			}
+		})
+	}
 }
 
 // BenchmarkAdd benchmarks the Add operation across different queue types.

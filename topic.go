@@ -37,10 +37,16 @@ import (
 type Topic[T any] interface {
 	// Publish appends data to the topic and wakes every subscriber's worker.
 	//
-	// It returns false only when nothing will read the payload: zero
-	// subscriptions, or the topic closed. To wait for a subscriber to finish
-	// its payloads, use its Worker's Wait.
+	// It returns false, and no subscriber gets the payload, when there are
+	// zero subscriptions, the topic is closed, or the topic is full: its
+	// slowest subscription already has WithTopicCapacity unread payloads. To
+	// wait for a subscriber to finish its payloads, use its Worker's Wait.
 	Publish(data T) bool
+	// IsFull reports whether the topic has reached its WithTopicCapacity: its
+	// slowest subscription already has that many unread payloads, so Publish
+	// would return false. It is always false without a capacity. The answer
+	// can change right after the call; Publish's result is authoritative.
+	IsFull() bool
 	// NumSubscribers returns the number of subscriptions attached in this
 	// process.
 	NumSubscribers() int
@@ -48,21 +54,24 @@ type Topic[T any] interface {
 	// return false. It is idempotent and always returns nil.
 	Close() error
 
-	subscribe(w *worker[T, iJob[T]]) *subscription[T]
+	subscribe(w *worker[T, iJob[T]], priority int) *subscription[T]
 }
 
 type topic[T any] struct {
 	// mx guards subs and closed, and is held for writing whenever a cursor is
 	// created or closed, so the log's open cursors are always exactly subs.
-	mx     sync.RWMutex
-	log    *topics.Log[T]
-	subs   []*subscription[T]
-	closed bool
+	mx       sync.RWMutex
+	log      *topics.Log[T]
+	capacity int // WithTopicCapacity; also each subscription's IsFull limit
+	subs     []*subscription[T]
+	closed   bool
 }
 
 // NewTopic creates an in-memory topic. See [Topic] for its semantics.
-func NewTopic[T any]() Topic[T] {
-	return &topic[T]{log: topics.NewLog[T]()}
+// configs takes topic options such as WithTopicCapacity.
+func NewTopic[T any](configs ...TopicConfigFunc) Topic[T] {
+	capacity := loadTopicConfigs(configs...).capacity
+	return &topic[T]{log: topics.NewBoundedLog[T](capacity), capacity: capacity}
 }
 
 func (t *topic[T]) Publish(data T) bool {
@@ -83,6 +92,10 @@ func (t *topic[T]) Publish(data T) bool {
 	}
 
 	return true
+}
+
+func (t *topic[T]) IsFull() bool {
+	return t.log.Full()
 }
 
 func (t *topic[T]) NumSubscribers() int {
@@ -111,19 +124,26 @@ func (t *topic[T]) Close() error {
 	return nil
 }
 
-// subscribe attaches a new cursor for w. The source is registered with the
-// worker while t.mx is held, so no payload can land in a cursor whose worker
-// cannot see it yet. Lock order: t.mx, then the worker's source manager, then
-// the log.
-func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
+// subscribe attaches a new cursor for w at the given source priority. The
+// source is registered with the worker while t.mx is held, so no payload can
+// land in a cursor whose worker cannot see it yet. Lock order: t.mx, then the
+// worker's source manager, then the log.
+func (t *topic[T]) subscribe(w *worker[T, iJob[T]], priority int) *subscription[T] {
 	t.mx.Lock()
 	defer t.mx.Unlock()
+
+	for _, s := range t.subs {
+		if s.worker == w {
+			panic("varmq: worker is already subscribed to this topic")
+		}
+	}
 
 	cursor := t.log.NewCursor()
 	view := &topicView[T]{cursor: cursor}
 	src := &topicSource[T]{cursor: cursor, w: w}
 	s := &subscription[T]{
-		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
+		// The topic's capacity makes IsFull report this subscription holding the topic full.
+		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity))),
 		worker:            w,
 		view:              view,
 		src:               src,
@@ -136,7 +156,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]]) *subscription[T] {
 		return s
 	}
 
-	w.addSource(src, loadQueueConfigs().priority)
+	w.addSource(src, priority)
 	t.subs = append(t.subs, s)
 
 	return s
@@ -157,6 +177,10 @@ func (t *topic[T]) unsubscribe(s *subscription[T]) {
 // Len and Purge act on what this subscription has not read yet. For a
 // persistent topic that is the group's backlog, shared with every reader of
 // the group. Purge never calls Close on payloads.
+//
+// IsFull reports whether this subscription has as many unread payloads as the
+// topic's WithTopicCapacity, so it is the one making Publish return false. It
+// is always false without a capacity, and for persistent topics.
 //
 // Close detaches this handle. For an in-memory topic it is the same as
 // Unsubscribe; for a persistent topic the group keeps its position, so

@@ -32,7 +32,7 @@ type PersistentTopic[T any] interface {
 	// messages are delivered again.
 	Close() error
 
-	bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string)) Subscription[T]
+	bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string), priority int) Subscription[T]
 }
 
 // NewPersistentTopic wraps durable topic storage. It panics on nil storage.
@@ -110,10 +110,10 @@ func (t *durableTopic[T]) Close() error {
 	return t.storage.Close()
 }
 
-// bindGroup joins the group, binds a view of it to w as a source, and records
-// the subscription. Lock order: t.mx, then storage, then the worker's source
-// manager.
-func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string)) Subscription[T] {
+// bindGroup joins the group, binds a view of it to w as a source at the given
+// priority, and records the subscription. Lock order: t.mx, then storage,
+// then the worker's source manager.
+func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent func(action string), priority int) Subscription[T] {
 	view := &groupView{storage: t.storage, group: group}
 	s := &durableSubscription[T]{
 		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs()),
@@ -123,6 +123,13 @@ func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent
 	}
 
 	t.mx.Lock()
+
+	for _, cur := range t.subs {
+		if cur.worker == w {
+			t.mx.Unlock()
+			panic("varmq: worker is already subscribed to this topic")
+		}
+	}
 
 	if t.closed {
 		t.mx.Unlock()
@@ -144,7 +151,7 @@ func (t *durableTopic[T]) bindGroup(w *worker[T, iJob[T]], group string, onEvent
 		s.cancel = t.subscribe(group, onEvent)
 	}
 
-	s.src = w.bind(view, loadQueueConfigs().priority)
+	s.src = w.bind(view, priority)
 	t.subs = append(t.subs, s)
 
 	// The group may already hold payloads, for example after a restart.

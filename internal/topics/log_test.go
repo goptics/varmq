@@ -81,6 +81,48 @@ func TestLog(t *testing.T) {
 		assert.Equal(t, []int{1, 2}, drain(b))
 	})
 
+	t.Run("a limit refuses appends while the slowest cursor is that far behind", func(t *testing.T) {
+		l := NewBoundedLog[int](2)
+		fast, slow := l.NewCursor(), l.NewCursor()
+
+		assert.Equal(t, 2, l.Append(1))
+		assert.Equal(t, 2, l.Append(2))
+		assert.True(t, l.Full())
+		assert.Equal(t, 0, l.Append(3), "slow has 2 unread")
+
+		drain(fast)
+		assert.Equal(t, 0, l.Append(3), "the slowest cursor decides, not the fastest")
+
+		_, _ = slow.Dequeue()
+		assert.False(t, l.Full())
+		assert.Equal(t, 2, l.Append(3), "reading frees room")
+		assert.Equal(t, 0, l.Append(4))
+
+		slow.Purge()
+		drain(fast)
+		assert.Equal(t, 2, l.Append(4), "purge frees room")
+		assert.Equal(t, 2, l.Append(5))
+		assert.Equal(t, 0, l.Append(6))
+
+		drain(fast)
+		assert.Equal(t, 0, l.Append(6), "slow still has 2 unread")
+		slow.Close()
+		assert.Equal(t, 1, l.Append(6), "closing the slow cursor frees room")
+		assert.Equal(t, 1, l.Append(7))
+		assert.Equal(t, 0, l.Append(8), "now fast is the slowest, 2 behind")
+		assert.Equal(t, []int{6, 7}, drain(fast))
+	})
+
+	t.Run("limit 0 is unbounded", func(t *testing.T) {
+		l := NewBoundedLog[int](0)
+		assert.False(t, l.Full(), "no cursors")
+		l.NewCursor()
+		for i := range 5000 {
+			assert.Equal(t, 1, l.Append(i))
+		}
+		assert.False(t, l.Full())
+	})
+
 	t.Run("append without cursors stores nothing", func(t *testing.T) {
 		l := NewLog[int]()
 		assert.Equal(t, 0, l.Append(1))
@@ -92,16 +134,16 @@ func TestLog(t *testing.T) {
 		c := l.NewCursor()
 		first := c.chunk
 		assert.NotNil(t, first)
-		assert.Equal(t, initialChunkCapacity, first.Cap())
+		assert.Equal(t, initialChunkCapacity, len(first.data))
 
 		for i := 0; i < 3*initialChunkCapacity; i++ {
 			l.Append(i)
 		}
 
 		assert.Same(t, first, c.chunk, "unread cursor still sits on its first chunk")
-		assert.Equal(t, initialChunkCapacity, first.Cap(), "first chunk was not reallocated")
-		assert.NotNil(t, first.Next, "later items live in linked chunks")
-		assert.Greater(t, first.Next.Cap(), first.Cap(), "chunks grow 1.5x")
+		assert.Equal(t, initialChunkCapacity, len(first.data), "first chunk was not reallocated")
+		assert.NotNil(t, first.next.Load(), "later items live in linked chunks")
+		assert.Greater(t, len(first.next.Load().data), len(first.data), "chunks grow 1.5x")
 		assert.Equal(t, 3*initialChunkCapacity, c.Len())
 		assert.Equal(t, 3*initialChunkCapacity, len(drain(c)))
 	})
@@ -177,6 +219,57 @@ func TestLog(t *testing.T) {
 		assert.Equal(t, 0, b.Len(), "new cursor starts after everything published before it")
 		assert.Equal(t, 1, l.Append(3))
 		assert.Equal(t, []int{3}, drain(b))
+	})
+
+	t.Run("readers crossing chunk boundaries see the same full sequence", func(t *testing.T) {
+		const writers, perWriter, readers = 4, 20_000, 6
+		const total = writers * perWriter // spans several chunks: 1024, 1536, 2304, ...
+
+		l := NewLog[int]()
+		cursors := make([]*Cursor[int], readers)
+		for i := range cursors {
+			cursors[i] = l.NewCursor()
+		}
+
+		seqs := make([][]int, readers)
+		var wg sync.WaitGroup
+		deadline := time.Now().Add(20 * time.Second)
+		for r, c := range cursors {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for len(seqs[r]) < total && time.Now().Before(deadline) {
+					if n := c.Len(); n < 0 || n > total {
+						t.Errorf("reader %d: Len %d out of range", r, n)
+						return
+					}
+					if v, ok := c.Dequeue(); ok {
+						seqs[r] = append(seqs[r], v)
+					} else {
+						runtime.Gosched()
+					}
+				}
+			}()
+		}
+		for w := range writers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range perWriter {
+					l.Append(w*perWriter + i)
+				}
+			}()
+		}
+		wg.Wait()
+
+		seen := make(map[int]bool, total)
+		for _, v := range seqs[0] {
+			seen[v] = true
+		}
+		assert.Len(t, seen, total, "every item read exactly once, none skipped at a chunk boundary")
+		for r := 1; r < readers; r++ {
+			assert.Equal(t, seqs[0], seqs[r], "reader %d saw a different sequence", r)
+		}
 	})
 
 	t.Run("concurrent append and read", func(t *testing.T) {
