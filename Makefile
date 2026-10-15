@@ -23,7 +23,7 @@ test:
 	go test -race -count=1 -timeout 5m -v ./...
 
 bench:
-	go test -bench=. -timeout 5m -benchmem
+	go test -bench=. -timeout 5m -benchmem -cpu=1
 
 # Format codes
 format:
@@ -31,7 +31,7 @@ format:
 
 # Regenerate animated README diagrams
 diagrams:
-	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority; do \
+	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority topic:topic; do \
 		python3 gen_$${d#*:}.py $${d%:*}.tpl.svg ../varmq-$${d%:*}.svg > /dev/null || exit 1; \
 	done
 

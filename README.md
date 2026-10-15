@@ -220,51 +220,45 @@ The Queue Manager picks which bound queue the next job comes from. With `varmq.W
 
 ### Topic (Fan-out)
 
-A `Topic` is the opposite of multi queue binding: one producer, many workers. Every `Publish` reaches each subscribed worker, and each worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed.
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Publish once and every subscribed worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed.
+
+| | Queue | Topic |
+|---|---|---|
+| Who gets a job | each job is processed once, by one worker | every subscribed worker gets its own job |
+| Storage | the job is removed once a worker takes it | the payload is stored once; each worker reads it with its own cursor, and it's freed after every worker has read it |
+| Producer | `queue.Add(x)` | `topic.Publish(x)` |
+| Late joiner | sees jobs still waiting in the queue | sees only what's published after it subscribed |
 
 ```go
-topic := varmq.NewTopic[Order]()
+topic := varmq.NewTopic[int]()
 
-varmq.NewWorker(func(j varmq.Job[Order]) {
-	sendEmail(j.Data())
-}).WithTopic(topic)
+email := varmq.NewWorker(func(j varmq.Job[int]) {
+  fmt.Printf("Emailing order %d\n", j.Data())
+  time.Sleep(1 * time.Second)
+}) // concurrency 1
+stock := varmq.NewWorker(func(j varmq.Job[int]) {
+  fmt.Printf("Updating stock for order %d\n", j.Data())
+  time.Sleep(300 * time.Millisecond)
+}, 2) // concurrency 2
+defer email.WaitUntilIdle()
+defer stock.WaitUntilIdle()
 
-varmq.NewWorker(func(j varmq.Job[Order]) {
-	updateStock(j.Data())
-}, 4).WithTopic(topic)
+email.WithTopic(topic)
+stock.WithTopic(topic)
 
-topic.Publish(order) // both workers receive their own copy
+for order := range 4 {
+  topic.Publish(order) // both workers get all 4 orders
+}
 ```
 
-Semantics are those of a fanout exchange, not a replayable log:
+↗️ **[Run it on Playground](https://go.dev/play/p/NeIa69kRi5s)**
 
-- No history. A worker that subscribes after a `Publish` never sees that payload.
-- Payloads are stored once in a shared log of linked chunks, the same buffer the queues use, so publishing never copies what is already buffered. Each subscription reads at its own position, so a slow worker never blocks the publisher or the others. A chunk is freed once the slowest subscription has moved past it, so a paused or stalled worker keeps everything published since it stalled until it catches up or unsubscribes.
-- The payload is copied by value. Pointer payloads are shared between subscribers.
-- `WithTopic` returns a `Subscription` with `Len`, `Purge`, `Unsubscribe` (alias `Close`), but no `Add`: the topic is the only producer.
-- A worker can combine `WithTopic` with `BindQueue` and other topics; its strategy decides the order across them.
+`Publish` stores the payload once in the topic's log and wakes every subscribed worker. Each subscription reads the log through its own cursor, so the fast stock worker runs ahead without waiting for the email worker. A payload stays in the log until every cursor has read it, and a chunk of the log is freed once the slowest cursor has moved past it:
 
-#### Persistent topics
+![VarMQ topic fan-out with two subscribed workers](./assets/diagrams/varmq-topic.svg)
 
-Back a topic with durable storage and give each subscriber a **group** name. Every group gets every payload published after it first joined, workers on the same group share its payloads, and a group resumes where it stopped after a restart.
-
-```go
-topic := varmq.NewPersistentTopic[Order](storage) // storage implements varmq.IPersistentTopic
-
-varmq.NewWorker(func(j varmq.Job[Order]) {
-	sendEmail(j.Data())
-}).WithPersistentTopic(topic, "email")
-
-varmq.NewWorker(func(j varmq.Job[Order]) {
-	updateStock(j.Data())
-}, 4).WithPersistentTopic(topic, "stock")
-
-topic.Publish(order, varmq.WithJobId(order.ID))
-```
-
-- `Close` on a subscription detaches it and keeps the group's position. `Unsubscribe` deletes the group, which also detaches every subscription on that group in this process.
-- Delivery is at least once: a message is acknowledged when its worker finishes the job, and the storage delivers unacknowledged messages again, so handlers should be idempotent.
-- Stop the workers before closing the topic.
+> [!Note]
+> Persistent topics are supported too: `varmq.NewPersistentTopic` with `worker.WithPersistentTopic(topic, "group")` keeps payloads in durable storage, every group gets every payload, workers on one group share it, and delivery is at least once. They need an `IPersistentTopic` adapter, and none has been released yet.
 
 ### Result and Error Worker
 

@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ topic fan-out with two subscribed workers</title>
+  <desc id="desc">Two workers subscribe to one in-memory topic: sendEmail with concurrency 1 and updateStock with concurrency 2. Publish is called four times. Each payload is appended once to a shared log made of linked chunks (drawn with two slots per chunk) and every Publish wakes both workers' event loops. Each subscription reads the log through its own cursor and turns every payload into its own job, so both workers process all four payloads. updateStock is faster and its cursor runs ahead; the slow sendEmail cursor never blocks it. A payload stays in the log until every cursor has read it, and a chunk is freed by the garbage collector only once the slowest cursor has moved past it, so the middle chunk is kept while the email cursor still sits on it.</desc>
+  <style>
+    :root {
+      --dur: {D}s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+      --c1: #0969da; --c2: #bc4c00;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+        --c1: #58a6ff; --c2: #f0883e;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .loop { stroke: var(--el); stroke-width: 2; }
+    .wk { stroke: var(--worker); }
+    .pool { fill: none; stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .prod { stroke: var(--item); stroke-width: 2; }
+    .chunk { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .item { fill: var(--item); }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .rail1 { fill: none; stroke: var(--c1); stroke-width: 1.5; }
+    .rail2 { fill: none; stroke: var(--c2); stroke-width: 1.5; }
+    .cur1 { fill: var(--c1); }
+    .cur2 { fill: var(--c2); }
+    .sig { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .arrow { fill: var(--line); }
+    .arrow-sig { fill: var(--signal); }
+    .arrow-c1 { fill: var(--c1); }
+    .arrow-c2 { fill: var(--c2); }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .s { fill: var(--signal); }
+    .k1 { fill: var(--c1); font-weight: 600; }
+    .k2 { fill: var(--c2); font-weight: 600; }
+    .why { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .keep { fill: var(--c1); }
+    .free { fill: var(--muted); }
+    .lg { font-size: 12px; fill: var(--muted); text-anchor: start; }
+
+    /* motion: one shared --dur loop; keyframes generated from a simulated timeline, keyframe name == element id */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    .ring { fill: none; stroke: var(--el); stroke-width: 2; transform-origin: center; }
+    .g-item { fill: var(--item); }
+    .g-wk { fill: var(--worker); }
+    .bar { fill: var(--worker); transform-origin: left center; }
+    .sigdot { fill: var(--signal); }
+    .jobdot { fill: var(--job); }
+    /*KEYFRAMES*/
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -{STILL}s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-sig" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="a1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-c1" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="a2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-c2" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="439" rx="12"/>
+
+  <g transform="translate(150 26)">
+    <rect class="item" x="0" y="-6" width="12" height="12" rx="3"/><text class="lg" x="20" y="0">payload, stored once in the log</text>
+    <circle class="jobdot" cx="6" cy="20" r="6"/><text class="lg" x="20" y="20">job: one per subscriber</text>
+    <path class="cur1" d="M0 34H12L6 44Z"/><text class="lg" x="20" y="40">cursor (next unread)</text>
+    <circle class="sigdot" cx="236" cy="0" r="5"/><text class="lg" x="250" y="0">signal to a worker's event loop</text>
+    <rect style="fill: var(--worker)" x="230" y="17" width="12" height="6" rx="2"/><text class="lg" x="250" y="20">worker busy</text>
+  </g>
+
+  <!-- Publish wakes every subscriber's event loop -->
+  <path class="sig" d="M44 228V106H640V146" marker-end="url(#as)"/>
+  <path class="sig" d="M44 276V418H640V364" marker-end="url(#as)"/>
+  <text class="m s" x="330" y="94">Publish → notifyToPullNextJobs() on each subscriber</text>
+
+  <!-- producer -->
+  <rect class="box prod" x="20" y="230" width="96" height="44" rx="8"/>
+  <rect id="pub-glow" class="a g-item" x="20" y="230" width="96" height="44" rx="8"/>
+  <text class="t" x="68" y="252">Publish</text>
+  <path class="edge" d="M116 252H138" marker-end="url(#a)"/>
+
+  <!-- shared log: linked chunks, two slots each in this drawing -->
+  <text class="h" x="150" y="168">Topic log</text>
+  <text class="m" x="222" y="168" style="text-anchor:start">append-only, linked chunks</text>
+  <g id="c0" class="a"><rect class="chunk" x="150" y="229" width="84" height="46" rx="8"/></g>
+  <g id="c1" class="a"><rect class="chunk" x="264" y="229" width="84" height="46" rx="8"/></g>
+  <g id="c2" class="a"><rect class="chunk" x="378" y="229" width="84" height="46" rx="8"/></g>
+  <path id="l1" class="a edge" d="M234 252H262" marker-end="url(#a)"/>
+  <path id="l2" class="a edge" d="M348 252H376" marker-end="url(#a)"/>
+  <text id="keep" class="why keep a" x="306" y="328">kept: email cursor on it</text>
+  <text id="free0" class="why free a" x="192" y="328">freed by GC</text>
+  <text id="free1" class="why free a" x="306" y="328">freed by GC</text>
+
+  <rect id="o0" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+  <rect id="o1" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+  <rect id="i0" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+  <rect id="i1" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+  <rect id="i2" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+  <rect id="i3" class="item a" x="0" y="237" width="30" height="30" rx="5"/>
+
+  <!-- subscriptions: each reads the log through its own cursor -->
+  <path class="rail1" d="M150 208H520V166H546" marker-end="url(#a1)"/>
+  <text class="m k1" x="150" y="196" style="text-anchor:start">email subscription</text>
+  <path class="rail2" d="M150 296H520V344H546" marker-end="url(#a2)"/>
+  <text class="m k2" x="150" y="308" style="text-anchor:start">stock subscription</text>
+  <path id="cure" class="cur1 a" d="M-6 0H6L0 10Z"/>
+  <path id="curs" class="cur2 a" d="M-6 10H6L0 0Z"/>
+
+  <!-- worker: sendEmail, concurrency 1 -->
+  <rect class="pool" x="548" y="118" width="372" height="96" rx="10"/>
+  <text class="h" x="560" y="134">sendEmail</text>
+  <text class="m" x="908" y="134" style="text-anchor:end">WithTopic · concurrency 1</text>
+  <rect class="box loop" x="566" y="150" width="100" height="32" rx="8"/>
+  <rect id="ring1" class="a ring" x="566" y="150" width="100" height="32" rx="8"/>
+  <text class="t" x="616" y="166">Event Loop</text>
+  <path class="edge" d="M666 166H700" marker-end="url(#a)"/>
+  <rect class="box" x="702" y="146" width="50" height="40" rx="6"/><text class="m" x="727" y="166">ch1</text>
+  <path class="edge" d="M752 166H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="146" width="120" height="40" rx="6"/>
+  <rect id="e0-glow" class="a g-wk" x="770" y="146" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="160">Worker 1</text>
+  <rect class="track" x="785" y="175" width="90" height="4" rx="2"/>
+  <rect id="e0-bar" class="a lin bar" x="785" y="175" width="90" height="4" rx="2"/>
+
+  <!-- worker: updateStock, concurrency 2 -->
+  <rect class="pool" x="548" y="270" width="372" height="134" rx="10"/>
+  <text class="h" x="560" y="286">updateStock</text>
+  <text class="m" x="908" y="286" style="text-anchor:end">WithTopic · concurrency 2</text>
+  <rect class="box loop" x="566" y="328" width="100" height="32" rx="8"/>
+  <rect id="ring2" class="a ring" x="566" y="328" width="100" height="32" rx="8"/>
+  <text class="t" x="616" y="344">Event Loop</text>
+  <path class="edge" d="M666 344H684M684 322V366"/>
+  <path class="edge" d="M684 322H700" marker-end="url(#a)"/>
+  <path class="edge" d="M684 366H700" marker-end="url(#a)"/>
+  <rect class="box" x="702" y="302" width="50" height="40" rx="6"/><text class="m" x="727" y="322">ch1</text>
+  <path class="edge" d="M752 322H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="302" width="120" height="40" rx="6"/>
+  <rect id="s0-glow" class="a g-wk" x="770" y="302" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="316">Worker 1</text>
+  <rect class="track" x="785" y="331" width="90" height="4" rx="2"/>
+  <rect id="s0-bar" class="a lin bar" x="785" y="331" width="90" height="4" rx="2"/>
+  <rect class="box" x="702" y="346" width="50" height="40" rx="6"/><text class="m" x="727" y="366">ch2</text>
+  <path class="edge" d="M752 366H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="346" width="120" height="40" rx="6"/>
+  <rect id="s1-glow" class="a g-wk" x="770" y="346" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="360">Worker 2</text>
+  <rect class="track" x="785" y="375" width="90" height="4" rx="2"/>
+  <rect id="s1-bar" class="a lin bar" x="785" y="375" width="90" height="4" rx="2"/>
+
+  <!-- moving tokens on top -->
+  <!--TOKENS-->
+</svg>

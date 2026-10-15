@@ -14,13 +14,14 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 | `varmq-worker-pool.svg` | `gen_pool.py` | `worker-pool.tpl.svg` | `Add` ×6, concurrency 4 |
 | `varmq-priority-queue.svg` | `gen_priority.py` | `priority-queue.tpl.svg` | priority queue reordering, concurrency 1 |
 | `varmq-multi-queue.svg` | `gen_multi.py` | `multi-queue.tpl.svg` | 3 queues, RoundRobin, concurrency 2 |
+| `varmq-topic.svg` | `gen_topic.py` | `topic.tpl.svg` | in-memory topic, 2 subscribers, per-cursor reads, chunk freeing |
 
 ## How it works
 
 - Template = static SVG (layout, colours, text). Generator = timeline. It writes `@keyframes` into the template's `/*KEYFRAMES*/` slot.
 - Timelines are authored in **seconds**; `kfu.py` converts them to `%` of the loop length `D`. Keyframe name == element `id`.
 - `kfu.Path` moves a dot at constant speed along straight segments; dots hide (opacity 0) while inside boxes.
-- `gen_multi.py` derives its timeline from a small simulation of the event loop (round-robin, worker slots, signals).
+- `gen_multi.py` and `gen_topic.py` derive their timelines from a small simulation of the event loop (worker slots, signals, cursors). `topic.tpl.svg` has a `<!--TOKENS-->` slot for the moving dots the simulation creates.
 - `gen_single.py` predates `kfu.py` and keeps its own hand-written timeline.
 
 ## Rules (why it is built this way)
