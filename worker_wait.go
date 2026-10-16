@@ -46,8 +46,9 @@ func (w *worker[T, JobType]) Wait() {
 
 // waitForChange blocks until the waiters are woken. Callers hold w.mx.
 //
-// A finished job always wakes them, and it can only finish under w.mx, so it
-// cannot slip past a caller. But a source shared with other workers or
+// The job that brings the running count to 0 always wakes them under w.mx,
+// after the decrement, so it cannot slip past a caller: either the caller
+// sees 0, or it is already waiting when the broadcast comes. But a source shared with other workers or
 // processes (one queue bound to several workers, a persistent topic group, a
 // distributed queue) can be drained by someone else while this worker runs
 // nothing, and nothing then wakes its waiters. So while no job is running, it
