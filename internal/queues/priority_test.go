@@ -2,6 +2,7 @@ package queues
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -114,6 +115,24 @@ func TestPriorityQueue(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(2, val, "dequeue should return the first element")
 		assert.Equal(1, pq.Len(), "queue should have length 1 after dequeuing from closed queue")
+	})
+
+	// An Enqueue already waiting for the lock when Close runs must observe the
+	// closed flag, otherwise it appends after a following Purge to a queue
+	// nobody drains.
+	t.Run("Close rejects an Enqueue waiting for the lock", func(t *testing.T) {
+		q := NewPriorityQueue[int]()
+		q.mx.Lock()
+
+		res := make(chan bool, 1)
+		go func() { res <- q.Enqueue(1, 0) }()
+
+		time.Sleep(50 * time.Millisecond)
+		q.Close()
+		q.mx.Unlock()
+
+		assert.False(t, <-res)
+		assert.Equal(t, 0, q.Len())
 	})
 
 	t.Run("SetCapacity", func(t *testing.T) {
