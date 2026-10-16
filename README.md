@@ -220,7 +220,7 @@ The Queue Manager picks which bound queue the next job comes from. With `varmq.W
 
 ### Topic (Fan-out)
 
-A `Topic` is the opposite of multi queue binding: one producer, many workers. Publish once and every subscribed worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed.
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Publish once and every subscribed worker gets its own job. `Publish` returns `false` when no subscription is attached, the topic is closed, or it is full.
 
 | | Queue | Topic |
 |---|---|---|
