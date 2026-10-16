@@ -386,6 +386,43 @@ func TestPersistentTopic(t *testing.T) {
 		assert.Equal(t, []int{10, 20, 1, 2}, seen)
 	})
 
+	t.Run("wait returns when another reader drains the group", func(t *testing.T) {
+		storage := mocks.NewMockPersistentTopic()
+		topic := NewPersistentTopic[int](storage)
+		w := NewWorker(func(j Job[int]) {})
+		w.WithPersistentTopic(topic, "jobs")
+		time.Sleep(20 * time.Millisecond) // let the loop consume the bind-time signal
+
+		// Written straight to storage, as another process would: this worker
+		// is not signalled, so it sees one pending message it never runs.
+		payload, err := newJob(1, loadJobConfigs(newConfig())).Json()
+		assert.NoError(t, err)
+		assert.True(t, storage.Publish(payload))
+		assert.Equal(t, 1, w.NumPending())
+
+		done := make(chan struct{})
+		go func() {
+			w.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("Wait returned while a message was pending")
+		case <-time.After(50 * time.Millisecond): // Wait is now asleep
+		}
+
+		// Another reader takes it; nothing in this worker changes.
+		_, ok, _ := storage.DequeueGroup("jobs")
+		assert.True(t, ok)
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Wait did not return after another reader drained the group")
+		}
+	})
+
 	t.Run("guards", func(t *testing.T) {
 		w := NewWorker(func(j Job[int]) {})
 		topic := NewPersistentTopic[int](mocks.NewMockPersistentTopic())

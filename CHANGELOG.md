@@ -13,6 +13,7 @@
 
 ### 🐛 Bug Fixes
 
+- **Wait hanging on a shared source**: `Wait` and `WaitUntilIdle` could sleep forever when another worker or process drained a source this worker shares (one queue bound to several workers, a persistent topic group, a distributed queue), because only this worker's own finished jobs woke them. While no job is running they now also re-check every 10 ms.
 - **Enqueue racing Close**: `Queue.Enqueue` and `PriorityQueue.Enqueue` in `internal/queues` now check the closed flag while holding the queue lock, so an item can no longer land after `Close` followed by `Purge`.
 
 ### 🔧 Refactoring
