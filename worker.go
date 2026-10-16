@@ -39,7 +39,8 @@ type worker[T any, JobType iJob[T]] struct {
 	sourcesMx       sync.Mutex
 	metrics         Metrics
 	concurrency     atomic.Uint32
-	curProcessing   atomic.Uint32
+	curProcessing   atomic.Uint32 // jobs taken from the sources and not yet finished
+	busyWorkers     atomic.Uint32 // pool goroutines serving a batch; bounded by concurrency
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	errorChan       chan error

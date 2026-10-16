@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/goptics/varmq/internal/pool"
 )
 
 func (w *worker[T, JobType]) goEventLoop() {
@@ -21,7 +23,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.NumPending() > 0 {
+				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.NumPending() > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -35,54 +37,87 @@ func (w *worker[T, JobType]) goEventLoop() {
 	}(w.ctx, w.eventLoopSignal)
 }
 
-func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	w.curProcessing.Add(1)
-	w.status.CompareAndSwap(idle, running)
+// maxBatch caps how many jobs one wake-up hands to a worker.
+const maxBatch = 32
 
-	j, err := w.manager().Next()
-	if err != nil {
-		w.releaseProcessingSlot()
-		if errors.Is(err, errNoReadySource) {
-			return false, nil
-		}
-		return true, err
-	}
-
-	if j.IsClosed() {
-		w.releaseProcessingSlot()
-		return true, nil
-	}
-
-	j.changeStatus(processing)
-
-	w.sendToNextChannel(j)
-
-	return true, nil
+// batchSize is each free worker's share of the backlog, at least 1 and at
+// most maxBatch. With a shallow backlog it is 1, so no worker sits on jobs
+// another could run; with a deep one every worker would be busy anyway and
+// the wake-up cost is spread over the batch.
+func batchSize(pending, free int) int {
+	return max(1, min(pending/max(free, 1), free, maxBatch))
 }
 
-// releaseProcessingSlot frees a slot without w.mx unless it was the last one:
-// waiters are only woken when processing reaches 0. See waitForChange for why
-// the decrement may happen before the lock.
-func (w *worker[T, JobType]) releaseProcessingSlot() {
-	processing := w.curProcessing.Add(^uint32(0))
-	if processing == 0 {
+// processNextJob hands the next batch of jobs to one worker. Concurrency
+// bounds busy workers, not jobs: a batch occupies one worker however many
+// jobs it holds. Jobs are counted before dequeuing so Wait never sees an
+// empty queue and zero processing while one is in flight.
+func (w *worker[T, JobType]) processNextJob() (bool, error) {
+	w.status.CompareAndSwap(idle, running)
+
+	free := int(w.concurrency.Load() - w.busyWorkers.Load())
+	k := batchSize(w.NumPending(), free)
+	w.busyWorkers.Add(1)
+	w.curProcessing.Add(uint32(k))
+
+	node := w.pool.PopBack()
+	if node == nil {
+		node = w.initPoolNode()
+	}
+	buf := node.Value.Batch(k)
+
+	n, cont, err := 0, true, error(nil)
+	for n < k {
+		j, nextErr := w.manager().Next()
+		if nextErr != nil {
+			if errors.Is(nextErr, errNoReadySource) {
+				cont = false
+			} else {
+				err = nextErr
+			}
+			break
+		}
+		if j.IsClosed() {
+			continue
+		}
+		j.changeStatus(processing)
+		buf[n] = j
+		n++
+	}
+
+	if n == 0 {
+		w.pool.PushNode(node)
+		w.busyWorkers.Add(^uint32(0))
+		w.finishJobs(uint32(k))
+		return cont, err
+	}
+
+	if n < k {
+		w.finishJobs(uint32(k - n))
+	}
+	node.Value.SendBatch(buf[:n])
+
+	return cont, err
+}
+
+// finishJobs takes m jobs off the processing count without w.mx unless they
+// were the last ones: waiters are only woken when processing reaches 0. See
+// waitForChange for why the decrement may happen before the lock.
+func (w *worker[T, JobType]) finishJobs(m uint32) {
+	if w.curProcessing.Add(^(m - 1)) == 0 {
 		w.mx.Lock()
 		// A job may have started since the decrement; then it releases them.
 		w.releaseWaiters(w.curProcessing.Load())
 		w.mx.Unlock()
 	}
-	if processing < w.concurrency.Load() {
-		w.notifyToPullNextJobs()
-	}
 }
 
-func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
-	if node := w.pool.PopBack(); node != nil {
-		node.Value.Send(j)
-		return
-	}
-
-	w.initPoolNode().Value.Send(j)
+// freeWorker returns node to the idle pool once its batch is done and lets
+// the event loop dispatch again.
+func (w *worker[T, JobType]) freeWorker(node *pool.Elem[JobType]) {
+	w.freePoolNode(node)
+	w.busyWorkers.Add(^uint32(0))
+	w.notifyToPullNextJobs()
 }
 
 func (w *worker[T, JobType]) notifyToPullNextJobs() {

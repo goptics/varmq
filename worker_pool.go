@@ -104,8 +104,9 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			w.sendError(err)
 		}
 		w.metrics.incCompleted()
-		w.freePoolNode(node)
-		w.releaseProcessingSlot()
+		w.finishJobs(1)
+	}, func() {
+		w.freeWorker(node)
 	})
 
 	return node
@@ -118,7 +119,9 @@ func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 		node.Value.UpdateLastUsed()
 	}
 
-	if w.NumPending() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	// Keep the goroutine while there is more backlog than idle workers to
+	// run it; stopping it would only make the next dispatch spawn another.
+	if w.NumPending() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}

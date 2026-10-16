@@ -5,13 +5,17 @@ import (
 	"time"
 )
 
+// Payload is one hand-off to a worker: a single item, or a batch staged in
+// the node's Buf. ok false tells the worker to stop.
 type Payload[T any] struct {
-	data T
-	ok   bool
+	data  T
+	batch []T
+	ok    bool
 }
 
 type Node[T any] struct {
 	ch       chan Payload[T]
+	buf      []T // batch staging; owned by whoever popped the node until Serve has read it
 	lastUsed atomic.Value
 }
 
@@ -30,13 +34,46 @@ func (wc *Node[T]) Send(data T) {
 	}
 }
 
-func (wc *Node[T]) Serve(fn func(T)) {
+// Batch returns a staging slice of n items for the caller to fill and then
+// pass to SendBatch. The slice is reused across batches, so the caller must
+// hold the node exclusively (popped from the pool) until the worker has
+// consumed it.
+func (wc *Node[T]) Batch(n int) []T {
+	if cap(wc.buf) < n {
+		wc.buf = make([]T, max(n, 2*cap(wc.buf)))
+	}
+
+	return wc.buf[:n]
+}
+
+// SendBatch hands jobs, a slice from Batch, to the worker in one wake-up.
+func (wc *Node[T]) SendBatch(jobs []T) {
+	wc.ch <- Payload[T]{
+		batch: jobs,
+		ok:    true,
+	}
+}
+
+// Serve runs fn on every item received, then done once per payload, single
+// or batch, so the node is handed back only after a whole batch is finished.
+func (wc *Node[T]) Serve(fn func(T), done func()) {
 	for payload := range wc.ch {
 		if !payload.ok {
 			return
 		}
 
-		fn(payload.data)
+		if payload.batch != nil {
+			for _, item := range payload.batch {
+				fn(item)
+			}
+			clear(payload.batch)
+		} else {
+			fn(payload.data)
+		}
+
+		if done != nil {
+			done()
+		}
 	}
 }
 

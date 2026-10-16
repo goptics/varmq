@@ -139,7 +139,7 @@ func TestPoolNode(t *testing.T) {
 			node.Serve(func(v string) {
 				wg.Done()
 				processed <- struct{}{}
-			})
+			}, nil)
 			close(done)
 		}()
 
