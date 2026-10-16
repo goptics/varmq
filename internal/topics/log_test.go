@@ -134,18 +134,18 @@ func TestLog(t *testing.T) {
 		c := l.NewCursor()
 		first := c.chunk
 		assert.NotNil(t, first)
-		assert.Equal(t, initialChunkCapacity, len(first.data))
+		assert.Equal(t, chunkCapacity, len(first.data))
 
-		for i := 0; i < 3*initialChunkCapacity; i++ {
+		for i := 0; i < 3*chunkCapacity; i++ {
 			l.Append(i)
 		}
 
 		assert.Same(t, first, c.chunk, "unread cursor still sits on its first chunk")
-		assert.Equal(t, initialChunkCapacity, len(first.data), "first chunk was not reallocated")
+		assert.Equal(t, chunkCapacity, len(first.data), "first chunk was not reallocated")
 		assert.NotNil(t, first.next.Load(), "later items live in linked chunks")
-		assert.Greater(t, len(first.next.Load().data), len(first.data), "chunks grow 1.5x")
-		assert.Equal(t, 3*initialChunkCapacity, c.Len())
-		assert.Equal(t, 3*initialChunkCapacity, len(drain(c)))
+		assert.Equal(t, chunkCapacity, len(first.next.Load().data), "chunks do not grow, so memory is freed in small steps")
+		assert.Equal(t, 3*chunkCapacity, c.Len())
+		assert.Equal(t, 3*chunkCapacity, len(drain(c)))
 	})
 
 	t.Run("chunks behind the slowest cursor are garbage collected", func(t *testing.T) {
@@ -153,11 +153,11 @@ func TestLog(t *testing.T) {
 		a, b := l.NewCursor(), l.NewCursor()
 		first := weak.Make(a.chunk)
 
-		for i := 0; i < 2*initialChunkCapacity; i++ {
+		for i := 0; i < 2*chunkCapacity; i++ {
 			l.Append(i)
 		}
 
-		for i := 0; i < initialChunkCapacity; i++ {
+		for i := 0; i < chunkCapacity; i++ {
 			a.Dequeue()
 			b.Dequeue()
 		}
@@ -175,7 +175,7 @@ func TestLog(t *testing.T) {
 		fast, slow := l.NewCursor(), l.NewCursor()
 		first := weak.Make(slow.chunk)
 
-		for i := 0; i < 2*initialChunkCapacity; i++ {
+		for i := 0; i < 2*chunkCapacity; i++ {
 			l.Append(i)
 		}
 		drain(fast)
@@ -195,7 +195,7 @@ func TestLog(t *testing.T) {
 		a, b := l.NewCursor(), l.NewCursor()
 		first := weak.Make(a.chunk)
 
-		for i := 0; i < 2*initialChunkCapacity; i++ {
+		for i := 0; i < 2*chunkCapacity; i++ {
 			l.Append(i)
 		}
 		drain(b)
@@ -223,7 +223,7 @@ func TestLog(t *testing.T) {
 
 	t.Run("readers crossing chunk boundaries see the same full sequence", func(t *testing.T) {
 		const writers, perWriter, readers = 4, 20_000, 6
-		const total = writers * perWriter // spans several chunks: 1024, 1536, 2304, ...
+		const total = writers * perWriter // spans many 1024-slot chunks
 
 		l := NewLog[int]()
 		cursors := make([]*Cursor[int], readers)

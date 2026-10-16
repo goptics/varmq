@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	initialChunkCapacity = 1024       // items in the first chunk
-	maxChunkCapacity     = 100 * 1024 // items per chunk, cap for growth
+	// chunkCapacity is the fixed size of every chunk. The log frees memory a
+	// whole chunk at a time, once the slowest cursor has passed it, so chunks
+	// stay small instead of growing like the queue's: a grown chunk would keep
+	// up to that many read payloads alive. One allocation per 1024 appends.
+	chunkCapacity = 1024
 )
 
 // chunk is one block of the log. The writer fills data[n] and then publishes
@@ -80,7 +83,7 @@ func (l *Log[T]) Append(item T) int {
 
 	n := l.tail.n.Load()
 	if int(n) == len(l.tail.data) {
-		next := newChunk[T](min(len(l.tail.data)+len(l.tail.data)/2, maxChunkCapacity))
+		next := newChunk[T](chunkCapacity)
 		l.tail.next.Store(next)
 		l.tail, n = next, 0
 	}
@@ -128,7 +131,7 @@ func (l *Log[T]) NewCursor() *Cursor[T] {
 	defer l.mx.Unlock()
 
 	if l.tail == nil {
-		l.tail = newChunk[T](initialChunkCapacity)
+		l.tail = newChunk[T](chunkCapacity)
 	}
 
 	c := &Cursor[T]{log: l, chunk: l.tail, idx: int(l.tail.n.Load())}
