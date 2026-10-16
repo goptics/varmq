@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/goptics/varmq/internal/linkedlist"
 	"github.com/goptics/varmq/internal/pool"
 )
 
@@ -35,7 +34,6 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 
 	for shrinkPoolSize > 0 && w.pool.Len() != minIdleWorkers {
 		if node := w.pool.PopBack(); node != nil {
-			w.pool.Remove(node)
 			node.Value.Stop()
 			w.pool.Cache.Put(node)
 			shrinkPoolSize--
@@ -76,14 +74,12 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 					continue
 				}
 
-				nodes := w.pool.NodeSlice()
-				for _, node := range nodes[targetIdleWorkers:] {
-					if node.Value.GetLastUsed().Add(interval).Before(time.Now()) &&
-						!(node.Next() == nil && node.Prev() == nil) {
-						w.pool.Remove(node)
-						node.Value.Stop()
-						w.pool.Cache.Put(node)
-					}
+				expired := w.pool.Prune(targetIdleWorkers, func(node *pool.Elem[JobType]) bool {
+					return node.Value.GetLastUsed().Add(interval).Before(time.Now())
+				})
+				for _, node := range expired {
+					node.Value.Stop()
+					w.pool.Cache.Put(node)
 				}
 			}
 		}
@@ -91,15 +87,14 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 }
 
 func (w *worker[T, JobType]) removeAllWorkers() {
-	for _, node := range w.pool.NodeSlice() {
-		w.pool.Remove(node)
+	for node := w.pool.PopBack(); node != nil; node = w.pool.PopBack() {
 		node.Value.Stop()
 		w.pool.Cache.Put(node)
 	}
 }
 
-func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]] {
-	node := w.pool.Cache.Get().(*linkedlist.Node[pool.Node[JobType]])
+func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
+	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
 	go node.Value.Serve(func(j JobType) {
 		w.workerFunc(j)
@@ -116,7 +111,7 @@ func (w *worker[T, JobType]) initPoolNode() *linkedlist.Node[pool.Node[JobType]]
 	return node
 }
 
-func (w *worker[T, JobType]) freePoolNode(node *linkedlist.Node[pool.Node[JobType]]) {
+func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 	enabledIdleWorkersRemover := w.Configs.idleWorkerExpiryDuration > 0
 
 	if enabledIdleWorkersRemover {

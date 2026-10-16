@@ -60,11 +60,17 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	return true, nil
 }
 
+// releaseProcessingSlot frees a slot without w.mx unless it was the last one:
+// waiters are only woken when processing reaches 0. See waitForChange for why
+// the decrement may happen before the lock.
 func (w *worker[T, JobType]) releaseProcessingSlot() {
-	w.mx.Lock()
 	processing := w.curProcessing.Add(^uint32(0))
-	w.releaseWaiters(processing)
-	w.mx.Unlock()
+	if processing == 0 {
+		w.mx.Lock()
+		// A job may have started since the decrement; then it releases them.
+		w.releaseWaiters(w.curProcessing.Load())
+		w.mx.Unlock()
+	}
 	if processing < w.concurrency.Load() {
 		w.notifyToPullNextJobs()
 	}
