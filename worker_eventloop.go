@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.queues.Len() > 0 {
+				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.NumPending() > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -35,54 +36,16 @@ func (w *worker[T, JobType]) goEventLoop() {
 }
 
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	queue, found := w.queues.next()
-
-	if !found {
-		return false, nil
-	}
-
 	w.curProcessing.Add(1)
 	w.status.CompareAndSwap(idle, running)
 
-	var (
-		v     any
-		ok    bool
-		ackId string
-	)
-
-	switch q := queue.(type) {
-	case IAcknowledgeable:
-		v, ok, ackId = q.DequeueWithAckId()
-	default:
-		v, ok = q.Dequeue()
-	}
-
-	if !ok {
+	j, err := w.manager().Next()
+	if err != nil {
 		w.releaseProcessingSlot()
-		return true, ErrFailedToDequeue
-	}
-
-	var j JobType
-
-	switch value := v.(type) {
-	case JobType:
-		j = value
-	case []byte:
-		var err error
-		if v, err = parseToJob[T](value); err != nil {
-			w.releaseProcessingSlot()
-			return true, err
+		if errors.Is(err, errNoReadySource) {
+			return false, nil
 		}
-
-		if j, ok = v.(JobType); !ok {
-			w.releaseProcessingSlot()
-			return true, ErrFailedToCastJob
-		}
-
-		j.setInternalQueue(queue)
-	default:
-		w.releaseProcessingSlot()
-		return true, ErrFailedToCastJob
+		return true, err
 	}
 
 	if j.IsClosed() {
@@ -91,7 +54,6 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	}
 
 	j.changeStatus(processing)
-	j.setAckId(ackId)
 
 	w.sendToNextChannel(j)
 

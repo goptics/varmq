@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased]
+
+### ✨ New Features
+
+- **Topic Fan-out**: Added `NewTopic[T]()` and `IWorkerBinder.WithTopic(topic)`. One `Publish` stores the payload once in a shared in-memory log; every subscription reads it at its own position and its worker gets its own job. `Publish` returns `false` when no subscription is attached or the topic is closed. `WithTopic` returns a `Subscription` (`Len`, `Purge`, `Close`, `Worker`, `Unsubscribe`) with no `Add`. `Close` on a subscription is the same as `Unsubscribe`. Fanout-exchange semantics: no replay, late subscribers miss earlier payloads. Void workers (`NewWorker`) only.
+  - `IWorkerBinder[T]` gained the `WithTopic` method; code that implements or mocks that interface must add it.
+- **Persistent Topics**: Added `NewPersistentTopic[T](IPersistentTopic)` and `IWorkerBinder.WithPersistentTopic(topic, group)`. Groups get every payload, workers in one group share it, positions survive restarts, and completed jobs are acknowledged. `IPersistentTopic` uses only built-in types so adapters need not import varmq. A test adapter is available as `mocks.NewMockPersistentTopic()`.
+- **Topic priority**: `WithTopic` and `WithPersistentTopic` take `TopicConfigFunc` options. `WithTopicPriority(n)` orders a worker's topic subscriptions among its sources the way `WithQueuePriority` orders queues; default `math.MaxInt`.
+- **Topic capacity**: `NewTopic` takes `TopicConfigFunc` options. With `WithTopicCapacity(n)`, `Publish` returns `false` once the slowest subscription has `n` unread payloads, so one slow, paused or starved subscriber can no longer grow the topic's memory without bound. Room comes back as it reads, purges or unsubscribes. `Topic.IsFull()` reports whether `Publish` would be refused, and `Subscription.IsFull()` whether that subscription is the one holding the topic full. Default unlimited.
+- **One subscription per worker and topic**: subscribing a worker to a topic it is already attached to panics (for a persistent topic, in any group), since the worker would process every payload twice. Resubscribing after `Unsubscribe` or `Close` is allowed.
+
+### 🐛 Bug Fixes
+
+- **Wait hanging on a shared source**: `Wait` and `WaitUntilIdle` could sleep forever when another worker or process drained a source this worker shares (one queue bound to several workers, a persistent topic group, a distributed queue), because only this worker's own finished jobs woke them. While no job is running they now also re-check every 10 ms.
+- **Enqueue racing Close**: `Queue.Enqueue` and `PriorityQueue.Enqueue` in `internal/queues` now check the closed flag while holding the queue lock, so an item can no longer land after `Close` followed by `Purge`.
+
+### 🔧 Refactoring
+
+- **Topic log on linked chunks**: The in-memory topic log stores payloads in fixed 1024-slot linked chunks. Appending links a new chunk instead of growing a slice, so a burst never copies the backlog, and a chunk is garbage collected once the slowest subscription has moved past it. Chunks do not grow, so read payloads are freed in small steps instead of staying alive in one large chunk.
+- **Lock-free topic reads**: Reading a topic no longer takes the log's lock. A publisher fills a slot and then publishes it with an atomic store, and each subscription reads only published slots under its own lock, so reads never block publishes and publishes never block reads. The topic log has its own chunk type, so the queues are unchanged. With 100 subscribers draining in parallel, a publish costs about 0.27 µs instead of 9.6 µs.
+- **Queue on the topic log**: The in-memory FIFO queue behind `BindQueue` (and the error and result worker variants) now uses the topic log with one consuming cursor that clears each slot as it reads it, so a dequeued item is freed at once and a fully read chunk is garbage collected. Enqueue never waits for Dequeue, and an uncontended enqueue plus dequeue is about 25% faster. Chunks are a fixed 1024 slots instead of growing 1.5x up to 100K, so memory comes back in 16 KB steps as items are read and a single Add after a burst never allocates a large chunk; 1M enqueues plus dequeues take 40 ms instead of 53 ms and a 10k burst is 35% faster, at about two small allocations per 1024 items. `internal/linkedbuffer` is removed. No public API change.
+- **Job sources**: The worker event loop now pulls from an internal `source` interface. In-memory queues and acknowledgeable queues (persistent, distributed, persistent topic groups) are adapters chosen once at bind time, and topic subscriptions read through a `topicSource`, so the loop no longer inspects storage per job. A worker with one bound source pulls from it directly; the strategy runs only while two or more sources are bound, and the worker drops back to direct pulls when sources are removed. No public API change.
+  - Side effect fixed: a custom queue that implements `IAcknowledgeable` but stores ready job objects (not JSON bytes) now has its jobs acknowledged on completion. Previously those jobs never acked.
+  - If `Acknowledge` returns false for such a job, `ErrAcknowledgeJob` is reported through the worker's error channel and handler and the job stays `Finished` rather than `Closed`, so `Wait` on its handle does not return. This matches how persistent queues have always treated a failed acknowledgement.
+
 ## [v1.8.0] (2026-07-04)
 
 ### ✨ New Features

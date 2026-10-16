@@ -1,166 +1,70 @@
 package queues
 
-import (
-	"math"
-	"sync"
-	"sync/atomic"
+import "github.com/goptics/varmq/internal/topics"
 
-	"github.com/goptics/varmq/internal/linkedbuffer"
-)
-
-var (
-	initialBufferCapacity = 1024       // 1KB initial capacity
-	maxChunkCapacity      = 100 * 1024 // 100KB max capacity
-)
-
-// Queue implements a FIFO queue using linked buffer chunks
-// This eliminates large slice allocations while maintaining good cache locality
-// Inspired by [pond](https://github.com/alitto/pond) buffer implementation with dynamic capacity growth
+// Queue is a FIFO queue: an append-only log in fixed-size linked chunks read
+// by one consuming cursor, the same log a topic uses. Producers serialise only
+// with each other, readers only with each other, so an Enqueue never waits
+// for a Dequeue. The cursor clears each slot as it reads it, so a dequeued
+// item is freed at once; a fully read chunk is garbage collected.
 type Queue[T any] struct {
-	readChunk        *linkedbuffer.Chunk[T] // Current chunk being read from
-	writeChunk       *linkedbuffer.Chunk[T] // Current chunk being written to
-	writeCount       atomic.Uint64          // Total items written
-	readCount        atomic.Uint64          // Total items read
-	mx               sync.RWMutex           // Protects chunk pointers
-	maxChunkCapacity int                    // Maximum capacity per chunk
-	capacity         int                    // Maximum capacity of the queue
-	closed           atomic.Bool
+	log *topics.Log[T]
+	cur *topics.Cursor[T]
 }
 
-// NewQueue creates a new empty linked buffer queue
+// NewQueue creates a new empty queue.
 func NewQueue[T any]() *Queue[T] {
-	chunk := linkedbuffer.NewChunk[T](initialBufferCapacity)
+	l := topics.NewLog[T]()
 
-	return &Queue[T]{
-		readChunk:        chunk,
-		writeChunk:       chunk,
-		maxChunkCapacity: maxChunkCapacity,
-	}
+	return &Queue[T]{log: l, cur: l.NewConsumer()}
 }
 
+// SetCapacity bounds how many items the queue holds; Enqueue returns false
+// while it is full. Values below 1 mean unlimited.
 func (q *Queue[T]) SetCapacity(cap int) {
-	q.capacity = max(0, cap)
+	q.log.SetLimit(cap)
 }
 
-// Len returns the total number of items in the queue
+// Len returns the number of items in the queue.
 func (q *Queue[T]) Len() int {
-	writeCount := q.writeCount.Load()
-	readCount := q.readCount.Load()
-
-	if writeCount < readCount {
-		// The writeCount counter wrapped around
-		return int(math.MaxUint64 - readCount + writeCount)
-	}
-
-	return int(writeCount - readCount)
+	return q.cur.Len()
 }
 
-// Enqueue adds an item to the back of the queue
-// Time complexity: O(1) amortized - only allocates new chunks when needed
+// Enqueue adds an item to the back of the queue. It returns false when the
+// item is not a T, the queue is full or it is closed.
 func (q *Queue[T]) Enqueue(item any) bool {
-	if q.closed.Load() {
-		return false
-	}
-
 	typedItem, ok := item.(T)
-
 	if !ok {
 		return false
 	}
 
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	if q.capacity > 0 && q.Len() == q.capacity {
-		return false
-	}
-
-	// Try to push to current write chunk
-	if q.writeChunk.Push(typedItem) {
-		q.writeCount.Add(1)
-		return true
-	}
-
-	currentCap := q.writeChunk.Cap()
-	newCapacity := min(currentCap+currentCap/2, q.maxChunkCapacity)
-
-	newChunk := linkedbuffer.NewChunk[T](newCapacity)
-
-	q.writeChunk.Next = newChunk
-	q.writeChunk = newChunk
-
-	if q.writeChunk.Push(typedItem) {
-		q.writeCount.Add(1)
-		return true
-	}
-
-	return false // Should never happen
+	return q.log.Append(typedItem) > 0
 }
 
-// Dequeue removes and returns the front item
-// Time complexity: O(1) amortized - may advance to next chunk
+// Dequeue removes and returns the front item.
 func (q *Queue[T]) Dequeue() (any, bool) {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	// Try to pop from current read chunk
-	if item, ok := q.readChunk.Pop(); ok {
-		q.readCount.Add(1)
-		return item, true
-	}
-
-	// Current chunk is empty, try to move to next chunk
-	if q.readChunk.Next != nil {
-		q.readChunk = q.readChunk.Next
-
-		// Try again with new chunk
-		if item, ok := q.readChunk.Pop(); ok {
-			q.readCount.Add(1)
-			return item, true
-		}
-	}
-
-	// No items available
-	return *new(T), false
+	return q.cur.Dequeue()
 }
 
-// Values returns a slice of all values in the queue
-// Note: This creates a temporary slice for compatibility
+// Values returns a copy of the items in the queue, front first.
 func (q *Queue[T]) Values() []any {
-	values := make([]any, 0)
-
-	if q.Len() == 0 {
-		return values
+	vals := q.cur.Values()
+	out := make([]any, len(vals))
+	for i, v := range vals {
+		out[i] = v
 	}
 
-	q.mx.RLock()
-	defer q.mx.RUnlock()
-	// Iterate through all chunks starting from read chunk
-	for chunk := q.readChunk; chunk != nil; chunk = chunk.Next {
-		// Add unread items from this chunk
-		for i := chunk.NextReadIndex; i < chunk.NextWriteIndex; i++ {
-			values = append(values, chunk.Data[i])
-		}
-	}
-
-	return values
+	return out
 }
 
-// Purge clears all elements from the queue
+// Purge removes every item.
 func (q *Queue[T]) Purge() {
-	q.mx.Lock()
-	defer q.mx.Unlock()
-
-	// Reset to single chunk with initial capacity
-	chunk := linkedbuffer.NewChunk[T](initialBufferCapacity)
-	q.readChunk = chunk
-	q.writeChunk = chunk
-	q.readCount.Store(0)
-	q.writeCount.Store(0)
+	q.cur.Purge()
 }
 
-// Close releases resources and clears the queue
+// Close makes every later Enqueue return false. Stored items can still be
+// dequeued.
 func (q *Queue[T]) Close() error {
-	q.closed.Store(true)
+	q.log.Close()
 	return nil
 }

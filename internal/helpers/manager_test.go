@@ -290,3 +290,22 @@ func TestManager(t *testing.T) {
 		assert.Equal(itemHigh, res)
 	})
 }
+
+func TestManagerOnly(t *testing.T) {
+	m := NewManager[*testItem]()
+
+	_, _, ok := m.Only()
+	assert.False(t, ok, "no items")
+
+	a := &testItem{id: "a"}
+	m.Register(a, 7)
+
+	item, priority, ok := m.Only()
+	assert.True(t, ok)
+	assert.Same(t, a, item)
+	assert.Equal(t, 7, priority)
+
+	m.Register(&testItem{id: "b"}, 1)
+	_, _, ok = m.Only()
+	assert.False(t, ok, "two items")
+}

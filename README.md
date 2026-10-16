@@ -40,6 +40,7 @@
   - `NewResultWorker` - Returns result and error
 - **🚦 Concurrency control**: Fine-grained control over worker pool size, dynamic tuning and idle workers management
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
+- **📢 Topic Fan-out**: Publish once, every subscribed worker gets its own copy
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
 - **📡 REST API**: Built-in HTTP endpoints to inspect worker status and manage state (pause, resume, stop, restart)
@@ -216,6 +217,48 @@ for i := range 10 {
 The Queue Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
 
 ![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
+
+### Topic (Fan-out)
+
+A `Topic` is the opposite of multi queue binding: one producer, many workers. Publish once and every subscribed worker gets its own job. `Publish` returns `false` when no subscription is attached, the topic is closed, or it is full.
+
+| | Queue | Topic |
+|---|---|---|
+| Who gets a job | each job is processed once, by one worker | every subscribed worker gets its own job |
+| Storage | the job is removed once a worker takes it | the payload is stored once; each worker reads it with its own cursor, and it's freed after every worker has read it |
+| Producer | `queue.Add(x)` | `topic.Publish(x)` |
+| Late joiner | sees jobs still waiting in the queue | sees only what's published after it subscribed |
+
+```go
+topic := varmq.NewTopic[int]()
+
+email := varmq.NewWorker(func(j varmq.Job[int]) {
+  fmt.Printf("Emailing order %d\n", j.Data())
+  time.Sleep(1 * time.Second)
+}) // concurrency 1
+stock := varmq.NewWorker(func(j varmq.Job[int]) {
+  fmt.Printf("Updating stock for order %d\n", j.Data())
+  time.Sleep(300 * time.Millisecond)
+}, 2) // concurrency 2
+defer email.WaitUntilIdle()
+defer stock.WaitUntilIdle()
+
+email.WithTopic(topic)
+stock.WithTopic(topic)
+
+for order := range 4 {
+  topic.Publish(order) // both workers get all 4 orders
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/NeIa69kRi5s)**
+
+`Publish` stores the payload once in the topic's log and wakes every subscribed worker. Each subscription reads the log through its own cursor, so the fast stock worker runs ahead without waiting for the email worker. A payload stays in the log until every cursor has read it, and a chunk of the log is freed once the slowest cursor has moved past it:
+
+![VarMQ topic fan-out with two subscribed workers](./assets/diagrams/varmq-topic.svg)
+
+> [!Note]
+> Persistent topics are supported too: `varmq.NewPersistentTopic` with `worker.WithPersistentTopic(topic, "group")` keeps payloads in durable storage, every group gets every payload, workers on one group share it, and delivery is at least once. They need an `IPersistentTopic` adapter, and none has been released yet.
 
 ### Result and Error Worker
 

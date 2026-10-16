@@ -150,6 +150,52 @@ type IWorkerBinder[T any] interface {
 	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
 	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
 	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
+
+	// WithTopic subscribes the worker to a Topic. The subscription reads the
+	// topic's shared log through its own cursor and is registered with the
+	// worker as a job source, like a bound queue. Every payload published
+	// after this call becomes a job for this worker, processed under its
+	// normal strategy and concurrency.
+	//
+	// A worker subscribes to a topic at most once: subscribing it again while
+	// the first subscription is attached panics, since it would process every
+	// payload twice.
+	//
+	// Parameters:
+	//   - t Topic[T]: The topic to subscribe to, created with NewTopic.
+	//   - configs: Optional, for example WithTopicPriority.
+	//
+	// Returns:
+	//   - Subscription[T]: The subscription handle (Len, Purge, Unsubscribe,
+	//     Worker). It has no Add; use Topic.Publish.
+	//
+	// Example usage:
+	//   topic := varmq.NewTopic[Order]()
+	//   sub := worker.WithTopic(topic)
+	//   topic.Publish(order) // the worker receives a copy
+	//   sub.Unsubscribe()    // stop receiving
+	WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T]
+
+	// WithPersistentTopic subscribes the worker to a group of a persistent
+	// topic. Every group gets every payload; workers on the same group share
+	// it. Close on the returned subscription keeps the group's position;
+	// Unsubscribe deletes the group, which also detaches every subscription on
+	// that group in this process.
+	//
+	// It panics on a nil topic, an empty group, or a worker already attached to
+	// this topic (in any group), since that worker would process every payload
+	// twice. configs takes options such as WithTopicPriority. If the storage cannot join
+	// the group, the error goes to the worker's error handler and the
+	// returned subscription is inert.
+	//
+	// Workers sharing a group may occasionally report ErrFailedToDequeue to
+	// their error handler when another worker took the message first; it is
+	// harmless.
+	//
+	// Example usage:
+	//   topic := varmq.NewPersistentTopic[Order](storage)
+	//   sub := worker.WithPersistentTopic(topic, "email")
+	WithPersistentTopic(t PersistentTopic[T], group string, configs ...TopicConfigFunc) Subscription[T]
 }
 
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
@@ -202,7 +248,7 @@ func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQue
 func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
 	c := loadQueueConfigs(configs...)
 	defer dq.Subscribe(wb.handleQueueSubscription)
-	defer wb.queues.Register(dq, c.priority)
+	defer wb.bind(dq, c.priority)
 
 	return NewDistributedQueue[T](dq, configs...)
 }
@@ -210,9 +256,29 @@ func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ..
 func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	defer dpq.Subscribe(wb.handleQueueSubscription)
-	defer wb.queues.Register(dpq, c.priority)
+	defer wb.bind(dpq, c.priority)
 
 	return NewDistributedPriorityQueue[T](dpq, configs...)
+}
+
+func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T] {
+	if t == nil {
+		panic("varmq: WithTopic called with nil Topic")
+	}
+
+	return t.subscribe(wb.worker, loadTopicConfigs(configs...).priority)
+}
+
+func (wb *workerBinder[T]) WithPersistentTopic(t PersistentTopic[T], group string, configs ...TopicConfigFunc) Subscription[T] {
+	if t == nil {
+		panic("varmq: WithPersistentTopic called with nil PersistentTopic")
+	}
+
+	if group == "" {
+		panic("varmq: WithPersistentTopic called with empty group")
+	}
+
+	return t.bindGroup(wb.worker, group, wb.handleQueueSubscription, loadTopicConfigs(configs...).priority)
 }
 
 type errWorkerBinder[T any] struct {

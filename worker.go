@@ -30,9 +30,13 @@ var (
 )
 
 type worker[T any, JobType iJob[T]] struct {
-	workerFunc      func(j JobType)
-	pool            *pool.Pool[JobType]
-	queues          *queueManager
+	workerFunc func(j JobType)
+	pool       *pool.Pool[JobType]
+	// sources holds the current sourceManager (empty, direct or strategy) in
+	// a managerBox. The event loop only loads it; sourcesMx serialises the
+	// add/remove calls that swap it.
+	sources         atomic.Value
+	sourcesMx       sync.Mutex
 	metrics         Metrics
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32
@@ -290,13 +294,13 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iJob[T]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
 		Configs:         c,
 	}
 
+	w.sources.Store(managerBox[iJob[T]]{newSourceManager[iJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
@@ -315,13 +319,13 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
 		Configs:         c,
 	}
 
+	w.sources.Store(managerBox[iErrorJob[T]]{newSourceManager[iErrorJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
@@ -340,13 +344,13 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
-		queues:          newQueueManager(c.strategy),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
 		errorChan:       make(chan error, errorChanCap),
 		Configs:         c,
 	}
 
+	w.sources.Store(managerBox[iResultJob[T, R]]{newSourceManager[iResultJob[T, R]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
 	w.initContext(c.ctx)
@@ -395,7 +399,7 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.queues.Len()
+	return w.manager().Len()
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {

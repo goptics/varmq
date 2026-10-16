@@ -20,7 +20,7 @@ type persistentQueue[T any] struct {
 // The worker's queue is set to the provided persistent queue implementation
 func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.queues.Register(pq, c.priority)
+	w.bind(pq, c.priority)
 
 	return &persistentQueue[T]{queue: &queue[T]{
 		externalBaseQueue: newExternalQueue(pq, w, c),

@@ -1,5 +1,11 @@
 package varmq
 
+import "time"
+
+// waitRecheck is how often Wait and WaitUntilIdle re-check while the worker
+// runs no job. See waitForChange.
+const waitRecheck = 10 * time.Millisecond
+
 func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	if processing != 0 {
 		return
@@ -24,7 +30,7 @@ func (w *worker[T, JobType]) Wait() {
 		s := w.status.Load()
 		switch s {
 		case running, idle:
-			if w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
+			if w.NumPending() == 0 && w.curProcessing.Load() == 0 {
 				return
 			}
 		case paused, stopped, pausing, stopping:
@@ -34,8 +40,30 @@ func (w *worker[T, JobType]) Wait() {
 		default:
 			return
 		}
-		w.waiters.Wait()
+		w.waitForChange()
 	}
+}
+
+// waitForChange blocks until the waiters are woken. Callers hold w.mx.
+//
+// A finished job always wakes them, and it can only finish under w.mx, so it
+// cannot slip past a caller. But a source shared with other workers or
+// processes (one queue bound to several workers, a persistent topic group, a
+// distributed queue) can be drained by someone else while this worker runs
+// nothing, and nothing then wakes its waiters. So while no job is running, it
+// also wakes them after waitRecheck to re-check. It decides on the running
+// count alone: NumPending may already have changed since the caller checked.
+func (w *worker[T, JobType]) waitForChange() {
+	if w.curProcessing.Load() == 0 {
+		t := time.AfterFunc(waitRecheck, func() {
+			w.mx.Lock()
+			w.waiters.Broadcast()
+			w.mx.Unlock()
+		})
+		defer t.Stop()
+	}
+
+	w.waiters.Wait()
 }
 
 func (w *worker[T, JobType]) WaitUntilIdle() {
@@ -43,11 +71,11 @@ func (w *worker[T, JobType]) WaitUntilIdle() {
 	defer w.mx.Unlock()
 
 	for {
-		if w.status.Load() == idle && w.queues.Len() == 0 && w.curProcessing.Load() == 0 {
+		if w.status.Load() == idle && w.NumPending() == 0 && w.curProcessing.Load() == 0 {
 			return
 		}
 
-		w.waiters.Wait()
+		w.waitForChange()
 	}
 }
 

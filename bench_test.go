@@ -21,6 +21,25 @@ func errTask(j Job[int]) error {
 	return nil
 }
 
+// BenchmarkPublish benchmarks the Publish operation: one op is one Publish to
+// a topic with one subscribed worker, and the timer runs until the worker has
+// processed every payload.
+func BenchmarkPublish(b *testing.B) {
+	b.Run("Topic", func(b *testing.B) {
+		topic := NewTopic[int]()
+		worker := NewWorker(task)
+		worker.WithTopic(topic)
+		defer worker.StopAndWait()
+
+		b.ResetTimer()
+		for i := range b.N {
+			topic.Publish(i)
+		}
+
+		worker.Wait()
+	})
+}
+
 // BenchmarkAdd benchmarks the Add operation across different queue types.
 func BenchmarkAdd(b *testing.B) {
 	b.Run("Queue", func(b *testing.B) {
