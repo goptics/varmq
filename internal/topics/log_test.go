@@ -123,8 +123,8 @@ func TestLog(t *testing.T) {
 		assert.False(t, l.Full())
 	})
 
-	t.Run("append waiting for the lock observes a close made meanwhile", func(t *testing.T) {
-		l := NewLog[int]()
+	t.Run("bounded append waiting for the lock observes a close made meanwhile", func(t *testing.T) {
+		l := NewBoundedLog[int](10)
 		c := l.NewCursor()
 		l.mx.Lock()
 
@@ -139,7 +139,7 @@ func TestLog(t *testing.T) {
 		assert.Equal(t, 0, c.Len())
 	})
 
-	t.Run("a consumer clears each slot it reads and purge drops the stored items", func(t *testing.T) {
+	t.Run("a consumer clears each slot it reads and purge skips the rest", func(t *testing.T) {
 		l := NewLog[*int]()
 		c := l.NewConsumer()
 		one, two := 1, 2
@@ -152,9 +152,7 @@ func TestLog(t *testing.T) {
 		assert.Nil(t, c.chunk.data[0], "read slot cleared, so the item can be collected")
 		assert.Same(t, &two, c.chunk.data[1], "unread slot kept")
 
-		first := c.chunk
 		c.Purge()
-		assert.NotSame(t, first, c.chunk, "purge starts a fresh chunk")
 		assert.Equal(t, 0, c.Len())
 		l.Append(&one)
 		v, _ = c.Dequeue()
@@ -174,7 +172,7 @@ func TestLog(t *testing.T) {
 	t.Run("append without cursors stores nothing", func(t *testing.T) {
 		l := NewLog[int]()
 		assert.Equal(t, 0, l.Append(1))
-		assert.Nil(t, l.tail, "no chunk is allocated while nobody can read")
+		assert.Nil(t, l.tail.Load(), "no chunk is allocated while nobody can read")
 	})
 
 	t.Run("append links chunks and never copies the one a cursor sits on", func(t *testing.T) {
@@ -254,14 +252,12 @@ func TestLog(t *testing.T) {
 		assert.Nil(t, first.Value(), "closed cursor must not pin memory")
 	})
 
-	t.Run("closing the last cursor resets the log", func(t *testing.T) {
+	t.Run("a cursor opened after the last one closed starts at the head", func(t *testing.T) {
 		l := NewLog[int]()
 		a := l.NewCursor()
 		l.Append(1)
 		l.Append(2)
 		a.Close()
-
-		assert.Nil(t, l.tail)
 
 		b := l.NewCursor()
 		assert.Equal(t, 0, b.Len(), "new cursor starts after everything published before it")
@@ -372,5 +368,41 @@ func TestLog(t *testing.T) {
 		for r := range got {
 			assert.Equal(t, total, got[r], "reader %d", r)
 		}
+	})
+
+	t.Run("appends racing cursor open, close and purge", func(t *testing.T) {
+		l := NewLog[int]()
+		keep := l.NewCursor()
+		const writers, perWriter = 4, 5000
+
+		var wg sync.WaitGroup
+		for w := range writers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range perWriter {
+					l.Append(w*perWriter + i)
+				}
+			}()
+		}
+		done := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					c := l.NewCursor()
+					c.Dequeue()
+					c.Purge()
+					c.Close()
+				}
+			}
+		}()
+		wg.Wait()
+		close(done)
+
+		assert.Len(t, drain(keep), writers*perWriter, "a cursor open throughout reads every item")
+		assert.Equal(t, 0, keep.Len())
 	})
 }
