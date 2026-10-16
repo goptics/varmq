@@ -435,13 +435,18 @@ func TestQueue(t *testing.T) {
 		t.Run("sets capacity correctly", func(t *testing.T) {
 			q := NewQueue[int]()
 			q.SetCapacity(5)
-			assert.Equal(t, 5, q.capacity)
+			for i := range 5 {
+				assert.True(t, q.Enqueue(i))
+			}
+			assert.False(t, q.Enqueue(5), "the sixth item exceeds capacity 5")
 		})
 
 		t.Run("clamps negative values to zero", func(t *testing.T) {
 			q := NewQueue[int]()
 			q.SetCapacity(-10)
-			assert.Equal(t, 0, q.capacity)
+			for i := range 100 {
+				assert.True(t, q.Enqueue(i), "negative capacity means unlimited")
+			}
 		})
 
 		t.Run("zero means unlimited", func(t *testing.T) {

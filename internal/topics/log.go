@@ -41,22 +41,24 @@ func newChunk[T any](capacity int) *chunk[T] {
 // only with other Appends and with opening, closing or purging a cursor;
 // Dequeue takes only its own cursor's lock.
 type Log[T any] struct {
-	mx    sync.Mutex    // writers and cursor bookkeeping: tail, open
-	tail  *chunk[T]     // write chunk; nil while no cursor is open
-	open  []*Cursor[T]  // open cursors
-	limit uint64        // max unread items for the slowest cursor; 0 means unbounded
-	head  atomic.Uint64 // items ever published, so the offset of the next one
+	mx     sync.Mutex    // writers and cursor bookkeeping: tail, open, limit
+	tail   *chunk[T]     // write chunk; nil while no cursor is open
+	open   []*Cursor[T]  // open cursors
+	limit  uint64        // max unread items for the slowest cursor; 0 means unbounded
+	head   atomic.Uint64 // items ever published, so the offset of the next one
+	closed atomic.Bool   // Close was called: Append stores nothing
 }
 
 // Cursor reads a Log from its own position. One goroutine reads it at a time;
 // mx only orders that reader against Values, Purge and Close.
 type Cursor[T any] struct {
-	log    *Log[T]
-	mx     sync.Mutex
-	chunk  *chunk[T] // holds the next unread item; nil once closed
-	idx    int       // index into chunk.data
-	offset atomic.Uint64
-	closed atomic.Bool
+	log     *Log[T]
+	mx      sync.Mutex
+	chunk   *chunk[T] // holds the next unread item; nil once closed
+	idx     int       // index into chunk.data
+	offset  atomic.Uint64
+	closed  atomic.Bool
+	consume bool // the log's only cursor: clear each slot as it is read
 }
 
 // NewLog returns an empty, unbounded log.
@@ -70,14 +72,32 @@ func NewBoundedLog[T any](limit int) *Log[T] {
 	return &Log[T]{limit: uint64(max(0, limit))}
 }
 
+// SetLimit changes the bound NewBoundedLog sets. A limit below 1 is
+// unbounded.
+func (l *Log[T]) SetLimit(limit int) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	l.limit = uint64(max(0, limit))
+}
+
+// Close makes every later Append store nothing. An Append already waiting for
+// the log's lock when Close runs is rejected too; cursors keep reading what
+// was stored.
+func (l *Log[T]) Close() {
+	l.closed.Store(true)
+}
+
 // Append stores item once and returns how many open cursors will read it. It
-// stores nothing and returns 0 when no cursor is open, or when the log is
-// bounded and its slowest cursor already has limit unread items.
+// stores nothing and returns 0 when the log is closed, no cursor is open, or
+// the log is bounded and its slowest cursor already has limit unread items.
 func (l *Log[T]) Append(item T) int {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	if len(l.open) == 0 || l.full() {
+	// closed is read under the lock so an Append that waited for it observes
+	// a Close made meanwhile.
+	if l.closed.Load() || len(l.open) == 0 || l.full() {
 		return 0
 	}
 
@@ -141,6 +161,17 @@ func (l *Log[T]) NewCursor() *Cursor[T] {
 	return c
 }
 
+// NewConsumer returns a cursor like NewCursor that also clears each slot as it
+// reads it, so a read item is freed at once instead of with its chunk. It
+// turns the log into a FIFO queue and must be the log's only cursor: other
+// cursors would find cleared slots.
+func (l *Log[T]) NewConsumer() *Cursor[T] {
+	c := l.NewCursor()
+	c.consume = true
+
+	return c
+}
+
 // Len returns how many items the cursor has not read. It is 0 once closed. It
 // takes no lock.
 func (c *Cursor[T]) Len() int {
@@ -167,6 +198,9 @@ func (c *Cursor[T]) Dequeue() (T, bool) {
 	for {
 		if c.idx < int(c.chunk.n.Load()) {
 			item := c.chunk.data[c.idx]
+			if c.consume {
+				c.chunk.data[c.idx] = zero // the writer never writes below n, so no race
+			}
 			c.idx++
 			c.offset.Add(1)
 
@@ -213,6 +247,11 @@ func (c *Cursor[T]) Purge() {
 	l := c.log
 	l.mx.Lock() // tail, its count and head move together only under the writer lock
 	defer l.mx.Unlock()
+
+	if c.consume {
+		// The only reader: drop the stored items with their chunks.
+		l.tail = newChunk[T](chunkCapacity)
+	}
 
 	c.chunk, c.idx = l.tail, int(l.tail.n.Load())
 	c.offset.Store(l.head.Load())
