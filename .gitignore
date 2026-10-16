@@ -5,3 +5,6 @@ vendor
 
 # motion-explainer sources and output (SVGs, reel, frames)
 assets/explainers/
+
+# superpowers specs and plans (local working docs)
+docs/superpowers/
