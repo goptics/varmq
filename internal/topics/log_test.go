@@ -123,6 +123,54 @@ func TestLog(t *testing.T) {
 		assert.False(t, l.Full())
 	})
 
+	t.Run("append waiting for the lock observes a close made meanwhile", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewCursor()
+		l.mx.Lock()
+
+		res := make(chan int, 1)
+		go func() { res <- l.Append(1) }()
+
+		time.Sleep(50 * time.Millisecond)
+		l.Close()
+		l.mx.Unlock()
+
+		assert.Equal(t, 0, <-res)
+		assert.Equal(t, 0, c.Len())
+	})
+
+	t.Run("a consumer clears each slot it reads and purge drops the stored items", func(t *testing.T) {
+		l := NewLog[*int]()
+		c := l.NewConsumer()
+		one, two := 1, 2
+		l.Append(&one)
+		l.Append(&two)
+
+		v, ok := c.Dequeue()
+		assert.True(t, ok)
+		assert.Same(t, &one, v)
+		assert.Nil(t, c.chunk.data[0], "read slot cleared, so the item can be collected")
+		assert.Same(t, &two, c.chunk.data[1], "unread slot kept")
+
+		first := c.chunk
+		c.Purge()
+		assert.NotSame(t, first, c.chunk, "purge starts a fresh chunk")
+		assert.Equal(t, 0, c.Len())
+		l.Append(&one)
+		v, _ = c.Dequeue()
+		assert.Same(t, &one, v)
+	})
+
+	t.Run("set limit bounds an existing log", func(t *testing.T) {
+		l := NewLog[int]()
+		l.NewCursor()
+		l.SetLimit(1)
+		assert.Equal(t, 1, l.Append(1))
+		assert.Equal(t, 0, l.Append(2))
+		l.SetLimit(0)
+		assert.Equal(t, 1, l.Append(2))
+	})
+
 	t.Run("append without cursors stores nothing", func(t *testing.T) {
 		l := NewLog[int]()
 		assert.Equal(t, 0, l.Append(1))
