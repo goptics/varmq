@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/goptics/varmq/internal/pool"
 )
 
 func (w *worker[T, JobType]) goEventLoop() {
@@ -59,15 +61,10 @@ func worthSpawning(pending int, jobNanos int64, alive int) bool {
 	return int64(pending)*jobNanos > spawnNanos*int64(alive)*int64(alive)
 }
 
-// batchSize is one worker's share of the backlog among the live workers,
-// busy or idle, at least 1 and at most maxBatch. Dividing by the live count
-// rather than the free count matters at both ends: with few goroutines
-// spawned yet (a high limit, cheap jobs) the share is large and the wake-up
-// cost is spread over the batch; with every worker busy the share stays
-// small, so no worker ends up holding a long run of jobs while the others
-// find the queue empty and stop.
-func batchSize(pending, alive int) int {
-	return max(1, min(pending/max(alive, 1), maxBatch))
+// batchSize is one worker's share when the backlog is split across shares
+// workers: at least 1, at most maxBatch. planBatch decides what shares is.
+func batchSize(pending, shares int) int {
+	return max(1, min(pending/max(shares, 1), maxBatch))
 }
 
 // processNextJob hands the next batch of jobs to one worker. Concurrency
@@ -78,49 +75,16 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	w.status.CompareAndSwap(idle, running)
 
 	m := w.manager()
-	pending := m.Len()
-	alive := int(w.busyWorkers.Load()) + w.pool.Len()
-	// Fair share: every worker the limit allows gets its own job before
-	// anyone gets two, so a batch never costs parallelism. Once another
-	// goroutine would cost more than it saves, the live ones share the
-	// backlog instead and nothing is spawned.
-	divisor := min(int(w.concurrency.Load()), pending)
-	grow := worthSpawning(pending, w.jobNanos.Load(), alive)
-	if !grow {
-		divisor = alive
-	}
-
-	node := w.pool.PopBack()
+	node, k := w.planBatch(m)
 	if node == nil {
-		if !grow {
-			return false, nil // wait for a worker to come back
-		}
-		node = w.initPoolNode()
+		return false, nil // no idle worker, and one more is not worth spawning: wait
 	}
 
-	k := min(batchSize(pending, divisor), m.maxBatch())
 	w.busyWorkers.Add(1)
 	w.curProcessing.Add(uint32(k))
 
 	buf := node.Value.Batch(k)
-
-	n, cont, err := 0, true, error(nil)
-	for n < k {
-		j, nextErr := m.Next()
-		if nextErr != nil {
-			if errors.Is(nextErr, errNoReadySource) {
-				cont = false
-			} else {
-				err = nextErr
-			}
-			break
-		}
-		if j.IsClosed() {
-			continue
-		}
-		buf[n] = j
-		n++
-	}
+	n, cont, err := w.fillBatch(m, buf)
 
 	if n == 0 {
 		w.pool.PushNode(node)
@@ -135,6 +99,59 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	node.Value.SendBatch(buf[:n])
 
 	return cont, err
+}
+
+// planBatch picks the worker for the next hand-off and how many jobs it
+// gets. The backlog is split by fair share over every worker the limit
+// allows, so a batch never costs parallelism; once one more goroutine would
+// cost more than it saves (worthSpawning), it is split over the live
+// goroutines instead and none is spawned. A nil node means no worker is idle
+// and none should be spawned: the loop waits for one to come back.
+func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[JobType], int) {
+	pending := m.Len()
+	alive := int(w.busyWorkers.Load()) + w.pool.Len()
+
+	shares := min(int(w.concurrency.Load()), pending)
+	grow := worthSpawning(pending, w.jobNanos.Load(), alive)
+	if !grow {
+		shares = alive
+	}
+
+	node := w.pool.PopBack()
+	if node == nil {
+		if !grow {
+			return nil, 0
+		}
+		node = w.initPoolNode()
+	}
+
+	return node, min(batchSize(pending, shares), m.maxBatch())
+}
+
+// fillBatch dequeues into buf, skipping jobs the user already closed (the
+// worker checks again before running one, since a job can be closed while it
+// waits in the batch). It returns how many it stored, whether the loop should
+// keep dispatching, and any storage error.
+func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) (n int, cont bool, err error) {
+	cont = true
+	for n < len(buf) {
+		j, nextErr := m.Next()
+		if nextErr != nil {
+			if errors.Is(nextErr, errNoReadySource) {
+				cont = false
+			} else {
+				err = nextErr
+			}
+			return
+		}
+		if j.IsClosed() {
+			continue
+		}
+		buf[n] = j
+		n++
+	}
+
+	return
 }
 
 // finishJobs takes m jobs off the processing count without w.mx unless they

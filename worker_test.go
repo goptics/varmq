@@ -1524,7 +1524,7 @@ func TestWorkerRegistration(t *testing.T) {
 }
 
 func TestBatchSize(t *testing.T) {
-	cases := []struct{ pending, alive, want int }{
+	cases := []struct{ pending, shares, want int }{
 		{0, 0, 1},          // nothing pending still hands out one slot's worth
 		{1, 1, 1},          // single worker, shallow queue
 		{1000, 1, 32},      // single live worker, deep queue: capped at maxBatch
@@ -1535,7 +1535,7 @@ func TestBatchSize(t *testing.T) {
 		{1000000, 50, 32},  // cap
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, batchSize(c.pending, c.alive), "batchSize(%d, %d)", c.pending, c.alive)
+		assert.Equal(t, c.want, batchSize(c.pending, c.shares), "batchSize(%d, %d)", c.pending, c.shares)
 	}
 }
 

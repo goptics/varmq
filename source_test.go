@@ -542,7 +542,10 @@ func TestMaxBatch(t *testing.T) {
 		}
 		assert.NoError(t, w.Start())
 
-		assert.Eventually(t, func() bool { return w.NumProcessing() == 1 }, time.Second, time.Millisecond)
+		// The worker marks job 0 Processing only after it has received the
+		// whole batch; the busy count alone rises before the dispatcher has
+		// finished dequeuing.
+		assert.Eventually(t, func() bool { return jobs[0].Status() == "Processing" }, time.Second, time.Millisecond)
 
 		assert.Equal(t, 0, q.Len(), "the whole backlog went to the one worker as a batch")
 		assert.Equal(t, 4, w.NumPending())

@@ -98,8 +98,9 @@ type Worker interface {
 	// batch and waiting their turn. A bound queue's own Len counts only the
 	// former. Submitted == NumPending + NumProcessing + Completed.
 	NumPending() int
-	// NumConcurrency returns the maximum number of jobs that can be
-	// processed concurrently (the pool size).
+	// NumConcurrency returns the upper bound on jobs processed at once. It
+	// is a limit, not a pool size: goroutines are spawned on demand and only
+	// while another one would shorten the backlog by more than it costs.
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle worker goroutines
 	// currently available in the pool to process new jobs.
