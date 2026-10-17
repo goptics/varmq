@@ -15,6 +15,7 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 | `varmq-priority-queue.svg` | `gen_priority.py` | `priority-queue.tpl.svg` | priority queue reordering, concurrency 1 |
 | `varmq-multi-queue.svg` | `gen_multi.py` | `multi-queue.tpl.svg` | 3 queues, RoundRobin, concurrency 2 |
 | `varmq-topic.svg` | `gen_topic.py` | `topic.tpl.svg` | in-memory topic, 2 subscribers, per-cursor reads, chunk freeing |
+| `varmq-batch.svg` | `gen_batch.py` | `batch.tpl.svg` | batched dispatch: `Add` ×8, concurrency 2, 4 + 2 jobs per hand-off, then 1 each |
 
 ## How it works
 
@@ -29,7 +30,7 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 - **CSS `@keyframes` only.** GitHub renders README SVGs through `<img>`: no JavaScript, and SMIL / `offset-path` are unreliable. Use the `r` attribute, not CSS `r` (Safari).
 - **Seamless loop.** Every animation ends in its start state: empty queues, idle workers.
 - **Match varmq's real behaviour.** Queues start empty (the event loop dispatches immediately). `Add` / `AddAll` signal once per job, but the signal channel holds one pending signal, so extra signals are drawn as dropped (`worker_eventloop.go` `notifyToPullNextJobs`). Done workers signal through `releaseProcessingSlot`.
-- **Batches.** `processNextJob` hands a worker its fair share of the backlog in one go, but at the depth these diagrams show (6 jobs, concurrency 4) the share is one job per worker at every wake-up, so no batch appears. A visible batch needs pending >= 2 × concurrency.
+- **Batches.** `processNextJob` hands a worker its fair share of the backlog, `pending / min(concurrency, pending)`, in one go, and the goroutine signals done once per hand-off. `varmq-batch.svg` shows it; in the worker-pool diagram (6 jobs, concurrency 4) the share is one job per worker at every wake-up, so no batch appears there. Jobs waiting in a batch are drawn parked inside the worker's channel box.
 - **Themes.** Colours are CSS variables, swapped by `@media (prefers-color-scheme: dark)`. Text must keep WCAG AA contrast (4.5:1) in both themes, also while a shape is flashing.
 - **Reduced motion.** `prefers-reduced-motion` pauses on an informative frame, chosen by the `still=` argument to `kfu.render` / `kfu.fill`.
 
