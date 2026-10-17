@@ -1,11 +1,6 @@
 package varmq
 
-import (
-	"fmt"
-	"sync"
-
-	"github.com/goptics/varmq/internal/helpers"
-)
+import "github.com/goptics/varmq/internal/helpers"
 
 // groupJob represents a job that can be used in a group.
 type groupJob[T any] struct {
@@ -37,7 +32,7 @@ func newGroupJob[T any](bufferSize int) *groupJob[T] {
 }
 
 func generateGroupId(id string) string {
-	return fmt.Sprintf("%s%s", groupIdPrefixed, id)
+	return groupIdPrefixed + id
 }
 
 func (gj *groupJob[T]) newJob(data T, config jobConfigs) *groupJob[T] {
@@ -70,9 +65,13 @@ func (gj *groupJob[T]) Close() error {
 	return nil
 }
 
+// resultGroupJob is one member of an AddAll group on a result queue. Unlike
+// resultJob it fans results into a channel shared by the whole group, which
+// is what Results() hands out.
 type resultGroupJob[T, R any] struct {
-	resultJob[T, R]
-	wgc *helpers.WgCounter
+	job[T]
+	resp *helpers.Response[Result[R]]
+	wgc  *helpers.WgCounter
 }
 
 // EnqueuedResultGroupJob is an interface representing a result group job that has been successfully enqueued.
@@ -90,10 +89,8 @@ type EnqueuedResultGroupJob[R any] interface {
 
 func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 	gj := &resultGroupJob[T, R]{
-		resultJob: resultJob[T, R]{
-			Response: helpers.NewResponse[Result[R]](bufferSize),
-		},
-		wgc: helpers.NewWgCounter(bufferSize),
+		resp: helpers.NewResponse[Result[R]](bufferSize),
+		wgc:  helpers.NewWgCounter(bufferSize),
 	}
 
 	return gj
@@ -101,15 +98,25 @@ func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 
 func (gj *resultGroupJob[T, R]) newJob(data T, config jobConfigs) *resultGroupJob[T, R] {
 	return &resultGroupJob[T, R]{
-		resultJob: resultJob[T, R]{
-			job: job[T]{
-				id:   generateGroupId(config.Id),
-				data: data,
-			},
-			Response: gj.Response,
+		job: job[T]{
+			id:   generateGroupId(config.Id),
+			data: data,
 		},
-		wgc: gj.wgc,
+		resp: gj.resp,
+		wgc:  gj.wgc,
 	}
+}
+
+func (gj *resultGroupJob[T, R]) sendResult(result R) {
+	gj.resp.Send(Result[R]{JobId: gj.id, Data: result})
+}
+
+func (gj *resultGroupJob[T, R]) sendError(err error) {
+	gj.resp.Send(Result[R]{JobId: gj.id, Err: err})
+}
+
+func (gj *resultGroupJob[T, R]) Drain() {
+	gj.resp.Drain()
 }
 
 func (gj *resultGroupJob[T, R]) NumPending() int {
@@ -121,7 +128,7 @@ func (gj *resultGroupJob[T, R]) Wait() {
 }
 
 func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
-	return gj.Response.Read()
+	return gj.resp.Read()
 }
 
 func (gj *resultGroupJob[T, R]) Close() error {
@@ -134,15 +141,18 @@ func (gj *resultGroupJob[T, R]) Close() error {
 	gj.wgc.Done()
 
 	if gj.wgc.Count() == 0 {
-		gj.Response.Close()
+		gj.resp.Close()
 	}
 
 	return nil
 }
 
+// errorGroupJob is one member of an AddAll group on an error queue; see
+// resultGroupJob.
 type errorGroupJob[T any] struct {
-	errorJob[T]
-	wgc *helpers.WgCounter
+	job[T]
+	resp *helpers.Response[error]
+	wgc  *helpers.WgCounter
 }
 
 // EnqueuedErrGroupJob is an interface representing an error group job that has been successfully enqueued.
@@ -160,13 +170,8 @@ type EnqueuedErrGroupJob interface {
 
 func newErrorGroupJob[T any](bufferSize int) *errorGroupJob[T] {
 	return &errorGroupJob[T]{
-		errorJob: errorJob[T]{
-			job: job[T]{
-				wg: sync.WaitGroup{},
-			},
-			Response: helpers.NewResponse[error](bufferSize),
-		},
-		wgc: helpers.NewWgCounter(bufferSize),
+		resp: helpers.NewResponse[error](bufferSize),
+		wgc:  helpers.NewWgCounter(bufferSize),
 	}
 }
 
@@ -180,19 +185,25 @@ func (gj *errorGroupJob[T]) Wait() {
 
 func (gj *errorGroupJob[T]) newJob(data T, config jobConfigs) *errorGroupJob[T] {
 	return &errorGroupJob[T]{
-		errorJob: errorJob[T]{
-			job: job[T]{
-				id:   generateGroupId(config.Id),
-				data: data,
-			},
-			Response: gj.Response,
+		job: job[T]{
+			id:   generateGroupId(config.Id),
+			data: data,
 		},
-		wgc: gj.wgc,
+		resp: gj.resp,
+		wgc:  gj.wgc,
 	}
 }
 
+func (gj *errorGroupJob[T]) sendError(err error) {
+	gj.resp.Send(err)
+}
+
+func (gj *errorGroupJob[T]) Drain() {
+	gj.resp.Drain()
+}
+
 func (gj *errorGroupJob[T]) Errs() <-chan error {
-	return gj.Response.Read()
+	return gj.resp.Read()
 }
 
 func (gj *errorGroupJob[T]) Close() error {
@@ -205,7 +216,7 @@ func (gj *errorGroupJob[T]) Close() error {
 	gj.wgc.Done()
 
 	if gj.wgc.Count() == 0 {
-		gj.Response.Close()
+		gj.resp.Close()
 	}
 
 	return nil

@@ -371,6 +371,24 @@ func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 	return applyJobConfigs(c, config)
 }
 
+// jobConfigsFor builds the job config for one AddAll item: the item's own
+// id, or one from the generator when it has none, the same choice WithJobId
+// makes. It skips the JobConfigFunc path, which heap-escapes c.
+//
+// The generator runs only for items without an id. Add with WithJobId still
+// calls it once and discards the value, so a stateful generator (a counter)
+// hands AddAll a denser sequence than Add: n1, n2 for the two unnamed items
+// of {a, -, b, -} rather than n2, n4. Ids stay unique either way.
+// ponytail: floor is one string alloc per non-empty id from the "g:" prefix
+// concat in generateGroupId.
+func (c *configs) jobConfigsFor(id string) jobConfigs {
+	if id == "" {
+		id = c.jobIdGenerator()
+	}
+
+	return jobConfigs{Id: id}
+}
+
 // applyJobConfigs is split out so that c escapes to the heap only when there
 // are config funcs to take its address; the common no-config Add stays
 // allocation free. noinline, or the inliner merges it back and c escapes.

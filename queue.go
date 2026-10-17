@@ -65,8 +65,10 @@ func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	groupJob := newGroupJob[T](len(items))
 
+	cfg := q.w.configs()
+
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
@@ -126,8 +128,10 @@ func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, b
 func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	groupJob := newErrorGroupJob[T](len(items))
 
+	cfg := q.w.configs()
+
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
@@ -186,8 +190,10 @@ func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResul
 func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	groupJob := newResultGroupJob[T, R](len(items))
 
+	cfg := q.w.configs()
+
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, loadJobConfigs(q.w.configs(), WithJobId(item.ID)))
+		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
 		if ok := q.internalQueue.Enqueue(j); !ok {
 			j.Close()
 			continue
