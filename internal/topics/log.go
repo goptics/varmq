@@ -132,13 +132,11 @@ func (l *Log[T]) Append(item T) int {
 	for o >= t.end() {
 		next := t.next.Load()
 		if next == nil {
-			if o != t.end() {
-				runtime.Gosched() // the Append that claimed t.end() links it
-				continue
-			}
-
-			next = newChunk[T](o)
-			t.next.Store(next)
+			// Any Append past the end may link it: its base is fixed, so
+			// CAS losers only drop a spare chunk instead of waiting on a
+			// linker the scheduler parked.
+			t.next.CompareAndSwap(nil, newChunk[T](t.end()))
+			next = t.next.Load()
 		}
 
 		l.tail.CompareAndSwap(t, next)
