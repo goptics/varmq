@@ -39,7 +39,9 @@ type worker[T any, JobType iJob[T]] struct {
 	sourcesMx       sync.Mutex
 	metrics         Metrics
 	concurrency     atomic.Uint32
-	curProcessing   atomic.Uint32
+	curProcessing   atomic.Uint32 // jobs taken from the sources and not yet finished
+	busyWorkers     atomic.Uint32 // pool goroutines serving a batch; bounded by concurrency
+	jobNanos        atomic.Int64  // ns per job in the last finished batch; 0 until one has run
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	errorChan       chan error
@@ -88,14 +90,17 @@ type Worker interface {
 	// Possible values: "Initiated", "Idle", "Running", "Pausing", "Paused",
 	// "Stopping", "Stopped"
 	Status() string
-	// NumProcessing returns the number of jobs currently being processed
-	// by the worker (in-flight jobs).
+	// NumProcessing returns the number of jobs being executed right now,
+	// never more than NumConcurrency.
 	NumProcessing() int
-	// NumPending returns the number of jobs waiting in the queue
-	// that have not yet started processing.
+	// NumPending returns the number of jobs that have not started: those
+	// still in the bound queues plus those already handed to a worker in a
+	// batch and waiting their turn. A bound queue's own Len counts only the
+	// former. Submitted == NumPending + NumProcessing + Completed.
 	NumPending() int
-	// NumConcurrency returns the maximum number of jobs that can be
-	// processed concurrently (the pool size).
+	// NumConcurrency returns the upper bound on jobs processed at once. It
+	// is a limit, not a pool size: goroutines are spawned on demand and only
+	// while another one would shorten the backlog by more than it costs.
 	NumConcurrency() int
 	// NumIdleWorkers returns the number of idle worker goroutines
 	// currently available in the pool to process new jobs.
@@ -399,11 +404,19 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.manager().Len()
+	// Each busy worker runs exactly one job, so taken minus running is what
+	// sits in batch buffers. The two loads are not a snapshot; clamp at 0.
+	taken, running := w.curProcessing.Load(), w.busyWorkers.Load()
+	buffered := 0
+	if taken > running {
+		buffered = int(taken - running)
+	}
+
+	return w.manager().Len() + buffered
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
-	return int(w.curProcessing.Load())
+	return int(w.busyWorkers.Load())
 }
 
 func (w *worker[T, JobType]) NumConcurrency() int {

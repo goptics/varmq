@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/goptics/varmq/internal/pool"
 )
 
 func (w *worker[T, JobType]) goEventLoop() {
@@ -21,7 +23,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.curProcessing.Load() < w.concurrency.Load() && w.NumPending() > 0 {
+				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.manager().Len() > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -35,54 +37,133 @@ func (w *worker[T, JobType]) goEventLoop() {
 	}(w.ctx, w.eventLoopSignal)
 }
 
-func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	w.curProcessing.Add(1)
-	w.status.CompareAndSwap(idle, running)
+// maxBatch caps how many jobs one wake-up hands to a worker.
+const maxBatch = 32
 
-	j, err := w.manager().Next()
-	if err != nil {
-		w.releaseProcessingSlot()
-		if errors.Is(err, errNoReadySource) {
-			return false, nil
-		}
-		return true, err
+// spawnNanos is what one more pool goroutine costs in wall time: the spawn
+// itself on an event loop that shares a few cores with everything else,
+// plus the stack it allocates and the collector later scans.
+//
+// ponytail: a constant; measuring the real cost per worker would need the
+// GC share, which no single goroutine can see.
+const spawnNanos = 2_000
+
+// worthSpawning reports whether one more goroutine would shorten the drain
+// of the backlog by more than it costs. With alive goroutines each job in
+// the backlog waits about pending*jobNanos/alive; one more cuts that by
+// pending*jobNanos/alive^2. Cheap jobs stop the pool at a few dozen
+// goroutines, ten-millisecond ones at tens of thousands.
+func worthSpawning(pending int, jobNanos int64, alive int) bool {
+	if alive == 0 || jobNanos == 0 {
+		return true // nothing measured yet: fair share decides
 	}
 
-	if j.IsClosed() {
-		w.releaseProcessingSlot()
-		return true, nil
-	}
-
-	j.changeStatus(processing)
-
-	w.sendToNextChannel(j)
-
-	return true, nil
+	return int64(pending)*jobNanos > spawnNanos*int64(alive)*int64(alive)
 }
 
-// releaseProcessingSlot frees a slot without w.mx unless it was the last one:
-// waiters are only woken when processing reaches 0. See waitForChange for why
-// the decrement may happen before the lock.
-func (w *worker[T, JobType]) releaseProcessingSlot() {
-	processing := w.curProcessing.Add(^uint32(0))
-	if processing == 0 {
+// batchSize is one worker's share when the backlog is split across shares
+// workers: at least 1, at most maxBatch. planBatch decides what shares is.
+func batchSize(pending, shares int) int {
+	return max(1, min(pending/max(shares, 1), maxBatch))
+}
+
+// processNextJob hands the next batch of jobs to one worker. Concurrency
+// bounds busy workers, not jobs: a batch occupies one worker however many
+// jobs it holds. Jobs are counted before dequeuing so Wait never sees an
+// empty queue and zero processing while one is in flight.
+func (w *worker[T, JobType]) processNextJob() (bool, error) {
+	w.status.CompareAndSwap(idle, running)
+
+	m := w.manager()
+	node, k := w.planBatch(m)
+	if node == nil {
+		return false, nil // no idle worker, and one more is not worth spawning: wait
+	}
+
+	w.busyWorkers.Add(1)
+	w.curProcessing.Add(uint32(k))
+
+	buf := node.Value.Batch(k)
+	n, cont, err := w.fillBatch(m, buf)
+
+	if n == 0 {
+		w.pool.PushNode(node)
+		w.busyWorkers.Add(^uint32(0))
+		w.finishJobs(uint32(k))
+		return cont, err
+	}
+
+	if n < k {
+		w.finishJobs(uint32(k - n))
+	}
+	node.Value.SendBatch(buf[:n])
+
+	return cont, err
+}
+
+// planBatch picks the worker for the next hand-off and how many jobs it
+// gets. The backlog is split by fair share over every worker the limit
+// allows, so a batch never costs parallelism; once one more goroutine would
+// cost more than it saves (worthSpawning), it is split over the live
+// goroutines instead and none is spawned. A nil node means no worker is idle
+// and none should be spawned: the loop waits for one to come back.
+func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[JobType], int) {
+	pending := m.Len()
+	alive := int(w.busyWorkers.Load()) + w.pool.Len()
+
+	shares := min(int(w.concurrency.Load()), pending)
+	grow := worthSpawning(pending, w.jobNanos.Load(), alive)
+	if !grow {
+		shares = alive
+	}
+
+	node := w.pool.PopBack()
+	if node == nil {
+		if !grow {
+			return nil, 0
+		}
+		node = w.initPoolNode()
+	}
+
+	return node, min(batchSize(pending, shares), m.maxBatch())
+}
+
+// fillBatch dequeues into buf, skipping jobs the user already closed (the
+// worker checks again before running one, since a job can be closed while it
+// waits in the batch). It returns how many it stored, whether the loop should
+// keep dispatching, and any storage error.
+func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) (n int, cont bool, err error) {
+	cont = true
+	for n < len(buf) {
+		j, nextErr := m.Next()
+		if nextErr != nil {
+			if errors.Is(nextErr, errNoReadySource) {
+				cont = false
+			} else {
+				err = nextErr
+			}
+			return
+		}
+		if j.IsClosed() {
+			continue
+		}
+		buf[n] = j
+		n++
+	}
+
+	return
+}
+
+// finishJobs takes m jobs off the processing count without w.mx unless they
+// were the last ones: waiters are only woken when processing reaches 0. See
+// waitForChange for why the decrement may happen before the lock.
+func (w *worker[T, JobType]) finishJobs(m uint32) {
+	if w.curProcessing.Add(^(m - 1)) == 0 {
 		w.mx.Lock()
 		// A job may have started since the decrement; then it releases them.
 		w.releaseWaiters(w.curProcessing.Load())
 		w.mx.Unlock()
 	}
-	if processing < w.concurrency.Load() {
-		w.notifyToPullNextJobs()
-	}
-}
-
-func (w *worker[T, JobType]) sendToNextChannel(j JobType) {
-	if node := w.pool.PopBack(); node != nil {
-		node.Value.Send(j)
-		return
-	}
-
-	w.initPoolNode().Value.Send(j)
 }
 
 func (w *worker[T, JobType]) notifyToPullNextJobs() {

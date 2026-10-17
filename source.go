@@ -19,6 +19,12 @@ type source[JobType any] interface {
 	// ErrFailedToCastJob when it yields something that is not a job, and a
 	// wrapped ErrParseJob when it yields bytes that do not parse.
 	Next() (JobType, error)
+	// maxBatch is the most jobs the scheduler may hand one worker from this
+	// source per wake-up. In-memory FIFO storage batches; storage that
+	// acknowledges returns 1 so one worker never prefetches messages other
+	// consumers could take, and priority storage returns 1 so a job that
+	// arrives after a batch was taken is not stuck behind lower priorities.
+	maxBatch() int
 }
 
 // ackQueue is storage that hands out an ack id with each item.
@@ -56,11 +62,16 @@ func toJob[T any, JobType iJob[T]](v any) (JobType, error) {
 // queues and priority queues, their error and result variants, and custom
 // WithQueue / WithPriorityQueue implementations.
 type queueSource[T any, JobType iJob[T]] struct {
-	q IBaseQueue
+	q     IBaseQueue
+	batch int // decided once in bind: 1 for priority storage
 }
 
 func (s *queueSource[T, JobType]) Len() int {
 	return s.q.Len()
+}
+
+func (s *queueSource[T, JobType]) maxBatch() int {
+	return s.batch
 }
 
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
@@ -82,6 +93,13 @@ type ackSource[T any, JobType iJob[T]] struct {
 
 func (s *ackSource[T, JobType]) Len() int {
 	return s.q.Len()
+}
+
+// maxBatch is 1: every dequeued message is unacknowledged until its job is
+// done, so holding a batch would hide messages from other consumers and
+// stretch the time before they are acknowledged.
+func (s *ackSource[T, JobType]) maxBatch() int {
+	return 1
 }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
@@ -119,6 +137,10 @@ func (s *topicSource[T]) Len() int {
 	return s.cursor.Len()
 }
 
+func (s *topicSource[T]) maxBatch() int {
+	return maxBatch
+}
+
 func (s *topicSource[T]) Next() (iJob[T], error) {
 	data, ok := s.cursor.Dequeue()
 	if !ok {
@@ -142,8 +164,10 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 
 	if aq, ok := q.(ackQueue); ok {
 		src = &ackSource[T, JobType]{q: aq}
+	} else if _, ok := q.(IPriorityQueue); ok {
+		src = &queueSource[T, JobType]{q: q, batch: 1}
 	} else {
-		src = &queueSource[T, JobType]{q: q}
+		src = &queueSource[T, JobType]{q: q, batch: maxBatch}
 	}
 
 	w.addSource(src, priority)

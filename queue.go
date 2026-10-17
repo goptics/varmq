@@ -211,7 +211,9 @@ type IExternalBaseQueue interface {
 	// This method will be removed in an upcoming release.
 	NumPending() int
 
-	// Len returns the number of jobs in the queue.
+	// Len returns the number of jobs in the queue. Jobs a worker has already
+	// taken into a batch but not started are not in the queue; the worker's
+	// NumPending counts them.
 	Len() int
 	// IsFull returns true if the queue has reached its configured capacity.
 	// If no capacity is set, it always returns false.

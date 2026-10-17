@@ -96,16 +96,37 @@ func (w *worker[T, JobType]) removeAllWorkers() {
 func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
-	go node.Value.Serve(func(j JobType) {
-		w.workerFunc(j)
+	go node.Value.Serve(func(jobs []JobType) {
+		start := time.Now()
+		for _, j := range jobs {
+			// A job stays Queued while it waits in the batch, so the user can
+			// still Close it; skip it here like the dispatcher would have.
+			if j.IsClosed() {
+				continue
+			}
+			j.changeStatus(processing)
 
-		j.changeStatus(finished)
-		if err := j.Close(); err != nil {
-			w.sendError(err)
+			w.workerFunc(j)
+
+			j.changeStatus(finished)
+			if err := j.Close(); err != nil {
+				w.sendError(err)
+			}
+			w.metrics.incCompleted()
 		}
-		w.metrics.incCompleted()
+
+		if n := len(jobs); n > 0 {
+			w.jobNanos.Store(int64(time.Since(start)) / int64(n))
+		}
+
+		// Drop the job references before the node is up for grabs again, then
+		// back in the pool and off the busy count before the processing count
+		// drops: a Wait that returns must find every idle worker in the pool.
+		clear(jobs)
 		w.freePoolNode(node)
-		w.releaseProcessingSlot()
+		w.busyWorkers.Add(^uint32(0))
+		w.finishJobs(uint32(len(jobs)))
+		w.notifyToPullNextJobs()
 	})
 
 	return node
@@ -118,7 +139,9 @@ func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 		node.Value.UpdateLastUsed()
 	}
 
-	if w.NumPending() >= w.NumConcurrency() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	// Keep the goroutine while there is more backlog than idle workers to
+	// run it; stopping it would only make the next dispatch spawn another.
+	if w.manager().Len() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}

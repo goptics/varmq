@@ -370,12 +370,12 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 1,045        | 113           | 2                       |
-|                  | Priority       | 1,072        | 128           | 3                       |
-| **ErrWorker**    | ErrQueue       | 1,153        | 289           | 5                       |
-|                  | ErrPriority    | 1,145        | 304           | 6                       |
-| **ResultWorker** | ResultQueue    | 1,167        | 337           | 5                       |
-|                  | ResultPriority | 1,155        | 352           | 6                       |
+| **Worker**       | Queue          | 1,036        | 98            | 1                       |
+|                  | Priority       | 1,121        | 112           | 2                       |
+| **ErrWorker**    | ErrQueue       | 1,224        | 274           | 4                       |
+|                  | ErrPriority    | 1,254        | 288           | 5                       |
+| **ResultWorker** | ResultQueue    | 1,219        | 322           | 4                       |
+|                  | ResultPriority | 1,274        | 336           | 5                       |
 
 ### `AddAll` Operation
 
@@ -383,26 +383,26 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 649,822      | 130,601       | 3,002                   |
-|                  | Priority       | 776,409      | 146,139       | 4,002                   |
-| **ErrWorker**    | ErrQueue       | 684,882      | 154,895       | 3,505                   |
-|                  | ErrPriority    | 808,360      | 170,661       | 4,505                   |
-| **ResultWorker** | ResultQueue    | 690,249      | 171,540       | 3,005                   |
-|                  | ResultPriority | 803,115      | 187,262       | 4,005                   |
+| **Worker**       | Queue          | 230,162      | 132,171       | 3,004                   |
+|                  | Priority       | 886,444      | 146,142       | 4,002                   |
+| **ErrWorker**    | ErrQueue       | 262,999      | 156,695       | 3,507                   |
+|                  | ErrPriority    | 912,068      | 170,664       | 4,505                   |
+| **ResultWorker** | ResultQueue    | 272,624      | 173,296       | 3,007                   |
+|                  | ResultPriority | 924,255      | 187,264       | 4,005                   |
 
 > [!Note]
 >
 > `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
-> e.g. for default `Queue`, the average time per item is approximately **650ns**.
+> e.g. for default `Queue`, the average time per item is approximately **230ns**, against about **1,036ns** for a single `Add` followed by `Wait`.
 
-Why is `AddAll` faster than individual `Add` calls? Here's what makes the difference:
+Why is `AddAll` so much faster per item than individual `Add` calls?
 
-1. **Batch Processing**: Uses a single group job to process multiple items, reducing per-item overhead
-2. **Shared Resources**: Utilizes a single result channel for all items in the batch
+1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
+2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
 
 ### Comparison with Other Packages
 
-We conducted comprehensive benchmarking between `VarMQ` and [Pond v2](https://github.com/alitto/pond), as both packages provide similar worker pool functionalities. While `VarMQ` draws inspiration from some of Pond's design patterns, `VarMQ` offers unique advantages in queue management and persistence capabilities.
+The [benchmark repository](https://github.com/goptics/varmq-benchmarks) runs `VarMQ` against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools, across producer counts from one to a million, CPU-bound and I/O-bound tasks, and 4, 8 and 24 CPUs. `VarMQ` draws on some of Pond's design patterns and adds queue management and persistence on top.
 
 **Key Differences:**
 

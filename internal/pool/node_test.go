@@ -136,7 +136,7 @@ func TestPoolNode(t *testing.T) {
 		// Start Serve in a goroutine
 		done := make(chan struct{})
 		go func() {
-			node.Serve(func(v string) {
+			node.Serve(func(vs []string) {
 				wg.Done()
 				processed <- struct{}{}
 			})
@@ -166,5 +166,54 @@ func TestPoolNode(t *testing.T) {
 		default:
 			t.Fatalf("channel should be open and writable after Serve exits")
 		}
+	})
+}
+
+func TestPoolNodeBatch(t *testing.T) {
+	t.Run("Batch reuses its buffer and grows on demand", func(t *testing.T) {
+		assert := assert.New(t)
+		node := CreateNode[string](1)
+
+		small := node.Batch(2)
+		assert.Len(small, 2)
+
+		again := node.Batch(2)
+		assert.Same(&small[0], &again[0], "a batch that fits should reuse the buffer")
+
+		big := node.Batch(5)
+		assert.Len(big, 5)
+		assert.NotSame(&small[0], &big[0], "a larger batch should grow the buffer")
+
+		back := node.Batch(3)
+		assert.Same(&big[0], &back[0], "the grown buffer should be kept")
+	})
+
+	t.Run("Serve gets each payload as one slice", func(t *testing.T) {
+		assert := assert.New(t)
+		node := CreateNode[string](1)
+
+		var got []string
+		calls := 0
+		served := make(chan struct{})
+		go func() {
+			node.Serve(func(vs []string) {
+				got = append(got, vs...)
+				calls++
+				served <- struct{}{}
+			})
+		}()
+
+		batch := node.Batch(3)
+		copy(batch, []string{"a", "b", "c"})
+		node.SendBatch(batch)
+		<-served
+
+		node.Send("d")
+		<-served
+
+		node.Stop()
+
+		assert.Equal([]string{"a", "b", "c", "d"}, got)
+		assert.Equal(2, calls, "fn runs once per payload, batch or single")
 	})
 }

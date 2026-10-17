@@ -364,8 +364,21 @@ func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 		Id: qConfig.jobIdGenerator(),
 	}
 
-	for _, config := range config {
-		config(&c)
+	if len(config) == 0 {
+		return c
+	}
+
+	return applyJobConfigs(c, config)
+}
+
+// applyJobConfigs is split out so that c escapes to the heap only when there
+// are config funcs to take its address; the common no-config Add stays
+// allocation free. noinline, or the inliner merges it back and c escapes.
+//
+//go:noinline
+func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
+	for _, f := range config {
+		f(&c)
 	}
 
 	return c

@@ -49,6 +49,8 @@ type emptyManager[JobType any] struct{}
 
 func (m *emptyManager[JobType]) Len() int { return 0 }
 
+func (m *emptyManager[JobType]) maxBatch() int { return 1 }
+
 func (m *emptyManager[JobType]) Next() (JobType, error) {
 	var zero JobType
 	return zero, errNoReadySource
@@ -70,6 +72,8 @@ type directManager[JobType any] struct {
 }
 
 func (m *directManager[JobType]) Len() int { return m.src.Len() }
+
+func (m *directManager[JobType]) maxBatch() int { return m.src.maxBatch() }
 
 // Next reports an empty source as errNoReadySource, as strategyManager's
 // pick does, so the scheduler treats it as "nothing to do". Without the
@@ -117,6 +121,11 @@ func newStrategyManager[JobType any](strategy Strategy) *strategyManager[JobType
 		strategy: strategy,
 	}
 }
+
+// maxBatch is 1: the strategy picks a source per Next, so a batch would mix
+// sources and skip the pick a strategy like Priority or MaxLen would make
+// for each later job.
+func (sm *strategyManager[JobType]) maxBatch() int { return 1 }
 
 func (sm *strategyManager[JobType]) next() (source[JobType], bool) {
 	switch sm.strategy {

@@ -664,6 +664,36 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(t, 0, testQueue.Len(), "Closed job should be dequeued but not processed")
 			})
 
+			t.Run("processNextJob with a partly closed batch", func(t *testing.T) {
+				// Concurrency 2 and 4 pending jobs make a batch of 2; three of
+				// the jobs are closed, so only one is handed over and the
+				// slot reserved for the other must be given back.
+				var ran atomic.Int32
+				w := newWorker(func(j iJob[string]) {
+					ran.Add(1)
+				}, WithAutoRun(false), WithConcurrency(2))
+				defer w.Stop()
+
+				testQueue := queues.NewQueue[any]()
+				for i := range 4 {
+					job := newJob("test-data", loadJobConfigs(w.configs()))
+					if i < 3 {
+						job.Close()
+					}
+					testQueue.Enqueue(job)
+				}
+				w.bind(testQueue, math.MaxInt)
+
+				w.processNextJob()
+
+				// The worker was never started, so Wait returns at once; poll
+				// for the hand-off instead.
+				assert.Eventually(t, func() bool {
+					return ran.Load() == 1 && w.curProcessing.Load() == 0 && w.NumProcessing() == 0
+				}, time.Second, time.Millisecond, "the open job should run and both slots be released")
+				assert.Equal(t, 0, testQueue.Len(), "closed jobs should be dequeued too")
+			})
+
 			t.Run("processNextJob with invalid byte data", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
@@ -1491,4 +1521,69 @@ func TestWorkerRegistration(t *testing.T) {
 
 		w.Stop()
 	})
+}
+
+func TestBatchSize(t *testing.T) {
+	cases := []struct{ pending, shares, want int }{
+		{0, 0, 1},          // nothing pending still hands out one slot's worth
+		{1, 1, 1},          // single worker, shallow queue
+		{1000, 1, 32},      // single live worker, deep queue: capped at maxBatch
+		{5, 10, 1},         // fewer jobs than live workers: one each
+		{20, 10, 2},        // even split
+		{100, 4, 25},       // few goroutines spawned so far: big share each
+		{100000, 50000, 2}, // every worker alive: small share, short tail
+		{1000000, 50, 32},  // cap
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, batchSize(c.pending, c.shares), "batchSize(%d, %d)", c.pending, c.shares)
+	}
+}
+
+func TestWorthSpawning(t *testing.T) {
+	assert.True(t, worthSpawning(1, 0, 0), "nothing measured: fair share")
+	assert.True(t, worthSpawning(1000, 50, 0), "no goroutine yet")
+	assert.False(t, worthSpawning(100_000, 50, 100), "50 ns jobs: a few dozen goroutines is plenty")
+	assert.True(t, worthSpawning(100_000, 50, 10))
+	assert.True(t, worthSpawning(1_000_000, 10_000_000, 50_000), "10 ms jobs: still worth it at 50k")
+	assert.False(t, worthSpawning(1_000_000, 10_000_000, 100_000), "...but not at 100k")
+	assert.True(t, worthSpawning(20, 5_000_000, 9), "small pool, slow jobs: fill the limit")
+}
+
+func TestDispatchWaitsInsteadOfSpawning(t *testing.T) {
+	// Concurrency allows ten goroutines, one is busy, and jobs have proven
+	// cheap: one more goroutine is not worth its spawn, so the dispatcher
+	// leaves the backlog for the busy worker to pick up when it returns.
+	block := make(chan struct{})
+	w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(10))
+	defer w.Stop()
+
+	q := queues.NewQueue[any]()
+	w.bind(q, 1)
+
+	q.Enqueue(newJob("first", loadJobConfigs(w.configs())))
+	cont, err := w.processNextJob()
+	assert.True(t, cont)
+	assert.NoError(t, err)
+	assert.Eventually(t, func() bool { return w.NumProcessing() == 1 }, time.Second, time.Millisecond)
+
+	w.jobNanos.Store(1) // measured: jobs cost nothing
+	for range 5 {
+		q.Enqueue(newJob("later", loadJobConfigs(w.configs())))
+	}
+
+	cont, err = w.processNextJob()
+	assert.False(t, cont, "nothing to do until a worker returns")
+	assert.NoError(t, err)
+	assert.Equal(t, 5, q.Len(), "backlog untouched")
+	assert.Equal(t, 1, w.NumProcessing(), "no goroutine spawned")
+	assert.Equal(t, 0, w.NumIdleWorkers())
+
+	// Slow jobs would be worth another goroutine.
+	w.jobNanos.Store(int64(time.Millisecond))
+	cont, err = w.processNextJob()
+	assert.True(t, cont)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, w.NumProcessing(), "a second goroutine was spawned")
+
+	close(block)
 }

@@ -473,3 +473,88 @@ func TestWorkerSources(t *testing.T) {
 		assert.True(t, isTopic)
 	})
 }
+
+func TestMaxBatch(t *testing.T) {
+	newTestWorker := func() *worker[string, iJob[string]] {
+		return newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+	}
+
+	t.Run("per source kind", func(t *testing.T) {
+		w := newTestWorker()
+		assert.Equal(t, 1, w.manager().maxBatch(), "nothing bound")
+
+		fifo := w.bind(queues.NewQueue[any](), 1)
+		assert.Equal(t, maxBatch, fifo.maxBatch(), "in-memory FIFO batches")
+		assert.Equal(t, maxBatch, w.manager().maxBatch(), "direct manager forwards its source")
+
+		assert.Equal(t, 1, newTestWorker().bind(queues.NewPriorityQueue[any](), 1).maxBatch(), "priority storage does not batch")
+		assert.Equal(t, 1, newTestWorker().bind(newAckTestQueue(), 1).maxBatch(), "acknowledging storage does not batch")
+
+		topic := &topicSource[string]{cursor: topics.NewLog[string]().NewCursor(), w: newTestWorker()}
+		assert.Equal(t, maxBatch, topic.maxBatch(), "in-memory topic batches")
+
+		w.bind(queues.NewQueue[any](), 2)
+		assert.Equal(t, 1, w.manager().maxBatch(), "several sources: the strategy picks per job")
+	})
+
+	t.Run("dispatcher takes one job at a time from a priority queue", func(t *testing.T) {
+		fifo, prio := queues.NewQueue[any](), queues.NewPriorityQueue[any]()
+		for _, tc := range []struct {
+			name        string
+			q           IBaseQueue
+			enqueue     func(any)
+			leftInQueue int
+		}{
+			{"fifo", fifo, func(j any) { fifo.Enqueue(j) }, 0},
+			{"priority", prio, func(j any) { prio.Enqueue(j, 1) }, 4},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				block := make(chan struct{})
+				w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(1))
+				defer close(block)
+				defer w.Stop()
+
+				for range 5 {
+					tc.enqueue(newJob("x", loadJobConfigs(w.configs())))
+				}
+				w.bind(tc.q, 1)
+
+				w.processNextJob()
+				assert.Equal(t, tc.leftInQueue, tc.q.Len(), "jobs left in storage")
+				assert.Equal(t, 4, w.NumPending(), "not started, in storage or in a batch")
+			})
+		}
+	})
+
+	t.Run("buffered jobs are pending, not processing, until they run", func(t *testing.T) {
+		block := make(chan struct{})
+		// Auto-run off so all five are queued before the first dispatch; with
+		// it on, the loop may hand out job 0 before the other Adds land.
+		w := NewWorker(func(j Job[int]) { <-block }, 1, WithAutoRun(false))
+		defer close(block)
+		defer w.Stop()
+		q := w.BindQueue()
+
+		var jobs []EnqueuedJob
+		for i := range 5 {
+			j, _ := q.Add(i)
+			jobs = append(jobs, j)
+		}
+		assert.NoError(t, w.Start())
+
+		// The worker marks job 0 Processing only after it has received the
+		// whole batch; the busy count alone rises before the dispatcher has
+		// finished dequeuing.
+		assert.Eventually(t, func() bool { return jobs[0].Status() == "Processing" }, time.Second, time.Millisecond)
+
+		assert.Equal(t, 0, q.Len(), "the whole backlog went to the one worker as a batch")
+		assert.Equal(t, 4, w.NumPending())
+		assert.Equal(t, 1, w.NumProcessing())
+		m := w.Metrics()
+		assert.Equal(t, int(m.Submitted()), w.NumPending()+w.NumProcessing()+int(m.Completed()))
+		assert.Equal(t, "Processing", jobs[0].Status())
+		assert.Equal(t, "Queued", jobs[1].Status(), "waiting in the batch")
+
+		assert.NoError(t, jobs[1].Close(), "a job waiting in a batch can still be closed")
+	})
+}
