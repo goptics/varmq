@@ -152,8 +152,14 @@ func TestLog(t *testing.T) {
 		assert.Nil(t, c.chunk.data[0], "read slot cleared, so the item can be collected")
 		assert.Same(t, &two, c.chunk.data[1], "unread slot kept")
 
+		big := new([1 << 20]int) // only the slot will hold it
+		purged := weak.Make(big)
+		l.Append(&big[0])
+		big = nil
 		c.Purge()
 		assert.Equal(t, 0, c.Len())
+		runtime.GC()
+		assert.Nil(t, purged.Value(), "purge clears the slots it skips, so they are freed at once")
 		l.Append(&one)
 		v, _ = c.Dequeue()
 		assert.Same(t, &one, v)
@@ -404,5 +410,39 @@ func TestLog(t *testing.T) {
 
 		assert.Len(t, drain(keep), writers*perWriter, "a cursor open throughout reads every item")
 		assert.Equal(t, 0, keep.Len())
+	})
+
+	t.Run("values and purge wait for an item still being written", func(t *testing.T) {
+		for _, consume := range []bool{false, true} {
+			l := NewLog[int]()
+			c := l.NewCursor()
+			c.consume = consume
+			l.Append(1)
+			l.head.Add(1) // a writer claimed offset 1 and was descheduled before writing
+			l.Append(3)
+
+			got := make(chan []int)
+			go func() { got <- c.Values() }()
+			select {
+			case <-got:
+				t.Fatal("Values returned past an unwritten claimed slot")
+			case <-time.After(20 * time.Millisecond):
+			}
+
+			tail := l.tail.Load()
+			tail.data[1] = 2
+			tail.ready[1].Store(true)
+			assert.Equal(t, []int{1, 2, 3}, <-got, "consume=%v", consume)
+
+			c.Purge()
+			assert.Equal(t, 0, c.Len())
+			if consume {
+				assert.Equal(t, []int{0, 0, 0}, tail.data[:3], "consumer purge clears every skipped slot")
+			}
+			l.Append(4)
+			v, ok := c.Dequeue()
+			assert.True(t, ok)
+			assert.Equal(t, 4, v)
+		}
 	})
 }

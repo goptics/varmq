@@ -285,8 +285,8 @@ func (c *Cursor[T]) claimed() bool {
 	return c.offset.Load() < c.log.head.Load()
 }
 
-// Values returns a copy of the unread items without consuming them. It stops
-// at the first item still being written.
+// Values returns a copy of the unread items without consuming them: every
+// item claimed before the call, waiting for any still being written.
 func (c *Cursor[T]) Values() []T {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -295,24 +295,16 @@ func (c *Cursor[T]) Values() []T {
 		return nil
 	}
 
-	out := make([]T, 0, c.Len())
-	for ch, i := c.chunk, c.idx; ch != nil; ch, i = ch.next.Load(), i-len(ch.data) {
-		for ; i < len(ch.data); i++ {
-			if !ch.ready[i].Load() {
-				return out
-			}
-			out = append(out, ch.data[i])
-		}
-	}
+	end := c.log.head.Load()
+	out := make([]T, 0, end-c.offset.Load())
+	c.each(end, func(ch *chunk[T], i int) { out = append(out, ch.data[i]) })
 
 	return out
 }
 
-// Purge skips every unread item.
-//
-// ponytail: a consumer's skipped items in the chunk it lands on stay alive
-// until it reads past that chunk (at most chunkCapacity-1); clearing them
-// would race Appends still filling claimed slots there.
+// Purge skips every item claimed before the call. A consumer clears the
+// slots it skips, so they are freed at once; it waits for any still being
+// written, or the item would land after the purge and stay pinned.
 func (c *Cursor[T]) Purge() {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -321,7 +313,42 @@ func (c *Cursor[T]) Purge() {
 		return
 	}
 
-	c.seekHead()
+	if !c.consume {
+		c.seekHead()
+		return
+	}
+
+	var zero T
+	end := c.log.head.Load()
+	c.chunk, c.idx = c.each(end, func(ch *chunk[T], i int) { ch.data[i] = zero })
+	c.offset.Store(end)
+}
+
+// each calls fn on every slot from the cursor up to offset end, waiting for
+// slots whose writer is between its claim and its publish, and returns the
+// position at end. It does not move the cursor. Callers hold c.mx and every
+// offset below end is claimed.
+func (c *Cursor[T]) each(end uint64, fn func(ch *chunk[T], i int)) (*chunk[T], int) {
+	ch, i := c.chunk, c.idx
+	for off := c.offset.Load(); off < end; off++ {
+		for i >= len(ch.data) {
+			next := ch.next.Load()
+			if next == nil {
+				runtime.Gosched() // claimed past the end: its chunk is being linked
+				continue
+			}
+			ch, i = next, i-len(ch.data)
+		}
+
+		for !ch.ready[i].Load() {
+			runtime.Gosched() // claimed: its writer is a few instructions from publishing
+		}
+
+		fn(ch, i)
+		i++
+	}
+
+	return ch, i
 }
 
 // Close detaches the cursor so it no longer holds chunks. It is idempotent.
