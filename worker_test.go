@@ -664,6 +664,36 @@ func TestWorkers(t *testing.T) {
 				assert.Equal(t, 0, testQueue.Len(), "Closed job should be dequeued but not processed")
 			})
 
+			t.Run("processNextJob with a partly closed batch", func(t *testing.T) {
+				// Concurrency 2 and 4 pending jobs make a batch of 2; three of
+				// the jobs are closed, so only one is handed over and the
+				// slot reserved for the other must be given back.
+				var ran atomic.Int32
+				w := newWorker(func(j iJob[string]) {
+					ran.Add(1)
+				}, WithAutoRun(false), WithConcurrency(2))
+				defer w.Stop()
+
+				testQueue := queues.NewQueue[any]()
+				for i := range 4 {
+					job := newJob("test-data", loadJobConfigs(w.configs()))
+					if i < 3 {
+						job.Close()
+					}
+					testQueue.Enqueue(job)
+				}
+				w.bind(testQueue, math.MaxInt)
+
+				w.processNextJob()
+
+				// The worker was never started, so Wait returns at once; poll
+				// for the hand-off instead.
+				assert.Eventually(t, func() bool {
+					return ran.Load() == 1 && w.curProcessing.Load() == 0 && w.NumProcessing() == 0
+				}, time.Second, time.Millisecond, "the open job should run and both slots be released")
+				assert.Equal(t, 0, testQueue.Len(), "closed jobs should be dequeued too")
+			})
+
 			t.Run("processNextJob with invalid byte data", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {
 					time.Sleep(5 * time.Millisecond)
