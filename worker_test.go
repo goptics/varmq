@@ -1538,3 +1538,13 @@ func TestBatchSize(t *testing.T) {
 		assert.Equal(t, c.want, batchSize(c.pending, c.alive), "batchSize(%d, %d)", c.pending, c.alive)
 	}
 }
+
+func TestWorthSpawning(t *testing.T) {
+	assert.True(t, worthSpawning(1, 0, 0), "nothing measured: fair share")
+	assert.True(t, worthSpawning(1000, 50, 0), "no goroutine yet")
+	assert.False(t, worthSpawning(100_000, 50, 100), "50 ns jobs: a few dozen goroutines is plenty")
+	assert.True(t, worthSpawning(100_000, 50, 10))
+	assert.True(t, worthSpawning(1_000_000, 10_000_000, 50_000), "10 ms jobs: still worth it at 50k")
+	assert.False(t, worthSpawning(1_000_000, 10_000_000, 100_000), "...but not at 100k")
+	assert.True(t, worthSpawning(20, 5_000_000, 9), "small pool, slow jobs: fill the limit")
+}

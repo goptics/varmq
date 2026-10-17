@@ -38,9 +38,26 @@ func (w *worker[T, JobType]) goEventLoop() {
 // maxBatch caps how many jobs one wake-up hands to a worker.
 const maxBatch = 32
 
-// fastJobNanos is the per-job cost below which jobs count as cheaper than a
-// hand-off, so one worker may take several while others could be spawned.
-const fastJobNanos = 10_000
+// spawnNanos is what one more pool goroutine costs in wall time: the spawn
+// itself on an event loop that shares a few cores with everything else,
+// plus the stack it allocates and the collector later scans.
+//
+// ponytail: a constant; measuring the real cost per worker would need the
+// GC share, which no single goroutine can see.
+const spawnNanos = 2_000
+
+// worthSpawning reports whether one more goroutine would shorten the drain
+// of the backlog by more than it costs. With alive goroutines each job in
+// the backlog waits about pending*jobNanos/alive; one more cuts that by
+// pending*jobNanos/alive^2. Cheap jobs stop the pool at a few dozen
+// goroutines, ten-millisecond ones at tens of thousands.
+func worthSpawning(pending int, jobNanos int64, alive int) bool {
+	if alive == 0 || jobNanos == 0 {
+		return true // nothing measured yet: fair share decides
+	}
+
+	return int64(pending)*jobNanos > spawnNanos*int64(alive)*int64(alive)
+}
 
 // batchSize is one worker's share of the backlog among the live workers,
 // busy or idle, at least 1 and at most maxBatch. Dividing by the live count
@@ -62,22 +79,29 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 
 	m := w.manager()
 	pending := m.Len()
+	alive := int(w.busyWorkers.Load()) + w.pool.Len()
 	// Fair share: every worker the limit allows gets its own job before
-	// anyone gets two, so a batch never costs parallelism. Once jobs have
-	// proven cheaper than a hand-off, share among the live goroutines
-	// instead: spawning more just to hand each one job would be slower.
+	// anyone gets two, so a batch never costs parallelism. Once another
+	// goroutine would cost more than it saves, the live ones share the
+	// backlog instead and nothing is spawned.
 	divisor := min(int(w.concurrency.Load()), pending)
-	if ns := w.jobNanos.Load(); ns != 0 && ns < fastJobNanos {
-		divisor = int(w.busyWorkers.Load()) + w.pool.Len()
+	grow := worthSpawning(pending, w.jobNanos.Load(), alive)
+	if !grow {
+		divisor = alive
 	}
+
+	node := w.pool.PopBack()
+	if node == nil {
+		if !grow {
+			return false, nil // wait for a worker to come back
+		}
+		node = w.initPoolNode()
+	}
+
 	k := min(batchSize(pending, divisor), m.maxBatch())
 	w.busyWorkers.Add(1)
 	w.curProcessing.Add(uint32(k))
 
-	node := w.pool.PopBack()
-	if node == nil {
-		node = w.initPoolNode()
-	}
 	buf := node.Value.Batch(k)
 
 	n, cont, err := 0, true, error(nil)
