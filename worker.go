@@ -41,6 +41,7 @@ type worker[T any, JobType iJob[T]] struct {
 	concurrency     atomic.Uint32
 	curProcessing   atomic.Uint32 // jobs taken from the sources and not yet finished
 	busyWorkers     atomic.Uint32 // pool goroutines serving a batch; bounded by concurrency
+	jobNanos        atomic.Int64  // ns per job in the last finished batch; 0 until one has run
 	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	errorChan       chan error

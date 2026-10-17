@@ -1524,16 +1524,17 @@ func TestWorkerRegistration(t *testing.T) {
 }
 
 func TestBatchSize(t *testing.T) {
-	cases := []struct{ pending, free, want int }{
-		{0, 0, 1},         // nothing pending still hands out one slot's worth
-		{1, 1, 1},         // single worker, shallow queue
-		{1000, 1, 32},     // single free worker, deep queue: capped at maxBatch
-		{5, 10, 1},        // fewer jobs than free workers: one each
-		{20, 10, 2},       // even split
-		{100, 4, 25},      // share of the backlog
-		{1000000, 50, 32}, // cap
+	cases := []struct{ pending, alive, want int }{
+		{0, 0, 1},          // nothing pending still hands out one slot's worth
+		{1, 1, 1},          // single worker, shallow queue
+		{1000, 1, 32},      // single live worker, deep queue: capped at maxBatch
+		{5, 10, 1},         // fewer jobs than live workers: one each
+		{20, 10, 2},        // even split
+		{100, 4, 25},       // few goroutines spawned so far: big share each
+		{100000, 50000, 2}, // every worker alive: small share, short tail
+		{1000000, 50, 32},  // cap
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, batchSize(c.pending, c.free), "batchSize(%d, %d)", c.pending, c.free)
+		assert.Equal(t, c.want, batchSize(c.pending, c.alive), "batchSize(%d, %d)", c.pending, c.alive)
 	}
 }

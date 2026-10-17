@@ -38,12 +38,19 @@ func (w *worker[T, JobType]) goEventLoop() {
 // maxBatch caps how many jobs one wake-up hands to a worker.
 const maxBatch = 32
 
-// batchSize is each free worker's share of the backlog, at least 1 and at
-// most maxBatch. With a shallow backlog it is 1, so no worker sits on jobs
-// another could run; with a deep one every worker would be busy anyway and
-// the wake-up cost is spread over the batch.
-func batchSize(pending, free int) int {
-	return max(1, min(pending/max(free, 1), maxBatch))
+// fastJobNanos is the per-job cost below which jobs count as cheaper than a
+// hand-off, so one worker may take several while others could be spawned.
+const fastJobNanos = 10_000
+
+// batchSize is one worker's share of the backlog among the live workers,
+// busy or idle, at least 1 and at most maxBatch. Dividing by the live count
+// rather than the free count matters at both ends: with few goroutines
+// spawned yet (a high limit, cheap jobs) the share is large and the wake-up
+// cost is spread over the batch; with every worker busy the share stays
+// small, so no worker ends up holding a long run of jobs while the others
+// find the queue empty and stop.
+func batchSize(pending, alive int) int {
+	return max(1, min(pending/max(alive, 1), maxBatch))
 }
 
 // processNextJob hands the next batch of jobs to one worker. Concurrency
@@ -54,8 +61,16 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	w.status.CompareAndSwap(idle, running)
 
 	m := w.manager()
-	free := int(w.concurrency.Load() - w.busyWorkers.Load())
-	k := min(batchSize(m.Len(), free), m.maxBatch())
+	pending := m.Len()
+	// Fair share: every worker the limit allows gets its own job before
+	// anyone gets two, so a batch never costs parallelism. Once jobs have
+	// proven cheaper than a hand-off, share among the live goroutines
+	// instead: spawning more just to hand each one job would be slower.
+	divisor := min(int(w.concurrency.Load()), pending)
+	if ns := w.jobNanos.Load(); ns != 0 && ns < fastJobNanos {
+		divisor = int(w.busyWorkers.Load()) + w.pool.Len()
+	}
+	k := min(batchSize(pending, divisor), m.maxBatch())
 	w.busyWorkers.Add(1)
 	w.curProcessing.Add(uint32(k))
 

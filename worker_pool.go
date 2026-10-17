@@ -97,6 +97,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
 	go node.Value.Serve(func(jobs []JobType) {
+		start := time.Now()
 		for _, j := range jobs {
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
@@ -112,6 +113,10 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()
+		}
+
+		if n := len(jobs); n > 0 {
+			w.jobNanos.Store(int64(time.Since(start)) / int64(n))
 		}
 
 		// Drop the job references before the node is up for grabs again, then
