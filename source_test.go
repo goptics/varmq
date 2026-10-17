@@ -125,7 +125,7 @@ func TestAckSource(t *testing.T) {
 		j, err := src.Next()
 		assert.NoError(t, err)
 		assert.Equal(t, "b-1", j.ID())
-		assert.Equal(t, "ack-1", j.(*job[string]).ackId)
+		assert.Equal(t, "ack-1", j.(*job[string]).ackRef.id)
 
 		assert.NoError(t, j.Close())
 		assert.Equal(t, []string{"ack-1"}, q.ackedIDs())
@@ -138,7 +138,7 @@ func TestAckSource(t *testing.T) {
 
 		j, err := src.Next()
 		assert.NoError(t, err)
-		assert.Equal(t, "ack-1", j.(*job[string]).ackId)
+		assert.Equal(t, "ack-1", j.(*job[string]).ackRef.id)
 
 		assert.NoError(t, j.Close())
 		assert.Equal(t, []string{"ack-1"}, q.ackedIDs(), "ready jobs from an ack source must ack too")
@@ -152,7 +152,7 @@ func TestAckSource(t *testing.T) {
 
 		j, err := src.Next()
 		assert.NoError(t, err)
-		assert.Equal(t, "", j.(*job[string]).ackId)
+		assert.Nil(t, j.(*job[string]).ackRef, "no ack id means nothing to acknowledge")
 
 		assert.NoError(t, j.Close())
 		assert.Empty(t, q.ackedIDs())

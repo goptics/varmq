@@ -1,6 +1,8 @@
 package queues
 
 import (
+	"math/rand/v2"
+	"slices"
 	"testing"
 	"time"
 
@@ -65,6 +67,39 @@ func TestPriorityQueue(t *testing.T) {
 		val, ok := pq.Dequeue()
 		assert.False(ok, "dequeue should return false for empty queue")
 		assert.Equal(0, val, "dequeue should return zero value for empty queue")
+	})
+
+	// Dequeue order must be exactly (priority asc, insertion order asc): a
+	// narrow priority range makes most items tie so the Index tiebreaker is
+	// exercised as much as the priority ordering.
+	t.Run("Random dequeue order is sorted", func(t *testing.T) {
+		const n = 500
+		pq := NewPriorityQueue[int]()
+
+		type pair struct{ priority, value int }
+		pairs := make([]pair, 0, n)
+		rng := rand.New(rand.NewPCG(1, 2)) // fixed seed: a failure must reproduce
+		for i := range n {
+			p := rng.IntN(10)
+			assert.True(t, pq.Enqueue(i, p))
+			pairs = append(pairs, pair{p, i})
+		}
+		// Stable sort keeps insertion order within a priority: the value is
+		// the insertion index, so the value sequence is the expected order.
+		slices.SortStableFunc(pairs, func(a, b pair) int { return a.priority - b.priority })
+
+		expected := make([]int, 0, n)
+		got := make([]int, 0, n)
+		for _, e := range pairs {
+			v, ok := pq.Dequeue()
+			assert.True(t, ok)
+			expected = append(expected, e.value)
+			got = append(got, v.(int))
+		}
+
+		assert.Equal(t, expected, got)
+		_, ok := pq.Dequeue()
+		assert.False(t, ok, "queue should be empty after dequeuing everything")
 	})
 
 	t.Run("Values Method", func(t *testing.T) {

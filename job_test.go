@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
-	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,26 +29,38 @@ func TestJob(t *testing.T) {
 		assert.False(j.IsClosed(), "job should not be closed initially")
 	})
 
-	t.Run("job setAckId and setInternalQueue", func(t *testing.T) {
+	t.Run("job setAck", func(t *testing.T) {
 		// Create a new job
 		jobData := "test data"
 		j := newJob(jobData, jobConfigs{Id: "job-ack-test"})
 		assert := assert.New(t)
 
-		// Test setAckId
-		ackId := "test-ack-id"
-		j.setAckId(ackId)
-		// We can't directly assert j.ackId since it's private, but we can test it indirectly through other methods
+		assert.Nil(j.ackRef, "a fresh job carries no ack")
 
-		// Test setInternalQueue
-		mockQueue := queues.NewQueue[any]()
-		j.setInternalQueue(mockQueue)
-		// We can't directly assert j.queue since it's private, but we can test it indirectly through other methods
+		mockQueue := mocks.NewMockPersistentQueue()
+		j.setAck(mockQueue, "test-ack-id")
+		assert.Equal("test-ack-id", j.ackRef.id)
 
-		// Now try to acknowledge - this will use both the ackId and queue we set
-		// Note: This will fail since the null queue doesn't implement IAcknowledgeable
+		// Now try to acknowledge - this will use both the ack id and queue we set
 		err := j.ack()
-		assert.Nil(err, "ack should not fail with null queue")
+		assert.Nil(err, "ack should succeed against the mock queue")
+	})
+
+	t.Run("job structs stay in their size classes", func(t *testing.T) {
+		// The in-memory hot path allocates one job per Add. Folding the ack
+		// fields behind one pointer keeps job[T] at 56 bytes (class 64, was
+		// 80); storing the error or result in place keeps errorJob at 72 and
+		// resultJob at 80 (both class 80, were 96 plus a channel).
+		for name, size := range map[string]uintptr{
+			"job[int]":           unsafe.Sizeof(job[int]{}),
+			"errorJob[int]":      unsafe.Sizeof(errorJob[int]{}),
+			"resultJob[int,int]": unsafe.Sizeof(resultJob[int, int]{}),
+		} {
+			t.Logf("unsafe.Sizeof(%s) = %d", name, size)
+		}
+		assert.LessOrEqual(t, unsafe.Sizeof(job[int]{}), uintptr(64))
+		assert.LessOrEqual(t, unsafe.Sizeof(errorJob[int]{}), uintptr(80))
+		assert.LessOrEqual(t, unsafe.Sizeof(resultJob[int, int]{}), uintptr(80))
 	})
 
 	t.Run("job Wait method", func(t *testing.T) {
@@ -200,24 +212,17 @@ func TestJob(t *testing.T) {
 	t.Run("job ack with various scenarios", func(t *testing.T) {
 		assert := assert.New(t)
 
-		// Test 1: Empty ackId
+		// Test 1: No ack attached
 		j1 := newJob("test data", jobConfigs{Id: "job-ack-empty"})
 		err := j1.ack()
-		assert.Nil(err, "ack should not fail with empty ackId")
+		assert.Nil(err, "ack should not fail with no ack attached")
 
 		// Test 2: Job is closed
 		j2 := newJob("test data", jobConfigs{Id: "job-ack-closed"})
-		j2.setAckId("some-ack-id")
+		j2.setAck(mocks.NewMockPersistentQueue(), "some-ack-id")
 		_ = j2.Close() // Close the job first
 		err = j2.ack()
 		assert.Nil(err, "ack should not fail on closed job")
-
-		// Test 3: Queue doesn't implement IAcknowledgeable
-		j3 := newJob("test data", jobConfigs{Id: "job-ack-no-impl"})
-		j3.setAckId("some-ack-id")
-		j3.setInternalQueue(queues.NewQueue[any]()) // Null queue doesn't implement IAcknowledgeable
-		err = j3.ack()
-		assert.Nil(err, "ack should not fail with queue not implementing IAcknowledgeable")
 	})
 }
 
@@ -236,9 +241,10 @@ func TestResultJob(t *testing.T) {
 		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 
-		// Save and send a result
+		// Save and send a result, then Close as the worker does after processing
 		expectedResult := 42
 		j.sendResult(expectedResult)
+		assert.NoError(j.Close(), "closing job should not fail")
 
 		// Get the result
 		result, err := j.Result()
@@ -246,14 +252,39 @@ func TestResultJob(t *testing.T) {
 		assert.Nil(err, "error should be nil")
 	})
 
+	t.Run("resultJob Result after Close without a send", func(t *testing.T) {
+		j := newResultJob[string, int]("test data", jobConfigs{Id: "result-job-no-send"})
+		assert := assert.New(t)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			j.Result() // must block until Close
+		}()
+
+		select {
+		case <-done:
+			assert.Fail("Result returned before the job was closed")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		assert.NoError(j.Close(), "closing job should not fail")
+		<-done
+
+		result, err := j.Result()
+		assert.Equal(0, result, "result should be the zero value when nothing was sent")
+		assert.Nil(err, "error should be nil when nothing was sent")
+	})
+
 	t.Run("resultJob error handling", func(t *testing.T) {
 		// Create a new result job
 		j := newResultJob[string, int]("test data", jobConfigs{Id: "result-job-error"})
 		assert := assert.New(t)
 
-		// Save and send an error
+		// Save and send an error, then Close as the worker does after processing
 		expectedErr := errors.New("test error")
 		j.sendError(expectedErr)
+		assert.NoError(j.Close(), "closing job should not fail")
 
 		// Get the result
 		var zeroValue int
@@ -279,9 +310,10 @@ func TestResultJob(t *testing.T) {
 		j := newResultJob[string, int]("test data", jobConfigs{Id: "result-job-error"})
 		assert := assert.New(t)
 
-		// Send an error through the job
+		// Send an error through the job, then Close as the worker does after processing
 		expectedErr := errors.New("job closed error")
 		j.sendError(expectedErr)
+		assert.NoError(j.Close(), "closing job should not fail")
 
 		// Try to get result
 		result, err := j.Result()
@@ -324,13 +356,36 @@ func TestErrorJob(t *testing.T) {
 		assert.Equal(jobData, j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should be 'Created'")
 
-		// Send an error
+		// Send an error, then Close as the worker does after processing
 		expectedErr := errors.New("test error")
 		j.sendError(expectedErr)
+		assert.NoError(j.Close(), "closing job should not fail")
 
 		// Get the error
 		err := j.Err()
 		assert.Equal(expectedErr, err, "error should match what was sent")
+	})
+
+	t.Run("errorJob Err after Close without a send", func(t *testing.T) {
+		j := newErrorJob("test data", jobConfigs{Id: "error-job-no-send"})
+		assert := assert.New(t)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			j.Err() // must block until Close
+		}()
+
+		select {
+		case <-done:
+			assert.Fail("Err returned before the job was closed")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		assert.NoError(j.Close(), "closing job should not fail")
+		<-done
+
+		assert.Nil(j.Err(), "error should be nil when nothing was sent")
 	})
 
 	t.Run("closing an errorJob", func(t *testing.T) {
@@ -396,8 +451,7 @@ func TestJobAckFailure(t *testing.T) {
 		mockQueue.ShouldFailAcknowledge = true
 
 		job := newJob("test", jobConfigs{})
-		job.setInternalQueue(mockQueue)
-		job.setAckId("ack-1")
+		job.setAck(mockQueue, "ack-1")
 
 		err := job.ack()
 		assert.Error(t, err)
@@ -430,8 +484,7 @@ func TestPublicErrors(t *testing.T) {
 		mockQueue.ShouldFailAcknowledge = true
 
 		job := newJob("test", jobConfigs{Id: "test-job"})
-		job.setInternalQueue(mockQueue)
-		job.setAckId("test-ack-id")
+		job.setAck(mockQueue, "test-ack-id")
 
 		err := job.ack()
 		assert.Error(t, err)
@@ -446,8 +499,7 @@ func TestPublicErrors(t *testing.T) {
 		mockQueue.ShouldFailAcknowledge = true
 
 		job := newJob("test", jobConfigs{Id: "close-ack-test"})
-		job.setInternalQueue(mockQueue)
-		job.setAckId("test-ack-id")
+		job.setAck(mockQueue, "test-ack-id")
 
 		// Call Close() which internally calls ack()
 		err := job.Close()

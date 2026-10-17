@@ -142,8 +142,7 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 		return j, nil // scheduler skips it; never mutate a job the user already closed
 	}
 
-	j.setInternalQueue(s.q)
-	j.setAckId(ackID)
+	j.setAck(s.q, ackID)
 
 	return j, nil
 }

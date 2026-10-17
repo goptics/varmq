@@ -3,6 +3,7 @@ package varmq
 import (
 	"errors"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -995,4 +996,34 @@ func TestPurgeCancelsBatchedJobs(t *testing.T) {
 		assert.Equal(t, int32(1), ran.Load(), "only the job already running may run")
 		assert.Equal(t, 0, w.NumPending())
 	})
+}
+
+// AddAll calls the worker's id generator only for items without an ID, so a
+// stateful generator numbers the unnamed items densely. Pinned here because
+// it differs from Add with WithJobId, which still consumes a generated id.
+func TestAddAllIdGeneratorCadence(t *testing.T) {
+	var next atomic.Int32
+	var mu sync.Mutex
+	var ids []string
+
+	w := NewWorker(func(j Job[string]) {
+		mu.Lock()
+		ids = append(ids, j.ID())
+		mu.Unlock()
+	}, WithJobIdGenerator(func() string {
+		return "n" + strconv.Itoa(int(next.Add(1)))
+	}))
+	defer w.StopAndWait()
+
+	w.BindQueue().AddAll([]Item[string]{
+		{ID: "a", Data: "x"},
+		{Data: "x"},
+		{ID: "b", Data: "x"},
+		{Data: "x"},
+	}).Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"g:a", "g:n1", "g:b", "g:n2"}, ids)
+	assert.Equal(t, int32(2), next.Load(), "generator runs once per unnamed item")
 }

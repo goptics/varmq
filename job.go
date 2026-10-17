@@ -7,8 +7,6 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
-
-	"github.com/goptics/varmq/internal/helpers"
 )
 
 const (
@@ -64,9 +62,10 @@ type Awaitable interface {
 }
 
 type Drainer interface {
-	// Drain cleans up the job's internal communication channels and releases associated resources.
-	// This should be called when the job is no longer needed.
-	// After calling Drain, the job's result channels will be closed and cannot be used again.
+	// Drain discards the results or errors a group job's channel still holds,
+	// so a caller that does not read them does not keep the channel full.
+	// A single job keeps its result in place and has no channel: Drain is a
+	// no-op there, and Err or Result still return the value.
 	Drain()
 }
 
@@ -77,8 +76,15 @@ type job[T any] struct {
 	data   T
 	status atomic.Uint32
 	wg     sync.WaitGroup
-	queue  IBaseQueue
-	ackId  string
+	ackRef *jobAck // nil for in-memory jobs; only ackSource.Next sets it
+}
+
+// jobAck is what a job needs to acknowledge itself: the storage that handed
+// it out and the ack id that storage gave it. Folding both behind one pointer
+// keeps job[T] in the 64-byte size class for the in-memory hot path.
+type jobAck struct {
+	q  IAcknowledgeable
+	id string
 }
 
 // jobView represents a view of a job's state for serialization.
@@ -98,8 +104,7 @@ type iJob[T any] interface {
 	Job[T]
 	StatusProvider
 	changeStatus(s status)
-	setAckId(id string)
-	setInternalQueue(q IBaseQueue)
+	setAck(q IAcknowledgeable, id string)
 	ack() error
 	io.Closer
 }
@@ -132,12 +137,16 @@ func newJob[T any](data T, configs jobConfigs) *job[T] {
 	return j
 }
 
-func (j *job[T]) setAckId(id string) {
-	j.ackId = id
-}
+// setAck attaches the storage and ack id that Close acknowledges with. An
+// empty id means the storage has nothing to acknowledge, so nothing is kept.
+// ponytail: one 32-byte allocation per acked job; that path already pays
+// json.Unmarshal, so this is not pooled.
+func (j *job[T]) setAck(q IAcknowledgeable, id string) {
+	if id == "" {
+		return
+	}
 
-func (j *job[T]) setInternalQueue(q IBaseQueue) {
-	j.queue = q
+	j.ackRef = &jobAck{q: q, id: id}
 }
 
 func (j *job[T]) ID() string {
@@ -248,16 +257,12 @@ func (j *job[T]) Close() error {
 }
 
 func (j *job[T]) ack() error {
-	if j.ackId == "" || j.IsClosed() {
+	if j.ackRef == nil || j.IsClosed() {
 		return nil
 	}
 
-	if _, ok := j.queue.(IAcknowledgeable); !ok {
-		return nil
-	}
-
-	if ok := j.queue.(IAcknowledgeable).Acknowledge(j.ackId); !ok {
-		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, j.ackId)
+	if !j.ackRef.q.Acknowledge(j.ackRef.id) {
+		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, j.ackRef.id)
 	}
 
 	return nil
@@ -268,9 +273,12 @@ type iErrorJob[T any] interface {
 	sendError(err error)
 }
 
+// errorJob is a single job whose worker reports an error. The error is stored
+// in place and published by the wg.Done in job.Close, so the job itself is the
+// one-shot latch: no channel per job.
 type errorJob[T any] struct {
 	job[T]
-	*helpers.Response[error]
+	err error
 }
 
 // EnqueuedErrJob is an interface representing an error job that has been successfully enqueued.
@@ -295,36 +303,41 @@ func newErrorJob[T any](data T, configs jobConfigs) *errorJob[T] {
 			status: atomic.Uint32{},
 			wg:     sync.WaitGroup{},
 		},
-		Response: helpers.NewResponse[error](1),
 	}
 	e.wg.Add(1)
 	return e
 }
 
+// Err blocks until the job is Closed (processed, purged or closed by the user)
+// and returns the error sent before that, or nil.
 func (ej *errorJob[T]) Err() error {
-	return ej.Response.Response()
+	ej.wg.Wait()
+	return ej.err
 }
 
+// sendError stores the error. The worker calls it before Close, so the write
+// happens-before the wg.Done that releases Err.
 func (ej *errorJob[T]) sendError(err error) {
-	ej.Response.Send(err)
+	ej.err = err
 }
 
-func (ej *errorJob[T]) Close() error {
-	if err := ej.job.Close(); err != nil {
-		return err
-	}
-
-	return ej.Response.Close()
-}
+// Drain is a no-op: a single job has no channel to drain. It exists so the job
+// satisfies the Drainer embedded in EnqueuedErrJob.
+func (ej *errorJob[T]) Drain() {}
 
 type iResultJob[T, R any] interface {
 	iErrorJob[T]
 	sendResult(result R)
 }
 
+// resultJob is a single job whose worker reports a result or an error, stored
+// in place like errorJob.err. It holds the two fields rather than a Result[R]:
+// Result's JobId would be a copy of job.id that Result() never returns, and
+// without it the job stays in the 80-byte size class.
 type resultJob[T, R any] struct {
 	job[T]
-	*helpers.Response[Result[R]]
+	data R
+	err  error
 }
 
 // EnqueuedResultJob is an interface representing a result job that has been successfully enqueued.
@@ -348,32 +361,29 @@ func newResultJob[T, R any](data T, configs jobConfigs) *resultJob[T, R] {
 			status: atomic.Uint32{},
 			wg:     sync.WaitGroup{},
 		},
-		Response: helpers.NewResponse[Result[R]](1),
 	}
 	r.wg.Add(1)
 	return r
 }
 
+// Result blocks until the job is Closed (processed, purged or closed by the
+// user) and returns what was sent before that, or the zero value and nil.
 func (rj *resultJob[T, R]) Result() (R, error) {
-	result := rj.Response.Response()
-
-	return result.Data, result.Err
+	rj.wg.Wait()
+	return rj.data, rj.err
 }
 
-// sendResult saves the result and sends it to the job's result channel.
+// sendResult stores the result. The worker calls it before Close, so the write
+// happens-before the wg.Done that releases Result.
 func (rj *resultJob[T, R]) sendResult(result R) {
-	rj.Response.Send(Result[R]{JobId: rj.id, Data: result})
+	rj.data = result
 }
 
-// sendError sends an error to the job's result channel.
+// sendError stores the error, see sendResult.
 func (rj *resultJob[T, R]) sendError(err error) {
-	rj.Response.Send(Result[R]{JobId: rj.id, Err: err})
+	rj.err = err
 }
 
-func (rj *resultJob[T, R]) Close() error {
-	if err := rj.job.Close(); err != nil {
-		return err
-	}
-
-	return rj.Response.Close()
-}
+// Drain is a no-op: a single job has no channel to drain. It exists so the job
+// satisfies the Drainer embedded in EnqueuedResultJob.
+func (rj *resultJob[T, R]) Drain() {}

@@ -242,7 +242,7 @@ func TestResultGroupJob(t *testing.T) {
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
 		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(rgj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
-		assert.Equal(rgj.Response, newJob.Response, "Response should be shared with the group")
+		assert.Equal(rgj.resp, newJob.resp, "Response should be shared with the group")
 	})
 
 	t.Run("getting results channel", func(t *testing.T) {
@@ -395,7 +395,7 @@ func TestErrorGroupJob(t *testing.T) {
 		assert.Equal(generateGroupId(jobId), newJob.ID(), "job ID should have group prefix")
 		assert.Equal(jobData, newJob.Data(), "job data should match")
 		assert.Equal(egj.wgc, newJob.wgc, "WaitGroup counter should be shared with the group")
-		assert.Equal(egj.Response, newJob.Response, "Response should be shared with the group")
+		assert.Equal(egj.resp, newJob.resp, "Response should be shared with the group")
 	})
 
 	t.Run("getting errors channel", func(t *testing.T) {
