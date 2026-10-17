@@ -113,12 +113,22 @@ func main() {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
-Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free.
+Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free, and it hands each worker its share of the backlog in one go (a batch) rather than one job per wake-up.
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
 > [!Note]
 > Concurrency is a limit, not a pool size. A worker starts with a single goroutine and spawns more only while jobs are waiting, up to the limit. As the queue drains, the extra goroutines exit one by one, keeping one idle (or the share set by `varmq.WithMinIdleWorkerRatio`). To keep idle goroutines around for reuse, set `varmq.WithIdleWorkerExpiryDuration`: they are then removed only after sitting idle that long.
+
+### Batched dispatch
+
+Each wake-up of the event loop costs the same whether the job is tiny or slow, so instead of one job per wake-up a worker gets its share of the backlog in one go: the waiting jobs split evenly across the workers, at most 32 per hand-off. Every worker gets a job before any worker gets two, so parallelism is never lost. Below, 8 jobs with concurrency 2: the first worker takes 4, a second is spawned for 2, and the last two go out one at a time as workers free up.
+
+![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
+
+A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed.
+
+Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; and a worker bound to several queues takes one at a time, so the strategy picks a source for every job.
 
 ### Priority Queue
 

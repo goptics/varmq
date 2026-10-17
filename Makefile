@@ -31,7 +31,7 @@ format:
 
 # Regenerate animated README diagrams
 diagrams:
-	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority topic:topic; do \
+	cd assets/diagrams/gen && for d in single-worker:single worker-pool:pool multi-queue:multi priority-queue:priority topic:topic batch:batch; do \
 		python3 gen_$${d#*:}.py $${d%:*}.tpl.svg ../varmq-$${d%:*}.svg > /dev/null || exit 1; \
 	done
 
