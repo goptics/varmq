@@ -528,7 +528,9 @@ func TestMaxBatch(t *testing.T) {
 
 	t.Run("buffered jobs are pending, not processing, until they run", func(t *testing.T) {
 		block := make(chan struct{})
-		w := NewWorker(func(j Job[int]) { <-block }, 1)
+		// Auto-run off so all five are queued before the first dispatch; with
+		// it on, the loop may hand out job 0 before the other Adds land.
+		w := NewWorker(func(j Job[int]) { <-block }, 1, WithAutoRun(false))
 		defer close(block)
 		defer w.Stop()
 		q := w.BindQueue()
@@ -538,6 +540,7 @@ func TestMaxBatch(t *testing.T) {
 			j, _ := q.Add(i)
 			jobs = append(jobs, j)
 		}
+		assert.NoError(t, w.Start())
 
 		assert.Eventually(t, func() bool { return w.NumProcessing() == 1 }, time.Second, time.Millisecond)
 
