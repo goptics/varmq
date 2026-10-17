@@ -89,8 +89,9 @@ type Worker interface {
 	// Possible values: "Initiated", "Idle", "Running", "Pausing", "Paused",
 	// "Stopping", "Stopped"
 	Status() string
-	// NumProcessing returns the number of jobs currently being processed
-	// by the worker (in-flight jobs).
+	// NumProcessing returns the number of jobs currently being executed by
+	// pool goroutines. Jobs the event loop has handed to a worker in a batch
+	// but that have not started yet are not counted; Wait still covers them.
 	NumProcessing() int
 	// NumPending returns the number of jobs waiting in the queue
 	// that have not yet started processing.
@@ -404,7 +405,7 @@ func (w *worker[T, JobType]) NumPending() int {
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
-	return int(w.curProcessing.Load())
+	return int(w.busyWorkers.Load())
 }
 
 func (w *worker[T, JobType]) NumConcurrency() int {

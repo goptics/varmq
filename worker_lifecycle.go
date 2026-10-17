@@ -72,7 +72,9 @@ func (w *worker[T, JobType]) Pause() error {
 	}
 
 	if w.status.CompareAndSwap(running, pausing) {
-		if w.NumProcessing() == 0 && w.status.CompareAndSwap(pausing, paused) {
+		// Jobs taken, not busy workers: the worker that finishes the last job
+		// is what flips Pausing to Paused, and it counts in curProcessing.
+		if w.curProcessing.Load() == 0 && w.status.CompareAndSwap(pausing, paused) {
 			w.waiters.Broadcast()
 		}
 		return nil
