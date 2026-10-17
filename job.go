@@ -229,22 +229,29 @@ func parseToJob[T any](data []byte) (any, error) {
 	return j, nil
 }
 
+// closeable reports why a job in state s cannot be closed, or nil.
+func closeable(s status) error {
+	switch s {
+	case processing:
+		return ErrJobProcessing
+	case closed:
+		return ErrJobAlreadyClosed
+	}
+
+	return nil
+}
+
 // claimClose moves a created, queued or finished job to closed with one CAS,
-// so only one concurrent Close can win and run the close side effects. It
-// returns the state it replaced, to restore if the close cannot complete.
-func (j *job[T]) claimClose() (status, error) {
+// so only one concurrent Close can win and run the close side effects.
+func (j *job[T]) claimClose() error {
 	for {
 		s := j.status.Load()
-
-		switch s {
-		case processing:
-			return s, ErrJobProcessing
-		case closed:
-			return s, ErrJobAlreadyClosed
+		if err := closeable(s); err != nil {
+			return err
 		}
 
 		if j.status.CompareAndSwap(s, closed) {
-			return s, nil
+			return nil
 		}
 	}
 }
@@ -271,17 +278,24 @@ func (j *job[T]) startProcessing() bool {
 }
 
 // Close closes the job, whatever its state except processing. Only the call
-// that wins the transition runs the acknowledgement and releases waiters; a
-// concurrent Close returns ErrJobAlreadyClosed. If the acknowledgement fails
-// the job returns to its previous state, so it stays Finished and unwaited.
+// that wins the transition releases waiters; a concurrent Close returns
+// ErrJobAlreadyClosed. A job handed out by an acknowledgeable queue is
+// acknowledged before the transition and never shows Closed meanwhile, so a
+// failed acknowledgement leaves it untouched: a worker that took it still
+// runs it, and a finished one stays Finished and unwaited. The price is that
+// two simultaneous Close calls on such a job can both acknowledge.
 func (j *job[T]) Close() error {
-	prev, err := j.claimClose()
-	if err != nil {
-		return err
+	if j.ackRef != nil {
+		if err := closeable(j.status.Load()); err != nil {
+			return err
+		}
+
+		if err := j.acknowledge(); err != nil {
+			return err
+		}
 	}
 
-	if err := j.acknowledge(); err != nil {
-		j.status.Store(prev)
+	if err := j.claimClose(); err != nil {
 		return err
 	}
 

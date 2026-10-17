@@ -549,7 +549,33 @@ func TestConcurrentCloseClosesOnce(t *testing.T) {
 	})
 }
 
+// statusProbeQueue fails every acknowledgement and runs onAck first.
+type statusProbeQueue struct{ onAck func() }
+
+func (q statusProbeQueue) Acknowledge(string) bool {
+	q.onAck()
+	return false
+}
+
+func (statusProbeQueue) DequeueWithAckId() (any, bool, string) { return nil, false, "" }
+
 func TestJobAckFailure(t *testing.T) {
+	// A worker that took the job can only skip it if it reads Closed. If Close
+	// showed Closed during the ack and restored the state after a failure, the
+	// job would be dropped by the worker yet stay open, and Wait would hang.
+	t.Run("failed ack never shows the job as closed", func(t *testing.T) {
+		j := newJob("test", jobConfigs{})
+		j.changeStatus(queued)
+
+		var during string
+		j.setAck(statusProbeQueue{onAck: func() { during = j.Status() }}, "ack-1")
+
+		assert.ErrorIs(t, j.Close(), ErrAcknowledgeJob)
+		assert.Equal(t, "Queued", during, "job must not read Closed while it is acknowledged")
+		assert.Equal(t, "Queued", j.Status())
+		assert.True(t, j.startProcessing(), "the worker can still run the job")
+	})
+
 	t.Run("Ack failure from queue", func(t *testing.T) {
 		mockQueue := mocks.NewMockPersistentQueue()
 		mockQueue.ShouldFailAcknowledge = true

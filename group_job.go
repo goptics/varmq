@@ -54,7 +54,7 @@ func (gj *groupJob[T]) Wait() {
 }
 
 func (gj *groupJob[T]) Close() error {
-	if _, err := gj.claimClose(); err != nil {
+	if err := gj.claimClose(); err != nil {
 		return err
 	}
 
@@ -131,7 +131,7 @@ func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
 }
 
 func (gj *resultGroupJob[T, R]) Close() error {
-	if _, err := gj.claimClose(); err != nil {
+	if err := gj.claimClose(); err != nil {
 		return err
 	}
 
@@ -205,7 +205,7 @@ func (gj *errorGroupJob[T]) Errs() <-chan error {
 }
 
 func (gj *errorGroupJob[T]) Close() error {
-	if _, err := gj.claimClose(); err != nil {
+	if err := gj.claimClose(); err != nil {
 		return err
 	}
 
