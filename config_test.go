@@ -539,3 +539,21 @@ func TestDefaultConfig(t *testing.T) {
 		})
 	})
 }
+
+func TestJobConfigsFor(t *testing.T) {
+	calls := 0
+	c := configs{jobIdGenerator: func() string {
+		calls++
+		return "gen"
+	}}
+
+	t.Run("explicit id is kept and the generator is not called", func(t *testing.T) {
+		assert.Equal(t, jobConfigs{Id: "mine"}, c.jobConfigsFor("mine"))
+		assert.Equal(t, 0, calls)
+	})
+
+	t.Run("empty id falls back to the generator", func(t *testing.T) {
+		assert.Equal(t, jobConfigs{Id: "gen"}, c.jobConfigsFor(""))
+		assert.Equal(t, 1, calls)
+	})
+}

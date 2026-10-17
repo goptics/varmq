@@ -1,7 +1,6 @@
 package queues
 
 import (
-	"container/heap"
 	"sync"
 	"sync/atomic"
 )
@@ -23,11 +22,7 @@ type PriorityQueue[T any] struct {
 
 // newPriorityQueue initializes an empty priority queue.
 func NewPriorityQueue[T any]() *PriorityQueue[T] {
-	pq := &heapQueue[T]{
-		items: make([]*enqItem[T], 0),
-	}
-	heap.Init(pq)
-	return &PriorityQueue[T]{internal: pq}
+	return &PriorityQueue[T]{internal: &heapQueue[T]{}}
 }
 
 func (q *PriorityQueue[T]) SetCapacity(cap int) {
@@ -45,9 +40,9 @@ func (q *PriorityQueue[T]) Len() int {
 func (q *PriorityQueue[T]) Values() []any {
 	q.mx.RLock()
 	defer q.mx.RUnlock()
-	values := make([]any, 0)
-	for _, item := range q.internal.items {
-		values = append(values, item.Value)
+	values := make([]any, 0, len(q.internal.items))
+	for i := range q.internal.items {
+		values = append(values, q.internal.items[i].Value)
 	}
 	return values
 }
@@ -75,7 +70,7 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 		return false
 	}
 
-	heap.Push(q.internal, &enqItem[T]{
+	q.internal.push(enqItem[T]{
 		Value:    typedValue,
 		Priority: priority,
 		Index:    q.insertionCount,
@@ -95,15 +90,15 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	if q.internal.Len() == 0 {
 		return zeroValue, false
 	}
-	popped := heap.Pop(q.internal).(*enqItem[T]) // O(log n)
-	return popped.Value, true
+	return q.internal.pop().Value, true // O(log n)
 }
 
 func (q *PriorityQueue[T]) Purge() {
 	q.mx.Lock()
 	defer q.mx.Unlock()
-	q.internal.items = make([]*enqItem[T], 0)
-	heap.Init(q.internal)
+	// Drop the backing array rather than reslicing to 0: it holds the purged
+	// values and, at 32 B a slot, would pin the queue's high-water memory.
+	q.internal.items = nil
 }
 
 // to satisfy the IQueue interface
