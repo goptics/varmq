@@ -16,9 +16,12 @@ type Payload[T any] struct {
 
 // Stamp records the value a generation counter had when a batch was taken.
 // The batch goes stale once the counter moves on. A nil Gen never does.
+// Src is whoever takes the unused rest of the batch back when the worker
+// stops or pauses; nil when nobody can, and the worker then runs the batch.
 type Stamp struct {
 	Gen   *atomic.Uint64
 	Epoch uint64
+	Src   any
 }
 
 // Stale reports whether the counter has moved since the batch was stamped.

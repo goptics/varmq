@@ -1539,6 +1539,17 @@ func TestBatchSize(t *testing.T) {
 	}
 }
 
+func TestBatchBudget(t *testing.T) {
+	assert.Equal(t, 1, batchBudget(0, 10), "nothing measured: one job, so slow jobs never queue behind each other")
+	assert.Equal(t, 1, batchBudget(3_000_000_000, 10), "ten workers on 3 s jobs: one at a time, in queue order")
+	assert.Equal(t, 1, batchBudget(1_000_000, 24), "24 workers on 1 ms jobs: 24k hand-offs/s is affordable")
+	assert.Equal(t, 4, batchBudget(100_000, 10), "ten workers on 100 µs jobs: a wake-up per 4 jobs")
+	assert.Equal(t, 10, batchBudget(10_000_000, 3_000), "3k workers on 10 ms jobs")
+	assert.Equal(t, maxBatch, batchBudget(10_000_000, 30_000), "30k workers on 10 ms jobs: the cap")
+	assert.Equal(t, maxBatch, batchBudget(50, 1), "trivial jobs fill the cap even on one worker")
+	assert.Equal(t, maxBatch, batchBudget(50, 0), "...and before the first worker is spawned")
+}
+
 func TestWorthSpawning(t *testing.T) {
 	assert.True(t, worthSpawning(1, 0, 0), "nothing measured: fair share")
 	assert.True(t, worthSpawning(1000, 50, 0), "no goroutine yet")
@@ -1586,4 +1597,43 @@ func TestDispatchWaitsInsteadOfSpawning(t *testing.T) {
 	assert.Equal(t, 2, w.NumProcessing(), "a second goroutine was spawned")
 
 	close(block)
+}
+
+// A worker that has not measured its jobs yet takes them one at a time: the
+// first N jobs start first on N workers, and a Stop leaves every job not yet
+// started in the queue rather than in a worker's buffer.
+func TestColdDispatchIsOneJobPerWorker(t *testing.T) {
+	var mu sync.Mutex
+	var started []int
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		mu.Lock()
+		started = append(started, j.Data())
+		mu.Unlock()
+		<-release
+	}, WithConcurrency(3), WithAutoRun(false))
+	q := w.BindQueue()
+	for i := range 10 {
+		_, ok := q.Add(i)
+		assert.True(t, ok)
+	}
+
+	assert.NoError(t, w.Start())
+	// NumProcessing counts slots the dispatcher reserved, before the job
+	// body runs; wait for the bodies.
+	assert.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(started) == 3 }, time.Second, time.Millisecond)
+
+	mu.Lock()
+	assert.ElementsMatch(t, []int{0, 1, 2}, started, "the first three jobs start first")
+	mu.Unlock()
+	assert.Equal(t, 7, q.Len(), "the rest stay in the queue, not in worker buffers")
+
+	assert.NoError(t, w.Stop())
+	close(release)
+	w.WaitUntilStopped()
+
+	assert.Equal(t, 7, q.Len(), "Stop runs only the jobs already started")
+	mu.Lock()
+	assert.Len(t, started, 3)
+	mu.Unlock()
 }

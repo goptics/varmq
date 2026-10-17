@@ -21,6 +21,16 @@ type IPriorityQueue interface {
 	Enqueue(item any, priority int) bool
 }
 
+// IRequeuer is FIFO storage that can take back items a worker dequeued in a
+// batch but did not start, when the worker is stopped or paused. Only such
+// storage is handed jobs in batches; a custom WithQueue storage without
+// Requeue gets one job at a time. Requeue puts items back at the front, in
+// order, unless stale (called under the storage's lock) reports that they
+// were purged meanwhile: then it stores nothing and returns false.
+type IRequeuer interface {
+	Requeue(items []any, stale func() bool) bool
+}
+
 // IAcknowledgeable is the root interface of acknowledgeable operations.
 type IAcknowledgeable interface {
 	// Returns true if the item was successfully acknowledged, false otherwise.

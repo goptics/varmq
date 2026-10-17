@@ -75,7 +75,9 @@ type Cursor[T any] struct {
 	idx     int       // index into chunk.data; may run past it until the next chunk is reached
 	offset  atomic.Uint64
 	closed  atomic.Bool
-	consume bool // the log's only cursor: clear each slot as it is read
+	consume bool         // the log's only cursor: clear each slot as it is read
+	front   [][]T        // batches a reader gave back, oldest first; read before the chunks
+	nFront  atomic.Int64 // items in front, so Len stays lock-free
 }
 
 // NewLog returns an empty, unbounded log.
@@ -182,9 +184,11 @@ func (l *Log[T]) full() bool {
 		return false
 	}
 
-	slowest := l.open[0].offset.Load()
+	// Items a cursor was given back by Requeue are unread again: they move
+	// its position back by as many.
+	slowest := l.open[0].position()
 	for _, c := range l.open[1:] {
-		slowest = min(slowest, c.offset.Load())
+		slowest = min(slowest, c.position())
 	}
 
 	return l.head.Load()-slowest >= limit
@@ -206,6 +210,12 @@ func (l *Log[T]) NewCursor() *Cursor[T] {
 	l.nOpen.Add(1) // after tail is set: an Append that sees a cursor sees a tail
 
 	return c
+}
+
+// position is the offset of the cursor's next unread item, the items given
+// back by Requeue counted: offset only counts reads from the chunks.
+func (c *Cursor[T]) position() uint64 {
+	return c.offset.Load() - uint64(c.nFront.Load())
 }
 
 // seekHead moves the cursor to the head. Appends racing it land on one side
@@ -231,14 +241,38 @@ func (l *Log[T]) NewConsumer() *Cursor[T] {
 	return c
 }
 
-// Len returns how many items the cursor has not read. It is 0 once closed. It
-// takes no lock.
+// Len returns how many items the cursor has not read, the ones given back
+// by Requeue included. It is 0 once closed. It takes no lock.
 func (c *Cursor[T]) Len() int {
 	if c.closed.Load() {
 		return 0
 	}
 
-	return int(max(0, int64(c.log.head.Load()-c.offset.Load())))
+	return int(max(0, int64(c.log.head.Load()-c.offset.Load()))) + int(c.nFront.Load())
+}
+
+// Requeue puts items a reader took but did not use back in front of the
+// unread ones: the next Dequeues return them first, in order, and Len counts
+// them. The cursor keeps items, so the caller must not touch the slice
+// again. stale runs under the cursor's lock; when it reports true the items
+// were purged after they were taken, nothing is stored and the result is
+// false. A closed cursor drops the items and reports true.
+func (c *Cursor[T]) Requeue(items []T, stale func() bool) bool {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
+	if c.chunk == nil || len(items) == 0 {
+		return true
+	}
+
+	if stale != nil && stale() {
+		return false
+	}
+
+	c.front = append(c.front, items)
+	c.nFront.Add(int64(len(items)))
+
+	return true
 }
 
 // Dequeue returns the next unread item and advances the cursor. Stepping off
@@ -252,6 +286,24 @@ func (c *Cursor[T]) Dequeue() (T, bool) {
 
 	if c.chunk == nil {
 		return zero, false
+	}
+
+	if len(c.front) > 0 {
+		batch := c.front[0]
+		item := batch[0]
+		batch[0] = zero
+		if len(batch) == 1 {
+			c.front[0] = nil
+			c.front = c.front[1:]
+			if len(c.front) == 0 {
+				c.front = nil
+			}
+		} else {
+			c.front[0] = batch[1:]
+		}
+		c.nFront.Add(-1)
+
+		return item, true
 	}
 
 	for {
@@ -296,8 +348,9 @@ func (c *Cursor[T]) claimed() bool {
 	return c.offset.Load() < c.log.head.Load()
 }
 
-// Values returns a copy of the unread items without consuming them: every
-// item claimed before the call, waiting for any still being written.
+// Values returns a copy of the unread items without consuming them: the
+// items given back by Requeue first, then every item claimed before the
+// call, waiting for any still being written.
 func (c *Cursor[T]) Values() []T {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -307,15 +360,19 @@ func (c *Cursor[T]) Values() []T {
 	}
 
 	end := c.log.head.Load()
-	out := make([]T, 0, end-c.offset.Load())
+	out := make([]T, 0, int(c.nFront.Load())+int(end-c.offset.Load()))
+	for _, b := range c.front {
+		out = append(out, b...)
+	}
 	c.each(end, func(ch *chunk[T], i int) { out = append(out, ch.data[i]) })
 
 	return out
 }
 
-// Purge skips every item claimed before the call. A consumer clears the
-// slots it skips, so they are freed at once; it waits for any still being
-// written, or the item would land after the purge and stay pinned.
+// Purge skips every item claimed before the call, and drops the ones given
+// back by Requeue. A consumer clears the slots it skips, so they are freed at
+// once; it waits for any still being written, or the item would land after
+// the purge and stay pinned.
 func (c *Cursor[T]) Purge() {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -323,6 +380,9 @@ func (c *Cursor[T]) Purge() {
 	if c.chunk == nil {
 		return
 	}
+
+	c.front = nil
+	c.nFront.Store(0)
 
 	if !c.consume {
 		c.seekHead()
@@ -375,6 +435,8 @@ func (c *Cursor[T]) Close() {
 
 	c.closed.Store(true)
 	c.chunk = nil
+	c.front = nil
+	c.nFront.Store(0)
 
 	l := c.log
 	l.mx.Lock()

@@ -67,12 +67,40 @@ func batchSize(pending, shares int) int {
 	return max(1, min(pending/max(shares, 1), maxBatch))
 }
 
+// handoffGap is how far apart hand-offs must be on average for the event
+// loop to stay out of the way: one every 32 µs, about 3% of its time at
+// around 1 µs each (channel send plus goroutine wake). Workers finishing
+// jobs faster than that get batches, just big enough to bring the rate back
+// under it. Measured on the competitor benchmark: 10 µs lost a few percent
+// on 10 ms jobs with 50k workers at 4 CPUs, 32 µs is at parity.
+const handoffGap = 32_000
+
+// batchBudget is how many jobs a batch needs so that alive workers each
+// finishing a job every jobNanos come back for a hand-off no more often than
+// handoffGap. 1 until a batch has been measured. Ten workers on 3 s jobs
+// get one job at a time, so jobs start in queue order; thirty thousand on
+// 10 ms jobs get 30. The worker about to be handed the batch counts even
+// before it is spawned.
+func batchBudget(jobNanos int64, alive int) int {
+	if jobNanos == 0 {
+		return 1
+	}
+
+	need := (int64(max(alive, 1))*handoffGap + jobNanos - 1) / jobNanos
+
+	return int(max(1, min(need, maxBatch)))
+}
+
 // processNextJob hands the next batch of jobs to one worker. Concurrency
 // bounds busy workers, not jobs: a batch occupies one worker however many
 // jobs it holds. Jobs are counted before dequeuing so Wait never sees an
 // empty queue and zero processing while one is in flight.
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	w.status.CompareAndSwap(idle, running)
+	// Load first: a failed compare-and-swap still dirties the line that the
+	// workers read before every job.
+	if w.status.Load() == idle {
+		w.status.CompareAndSwap(idle, running)
+	}
 
 	m := w.manager()
 	node, k := w.planBatch(m)
@@ -97,14 +125,16 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 		w.finishJobs(uint32(k - n))
 	}
 	// Stamped after the fill, so a job Added after a Purge returned is never
-	// mistaken for a purged one.
+	// mistaken for a purged one. The manager that filled the batch takes the
+	// unused rest back on Stop or Pause, even if the sources changed since.
 	// ponytail: a Purge overlapping this fill lets the jobs dequeued before it
 	// run (one batch, microseconds). Exact semantics would load the counter
 	// before each dequeue and close the stale part of the buffer: one more
 	// atomic load per job on the dispatcher, the serial ceiling.
 	stamp := pool.Stamp{Gen: m.purgeGen()}
-	if stamp.Gen != nil {
+	if stamp.Gen != nil { // a source that batches
 		stamp.Epoch = stamp.Gen.Load()
+		stamp.Src = m
 	}
 	node.Value.SendBatch(buf[:n], stamp)
 
@@ -115,8 +145,9 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 // gets. The backlog is split by fair share over every worker the limit
 // allows, so a batch never costs parallelism; once one more goroutine would
 // cost more than it saves (worthSpawning), it is split over the live
-// goroutines instead and none is spawned. A nil node means no worker is idle
-// and none should be spawned: the loop waits for one to come back.
+// goroutines instead and none is spawned. The share is then capped by how
+// much work a batch may hold (batchBudget). A nil node means no worker is
+// idle and none should be spawned: the loop waits for one to come back.
 func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[JobType], int) {
 	pending := m.Len()
 	alive := int(w.busyWorkers.Load()) + w.pool.Len()
@@ -135,7 +166,7 @@ func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[Job
 		node = w.initPoolNode()
 	}
 
-	return node, min(batchSize(pending, shares), m.maxBatch())
+	return node, min(batchSize(pending, shares), batchBudget(w.jobNanos.Load(), alive), m.maxBatch())
 }
 
 // fillBatch dequeues into buf, skipping jobs the user already closed (the

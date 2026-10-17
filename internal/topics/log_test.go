@@ -531,3 +531,73 @@ func TestLog(t *testing.T) {
 		assert.Equal(t, 0, c.Len())
 	})
 }
+
+func TestCursorRequeue(t *testing.T) {
+	fresh := func() bool { return false }
+
+	t.Run("given back items come first, in order, and count", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+		for i := 1; i <= 5; i++ {
+			l.Append(i)
+		}
+		a, _ := c.Dequeue()
+		b, _ := c.Dequeue()
+		assert.Equal(t, []int{1, 2}, []int{a, b})
+		assert.Equal(t, 3, c.Len())
+
+		assert.True(t, c.Requeue([]int{a, b}, fresh))
+		assert.Equal(t, 5, c.Len())
+		assert.Equal(t, []int{1, 2, 3, 4, 5}, c.Values(), "front first, then the chunks")
+		assert.Equal(t, []int{1, 2, 3, 4, 5}, drain(c))
+		assert.Equal(t, 0, c.Len())
+	})
+
+	t.Run("several batches keep their order", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewCursor()
+		l.Append(9)
+		assert.True(t, c.Requeue([]int{1, 2}, fresh))
+		assert.True(t, c.Requeue([]int{3}, fresh))
+		assert.Equal(t, 4, c.Len())
+		assert.Equal(t, []int{1, 2, 3, 9}, drain(c))
+	})
+
+	t.Run("stale: purged meanwhile, nothing stored", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+		assert.False(t, c.Requeue([]int{1, 2}, func() bool { return true }))
+		assert.Equal(t, 0, c.Len())
+		assert.Empty(t, c.Values())
+	})
+
+	t.Run("Purge drops the front", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+		l.Append(3)
+		assert.True(t, c.Requeue([]int{1, 2}, fresh))
+		c.Purge()
+		assert.Equal(t, 0, c.Len())
+		assert.Empty(t, drain(c))
+	})
+
+	t.Run("closed cursor drops the items and reports true", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewCursor()
+		c.Close()
+		assert.True(t, c.Requeue([]int{1}, fresh))
+		assert.Equal(t, 0, c.Len())
+	})
+
+	t.Run("a bounded log counts the front as unread", func(t *testing.T) {
+		l := NewBoundedLog[int](2)
+		c := l.NewConsumer()
+		assert.Equal(t, 1, l.Append(1))
+		assert.Equal(t, 1, l.Append(2))
+		assert.Equal(t, 0, l.Append(3), "full")
+		v, _ := c.Dequeue()
+		assert.True(t, c.Requeue([]int{v}, fresh))
+		assert.Equal(t, 2, c.Len())
+		assert.Equal(t, 0, l.Append(3), "still full: the item given back counts")
+	})
+}
