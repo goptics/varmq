@@ -498,14 +498,15 @@ func TestMaxBatch(t *testing.T) {
 	})
 
 	t.Run("dispatcher takes one job at a time from a priority queue", func(t *testing.T) {
+		fifo, prio := queues.NewQueue[any](), queues.NewPriorityQueue[any]()
 		for _, tc := range []struct {
 			name        string
-			q           IQueue
-			enqueue     func(IQueue, any)
+			q           IBaseQueue
+			enqueue     func(any)
 			wantPending int
 		}{
-			{"fifo", queues.NewQueue[any](), func(q IQueue, j any) { q.Enqueue(j) }, 0},
-			{"priority", queues.NewPriorityQueue[any](), func(q IQueue, j any) { q.(IPriorityQueue).Enqueue(j, 1) }, 4},
+			{"fifo", fifo, func(j any) { fifo.Enqueue(j) }, 0},
+			{"priority", prio, func(j any) { prio.Enqueue(j, 1) }, 4},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				block := make(chan struct{})
@@ -514,7 +515,7 @@ func TestMaxBatch(t *testing.T) {
 				defer w.Stop()
 
 				for range 5 {
-					tc.enqueue(tc.q, newJob("x", loadJobConfigs(w.configs())))
+					tc.enqueue(newJob("x", loadJobConfigs(w.configs())))
 				}
 				w.bind(tc.q, 1)
 
