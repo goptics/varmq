@@ -42,7 +42,6 @@ type worker[T any, JobType iJob[T]] struct {
 	curProcessing   atomic.Uint32 // jobs taken from the sources and not yet finished
 	busyWorkers     atomic.Uint32 // pool goroutines serving a batch; bounded by concurrency
 	jobNanos        atomic.Int64  // ns per job in the last finished batch; 0 until one has run
-	status          atomic.Uint32
 	eventLoopSignal chan struct{}
 	errorChan       chan error
 	waiters         *sync.Cond
@@ -51,6 +50,9 @@ type worker[T any, JobType iJob[T]] struct {
 	cancel          context.CancelFunc
 	Configs         configs
 	registryTimer   *time.Timer
+	// status sits apart from the counters above, which every batch writes:
+	// a worker reads it before each job of a batch and should hit its cache.
+	status atomic.Uint32
 }
 
 // Worker represents a worker that processes Jobs.
@@ -128,7 +130,9 @@ type Worker interface {
 	// whether there are in-flight jobs:
 	//   - If no jobs are processing: transitions directly to Paused.
 	//   - If jobs are processing: transitions to Pausing. In-flight jobs
-	//     continue until completion, then the status becomes Paused.
+	//     continue until completion, then the status becomes Paused. Jobs a
+	//     worker holds in its batch but has not started go back to the
+	//     front of their queue, still Queued and counted by Len.
 	//
 	// Once Paused, no new jobs are processed from the queue. Use Resume()
 	// to resume processing, or PauseAndWait() to block until fully paused.
@@ -147,7 +151,9 @@ type Worker interface {
 	// This is non-blocking and returns immediately. The worker transitions
 	// to Stopping and cancels its internal context. The event loop then
 	// waits for in-flight jobs to finish, removes all worker goroutines,
-	// and transitions to Stopped.
+	// and transitions to Stopped. Jobs a worker holds in its batch but has
+	// not started go back to the front of their queue, still Queued and
+	// counted by Len, so a Restart runs them.
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.

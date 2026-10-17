@@ -25,6 +25,12 @@ type ackTestQueue struct {
 	failAck bool
 }
 
+// noRequeueQueue is custom FIFO storage without Requeue: a worker stopped
+// mid-batch could not give its jobs back, so it gets one job at a time.
+type noRequeueQueue struct{ *queues.Queue[any] }
+
+func (q *noRequeueQueue) Requeue() {} // a different signature: not an IRequeuer
+
 func newAckTestQueue() *ackTestQueue {
 	return &ackTestQueue{Queue: queues.NewQueue[any]()}
 }
@@ -488,6 +494,7 @@ func TestMaxBatch(t *testing.T) {
 		assert.Equal(t, maxBatch, w.manager().maxBatch(), "direct manager forwards its source")
 
 		assert.Equal(t, 1, newTestWorker().bind(queues.NewPriorityQueue[any](), 1).maxBatch(), "priority storage does not batch")
+		assert.Equal(t, 1, newTestWorker().bind(&noRequeueQueue{queues.NewQueue[any]()}, 1).maxBatch(), "storage that cannot take a batch back does not batch")
 		assert.Equal(t, 1, newTestWorker().bind(newAckTestQueue(), 1).maxBatch(), "acknowledging storage does not batch")
 
 		topic := &topicSource[string]{cursor: topics.NewLog[string]().NewCursor(), w: newTestWorker()}
@@ -511,6 +518,7 @@ func TestMaxBatch(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				block := make(chan struct{})
 				w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(1))
+				w.jobNanos.Store(1) // measured: cheap jobs batch
 				defer close(block)
 				defer w.Stop()
 
@@ -531,6 +539,7 @@ func TestMaxBatch(t *testing.T) {
 		// Auto-run off so all five are queued before the first dispatch; with
 		// it on, the loop may hand out job 0 before the other Adds land.
 		w := NewWorker(func(j Job[int]) { <-block }, 1, WithAutoRun(false))
+		w.(*workerBinder[int]).jobNanos.Store(1) // measured: cheap jobs batch
 		defer close(block)
 		defer w.Stop()
 		q := w.BindQueue()

@@ -33,6 +33,12 @@ type source[JobType any] interface {
 	// with it, and the worker closes, instead of running, a job whose batch
 	// is older than the counter. nil for sources that never batch.
 	purgeGen() *atomic.Uint64
+	// requeue puts jobs a worker took in a batch but did not start back at
+	// the front of the source, in order, when the worker stops or pauses.
+	// It returns false when they were purged after the batch was taken
+	// (checked under the storage's lock); the worker then closes them. Only
+	// sources that batch are asked.
+	requeue(jobs []JobType, stale func() bool) bool
 }
 
 // ackQueue is storage that hands out an ack id with each item.
@@ -103,6 +109,20 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 	return toJob[T, JobType](v)
 }
 
+func (s *queueSource[T, JobType]) requeue(jobs []JobType, stale func() bool) bool {
+	r, ok := s.q.(IRequeuer)
+	if !ok {
+		return false // unreachable: such storage hands out one job at a time
+	}
+
+	items := make([]any, len(jobs))
+	for i, j := range jobs {
+		items[i] = j
+	}
+
+	return r.Requeue(items, stale)
+}
+
 // ackSource reads storage that acknowledges: persistent and distributed
 // queues. Every job it returns knows its storage
 // and ack id, so job.Close can acknowledge it.
@@ -123,6 +143,10 @@ func (s *ackSource[T, JobType]) maxBatch() int {
 
 func (s *ackSource[T, JobType]) purgeGen() *atomic.Uint64 {
 	return nil
+}
+
+func (s *ackSource[T, JobType]) requeue([]JobType, func() bool) bool {
+	return false // unreachable: batches of one
 }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
@@ -177,6 +201,18 @@ func (s *topicSource[T]) Next() (iJob[T], error) {
 	return newJob(data, loadJobConfigs(s.w.configs())), nil
 }
 
+// requeue gives the payloads back; the jobs made for them are dropped, and
+// Next makes new ones when they are read again. Nothing holds those jobs: a
+// topic's jobs are never handed to the publisher.
+func (s *topicSource[T]) requeue(jobs []iJob[T], stale func() bool) bool {
+	payloads := make([]T, len(jobs))
+	for i, j := range jobs {
+		payloads[i] = j.Data()
+	}
+
+	return s.cursor.Requeue(payloads, stale)
+}
+
 var (
 	_ source[iJob[int]] = (*queueSource[int, iJob[int]])(nil)
 	_ source[iJob[int]] = (*ackSource[int, iJob[int]])(nil)
@@ -193,8 +229,10 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		src = &ackSource[T, JobType]{q: aq}
 	} else if _, ok := q.(IPriorityQueue); ok {
 		src = &queueSource[T, JobType]{q: q, batch: 1}
-	} else {
+	} else if _, ok := q.(IRequeuer); ok {
 		src = &queueSource[T, JobType]{q: q, batch: maxBatch}
+	} else {
+		src = &queueSource[T, JobType]{q: q, batch: 1} // cannot take a batch back on Stop
 	}
 
 	w.addSource(src, priority)

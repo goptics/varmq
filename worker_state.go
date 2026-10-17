@@ -63,6 +63,12 @@ func (w *worker[T, JobType]) IsActive() bool {
 	return s == running || s == idle
 }
 
+// halting reports whether the worker is pausing, paused, stopping or
+// stopped: a job not started yet must not start now.
+func (w *worker[T, JobType]) halting() bool {
+	return w.status.Load() >= pausing
+}
+
 func (w *worker[T, JobType]) IsIdle() bool {
 	return w.status.Load() == idle
 }

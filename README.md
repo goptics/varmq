@@ -122,13 +122,13 @@ Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the si
 
 ### Batched dispatch
 
-Each wake-up of the event loop costs the same whether the job is tiny or slow, so instead of one job per wake-up a worker gets its share of the backlog in one go: the waiting jobs split evenly across the workers, at most 32 per hand-off. Every worker gets a job before any worker gets two, so parallelism is never lost. Below, 8 jobs with concurrency 2: the first worker takes 4, a second is spawned for 2, and the last two go out one at a time as workers free up.
+Each wake-up of the event loop costs the same whether the job is tiny or slow, so instead of one job per wake-up a worker gets its share of the backlog in one go: the waiting jobs split evenly across the workers, at most 32 per hand-off. Every worker gets a job before any worker gets two, so parallelism is never lost. A batch is also only as big as the loop needs: with the job time measured from the previous batch, a worker gets just enough jobs that the workers together come back for a hand-off at most about every 32 µs, and a worker that has not run a job yet takes one at a time. Ten workers on 3 s jobs therefore take one job each, so jobs start in queue order (job 1 before job 59); thirty thousand workers on 10 ms jobs take about thirty, which is what keeps the loop out of the way. The measure is one sample from the last batch, so a worker whose jobs suddenly turn slow still buffers one batch of them before it adapts. Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second is spawned for 2, and the last two go out one at a time as workers free up.
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
-A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed.
+A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed. On `Stop` or `Pause` a worker finishes the job it is running and gives the rest of its batch back to the front of its queue, still `Queued` and still counted by `Len`, so a `Restart` or `Resume` runs them in order.
 
-Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; and a worker bound to several queues takes one at a time, so the strategy picks a source for every job.
+Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; a worker bound to several queues takes one at a time, so the strategy picks a source for every job; and a custom `WithQueue` storage batches only if it can take jobs back (it implements `IRequeuer`).
 
 ### Priority Queue
 
