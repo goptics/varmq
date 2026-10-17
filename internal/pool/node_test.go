@@ -136,10 +136,10 @@ func TestPoolNode(t *testing.T) {
 		// Start Serve in a goroutine
 		done := make(chan struct{})
 		go func() {
-			node.Serve(func(v string) {
+			node.Serve(func(vs []string) {
 				wg.Done()
 				processed <- struct{}{}
-			}, nil)
+			})
 			close(done)
 		}()
 
@@ -188,16 +188,17 @@ func TestPoolNodeBatch(t *testing.T) {
 		assert.Same(&big[0], &back[0], "the grown buffer should be kept")
 	})
 
-	t.Run("SendBatch runs every item in order then done once", func(t *testing.T) {
+	t.Run("Serve gets each payload as one slice", func(t *testing.T) {
 		assert := assert.New(t)
 		node := CreateNode[string](1)
 
 		var got []string
-		doneCalls := 0
+		calls := 0
 		served := make(chan struct{})
 		go func() {
-			node.Serve(func(v string) { got = append(got, v) }, func() {
-				doneCalls++
+			node.Serve(func(vs []string) {
+				got = append(got, vs...)
+				calls++
 				served <- struct{}{}
 			})
 		}()
@@ -213,7 +214,6 @@ func TestPoolNodeBatch(t *testing.T) {
 		node.Stop()
 
 		assert.Equal([]string{"a", "b", "c", "d"}, got)
-		assert.Equal(2, doneCalls, "done runs once per payload, batch or single")
-		assert.Equal([]string{"", "", ""}, batch, "a consumed batch is cleared")
+		assert.Equal(2, calls, "fn runs once per payload, batch or single")
 	})
 }

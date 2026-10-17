@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/goptics/varmq/internal/pool"
 )
 
 func (w *worker[T, JobType]) goEventLoop() {
@@ -110,14 +108,6 @@ func (w *worker[T, JobType]) finishJobs(m uint32) {
 		w.releaseWaiters(w.curProcessing.Load())
 		w.mx.Unlock()
 	}
-}
-
-// freeWorker returns node to the idle pool once its batch is done and lets
-// the event loop dispatch again.
-func (w *worker[T, JobType]) freeWorker(node *pool.Elem[JobType]) {
-	w.freePoolNode(node)
-	w.busyWorkers.Add(^uint32(0))
-	w.notifyToPullNextJobs()
 }
 
 func (w *worker[T, JobType]) notifyToPullNextJobs() {

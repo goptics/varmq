@@ -96,17 +96,25 @@ func (w *worker[T, JobType]) removeAllWorkers() {
 func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
-	go node.Value.Serve(func(j JobType) {
-		w.workerFunc(j)
+	go node.Value.Serve(func(jobs []JobType) {
+		for _, j := range jobs {
+			w.workerFunc(j)
 
-		j.changeStatus(finished)
-		if err := j.Close(); err != nil {
-			w.sendError(err)
+			j.changeStatus(finished)
+			if err := j.Close(); err != nil {
+				w.sendError(err)
+			}
+			w.metrics.incCompleted()
 		}
-		w.metrics.incCompleted()
-		w.finishJobs(1)
-	}, func() {
-		w.freeWorker(node)
+
+		// Drop the job references before the node is up for grabs again, then
+		// back in the pool and off the busy count before the processing count
+		// drops: a Wait that returns must find every idle worker in the pool.
+		clear(jobs)
+		w.freePoolNode(node)
+		w.busyWorkers.Add(^uint32(0))
+		w.finishJobs(uint32(len(jobs)))
+		w.notifyToPullNextJobs()
 	})
 
 	return node

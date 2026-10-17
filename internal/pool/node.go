@@ -15,7 +15,8 @@ type Payload[T any] struct {
 
 type Node[T any] struct {
 	ch       chan Payload[T]
-	buf      []T // batch staging; owned by whoever popped the node until Serve has read it
+	buf      []T  // batch staging; owned by whoever popped the node until Serve has read it
+	single   [1]T // lets Serve hand a lone Send to fn as a slice without allocating
 	lastUsed atomic.Value
 }
 
@@ -54,26 +55,22 @@ func (wc *Node[T]) SendBatch(jobs []T) {
 	}
 }
 
-// Serve runs fn on every item received, then done once per payload, single
-// or batch, so the node is handed back only after a whole batch is finished.
-func (wc *Node[T]) Serve(fn func(T), done func()) {
+// Serve runs fn once per payload with the items it carries, one from Send or
+// a whole batch from SendBatch. The slice is the node's own storage: fn must
+// clear it before it lets anyone else (a pool) hand the node a new batch.
+func (wc *Node[T]) Serve(fn func([]T)) {
 	for payload := range wc.ch {
 		if !payload.ok {
 			return
 		}
 
-		if payload.batch != nil {
-			for _, item := range payload.batch {
-				fn(item)
-			}
-			clear(payload.batch)
-		} else {
-			fn(payload.data)
+		items := payload.batch
+		if items == nil {
+			wc.single[0] = payload.data
+			items = wc.single[:]
 		}
 
-		if done != nil {
-			done()
-		}
+		fn(items)
 	}
 }
 
