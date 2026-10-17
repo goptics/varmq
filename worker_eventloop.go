@@ -53,8 +53,9 @@ func batchSize(pending, free int) int {
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	w.status.CompareAndSwap(idle, running)
 
+	m := w.manager()
 	free := int(w.concurrency.Load() - w.busyWorkers.Load())
-	k := batchSize(w.NumPending(), free)
+	k := min(batchSize(m.Len(), free), m.maxBatch())
 	w.busyWorkers.Add(1)
 	w.curProcessing.Add(uint32(k))
 
@@ -66,7 +67,7 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 
 	n, cont, err := 0, true, error(nil)
 	for n < k {
-		j, nextErr := w.manager().Next()
+		j, nextErr := m.Next()
 		if nextErr != nil {
 			if errors.Is(nextErr, errNoReadySource) {
 				cont = false

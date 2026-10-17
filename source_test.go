@@ -473,3 +473,54 @@ func TestWorkerSources(t *testing.T) {
 		assert.True(t, isTopic)
 	})
 }
+
+func TestMaxBatch(t *testing.T) {
+	newTestWorker := func() *worker[string, iJob[string]] {
+		return newWorker(func(j iJob[string]) {}, WithAutoRun(false))
+	}
+
+	t.Run("per source kind", func(t *testing.T) {
+		w := newTestWorker()
+		assert.Equal(t, 1, w.manager().maxBatch(), "nothing bound")
+
+		fifo := w.bind(queues.NewQueue[any](), 1)
+		assert.Equal(t, maxBatch, fifo.maxBatch(), "in-memory FIFO batches")
+		assert.Equal(t, maxBatch, w.manager().maxBatch(), "direct manager forwards its source")
+
+		assert.Equal(t, 1, newTestWorker().bind(queues.NewPriorityQueue[any](), 1).maxBatch(), "priority storage does not batch")
+		assert.Equal(t, 1, newTestWorker().bind(newAckTestQueue(), 1).maxBatch(), "acknowledging storage does not batch")
+
+		topic := &topicSource[string]{cursor: topics.NewLog[string]().NewCursor(), w: newTestWorker()}
+		assert.Equal(t, maxBatch, topic.maxBatch(), "in-memory topic batches")
+
+		w.bind(queues.NewQueue[any](), 2)
+		assert.Equal(t, 1, w.manager().maxBatch(), "several sources: the strategy picks per job")
+	})
+
+	t.Run("dispatcher takes one job at a time from a priority queue", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			q           IQueue
+			enqueue     func(IQueue, any)
+			wantPending int
+		}{
+			{"fifo", queues.NewQueue[any](), func(q IQueue, j any) { q.Enqueue(j) }, 0},
+			{"priority", queues.NewPriorityQueue[any](), func(q IQueue, j any) { q.(IPriorityQueue).Enqueue(j, 1) }, 4},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				block := make(chan struct{})
+				w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(1))
+				defer close(block)
+				defer w.Stop()
+
+				for range 5 {
+					tc.enqueue(tc.q, newJob("x", loadJobConfigs(w.configs())))
+				}
+				w.bind(tc.q, 1)
+
+				w.processNextJob()
+				assert.Equal(t, tc.wantPending, w.NumPending())
+			})
+		}
+	})
+}
