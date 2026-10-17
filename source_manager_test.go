@@ -119,3 +119,20 @@ func TestSourceManagerNext(t *testing.T) {
 		assert.Nil(t, src)
 	})
 }
+
+// Only a lone batching source exposes its purge counter; everything else
+// hands out batches of one and returns nil so the worker skips the check.
+func TestSourceManagerPurgeGen(t *testing.T) {
+	var m sourceManager[iJob[string]] = newSourceManager[iJob[string]]()
+	assert.Nil(t, m.purgeGen(), "empty")
+
+	fifo := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: maxBatch}
+	m = m.add(fifo, math.MaxInt, RoundRobin)
+	assert.Same(t, &fifo.purges, m.purgeGen(), "direct forwards the source's counter")
+
+	m = m.add(newTestSource(), math.MaxInt, RoundRobin)
+	assert.Nil(t, m.purgeGen(), "strategy")
+
+	prio := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: 1}
+	assert.Nil(t, prio.purgeGen(), "batch of one")
+}

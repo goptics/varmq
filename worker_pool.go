@@ -104,11 +104,10 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			if j.IsClosed() {
 				continue
 			}
-			// Purged after it was taken: close it as Purge would have.
+			// Purged after it was taken: close it as Purge would have. Close
+			// fails only if the user closed it meanwhile; Purge ignores that too.
 			if stamp.Stale() {
-				if err := j.Close(); err != nil {
-					w.sendError(err)
-				}
+				_ = j.Close()
 				continue
 			}
 			j.changeStatus(processing)

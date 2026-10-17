@@ -2,6 +2,7 @@ package pool
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -216,4 +217,15 @@ func TestPoolNodeBatch(t *testing.T) {
 		assert.Equal([]string{"a", "b", "c", "d"}, got)
 		assert.Equal(2, calls, "fn runs once per payload, batch or single")
 	})
+}
+
+func TestStamp(t *testing.T) {
+	assert.False(t, Stamp{}.Stale(), "nil counter never goes stale")
+
+	var gen atomic.Uint64
+	s := Stamp{Gen: &gen, Epoch: gen.Load()}
+	assert.False(t, s.Stale())
+
+	gen.Add(1)
+	assert.True(t, s.Stale(), "stale once the counter moves")
 }
