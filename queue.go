@@ -56,7 +56,7 @@ func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	}
 
 	q.w.Metrics().incSubmitted()
-	j.changeStatus(queued)
+	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
 	return j, true
@@ -75,7 +75,7 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 		}
 
 		q.w.Metrics().incSubmitted()
-		j.changeStatus(queued)
+		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
 
@@ -119,7 +119,7 @@ func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, b
 	}
 
 	q.w.Metrics().incSubmitted()
-	j.changeStatus(queued)
+	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
 	return j, true
@@ -138,7 +138,7 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 		}
 
 		q.w.Metrics().incSubmitted()
-		j.changeStatus(queued)
+		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
 
@@ -181,7 +181,7 @@ func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResul
 	}
 
 	q.w.Metrics().incSubmitted()
-	j.changeStatus(queued)
+	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
 	return j, true
@@ -200,7 +200,7 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 		}
 
 		q.w.Metrics().incSubmitted()
-		j.changeStatus(queued)
+		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
 

@@ -54,12 +54,10 @@ func (gj *groupJob[T]) Wait() {
 }
 
 func (gj *groupJob[T]) Close() error {
-	if err := gj.isCloseable(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
 
-	gj.ack()
-	gj.changeStatus(closed)
 	gj.wgc.Done()
 
 	return nil
@@ -132,15 +130,12 @@ func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
 }
 
 func (gj *resultGroupJob[T, R]) Close() error {
-	if err := gj.isCloseable(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
 
-	gj.ack()
-	gj.changeStatus(closed)
-	gj.wgc.Done()
-
-	if gj.wgc.Count() == 0 {
+	// Only the Close that takes the count to zero closes the shared response.
+	if gj.wgc.Done() {
 		gj.resp.Close()
 	}
 
@@ -207,15 +202,12 @@ func (gj *errorGroupJob[T]) Errs() <-chan error {
 }
 
 func (gj *errorGroupJob[T]) Close() error {
-	if err := gj.isCloseable(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
 
-	gj.ack()
-	gj.changeStatus(closed)
-	gj.wgc.Done()
-
-	if gj.wgc.Count() == 0 {
+	// Only the Close that takes the count to zero closes the shared response.
+	if gj.wgc.Done() {
 		gj.resp.Close()
 	}
 

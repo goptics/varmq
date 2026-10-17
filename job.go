@@ -76,7 +76,7 @@ type job[T any] struct {
 	data   T
 	status atomic.Uint32
 	wg     sync.WaitGroup
-	ackRef *jobAck // nil for in-memory jobs; only ackSource.Next sets it
+	ackRef atomic.Pointer[jobAck] // nil for in-memory jobs; set by ackSource.Next, taken by acknowledge
 }
 
 // jobAck is what a job needs to acknowledge itself: the storage that handed
@@ -104,8 +104,8 @@ type iJob[T any] interface {
 	Job[T]
 	StatusProvider
 	changeStatus(s status)
+	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
-	ack() error
 	io.Closer
 }
 
@@ -146,7 +146,7 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 		return
 	}
 
-	j.ackRef = &jobAck{q: q, id: id}
+	j.ackRef.Store(&jobAck{q: q, id: id})
 }
 
 func (j *job[T]) ID() string {
@@ -228,8 +228,9 @@ func parseToJob[T any](data []byte) (any, error) {
 	return j, nil
 }
 
-func (j *job[T]) isCloseable() error {
-	switch j.status.Load() {
+// closeable reports why a job in state s cannot be closed, or nil.
+func closeable(s status) error {
+	switch s {
 	case processing:
 		return ErrJobProcessing
 	case closed:
@@ -239,30 +240,97 @@ func (j *job[T]) isCloseable() error {
 	return nil
 }
 
-// close closes the job and its associated channels.
-// the job regardless of its current state, except when locked.
+// notClosed reports ErrJobAlreadyClosed for a closed job, nil otherwise.
+func notClosed(s status) error {
+	if s == closed {
+		return ErrJobAlreadyClosed
+	}
+
+	return nil
+}
+
+// transition moves the job to the state to with one CAS when allowed accepts
+// the state it is in, retrying while other goroutines move it. The CAS makes
+// each transition exactly-once: of two concurrent callers one wins and the
+// other sees the new state.
+func (j *job[T]) transition(to status, allowed func(status) error) error {
+	for {
+		s := j.status.Load()
+		if err := allowed(s); err != nil {
+			return err
+		}
+
+		if j.status.CompareAndSwap(s, to) {
+			return nil
+		}
+	}
+}
+
+// claimClose moves a created, queued or finished job to closed, so only one
+// concurrent Close can win and run the close side effects.
+func (j *job[T]) claimClose() error {
+	return j.transition(closed, closeable)
+}
+
+// markQueued records that Enqueue succeeded. It only moves a created job: a
+// worker may already have started it, or the user closed it, before this runs.
+func (j *job[T]) markQueued() {
+	j.status.CompareAndSwap(created, queued)
+}
+
+// startProcessing moves a job a worker took to processing, unless it was
+// closed meanwhile.
+func (j *job[T]) startProcessing() bool {
+	return j.transition(processing, notClosed) == nil
+}
+
+// closeOnce acknowledges the job's storage, if it has one, and claims the
+// move to closed. The claim is one CAS and the acknowledgement happens once
+// per job (acknowledge takes the ack out of the job before calling storage),
+// so of two concurrent Close calls exactly one acknowledges and exactly one
+// wins; the other gets ErrJobAlreadyClosed. A job from acknowledgeable
+// storage is acknowledged before the claim and never shows Closed meanwhile,
+// so a failed acknowledgement leaves it untouched: a worker that took it still
+// runs it, and a finished one stays Finished and unwaited.
+func (j *job[T]) closeOnce() error {
+	if j.ackRef.Load() != nil {
+		if err := closeable(j.status.Load()); err != nil {
+			return err
+		}
+
+		if err := j.acknowledge(); err != nil {
+			return err
+		}
+	}
+
+	return j.claimClose()
+}
+
+// Close closes the job, whatever its state except processing, and releases
+// Wait. Only the call that wins the transition releases; a concurrent Close
+// returns ErrJobAlreadyClosed. See closeOnce for acknowledgeable storage.
 func (j *job[T]) Close() error {
-	if err := j.isCloseable(); err != nil {
+	if err := j.closeOnce(); err != nil {
 		return err
 	}
 
-	if err := j.ack(); err != nil {
-		return err
-	}
-
-	j.status.Store(closed)
 	j.wg.Done()
 
 	return nil
 }
 
-func (j *job[T]) ack() error {
-	if j.ackRef == nil || j.IsClosed() {
+// acknowledge acknowledges the job with its storage at most once: it takes
+// the ack out of the job first, so a concurrent or later call finds nothing
+// to do, and puts it back only when storage refuses, so a retry can ack.
+func (j *job[T]) acknowledge() error {
+	ref := j.ackRef.Swap(nil)
+	if ref == nil {
 		return nil
 	}
 
-	if !j.ackRef.q.Acknowledge(j.ackRef.id) {
-		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, j.ackRef.id)
+	if !ref.q.Acknowledge(ref.id) {
+		j.ackRef.Store(ref)
+		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, ref.id)
 	}
 
 	return nil
