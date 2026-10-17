@@ -171,28 +171,22 @@ func (t *topic[T]) unsubscribe(s *subscription[T]) {
 }
 
 // Subscription is a worker's handle on a topic, returned by
-// [IWorkerBinder.WithTopic] or [IWorkerBinder.WithPersistentTopic]. It has
-// no Add: the topic is the only producer.
+// [IWorkerBinder.WithTopic]. It has no Add: the topic is the only producer.
 //
-// Len and Purge act on what this subscription has not read yet. For a
-// persistent topic that is the group's backlog, shared with every reader of
-// the group. Purge never calls Close on payloads.
+// Len and Purge act on what this subscription has not read yet. Purge never
+// calls Close on payloads.
 //
 // IsFull reports whether this subscription has as many unread payloads as the
 // topic's WithTopicCapacity, so it is the one making Publish return false. It
-// is always false without a capacity, and for persistent topics.
+// is always false without a capacity.
 //
-// Close detaches this handle. For an in-memory topic it is the same as
-// Unsubscribe; for a persistent topic the group keeps its position, so
-// binding the same group again resumes where it stopped.
+// Close detaches this handle. It is the same as Unsubscribe.
 type Subscription[T any] interface {
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
-	// Unsubscribe ends the subscription and detaches it from the worker. For
-	// an in-memory topic it drops what this subscription has not read. For a
-	// persistent topic it deletes the group, for every reader in every
-	// process. It is idempotent.
+	// Unsubscribe ends the subscription and detaches it from the worker and
+	// drops what this subscription has not read. It is idempotent.
 	Unsubscribe()
 }
 

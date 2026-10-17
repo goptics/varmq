@@ -267,9 +267,6 @@ for order := range 4 {
 
 ![VarMQ topic fan-out with two subscribed workers](./assets/diagrams/varmq-topic.svg)
 
-> [!Note]
-> Persistent topics are supported too: `varmq.NewPersistentTopic` with `worker.WithPersistentTopic(topic, "group")` keeps payloads in durable storage, every group gets every payload, workers on one group share it, and delivery is at least once. They need an `IPersistentTopic` adapter, and none has been released yet.
-
 ### Result and Error Worker
 
 VarMQ provides a `NewResultWorker` that returns both the result and error for each job processed. This is useful when you need to handle both success and failure cases.

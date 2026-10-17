@@ -175,27 +175,6 @@ type IWorkerBinder[T any] interface {
 	//   topic.Publish(order) // the worker receives a copy
 	//   sub.Unsubscribe()    // stop receiving
 	WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T]
-
-	// WithPersistentTopic subscribes the worker to a group of a persistent
-	// topic. Every group gets every payload; workers on the same group share
-	// it. Close on the returned subscription keeps the group's position;
-	// Unsubscribe deletes the group, which also detaches every subscription on
-	// that group in this process.
-	//
-	// It panics on a nil topic, an empty group, or a worker already attached to
-	// this topic (in any group), since that worker would process every payload
-	// twice. configs takes options such as WithTopicPriority. If the storage cannot join
-	// the group, the error goes to the worker's error handler and the
-	// returned subscription is inert.
-	//
-	// Workers sharing a group may occasionally report ErrFailedToDequeue to
-	// their error handler when another worker took the message first; it is
-	// harmless.
-	//
-	// Example usage:
-	//   topic := varmq.NewPersistentTopic[Order](storage)
-	//   sub := worker.WithPersistentTopic(topic, "email")
-	WithPersistentTopic(t PersistentTopic[T], group string, configs ...TopicConfigFunc) Subscription[T]
 }
 
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
@@ -267,18 +246,6 @@ func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Sub
 	}
 
 	return t.subscribe(wb.worker, loadTopicConfigs(configs...).priority)
-}
-
-func (wb *workerBinder[T]) WithPersistentTopic(t PersistentTopic[T], group string, configs ...TopicConfigFunc) Subscription[T] {
-	if t == nil {
-		panic("varmq: WithPersistentTopic called with nil PersistentTopic")
-	}
-
-	if group == "" {
-		panic("varmq: WithPersistentTopic called with empty group")
-	}
-
-	return t.bindGroup(wb.worker, group, wb.handleQueueSubscription, loadTopicConfigs(configs...).priority)
 }
 
 type errWorkerBinder[T any] struct {

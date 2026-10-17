@@ -49,8 +49,8 @@ func (w *worker[T, JobType]) Wait() {
 // The job that brings the running count to 0 always wakes them under w.mx,
 // after the decrement, so it cannot slip past a caller: either the caller
 // sees 0, or it is already waiting when the broadcast comes. But a source shared with other workers or
-// processes (one queue bound to several workers, a persistent topic group, a
-// distributed queue) can be drained by someone else while this worker runs
+// processes (one queue bound to several workers, a persistent or distributed
+// queue) can be drained by someone else while this worker runs
 // nothing, and nothing then wakes its waiters. So while no job is running, it
 // also wakes them after waitRecheck to re-check. It decides on the running
 // count alone: NumPending may already have changed since the caller checked.

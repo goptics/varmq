@@ -434,8 +434,8 @@ func WithQueuePriority(priority int) QueueConfigFunc {
 }
 
 // TopicConfigFunc configures a topic or a worker's subscription to one, like
-// QueueConfigFunc does for queues: NewTopic reads the capacity, WithTopic and
-// WithPersistentTopic read the priority.
+// QueueConfigFunc does for queues: NewTopic reads the capacity, WithTopic reads
+// the priority.
 type TopicConfigFunc func(*topicConfig)
 
 type topicConfig struct {
