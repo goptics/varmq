@@ -507,3 +507,21 @@ func TestPublicErrors(t *testing.T) {
 		assert.ErrorIs(t, err, ErrAcknowledgeJob, "Close should return ErrAcknowledgeJob when ack fails")
 	})
 }
+
+// Drain is a no-op on single error and result jobs: they keep the outcome in
+// place, so Err and Result still return it afterwards.
+func TestSingleJobDrainIsNoop(t *testing.T) {
+	ej := newErrorJob("x", jobConfigs{})
+	ej.sendError(errors.New("boom"))
+	assert.NoError(t, ej.Close())
+	ej.Drain()
+	assert.EqualError(t, ej.Err(), "boom")
+
+	rj := newResultJob[string, int]("x", jobConfigs{})
+	rj.sendResult(7)
+	assert.NoError(t, rj.Close())
+	rj.Drain()
+	v, err := rj.Result()
+	assert.Equal(t, 7, v)
+	assert.NoError(t, err)
+}

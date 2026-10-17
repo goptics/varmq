@@ -484,3 +484,45 @@ func TestErrorGroupJob(t *testing.T) {
 		assert.Equal(expectedError.Error(), err.Error(), "error message should indicate job is already closed")
 	})
 }
+
+func TestGroupJobSendAndDrain(t *testing.T) {
+	t.Run("result group member sends results and errors into the shared channel", func(t *testing.T) {
+		rgj := newResultGroupJob[string, int](2)
+		a := rgj.newJob("a", jobConfigs{Id: "1"})
+		b := rgj.newJob("b", jobConfigs{Id: "2"})
+
+		a.sendResult(42)
+		b.sendError(errors.New("boom"))
+
+		got := []Result[int]{<-rgj.Results(), <-rgj.Results()}
+		assert.Equal(t, Result[int]{JobId: "g:1", Data: 42}, got[0])
+		assert.Equal(t, "g:2", got[1].JobId)
+		assert.EqualError(t, got[1].Err, "boom")
+	})
+
+	t.Run("Drain empties a result group channel after it is closed", func(t *testing.T) {
+		rgj := newResultGroupJob[string, int](1)
+		j := rgj.newJob("a", jobConfigs{})
+		j.sendResult(1)
+		assert.NoError(t, j.Close()) // last member: closes the channel
+
+		rgj.Drain()
+		assert.Eventually(t, func() bool {
+			_, ok := <-rgj.Results()
+			return !ok
+		}, time.Second, time.Millisecond, "channel should be drained and closed")
+	})
+
+	t.Run("Drain empties an error group channel after it is closed", func(t *testing.T) {
+		egj := newErrorGroupJob[string](1)
+		j := egj.newJob("a", jobConfigs{})
+		j.sendError(errors.New("boom"))
+		assert.NoError(t, j.Close())
+
+		egj.Drain()
+		assert.Eventually(t, func() bool {
+			_, ok := <-egj.Errs()
+			return !ok
+		}, time.Second, time.Millisecond, "channel should be drained and closed")
+	})
+}
