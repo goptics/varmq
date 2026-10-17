@@ -15,6 +15,9 @@ const (
 	// stay small instead of growing like the queue's: a grown chunk would keep
 	// up to that many read payloads alive. One allocation per 1024 appends.
 	chunkCapacity = 1024
+	// linkSpins is how many times an Append past the end of a chunk yields
+	// for the one linking the next chunk before it allocates one itself.
+	linkSpins = 4
 )
 
 // chunk is one block of the log, holding the items at offsets base to
@@ -24,10 +27,11 @@ const (
 // claim in order but may finish out of order. next is linked by the writer
 // that claims the first offset past the end.
 type chunk[T any] struct {
-	base  uint64
-	data  []T
-	ready []atomic.Bool
-	next  atomic.Pointer[chunk[T]]
+	base    uint64
+	data    []T
+	ready   []atomic.Bool
+	next    atomic.Pointer[chunk[T]]
+	linking atomic.Bool // an Append is allocating next
 }
 
 func newChunk[T any](base uint64) *chunk[T] {
@@ -129,14 +133,21 @@ func (l *Log[T]) Append(item T) int {
 	t := l.tail.Load()
 	o := l.head.Add(1) - 1
 
+	spins := 0
 	for o >= t.end() {
 		next := t.next.Load()
 		if next == nil {
-			// Any Append past the end may link it: its base is fixed, so
-			// CAS losers only drop a spare chunk instead of waiting on a
-			// linker the scheduler parked.
-			t.next.CompareAndSwap(nil, newChunk[T](t.end()))
-			next = t.next.Load()
+			// The first Append past the end links the next chunk; the others
+			// yield a few times for it. Its base is fixed, so if the linker
+			// was parked they allocate one themselves and the CAS losers
+			// drop a spare chunk, instead of waiting on the scheduler.
+			if t.linking.CompareAndSwap(false, true) || spins == linkSpins {
+				t.next.CompareAndSwap(nil, newChunk[T](t.end()))
+				continue
+			}
+			spins++
+			runtime.Gosched()
+			continue
 		}
 
 		l.tail.CompareAndSwap(t, next)
