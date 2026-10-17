@@ -224,7 +224,7 @@ for i := range 10 {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/0eL_0WNRVIh)**
 
-The Queue Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
+The Source Manager picks which bound queue the next job comes from. With `varmq.WithStrategy(varmq.RoundRobin)` it takes turns across the queues and skips any that are empty:
 
 ![VarMQ multiple queues with round-robin selection](./assets/diagrams/varmq-multi-queue.svg)
 
