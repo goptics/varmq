@@ -113,7 +113,7 @@ func main() {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
-Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free.
+Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free, and it hands each worker its share of the backlog in one go (a batch) rather than one job per wake-up.
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
