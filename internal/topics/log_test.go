@@ -445,4 +445,89 @@ func TestLog(t *testing.T) {
 			assert.Equal(t, 4, v)
 		}
 	})
+
+	// fakeWriter claims the next offset the way Append does but publishes
+	// only when told, like a writer descheduled between claim and publish.
+	// When the claim runs past the tail chunk, the next chunk is linked only
+	// on publish too.
+	fakeWriter := func(l *Log[int]) (publish func(int)) {
+		t := l.tail.Load()
+		o := l.head.Add(1) - 1
+
+		return func(v int) {
+			if o >= t.end() {
+				next := newChunk[int](t.end())
+				t.next.Store(next)
+				l.tail.Store(next)
+				t = next
+			}
+			t.data[o-t.base] = v
+			t.ready[o-t.base].Store(true)
+		}
+	}
+
+	// blocked asserts read does not return until publish runs, then
+	// returns what it returned.
+	blocked := func(t *testing.T, read func() any, publish func()) any {
+		t.Helper()
+		got := make(chan any, 1)
+		go func() { got <- read() }()
+		select {
+		case <-got:
+			t.Fatal("read returned before the claimed slot was published")
+		case <-time.After(20 * time.Millisecond):
+		}
+		publish()
+
+		return <-got
+	}
+
+	t.Run("dequeue waits for a claimed slot and for a chunk still being linked", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+
+		publish := fakeWriter(l)
+		v := blocked(t, func() any { v, _ := c.Dequeue(); return v }, func() { publish(1) })
+		assert.Equal(t, 1, v)
+
+		for i := range chunkCapacity - 1 {
+			l.Append(i)
+			c.Dequeue()
+		}
+		publish = fakeWriter(l) // first offset of a chunk nobody linked yet
+		v = blocked(t, func() any { v, _ := c.Dequeue(); return v }, func() { publish(2) })
+		assert.Equal(t, 2, v)
+	})
+
+	t.Run("values and consumer purge cross chunks and wait for one still being linked", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+		for i := range chunkCapacity {
+			l.Append(i)
+		}
+		publish := fakeWriter(l)
+
+		got := blocked(t, func() any { return c.Values() }, func() { publish(-1) }).([]int)
+		assert.Len(t, got, chunkCapacity+1)
+		assert.Equal(t, -1, got[chunkCapacity])
+
+		first := c.chunk
+		c.Purge()
+		assert.Equal(t, 0, c.Len())
+		assert.NotSame(t, first, c.chunk, "purge moved onto the next chunk")
+		assert.Equal(t, 0, first.data[chunkCapacity-1], "skipped slots cleared")
+		assert.Equal(t, 1, l.Append(7))
+		v, ok := c.Dequeue()
+		assert.True(t, ok)
+		assert.Equal(t, 7, v)
+	})
+
+	t.Run("purge on a closed consumer does nothing", func(t *testing.T) {
+		l := NewLog[int]()
+		c := l.NewConsumer()
+		c.Close()
+		c.Purge()
+		assert.Nil(t, c.chunk)
+		assert.Equal(t, 0, c.Len())
+	})
 }
