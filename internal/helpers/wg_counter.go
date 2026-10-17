@@ -23,16 +23,21 @@ func (pt *WgCounter) Count() int {
 	return int(pt.count.Load())
 }
 
-// Done counts one job off and reports whether it was the last one.
+// Done counts one job off and reports whether it was the last one. The count
+// never goes below zero: a Done past the last one is a no-op, however many
+// race for it.
 func (pt *WgCounter) Done() bool {
-	if pt.count.Load() == 0 {
-		return false
+	for {
+		n := pt.count.Load()
+		if n == 0 {
+			return false
+		}
+
+		if pt.count.CompareAndSwap(n, n-1) {
+			pt.wg.Done()
+			return n == 1
+		}
 	}
-
-	last := pt.count.Add(^uint32(0)) == 0
-	pt.wg.Done()
-
-	return last
 }
 
 func (pt *WgCounter) Wait() {

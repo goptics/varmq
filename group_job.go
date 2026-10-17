@@ -54,11 +54,10 @@ func (gj *groupJob[T]) Wait() {
 }
 
 func (gj *groupJob[T]) Close() error {
-	if err := gj.claimClose(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
 
-	_ = gj.acknowledge()
 	gj.wgc.Done()
 
 	return nil
@@ -131,11 +130,9 @@ func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
 }
 
 func (gj *resultGroupJob[T, R]) Close() error {
-	if err := gj.claimClose(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
-
-	_ = gj.acknowledge()
 
 	// Only the Close that takes the count to zero closes the shared response.
 	if gj.wgc.Done() {
@@ -205,11 +202,9 @@ func (gj *errorGroupJob[T]) Errs() <-chan error {
 }
 
 func (gj *errorGroupJob[T]) Close() error {
-	if err := gj.claimClose(); err != nil {
+	if err := gj.closeOnce(); err != nil {
 		return err
 	}
-
-	_ = gj.acknowledge()
 
 	// Only the Close that takes the count to zero closes the shared response.
 	if gj.wgc.Done() {

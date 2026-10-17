@@ -35,14 +35,14 @@ func TestJob(t *testing.T) {
 		j := newJob(jobData, jobConfigs{Id: "job-ack-test"})
 		assert := assert.New(t)
 
-		assert.Nil(j.ackRef, "a fresh job carries no ack")
+		assert.Nil(j.ackRef.Load(), "a fresh job carries no ack")
 
 		mockQueue := mocks.NewMockPersistentQueue()
 		j.setAck(mockQueue, "test-ack-id")
-		assert.Equal("test-ack-id", j.ackRef.id)
+		assert.Equal("test-ack-id", j.ackRef.Load().id)
 
 		// Now try to acknowledge - this will use both the ack id and queue we set
-		err := j.ack()
+		err := j.acknowledge()
 		assert.Nil(err, "ack should succeed against the mock queue")
 	})
 
@@ -214,15 +214,15 @@ func TestJob(t *testing.T) {
 
 		// Test 1: No ack attached
 		j1 := newJob("test data", jobConfigs{Id: "job-ack-empty"})
-		err := j1.ack()
+		err := j1.acknowledge()
 		assert.Nil(err, "ack should not fail with no ack attached")
 
 		// Test 2: Job is closed
 		j2 := newJob("test data", jobConfigs{Id: "job-ack-closed"})
 		j2.setAck(mocks.NewMockPersistentQueue(), "some-ack-id")
 		_ = j2.Close() // Close the job first
-		err = j2.ack()
-		assert.Nil(err, "ack should not fail on closed job")
+		err = j2.acknowledge()
+		assert.Nil(err, "a closed job was already acknowledged: nothing left to do")
 	})
 }
 
@@ -583,7 +583,7 @@ func TestJobAckFailure(t *testing.T) {
 		job := newJob("test", jobConfigs{})
 		job.setAck(mockQueue, "ack-1")
 
-		err := job.ack()
+		err := job.acknowledge()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrAcknowledgeJob, "should return ErrAcknowledgeJob sentinel")
 	})
@@ -616,7 +616,7 @@ func TestPublicErrors(t *testing.T) {
 		job := newJob("test", jobConfigs{Id: "test-job"})
 		job.setAck(mockQueue, "test-ack-id")
 
-		err := job.ack()
+		err := job.acknowledge()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrAcknowledgeJob, "should return ErrAcknowledgeJob when acknowledgement fails")
 		// Also verify the wrapped error contains useful context
@@ -654,4 +654,85 @@ func TestSingleJobDrainIsNoop(t *testing.T) {
 	v, err := rj.Result()
 	assert.Equal(t, 7, v)
 	assert.NoError(t, err)
+}
+
+// onceAckQueue acknowledges an id once, like real storage, and runs hook
+// inside the first acknowledgement.
+type onceAckQueue struct {
+	mu    sync.Mutex
+	acked map[string]bool
+	calls atomic.Int32
+	hook  func()
+}
+
+func (q *onceAckQueue) Acknowledge(id string) bool {
+	q.calls.Add(1)
+	if h := q.hook; h != nil {
+		q.hook = nil
+		h()
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.acked[id] {
+		return false
+	}
+	q.acked[id] = true
+
+	return true
+}
+
+func (*onceAckQueue) DequeueWithAckId() (any, bool, string) { return nil, false, "" }
+
+func TestAckExactlyOnce(t *testing.T) {
+	t.Run("user Close acks while the worker takes the job", func(t *testing.T) {
+		j := newJob("x", jobConfigs{})
+		j.changeStatus(queued)
+		q := &onceAckQueue{acked: map[string]bool{}}
+		q.hook = func() { assert.True(t, j.startProcessing()) } // dispatched mid-ack
+		j.setAck(q, "ack-1")
+
+		assert.ErrorIs(t, j.Close(), ErrJobProcessing)
+
+		// The worker finishes and closes, as worker_pool.go does. The user's
+		// Close already acknowledged, so this must not ack again and fail,
+		// which used to strand the job in Finished with Wait blocked.
+		j.changeStatus(finished)
+		assert.NoError(t, j.Close())
+		assert.Equal(t, int32(1), q.calls.Load(), "acknowledged once")
+
+		done := make(chan struct{})
+		go func() { j.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Wait hangs: the job was stranded")
+		}
+	})
+
+	t.Run("two concurrent Close calls acknowledge once", func(t *testing.T) {
+		for range 200 {
+			j := newJob("x", jobConfigs{})
+			j.changeStatus(queued)
+			q := &onceAckQueue{acked: map[string]bool{}}
+			j.setAck(q, "ack-1")
+
+			errs := make([]error, 2)
+			var start, done sync.WaitGroup
+			start.Add(1)
+			for i := range errs {
+				done.Add(1)
+				go func() {
+					defer done.Done()
+					start.Wait()
+					errs[i] = j.Close()
+				}()
+			}
+			start.Done()
+			done.Wait()
+
+			assert.ElementsMatch(t, []error{nil, ErrJobAlreadyClosed}, errs)
+			assert.Equal(t, int32(1), q.calls.Load(), "acknowledged once")
+		}
+	})
 }
