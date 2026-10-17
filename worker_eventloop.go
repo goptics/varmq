@@ -45,7 +45,7 @@ const maxBatch = 32
 // another could run; with a deep one every worker would be busy anyway and
 // the wake-up cost is spread over the batch.
 func batchSize(pending, free int) int {
-	return max(1, min(pending/max(free, 1), free, maxBatch))
+	return max(1, min(pending/max(free, 1), maxBatch))
 }
 
 // processNextJob hands the next batch of jobs to one worker. Concurrency
