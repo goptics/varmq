@@ -1,6 +1,10 @@
 package varmq
 
-import "github.com/goptics/varmq/internal/topics"
+import (
+	"sync/atomic"
+
+	"github.com/goptics/varmq/internal/topics"
+)
 
 // source is what the worker's scheduler pulls from. Every bound queue and topic
 // subscription is wrapped in one at bind time.
@@ -25,6 +29,10 @@ type source[JobType any] interface {
 	// consumers could take, and priority storage returns 1 so a job that
 	// arrives after a batch was taken is not stuck behind lower priorities.
 	maxBatch() int
+	// purgeGen is the counter Purge bumps. The scheduler stamps each batch
+	// with it, and the worker closes, instead of running, a job whose batch
+	// is older than the counter. nil for sources that never batch.
+	purgeGen() *atomic.Uint64
 }
 
 // ackQueue is storage that hands out an ack id with each item.
@@ -62,8 +70,9 @@ func toJob[T any, JobType iJob[T]](v any) (JobType, error) {
 // queues and priority queues, their error and result variants, and custom
 // WithQueue / WithPriorityQueue implementations.
 type queueSource[T any, JobType iJob[T]] struct {
-	q     IBaseQueue
-	batch int // decided once in bind: 1 for priority storage
+	q      IBaseQueue
+	batch  int // decided once in bind: 1 for priority storage
+	purges atomic.Uint64
 }
 
 func (s *queueSource[T, JobType]) Len() int {
@@ -72,6 +81,16 @@ func (s *queueSource[T, JobType]) Len() int {
 
 func (s *queueSource[T, JobType]) maxBatch() int {
 	return s.batch
+}
+
+// purgeGen is nil for priority storage: a batch of one starts at once, so
+// nothing waits for Purge to cancel.
+func (s *queueSource[T, JobType]) purgeGen() *atomic.Uint64 {
+	if s.batch == 1 {
+		return nil
+	}
+
+	return &s.purges
 }
 
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
@@ -100,6 +119,10 @@ func (s *ackSource[T, JobType]) Len() int {
 // stretch the time before they are acknowledged.
 func (s *ackSource[T, JobType]) maxBatch() int {
 	return 1
+}
+
+func (s *ackSource[T, JobType]) purgeGen() *atomic.Uint64 {
+	return nil
 }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
@@ -131,6 +154,7 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 type topicSource[T any] struct {
 	cursor *topics.Cursor[T]
 	w      *worker[T, iJob[T]]
+	purges atomic.Uint64
 }
 
 func (s *topicSource[T]) Len() int {
@@ -139,6 +163,10 @@ func (s *topicSource[T]) Len() int {
 
 func (s *topicSource[T]) maxBatch() int {
 	return maxBatch
+}
+
+func (s *topicSource[T]) purgeGen() *atomic.Uint64 {
+	return &s.purges
 }
 
 func (s *topicSource[T]) Next() (iJob[T], error) {

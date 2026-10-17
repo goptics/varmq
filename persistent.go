@@ -23,7 +23,7 @@ func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, confi
 	w.bind(pq, c.priority)
 
 	return &persistentQueue[T]{queue: &queue[T]{
-		externalBaseQueue: newExternalQueue(pq, w, c),
+		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}}
 }

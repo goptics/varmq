@@ -96,7 +96,17 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	if n < k {
 		w.finishJobs(uint32(k - n))
 	}
-	node.Value.SendBatch(buf[:n])
+	// Stamped after the fill, so a job Added after a Purge returned is never
+	// mistaken for a purged one.
+	// ponytail: a Purge overlapping this fill lets the jobs dequeued before it
+	// run (one batch, microseconds). Exact semantics would load the counter
+	// before each dequeue and close the stale part of the buffer: one more
+	// atomic load per job on the dispatcher, the serial ceiling.
+	stamp := pool.Stamp{Gen: m.purgeGen()}
+	if stamp.Gen != nil {
+		stamp.Epoch = stamp.Gen.Load()
+	}
+	node.Value.SendBatch(buf[:n], stamp)
 
 	return cont, err
 }

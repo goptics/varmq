@@ -2,6 +2,7 @@ package pool
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -136,7 +137,7 @@ func TestPoolNode(t *testing.T) {
 		// Start Serve in a goroutine
 		done := make(chan struct{})
 		go func() {
-			node.Serve(func(vs []string) {
+			node.Serve(func(vs []string, _ Stamp) {
 				wg.Done()
 				processed <- struct{}{}
 			})
@@ -196,7 +197,7 @@ func TestPoolNodeBatch(t *testing.T) {
 		calls := 0
 		served := make(chan struct{})
 		go func() {
-			node.Serve(func(vs []string) {
+			node.Serve(func(vs []string, _ Stamp) {
 				got = append(got, vs...)
 				calls++
 				served <- struct{}{}
@@ -205,7 +206,7 @@ func TestPoolNodeBatch(t *testing.T) {
 
 		batch := node.Batch(3)
 		copy(batch, []string{"a", "b", "c"})
-		node.SendBatch(batch)
+		node.SendBatch(batch, Stamp{})
 		<-served
 
 		node.Send("d")
@@ -216,4 +217,15 @@ func TestPoolNodeBatch(t *testing.T) {
 		assert.Equal([]string{"a", "b", "c", "d"}, got)
 		assert.Equal(2, calls, "fn runs once per payload, batch or single")
 	})
+}
+
+func TestStamp(t *testing.T) {
+	assert.False(t, Stamp{}.Stale(), "nil counter never goes stale")
+
+	var gen atomic.Uint64
+	s := Stamp{Gen: &gen, Epoch: gen.Load()}
+	assert.False(t, s.Stale())
+
+	gen.Add(1)
+	assert.True(t, s.Stale(), "stale once the counter moves")
 }

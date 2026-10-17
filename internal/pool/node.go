@@ -10,7 +10,20 @@ import (
 type Payload[T any] struct {
 	data  T
 	batch []T
+	stamp Stamp
 	ok    bool
+}
+
+// Stamp records the value a generation counter had when a batch was taken.
+// The batch goes stale once the counter moves on. A nil Gen never does.
+type Stamp struct {
+	Gen   *atomic.Uint64
+	Epoch uint64
+}
+
+// Stale reports whether the counter has moved since the batch was stamped.
+func (s Stamp) Stale() bool {
+	return s.Gen != nil && s.Gen.Load() != s.Epoch
 }
 
 type Node[T any] struct {
@@ -47,18 +60,20 @@ func (wc *Node[T]) Batch(n int) []T {
 	return wc.buf[:n]
 }
 
-// SendBatch hands jobs, a slice from Batch, to the worker in one wake-up.
-func (wc *Node[T]) SendBatch(jobs []T) {
+// SendBatch hands jobs, a slice from Batch, to the worker in one wake-up,
+// along with the stamp Serve passes to fn.
+func (wc *Node[T]) SendBatch(jobs []T, stamp Stamp) {
 	wc.ch <- Payload[T]{
 		batch: jobs,
+		stamp: stamp,
 		ok:    true,
 	}
 }
 
 // Serve runs fn once per payload with the items it carries, one from Send or
-// a whole batch from SendBatch. The slice is the node's own storage: fn must
+// a whole batch from SendBatch, and its stamp (zero for Send). The slice is the node's own storage: fn must
 // clear it before it lets anyone else (a pool) hand the node a new batch.
-func (wc *Node[T]) Serve(fn func([]T)) {
+func (wc *Node[T]) Serve(fn func([]T, Stamp)) {
 	for payload := range wc.ch {
 		if !payload.ok {
 			return
@@ -70,7 +85,7 @@ func (wc *Node[T]) Serve(fn func([]T)) {
 			items = wc.single[:]
 		}
 
-		fn(items)
+		fn(items, payload.stamp)
 	}
 }
 

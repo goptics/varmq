@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"io"
+	"sync/atomic"
 )
 
 // queue is the base implementation of the Queue interface
@@ -38,10 +39,10 @@ type Item[T any] struct {
 // It sets the worker's queue to the provided queue and creates a new external queue for job management
 func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc) *queue[T] {
 	c := loadQueueConfigs(configs...)
-	w.bind(q, c.priority)
+	src := w.bind(q, c.priority)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c),
+		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
 		internalQueue:     q,
 	}
 }
@@ -99,10 +100,10 @@ type ErrQueue[T any] interface {
 
 func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...QueueConfigFunc) *errorQueue[T] {
 	c := loadQueueConfigs(configs...)
-	w.bind(q, c.priority)
+	src := w.bind(q, c.priority)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c),
+		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
 		internalQueue:     q,
 	}
 }
@@ -159,10 +160,10 @@ type ResultQueue[T, R any] interface {
 
 func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs ...QueueConfigFunc) *resultQueue[T, R] {
 	c := loadQueueConfigs(configs...)
-	w.bind(q, c.priority)
+	src := w.bind(q, c.priority)
 
 	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, w, c),
+		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
 		internalQueue:     q,
 	}
 }
@@ -204,6 +205,7 @@ type externalBaseQueue struct {
 	w      Worker
 	q      IBaseQueue
 	config queueConfig
+	purges *atomic.Uint64 // the bound source's purge counter; nil if it never batches
 }
 
 type IExternalBaseQueue interface {
@@ -224,7 +226,7 @@ type IExternalBaseQueue interface {
 	Close() error
 }
 
-func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig) *externalBaseQueue {
+func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purges *atomic.Uint64) *externalBaseQueue {
 	if cap, ok := q.(CapacitySetter); ok {
 		cap.SetCapacity(config.capacity)
 	}
@@ -233,6 +235,7 @@ func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig) *external
 		w:      worker,
 		q:      q,
 		config: config,
+		purges: purges,
 	}
 }
 
@@ -252,7 +255,11 @@ func (eq *externalBaseQueue) Worker() Worker {
 	return eq.w
 }
 
+// Purge closes every job not started yet: the ones in storage and the ones
+// a worker took into its batch. Bumping the counter first makes the worker
+// close those, as it reaches each one.
 func (eq *externalBaseQueue) Purge() {
+	eq.bumpPurges()
 	prevValues := eq.q.Values()
 	eq.q.Purge()
 
@@ -261,6 +268,12 @@ func (eq *externalBaseQueue) Purge() {
 		if j, ok := val.(io.Closer); ok {
 			j.Close()
 		}
+	}
+}
+
+func (eq *externalBaseQueue) bumpPurges() {
+	if eq.purges != nil {
+		eq.purges.Add(1)
 	}
 }
 
