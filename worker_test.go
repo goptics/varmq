@@ -1548,3 +1548,42 @@ func TestWorthSpawning(t *testing.T) {
 	assert.False(t, worthSpawning(1_000_000, 10_000_000, 100_000), "...but not at 100k")
 	assert.True(t, worthSpawning(20, 5_000_000, 9), "small pool, slow jobs: fill the limit")
 }
+
+func TestDispatchWaitsInsteadOfSpawning(t *testing.T) {
+	// Concurrency allows ten goroutines, one is busy, and jobs have proven
+	// cheap: one more goroutine is not worth its spawn, so the dispatcher
+	// leaves the backlog for the busy worker to pick up when it returns.
+	block := make(chan struct{})
+	w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(10))
+	defer w.Stop()
+
+	q := queues.NewQueue[any]()
+	w.bind(q, 1)
+
+	q.Enqueue(newJob("first", loadJobConfigs(w.configs())))
+	cont, err := w.processNextJob()
+	assert.True(t, cont)
+	assert.NoError(t, err)
+	assert.Eventually(t, func() bool { return w.NumProcessing() == 1 }, time.Second, time.Millisecond)
+
+	w.jobNanos.Store(1) // measured: jobs cost nothing
+	for range 5 {
+		q.Enqueue(newJob("later", loadJobConfigs(w.configs())))
+	}
+
+	cont, err = w.processNextJob()
+	assert.False(t, cont, "nothing to do until a worker returns")
+	assert.NoError(t, err)
+	assert.Equal(t, 5, q.Len(), "backlog untouched")
+	assert.Equal(t, 1, w.NumProcessing(), "no goroutine spawned")
+	assert.Equal(t, 0, w.NumIdleWorkers())
+
+	// Slow jobs would be worth another goroutine.
+	w.jobNanos.Store(int64(time.Millisecond))
+	cont, err = w.processNextJob()
+	assert.True(t, cont)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, w.NumProcessing(), "a second goroutine was spawned")
+
+	close(block)
+}
