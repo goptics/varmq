@@ -35,6 +35,8 @@ def done_signal(k):
 
 
 arrive = {k: done_signal(k) for k in range(6)}
+# batched dispatch still hands out one job here: batchSize(pending=2, min(concurrency 4, pending 2)) == 1,
+# so each freed worker takes a single job (a share > 1 needs pending >= 2 * concurrency)
 disp.append(arrive[1] + .4)   # Worker 2 frees first -> job 4
 disp.append(arrive[3] + .4)   # Worker 4 frees next  -> job 5
 assert arrive[1] < arrive[3] < min(arrive[0], arrive[2]), arrive  # those two signals are the ones that find a waiting job

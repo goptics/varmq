@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ multiple queues with round-robin selection</title>
-  <desc id="desc">Three empty queues are bound to one worker with concurrency 2 and the RoundRobin strategy. Producers add jobs to all three queues; only the first signal reaches the event loop, the others are dropped because one signal is already pending. The pool starts with a single worker goroutine. The Queue Manager picks the next queue in turn: Queue 1 goes to Worker 1, then Worker 2 is spawned for Queue 2, and the remaining jobs wait. A finished worker stays idle in the pool while enough jobs are queued; idle workers are reused newest first. Each time a worker finishes, its signal lets the event loop dispatch one more job, continuing the rotation with Queue 3 and Queue 1. When Queue 2 is empty the Queue Manager skips it and moves on to Queue 3. As the queues drain, Worker 2 exits because Worker 1 is already idle. Once every queue is empty, later signals find nothing to do and the event loop waits.</desc>
+  <desc id="desc">Three empty queues are bound to one worker with concurrency 2 and the RoundRobin strategy. Producers add jobs to all three queues; only the first signal reaches the event loop, the others are dropped because one signal is already pending. The pool starts with a single worker goroutine. The Source Manager picks the next queue in turn: Queue 1 goes to Worker 1, then Worker 2 is spawned for Queue 2, and the remaining jobs wait. A finished worker stays idle in the pool while enough jobs are queued; idle workers are reused newest first. Each time a worker finishes, its signal lets the event loop dispatch one more job, continuing the rotation with Queue 3 and Queue 1. When Queue 2 is empty the Source Manager skips it and moves on to Queue 3. As the queues drain, Worker 2 exits because Worker 1 is already idle. Once every queue is empty, later signals find nothing to do and the event loop waits.</desc>
   <style>
     :root {
       --dur: {D}s;
@@ -122,14 +122,14 @@
   <rect id="q3i0" class="item a" x="0" y="361" width="30" height="30" rx="5"/>
   <rect id="q3i1" class="item a" x="0" y="361" width="30" height="30" rx="5"/>
 
-  <!-- queues -> queue manager -> processNextJob -->
+  <!-- queues -> source manager -> processNextJob -->
   <path class="edge" d="M288 216H310V376H288"/>
   <path class="edge" d="M288 296H328" marker-end="url(#a)"/>
 
   <rect class="box mgr" x="330" y="261" width="130" height="70" rx="8"/>
   <rect id="qm-glow" class="a g-job" x="330" y="261" width="130" height="70" rx="8"/>
-  <text class="t" x="395" y="280">Queue Manager</text>
-  <text class="m" x="395" y="299">queues.next()</text>
+  <text class="t" x="395" y="280">Source Manager</text>
+  <text class="m" x="395" y="299">sources.next()</text>
   <text class="m" x="395" y="315">RoundRobin</text>
   <path class="edge" d="M460 296H498" marker-end="url(#a)"/>
 
