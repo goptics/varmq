@@ -390,6 +390,110 @@ func TestJobCloseEdgeCases(t *testing.T) {
 	})
 }
 
+// A user Close racing the worker's own Close after the run must close the job
+// exactly once; the loser used to hit "sync: negative WaitGroup counter".
+func TestCloseRacingWorkerCompletion(t *testing.T) {
+	const iterations = 3000
+
+	t.Run("error worker", func(t *testing.T) {
+		w := NewErrWorker(func(j Job[int]) error { return nil }, 4)
+		defer w.StopAndWait()
+		q := w.BindQueue()
+
+		for i := range iterations {
+			j, ok := q.Add(i)
+			assert.True(t, ok)
+			_ = j.Close()
+			assert.NoError(t, j.Err())
+			j.Wait()
+		}
+	})
+
+	t.Run("result worker", func(t *testing.T) {
+		w := NewResultWorker(func(j Job[int]) (int, error) { return j.Data(), nil }, 4)
+		defer w.StopAndWait()
+		q := w.BindQueue()
+
+		for i := range iterations {
+			j, ok := q.Add(i)
+			assert.True(t, ok)
+			_ = j.Close()
+			_, err := j.Result()
+			assert.NoError(t, err)
+			j.Wait()
+		}
+	})
+}
+
+func TestConcurrentCloseClosesOnce(t *testing.T) {
+	const iterations = 1000
+
+	closers := map[string]func() (iJob[int], func() error){
+		"job": func() (iJob[int], func() error) {
+			j := newJob(0, jobConfigs{})
+			return j, j.Close
+		},
+		"error job": func() (iJob[int], func() error) {
+			j := newErrorJob(0, jobConfigs{})
+			return j, j.Close
+		},
+		"result job": func() (iJob[int], func() error) {
+			j := newResultJob[int, int](0, jobConfigs{})
+			return j, j.Close
+		},
+	}
+
+	for name, newCloser := range closers {
+		t.Run(name, func(t *testing.T) {
+			for range iterations {
+				j, closeJob := newCloser()
+				j.changeStatus(queued)
+
+				errs := make([]error, 2)
+				var start, done sync.WaitGroup
+				start.Add(1)
+				for i := range errs {
+					done.Add(1)
+					go func() {
+						defer done.Done()
+						start.Wait()
+						errs[i] = closeJob()
+					}()
+				}
+				start.Done()
+				done.Wait()
+
+				assert.ElementsMatch(t, []error{nil, ErrJobAlreadyClosed}, errs)
+				assert.True(t, j.IsClosed())
+			}
+		})
+	}
+
+	t.Run("group jobs close the shared response once", func(t *testing.T) {
+		for range iterations {
+			gj := newErrorGroupJob[int](2)
+			js := []*errorGroupJob[int]{gj.newJob(0, jobConfigs{}), gj.newJob(1, jobConfigs{})}
+
+			var start, done sync.WaitGroup
+			start.Add(1)
+			for _, j := range js {
+				j.changeStatus(queued)
+				done.Add(1)
+				go func() {
+					defer done.Done()
+					start.Wait()
+					assert.NoError(t, j.Close())
+				}()
+			}
+			start.Done()
+			done.Wait()
+
+			_, open := <-gj.Errs()
+			assert.False(t, open)
+		}
+	})
+}
+
 func TestJobAckFailure(t *testing.T) {
 	t.Run("Ack failure from queue", func(t *testing.T) {
 		mockQueue := mocks.NewMockPersistentQueue()

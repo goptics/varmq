@@ -98,6 +98,7 @@ type iJob[T any] interface {
 	Job[T]
 	StatusProvider
 	changeStatus(s status)
+	startProcessing() bool
 	setAckId(id string)
 	setInternalQueue(q IBaseQueue)
 	ack() error
@@ -219,36 +220,77 @@ func parseToJob[T any](data []byte) (any, error) {
 	return j, nil
 }
 
-func (j *job[T]) isCloseable() error {
-	switch j.status.Load() {
-	case processing:
-		return ErrJobProcessing
-	case closed:
-		return ErrJobAlreadyClosed
-	}
+// claimClose moves a created, queued or finished job to closed with one CAS,
+// so only one concurrent Close can win and run the close side effects. It
+// returns the state it replaced, to restore if the close cannot complete.
+func (j *job[T]) claimClose() (status, error) {
+	for {
+		s := j.status.Load()
 
-	return nil
+		switch s {
+		case processing:
+			return s, ErrJobProcessing
+		case closed:
+			return s, ErrJobAlreadyClosed
+		}
+
+		if j.status.CompareAndSwap(s, closed) {
+			return s, nil
+		}
+	}
 }
 
-// close closes the job and its associated channels.
-// the job regardless of its current state, except when locked.
+// markQueued records that Enqueue succeeded. It only moves a created job: a
+// worker may already have started it, or the user closed it, before this runs.
+func (j *job[T]) markQueued() {
+	j.status.CompareAndSwap(created, queued)
+}
+
+// startProcessing moves a job a worker took to processing, unless it was
+// closed meanwhile.
+func (j *job[T]) startProcessing() bool {
+	for {
+		s := j.status.Load()
+		if s == closed {
+			return false
+		}
+
+		if j.status.CompareAndSwap(s, processing) {
+			return true
+		}
+	}
+}
+
+// Close closes the job, whatever its state except processing. Only the call
+// that wins the transition runs the acknowledgement and releases waiters; a
+// concurrent Close returns ErrJobAlreadyClosed. If the acknowledgement fails
+// the job returns to its previous state, so it stays Finished and unwaited.
 func (j *job[T]) Close() error {
-	if err := j.isCloseable(); err != nil {
+	prev, err := j.claimClose()
+	if err != nil {
 		return err
 	}
 
-	if err := j.ack(); err != nil {
+	if err := j.acknowledge(); err != nil {
+		j.status.Store(prev)
 		return err
 	}
 
-	j.status.Store(closed)
 	j.wg.Done()
 
 	return nil
 }
 
 func (j *job[T]) ack() error {
-	if j.ackId == "" || j.IsClosed() {
+	if j.IsClosed() {
+		return nil
+	}
+
+	return j.acknowledge()
+}
+
+func (j *job[T]) acknowledge() error {
+	if j.ackId == "" {
 		return nil
 	}
 

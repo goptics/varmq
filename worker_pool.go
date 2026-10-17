@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/goptics/varmq/internal/pool"
@@ -99,23 +100,23 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	go node.Value.Serve(func(jobs []JobType, stamp pool.Stamp) {
 		start := time.Now()
 		for _, j := range jobs {
-			// A job stays Queued while it waits in the batch, so the user can
-			// still Close it; skip it here like the dispatcher would have.
-			if j.IsClosed() {
-				continue
-			}
 			// Purged after it was taken: close it as Purge would have. Close
 			// fails only if the user closed it meanwhile; Purge ignores that too.
 			if stamp.Stale() {
 				_ = j.Close()
 				continue
 			}
-			j.changeStatus(processing)
+			// A job stays Queued while it waits in the batch, so the user can
+			// still Close it; skip it here like the dispatcher would have.
+			if !j.startProcessing() {
+				continue
+			}
 
 			w.workerFunc(j)
 
 			j.changeStatus(finished)
-			if err := j.Close(); err != nil {
+			// The user may close a finished job first; that is not an error.
+			if err := j.Close(); err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()

@@ -23,13 +23,16 @@ func (pt *WgCounter) Count() int {
 	return int(pt.count.Load())
 }
 
-func (pt *WgCounter) Done() {
+// Done counts one job off and reports whether it was the last one.
+func (pt *WgCounter) Done() bool {
 	if pt.count.Load() == 0 {
-		return
+		return false
 	}
 
-	pt.count.Add(^uint32(0))
+	last := pt.count.Add(^uint32(0)) == 0
 	pt.wg.Done()
+
+	return last
 }
 
 func (pt *WgCounter) Wait() {
