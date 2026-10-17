@@ -12,6 +12,7 @@
 
 ### 🐛 Bug Fixes
 
+- **Purge skipping batched jobs**: Since batch dispatch, `Purge` on an in-memory queue or topic subscription only cleared storage, so up to 31 jobs per busy worker that were already taken into its batch but not started still ran. `Purge` now bumps a per-source counter the worker checks before each job, and those jobs end `Closed` without running, as before batch dispatch. A `Purge` racing the very fill of a batch may still let that batch run, like a job dequeued at the same moment did before.
 - **Wait hanging on a shared source**: `Wait` and `WaitUntilIdle` could sleep forever when another worker or process drained a source this worker shares (one queue bound to several workers, a persistent or distributed queue), because only this worker's own finished jobs woke them. While no job is running they now also re-check every 10 ms.
 - **Enqueue racing Close**: `Queue.Enqueue` and `PriorityQueue.Enqueue` in `internal/queues` now check the closed flag while holding the queue lock, so an item can no longer land after `Close` followed by `Purge`.
 

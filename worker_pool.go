@@ -96,12 +96,19 @@ func (w *worker[T, JobType]) removeAllWorkers() {
 func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
-	go node.Value.Serve(func(jobs []JobType) {
+	go node.Value.Serve(func(jobs []JobType, stamp pool.Stamp) {
 		start := time.Now()
 		for _, j := range jobs {
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
 			if j.IsClosed() {
+				continue
+			}
+			// Purged after it was taken: close it as Purge would have.
+			if stamp.Stale() {
+				if err := j.Close(); err != nil {
+					w.sendError(err)
+				}
 				continue
 			}
 			j.changeStatus(processing)

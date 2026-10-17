@@ -136,7 +136,7 @@ func TestPoolNode(t *testing.T) {
 		// Start Serve in a goroutine
 		done := make(chan struct{})
 		go func() {
-			node.Serve(func(vs []string) {
+			node.Serve(func(vs []string, _ Stamp) {
 				wg.Done()
 				processed <- struct{}{}
 			})
@@ -196,7 +196,7 @@ func TestPoolNodeBatch(t *testing.T) {
 		calls := 0
 		served := make(chan struct{})
 		go func() {
-			node.Serve(func(vs []string) {
+			node.Serve(func(vs []string, _ Stamp) {
 				got = append(got, vs...)
 				calls++
 				served <- struct{}{}
@@ -205,7 +205,7 @@ func TestPoolNodeBatch(t *testing.T) {
 
 		batch := node.Batch(3)
 		copy(batch, []string{"a", "b", "c"})
-		node.SendBatch(batch)
+		node.SendBatch(batch, Stamp{})
 		<-served
 
 		node.Send("d")

@@ -3,9 +3,12 @@ package varmq
 import (
 	"errors"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/goptics/varmq/internal/queues"
 )
@@ -906,5 +909,90 @@ func TestQueueCapacity(t *testing.T) {
 			queue.AddAll(items)
 			assert.Equal(t, 2, queue.Len(), "Queue should only accept up to capacity")
 		})
+	})
+}
+
+// Purge must also reach jobs a worker already took into its batch but has not
+// started: with concurrency 1 and 40 jobs, one runs, 31 wait in the batch
+// buffer and 8 stay in storage.
+func TestPurgeCancelsBatchedJobs(t *testing.T) {
+	waitDone := func(t *testing.T, w Worker) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() { w.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Wait did not return after Purge")
+		}
+	}
+
+	t.Run("queue", func(t *testing.T) {
+		var ran atomic.Int32
+		started, release := make(chan struct{}, 1), make(chan struct{})
+		w := NewWorker(func(j Job[int]) {
+			ran.Add(1)
+			started <- struct{}{}
+			<-release
+		}, WithConcurrency(1), WithAutoRun(false))
+		q := w.BindQueue()
+
+		jobs := make([]EnqueuedJob, 40)
+		for i := range jobs {
+			j, ok := q.Add(i)
+			require.True(t, ok)
+			jobs[i] = j
+		}
+
+		require.NoError(t, w.Start())
+		<-started
+		require.Equal(t, "Processing", jobs[0].Status())
+		require.Equal(t, "Queued", jobs[1].Status(), "second job waits in the batch buffer")
+
+		q.Purge()
+		close(release)
+		waitDone(t, w)
+
+		assert.Equal(t, int32(1), ran.Load(), "only the job already running may run")
+		for i, j := range jobs[1:] {
+			j.Wait() // returns once closed
+			assert.Equal(t, "Closed", j.Status(), "job %d", i+1)
+		}
+		assert.Equal(t, 0, w.NumPending())
+		assert.Equal(t, 0, w.NumProcessing())
+
+		// The queue still works after a Purge.
+		j, ok := q.Add(99)
+		require.True(t, ok)
+		<-started
+		j.Wait()
+		assert.Equal(t, int32(2), ran.Load())
+	})
+
+	t.Run("topic", func(t *testing.T) {
+		var ran atomic.Int32
+		started, release := make(chan struct{}, 1), make(chan struct{})
+		w := NewWorker(func(j Job[int]) {
+			ran.Add(1)
+			started <- struct{}{}
+			<-release
+		}, WithConcurrency(1), WithAutoRun(false))
+		topic := NewTopic[int]()
+		sub := w.WithTopic(topic)
+
+		for i := range 40 {
+			require.True(t, topic.Publish(i))
+		}
+
+		require.NoError(t, w.Start())
+		<-started
+		require.Equal(t, 39, w.NumPending())
+
+		sub.Purge()
+		close(release)
+		waitDone(t, w)
+
+		assert.Equal(t, int32(1), ran.Load(), "only the job already running may run")
+		assert.Equal(t, 0, w.NumPending())
 	})
 }

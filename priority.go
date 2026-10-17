@@ -23,7 +23,7 @@ func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs .
 	w.bind(pq, c.priority)
 
 	return &priorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w, c),
+		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }
@@ -84,7 +84,7 @@ func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriori
 	w.bind(pq, c.priority)
 
 	return &resultPriorityQueue[T, R]{
-		externalBaseQueue: newExternalQueue(pq, w, c),
+		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }
@@ -145,7 +145,7 @@ func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue,
 	w.bind(pq, c.priority)
 
 	return &errorPriorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w, c),
+		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }

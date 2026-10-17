@@ -143,7 +143,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]], priority int) *subscription[
 	src := &topicSource[T]{cursor: cursor, w: w}
 	s := &subscription[T]{
 		// The topic's capacity makes IsFull report this subscription holding the topic full.
-		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity))),
+		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity)), &src.purges),
 		worker:            w,
 		view:              view,
 		src:               src,
@@ -218,6 +218,7 @@ func (s *subscription[T]) Close() error {
 // externalBaseQueue.Purge, which calls Close on every pending value that
 // implements io.Closer; here those values are user payloads.
 func (s *subscription[T]) Purge() {
+	s.bumpPurges() // first, so the worker also drops what it already took
 	s.view.Purge()
 }
 
