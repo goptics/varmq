@@ -2,8 +2,8 @@ package varmq
 
 import "github.com/goptics/varmq/internal/topics"
 
-// source is what the worker's scheduler pulls from. Every bound queue, topic
-// subscription and persistent topic group is wrapped in one at bind time.
+// source is what the worker's scheduler pulls from. Every bound queue and topic
+// subscription is wrapped in one at bind time.
 //
 // The scheduler (worker_eventloop.go) owns picking a source, reserving a
 // concurrency slot, skipping closed jobs and dispatching. A source owns the
@@ -84,8 +84,8 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 	return toJob[T, JobType](v)
 }
 
-// ackSource reads storage that acknowledges: persistent queues, distributed
-// queues and persistent topic groups. Every job it returns knows its storage
+// ackSource reads storage that acknowledges: persistent and distributed
+// queues. Every job it returns knows its storage
 // and ack id, so job.Close can acknowledge it.
 type ackSource[T any, JobType iJob[T]] struct {
 	q ackQueue
