@@ -503,7 +503,7 @@ func TestMaxBatch(t *testing.T) {
 			name        string
 			q           IBaseQueue
 			enqueue     func(any)
-			wantPending int
+			leftInQueue int
 		}{
 			{"fifo", fifo, func(j any) { fifo.Enqueue(j) }, 0},
 			{"priority", prio, func(j any) { prio.Enqueue(j, 1) }, 4},
@@ -520,8 +520,35 @@ func TestMaxBatch(t *testing.T) {
 				w.bind(tc.q, 1)
 
 				w.processNextJob()
-				assert.Equal(t, tc.wantPending, w.NumPending())
+				assert.Equal(t, tc.leftInQueue, tc.q.Len(), "jobs left in storage")
+				assert.Equal(t, 4, w.NumPending(), "not started, in storage or in a batch")
 			})
 		}
+	})
+
+	t.Run("buffered jobs are pending, not processing, until they run", func(t *testing.T) {
+		block := make(chan struct{})
+		w := NewWorker(func(j Job[int]) { <-block }, 1)
+		defer close(block)
+		defer w.Stop()
+		q := w.BindQueue()
+
+		var jobs []EnqueuedJob
+		for i := range 5 {
+			j, _ := q.Add(i)
+			jobs = append(jobs, j)
+		}
+
+		assert.Eventually(t, func() bool { return w.NumProcessing() == 1 }, time.Second, time.Millisecond)
+
+		assert.Equal(t, 0, q.Len(), "the whole backlog went to the one worker as a batch")
+		assert.Equal(t, 4, w.NumPending())
+		assert.Equal(t, 1, w.NumProcessing())
+		m := w.Metrics()
+		assert.Equal(t, int(m.Submitted()), w.NumPending()+w.NumProcessing()+int(m.Completed()))
+		assert.Equal(t, "Processing", jobs[0].Status())
+		assert.Equal(t, "Queued", jobs[1].Status(), "waiting in the batch")
+
+		assert.NoError(t, jobs[1].Close(), "a job waiting in a batch can still be closed")
 	})
 }

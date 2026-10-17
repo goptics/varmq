@@ -89,12 +89,13 @@ type Worker interface {
 	// Possible values: "Initiated", "Idle", "Running", "Pausing", "Paused",
 	// "Stopping", "Stopped"
 	Status() string
-	// NumProcessing returns the number of jobs currently being executed by
-	// pool goroutines. Jobs the event loop has handed to a worker in a batch
-	// but that have not started yet are not counted; Wait still covers them.
+	// NumProcessing returns the number of jobs being executed right now,
+	// never more than NumConcurrency.
 	NumProcessing() int
-	// NumPending returns the number of jobs waiting in the queue
-	// that have not yet started processing.
+	// NumPending returns the number of jobs that have not started: those
+	// still in the bound queues plus those already handed to a worker in a
+	// batch and waiting their turn. A bound queue's own Len counts only the
+	// former. Submitted == NumPending + NumProcessing + Completed.
 	NumPending() int
 	// NumConcurrency returns the maximum number of jobs that can be
 	// processed concurrently (the pool size).
@@ -401,7 +402,15 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	return w.manager().Len()
+	// Each busy worker runs exactly one job, so taken minus running is what
+	// sits in batch buffers. The two loads are not a snapshot; clamp at 0.
+	taken, running := w.curProcessing.Load(), w.busyWorkers.Load()
+	buffered := 0
+	if taken > running {
+		buffered = int(taken - running)
+	}
+
+	return w.manager().Len() + buffered
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {

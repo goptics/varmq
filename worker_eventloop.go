@@ -21,7 +21,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.NumPending() > 0 {
+				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.manager().Len() > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -79,7 +79,6 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 		if j.IsClosed() {
 			continue
 		}
-		j.changeStatus(processing)
 		buf[n] = j
 		n++
 	}

@@ -98,6 +98,13 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 
 	go node.Value.Serve(func(jobs []JobType) {
 		for _, j := range jobs {
+			// A job stays Queued while it waits in the batch, so the user can
+			// still Close it; skip it here like the dispatcher would have.
+			if j.IsClosed() {
+				continue
+			}
+			j.changeStatus(processing)
+
 			w.workerFunc(j)
 
 			j.changeStatus(finished)
@@ -129,7 +136,7 @@ func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 
 	// Keep the goroutine while there is more backlog than idle workers to
 	// run it; stopping it would only make the next dispatch spawn another.
-	if w.NumPending() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	if w.manager().Len() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}
