@@ -146,9 +146,20 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
-A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed. On `Stop` or `Pause` a worker finishes the job it is running and parks the rest of its batch on the worker: they stay `Queued` and count in `NumPending` (a queue's own `Len` counts only what is still in storage), and a `Restart` or `Resume` hands them out first, in the order they were dispatched across all workers. A `Purge` of their queue closes parked jobs at once, on every worker bound to that queue (for a custom `WithQueue` storage, on the worker behind the handle). Jobs taken in a batch or parked are outside a queue's capacity.
+**While jobs wait in a batch.** A worker runs its batch one job after another and tells the loop once, when the batch is done. Jobs still waiting their turn are `Queued`: `NumPending` counts them, `NumProcessing` does not, and you can still close them.
 
-Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; and a worker bound to several queues takes one at a time, so the strategy picks a source for every job.
+**On `Stop` or `Pause`.** Each worker finishes the job it is running and keeps the rest of its batch aside (parks them). Parked jobs stay `Queued`. `NumPending` counts them, but the queue's own `Len` does not, since they have already left the queue. On `Restart` or `Resume` they run first, in their original order. A `Purge` of their queue closes them at once.
+
+**Capacity.** A queue's capacity limit counts only jobs still in the queue, not jobs in a batch or parked, so up to 32 more per worker can be pending.
+
+**Which queues batch.**
+
+| Queue | Batches? | Why |
+|---|---|---|
+| In-memory queue, topic | Yes | |
+| Priority queue | No | A higher-priority job added later must not wait behind a batch. |
+| Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
+| Worker bound to several queues | No | The strategy picks a queue for every single job. |
 
 ### Priority Queue
 
