@@ -279,7 +279,7 @@ if job, ok := queue.Add("error"); ok {
 }
 ```
 
-↗️ **[Run it on Playground](https://go.dev/play/p/4jkGb9SAIrp)**
+↗️ **[Run it on Playground](https://go.dev/play/p/nKnAyQfkxou)**
 
 `NewErrWorker` is similar to `NewResultWorker` but it returns only error.
 
