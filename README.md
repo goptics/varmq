@@ -431,9 +431,9 @@ Why is `AddAll` so much faster per item than individual `Add` calls?
 
 Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
 
-| Source | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ------ | ------------ | ------------- | ----------------------- |
-| Topic  | 126.8        | 76            | 1                       |
+| Worker Type | Queue Type | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ----------- | ---------- | ------------ | ------------- | ----------------------- |
+| **Worker**  | Topic      | 126.8        | 76            | 1                       |
 
 One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
 
