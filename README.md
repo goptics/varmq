@@ -126,9 +126,9 @@ Each wake-up of the event loop costs the same whether the job is tiny or slow, s
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
-A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed. On `Stop` or `Pause` a worker finishes the job it is running and gives the rest of its batch back to the front of its queue, still `Queued` and still counted by `Len`, so a `Restart` or `Resume` runs them in order.
+A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed. On `Stop` or `Pause` a worker finishes the job it is running and parks the rest of its batch on the worker: they stay `Queued` and count in `NumPending` (a queue's own `Len` counts only what is still in storage), and a `Restart` or `Resume` hands them out first, in the order they were dispatched across all workers. A `Purge` of their queue closes parked jobs at once.
 
-Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; a worker bound to several queues takes one at a time, so the strategy picks a source for every job; and a custom `WithQueue` storage batches only if it can take jobs back (it implements `IRequeuer`).
+Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; and a worker bound to several queues takes one at a time, so the strategy picks a source for every job.
 
 ### Priority Queue
 

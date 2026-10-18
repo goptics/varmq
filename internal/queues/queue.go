@@ -46,20 +46,6 @@ func (q *Queue[T]) Dequeue() (any, bool) {
 	return q.cur.Dequeue()
 }
 
-// Requeue puts items a consumer dequeued but did not use back at the front,
-// in order, unless stale reports under the queue's lock that they were
-// purged meanwhile: then nothing is stored and it returns false.
-func (q *Queue[T]) Requeue(items []any, stale func() bool) bool {
-	typed := make([]T, 0, len(items))
-	for _, item := range items {
-		if v, ok := item.(T); ok {
-			typed = append(typed, v)
-		}
-	}
-
-	return q.cur.Requeue(typed, stale)
-}
-
 // Values returns a copy of the items in the queue, front first.
 func (q *Queue[T]) Values() []any {
 	vals := q.cur.Values()

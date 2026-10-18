@@ -42,6 +42,7 @@ type worker[T any, JobType iJob[T]] struct {
 	curProcessing   atomic.Uint32 // jobs taken from the sources and not yet finished
 	busyWorkers     atomic.Uint32 // pool goroutines serving a batch; bounded by concurrency
 	jobNanos        atomic.Int64  // ns per job in the last finished batch; 0 until one has run
+	dispatched      uint64        // jobs handed out in batches that can be parked; event loop only
 	eventLoopSignal chan struct{}
 	errorChan       chan error
 	waiters         *sync.Cond
@@ -52,7 +53,12 @@ type worker[T any, JobType iJob[T]] struct {
 	registryTimer   *time.Timer
 	// status sits apart from the counters above, which every batch writes:
 	// a worker reads it before each job of a batch and should hit its cache.
-	status atomic.Uint32
+	// The park fields share its line: they change only on a stop or pause
+	// and while the parked jobs are handed out again.
+	status  atomic.Uint32
+	nParked atomic.Int64 // len of all parked batches, read without parkMx
+	parkMx  sync.Mutex
+	parked  []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause, by Seq
 }
 
 // Worker represents a worker that processes Jobs.
@@ -97,8 +103,9 @@ type Worker interface {
 	NumProcessing() int
 	// NumPending returns the number of jobs that have not started: those
 	// still in the bound queues plus those already handed to a worker in a
-	// batch and waiting their turn. A bound queue's own Len counts only the
-	// former. Submitted == NumPending + NumProcessing + Completed.
+	// batch and waiting their turn, or parked by a Stop or Pause. A bound
+	// queue's own Len counts only the former.
+	// Submitted == NumPending + NumProcessing + Completed.
 	NumPending() int
 	// NumConcurrency returns the upper bound on jobs processed at once. It
 	// is a limit, not a pool size: goroutines are spawned on demand and only
@@ -131,8 +138,9 @@ type Worker interface {
 	//   - If no jobs are processing: transitions directly to Paused.
 	//   - If jobs are processing: transitions to Pausing. In-flight jobs
 	//     continue until completion, then the status becomes Paused. Jobs a
-	//     worker holds in its batch but has not started go back to the
-	//     front of their queue, still Queued and counted by Len.
+	//     worker holds in its batch but has not started are parked on the
+	//     worker: still Queued and counted by NumPending, and handed out
+	//     first, in order, on Resume.
 	//
 	// Once Paused, no new jobs are processed from the queue. Use Resume()
 	// to resume processing, or PauseAndWait() to block until fully paused.
@@ -152,8 +160,8 @@ type Worker interface {
 	// to Stopping and cancels its internal context. The event loop then
 	// waits for in-flight jobs to finish, removes all worker goroutines,
 	// and transitions to Stopped. Jobs a worker holds in its batch but has
-	// not started go back to the front of their queue, still Queued and
-	// counted by Len, so a Restart runs them.
+	// not started are parked on the worker: still Queued and counted by
+	// NumPending, and handed out first, in order, on Restart.
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.
@@ -418,7 +426,7 @@ func (w *worker[T, JobType]) NumPending() int {
 		buffered = int(taken - running)
 	}
 
-	return w.manager().Len() + buffered
+	return w.pending(w.manager()) + buffered
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {

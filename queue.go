@@ -277,9 +277,17 @@ func (eq *externalBaseQueue) Purge() {
 	}
 }
 
+// bumpPurges makes the worker close, not run, the jobs it took from this
+// source and has not started: those in a batch as it reaches them, and those
+// parked by a stop or pause at once.
 func (eq *externalBaseQueue) bumpPurges() {
-	if eq.purges != nil {
-		eq.purges.Add(1)
+	if eq.purges == nil {
+		return
+	}
+
+	eq.purges.Add(1)
+	if p, ok := eq.w.(interface{ dropParked(*atomic.Uint64) }); ok {
+		p.dropParked(eq.purges)
 	}
 }
 

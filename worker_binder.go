@@ -33,9 +33,6 @@ type IWorkerBinder[T any] interface {
 	// This method allows you to use your own queue implementation as long as it
 	// satisfies the IQueue interface. This is useful when you need specialized
 	// queueing behavior beyond what the standard queue provides.
-	// A storage that also implements IRequeuer is handed jobs in batches; one
-	// that does not gets one job at a time, since a stopped worker could not
-	// give a batch back.
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
@@ -278,9 +275,6 @@ type IErrWorkerBinder[T any] interface {
 	// This method allows you to use your own queue implementation as long as it
 	// satisfies the IQueue interface. This is useful when you need specialized
 	// queueing behavior beyond what the standard queue provides.
-	// A storage that also implements IRequeuer is handed jobs in batches; one
-	// that does not gets one job at a time, since a stopped worker could not
-	// give a batch back.
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.
@@ -378,9 +372,6 @@ type IResultWorkerBinder[T, R any] interface {
 	// This method allows you to use your own queue implementation as long as it
 	// satisfies the IQueue interface. This is useful when you need specialized
 	// queueing behavior beyond what the standard queue provides.
-	// A storage that also implements IRequeuer is handed jobs in batches; one
-	// that does not gets one job at a time, since a stopped worker could not
-	// give a batch back.
 	//
 	// Parameters:
 	//   - q IQueue: A custom queue implementation that satisfies the IQueue interface.

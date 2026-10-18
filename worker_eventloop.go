@@ -23,7 +23,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
-				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.manager().Len() > 0 {
+				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.pending(w.manager()) > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {
 						w.sendError(err)
@@ -112,6 +112,19 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	w.curProcessing.Add(uint32(k))
 
 	buf := node.Value.Batch(k)
+
+	// Jobs parked by a stop or pause go first: they were taken before
+	// anything still in the sources.
+	if w.nParked.Load() > 0 {
+		if n, stamp := w.unpark(buf); n > 0 {
+			if n < k {
+				w.finishJobs(uint32(k - n))
+			}
+			node.Value.SendBatch(buf[:n], stamp)
+			return true, nil
+		}
+	}
+
 	n, cont, err := w.fillBatch(m, buf)
 
 	if n == 0 {
@@ -125,8 +138,8 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 		w.finishJobs(uint32(k - n))
 	}
 	// Stamped after the fill, so a job Added after a Purge returned is never
-	// mistaken for a purged one. The manager that filled the batch takes the
-	// unused rest back on Stop or Pause, even if the sources changed since.
+	// mistaken for a purged one. Seq numbers the jobs of batches a stop or
+	// pause can park, so parked jobs go back out in the order they came.
 	// ponytail: a Purge overlapping this fill lets the jobs dequeued before it
 	// run (one batch, microseconds). Exact semantics would load the counter
 	// before each dequeue and close the stale part of the buffer: one more
@@ -134,7 +147,8 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	stamp := pool.Stamp{Gen: m.purgeGen()}
 	if stamp.Gen != nil { // a source that batches
 		stamp.Epoch = stamp.Gen.Load()
-		stamp.Src = m
+		stamp.Seq = w.dispatched
+		w.dispatched += uint64(n)
 	}
 	node.Value.SendBatch(buf[:n], stamp)
 
@@ -149,7 +163,7 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 // much work a batch may hold (batchBudget). A nil node means no worker is
 // idle and none should be spawned: the loop waits for one to come back.
 func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[JobType], int) {
-	pending := m.Len()
+	pending := w.pending(m)
 	alive := int(w.busyWorkers.Load()) + w.pool.Len()
 
 	shares := min(int(w.concurrency.Load()), pending)

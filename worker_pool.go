@@ -106,18 +106,18 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				_ = j.Close()
 				continue
 			}
-			// Stopping or pausing: the jobs not started yet go back to the
-			// front of their queue, still Queued, before the processing count
-			// drops so a Wait never finds them missing. A Purge that got there
-			// first wins and they close instead. A batch of one from storage
-			// that cannot take jobs back has no Src and runs: it was in flight
-			// once handed out.
-			if stamp.Src != nil && w.halting() {
-				if !stamp.Src.(sourceManager[JobType]).requeue(jobs[i:], stamp.Stale) {
-					for _, j := range jobs[i:] {
-						_ = j.Close()
-					}
-				}
+			// Stopping or pausing: the jobs not started yet stay with the
+			// worker, still Queued, and go out first, in order, when it runs
+			// again. Parked before the processing count drops, so Paused and
+			// Stopped are reached only once they are accounted for. The first
+			// job of a batch always runs: NumProcessing has counted it since
+			// the hand-off, so Stop waits for it as it always did. A job from
+			// a source that never batches (priority, acknowledging, several
+			// sources) has no Gen and runs for the same reason.
+			if i > 0 && stamp.Gen != nil && w.halting() {
+				rest := stamp
+				rest.Seq += uint64(i)
+				w.park(jobs[i:], rest)
 				break
 			}
 			// A job stays Queued while it waits in the batch, so the user can
@@ -137,7 +137,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			ran++
 		}
 
-		// Over the jobs that ran, so a batch mostly given back does not make
+		// Over the jobs that ran, so a batch mostly parked does not make
 		// jobs look cheaper than they are. At least 1: 0 means "not measured
 		// yet" to batchBudget.
 		if ran > 0 {
@@ -166,7 +166,7 @@ func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 
 	// Keep the goroutine while there is more backlog than idle workers to
 	// run it; stopping it would only make the next dispatch spawn another.
-	if w.manager().Len() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	if w.pending(w.manager()) > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}

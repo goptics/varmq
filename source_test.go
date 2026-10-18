@@ -25,12 +25,6 @@ type ackTestQueue struct {
 	failAck bool
 }
 
-// noRequeueQueue is custom FIFO storage without Requeue: a worker stopped
-// mid-batch could not give its jobs back, so it gets one job at a time.
-type noRequeueQueue struct{ *queues.Queue[any] }
-
-func (q *noRequeueQueue) Requeue() {} // a different signature: not an IRequeuer
-
 func newAckTestQueue() *ackTestQueue {
 	return &ackTestQueue{Queue: queues.NewQueue[any]()}
 }
@@ -494,7 +488,6 @@ func TestMaxBatch(t *testing.T) {
 		assert.Equal(t, maxBatch, w.manager().maxBatch(), "direct manager forwards its source")
 
 		assert.Equal(t, 1, newTestWorker().bind(queues.NewPriorityQueue[any](), 1).maxBatch(), "priority storage does not batch")
-		assert.Equal(t, 1, newTestWorker().bind(&noRequeueQueue{queues.NewQueue[any]()}, 1).maxBatch(), "storage that cannot take a batch back does not batch")
 		assert.Equal(t, 1, newTestWorker().bind(newAckTestQueue(), 1).maxBatch(), "acknowledging storage does not batch")
 
 		topic := &topicSource[string]{cursor: topics.NewLog[string]().NewCursor(), w: newTestWorker()}
