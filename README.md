@@ -504,6 +504,16 @@ Charts for the I/O workload, stacked by producer pattern. A chart's *Total* adds
 
 </details>
 
+Full results, with every workload and pool size:
+
+- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
+- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Visual performance comparisons
+- 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
+
+#### Summary
+
+The tables below sum up the full benchmark suite through its three task types at 50K workers. The live charts above hold every workload and pool size.
+
 **Execution time** (sum of the 5 producer patterns, lower is better)
 
 | CPUs | Workload | VarMQ | Ants | Pond | Conc | WorkerPool | GoroutinePool | BufferedPool |
@@ -545,12 +555,6 @@ Charts for the I/O workload, stacked by producer pattern. A chart's *Total* adds
 | 24 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=0) | 132 MB | 22 MB | 353 MB | 17 MB | 61 MB | **16 MB** | 27 MB |
 | 24 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=0&g=1) | 93 MB | **8 MB** | 264 MB | 11 MB | 19 MB | 11 MB | 19 MB |
 | 24 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=2) | 118 MB | **15 MB** | 346 MB | 16 MB | 18 MB | 16 MB | 24 MB |
-
-For detailed performance comparisons and benchmarking results, visit:
-
-- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
-- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Visual performance comparisons
-- 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
 
 ## API Reference
 
