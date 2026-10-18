@@ -73,9 +73,9 @@ func (wc *Node[T]) SendBatch(jobs []T, stamp Stamp) {
 	}
 }
 
-// Serve runs fn once per payload with the items it carries, one from Send or
-// a whole batch from SendBatch, and its stamp (zero for Send). The slice is the node's own storage: fn must
-// clear it before it lets anyone else (a pool) hand the node a new batch.
+// Serve runs fn on each payload's items (one from Send, or a batch from
+// SendBatch) and stamp (zero for Send). The slice is the node's own storage:
+// fn must clear it before anyone (a pool) can hand the node a new batch.
 func (wc *Node[T]) Serve(fn func([]T, Stamp)) {
 	for payload := range wc.ch {
 		if !payload.ok {
@@ -98,10 +98,10 @@ func (wc *Node[T]) Stop() {
 	}
 }
 
-// UpdateLastUsed records now. An integer, not an atomic.Value holding a
-// time.Time, so the per-batch call does not allocate. A plain int64 with
-// atomic.StoreInt64 rather than atomic.Int64 because CreateNode returns the
-// Node by value and atomic.Int64 must not be copied.
+// UpdateLastUsed records now as unix nanos, not a time.Time in an
+// atomic.Value, so the per-batch call does not allocate. A plain int64, not
+// atomic.Int64, because CreateNode returns Node by value and atomic.Int64
+// must not be copied.
 func (wc *Node[T]) UpdateLastUsed() {
 	atomic.StoreInt64(&wc.lastUsed, time.Now().UnixNano())
 }

@@ -106,14 +106,12 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				_ = j.Close()
 				continue
 			}
-			// Stopping or pausing: the jobs not started yet stay with the
-			// worker, still Queued, and go out first, in order, when it runs
-			// again. Parked before the processing count drops, so Paused and
-			// Stopped are reached only once they are accounted for. The first
-			// job of a batch always runs: NumProcessing has counted it since
-			// the hand-off, so Stop waits for it as it always did. A job from
-			// a source that never batches (priority, acknowledging, several
-			// sources) has no Gen and runs for the same reason.
+			// Stopping or pausing: park the unstarted rest (see park). Parked
+			// before the processing count drops, so Paused and Stopped are
+			// reached only once they are accounted for. The first job always
+			// runs: NumProcessing has counted it since the hand-off, so Stop
+			// waits for it. A job from a source that never batches (priority,
+			// acknowledging, several sources) has no Gen and runs likewise.
 			if i > 0 && stamp.Gen != nil && w.halting() {
 				rest := stamp
 				rest.Seq += uint64(i)
@@ -137,9 +135,8 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			ran++
 		}
 
-		// Over the jobs that ran, so a batch mostly parked does not make
-		// jobs look cheaper than they are. At least 1: 0 means "not measured
-		// yet" to batchBudget.
+		// Averaged over the jobs that ran, so a mostly parked batch does not
+		// make jobs look cheap. At least 1: 0 means "not measured yet".
 		if ran > 0 {
 			w.jobNanos.Store(max(1, int64(time.Since(start))/int64(ran)))
 		}

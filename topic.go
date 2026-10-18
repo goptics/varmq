@@ -33,7 +33,7 @@ import (
 //	varmq.NewWorker(sendEmail).WithTopic(topic)
 //	varmq.NewWorker(updateStock, 4).WithTopic(topic)
 //
-//	topic.Publish(order) // both workers receive their own copy
+//	topic.Publish(order) // both workers get their own job from one shared log
 type Topic[T any] interface {
 	// Publish appends data to the topic and wakes every subscriber's worker.
 	//
@@ -124,10 +124,9 @@ func (t *topic[T]) Close() error {
 	return nil
 }
 
-// subscribe attaches a new cursor for w at the given source priority. The
-// source is registered with the worker while t.mx is held, so no payload can
-// land in a cursor whose worker cannot see it yet. Lock order: t.mx, then the
-// worker's source manager, then the log.
+// subscribe attaches a cursor for w. Source is registered under t.mx so
+// no payload lands in a cursor its worker can't see. Lock order: t.mx, then
+// w.sourcesMx or the log's mx.
 func (t *topic[T]) subscribe(w *worker[T, iJob[T]], priority int) *subscription[T] {
 	t.mx.Lock()
 	defer t.mx.Unlock()
@@ -143,7 +142,7 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]], priority int) *subscription[
 	src := &topicSource[T]{cursor: cursor, w: w, purge: &purgeState{}}
 	src.purge.register(w.parkHook())
 	s := &subscription[T]{
-		// The topic's capacity makes IsFull report this subscription holding the topic full.
+		// Topic capacity, so IsFull reports this subscription holding the topic full.
 		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity)), src.purge),
 		worker:            w,
 		view:              view,
@@ -193,7 +192,7 @@ type Subscription[T any] interface {
 
 type subscription[T any] struct {
 	*externalBaseQueue
-	worker *worker[T, iJob[T]] // concrete worker, needed to unregister its source; externalBaseQueue.w is only the Worker interface
+	worker *worker[T, iJob[T]] // concrete type for removeSource; externalBaseQueue.w is only a Worker
 	view   *topicView[T]
 	src    *topicSource[T]
 	t      *topic[T]
@@ -223,10 +222,9 @@ func (s *subscription[T]) Purge() {
 	s.view.Purge()
 }
 
-// topicView adapts a log cursor to IBaseQueue so the Subscription handle can
-// embed externalBaseQueue (Len, NumPending, IsFull). Purge and Close are
-// overridden on subscription. The scheduler does not read it; jobs come from
-// topicSource over the same cursor.
+// topicView adapts a log cursor to IBaseQueue so subscription can embed
+// externalBaseQueue (Len, NumPending, IsFull); subscription overrides Purge
+// and Close. The scheduler reads jobs via topicSource on the same cursor.
 type topicView[T any] struct {
 	cursor *topics.Cursor[T]
 }
@@ -235,7 +233,7 @@ func (v *topicView[T]) Len() int {
 	return v.cursor.Len()
 }
 
-// Dequeue hands out the raw payload. Nothing in the scheduler calls it; it exists to satisfy IBaseQueue.
+// Dequeue hands out the raw payload. Only there to satisfy IBaseQueue.
 func (v *topicView[T]) Dequeue() (any, bool) {
 	data, ok := v.cursor.Dequeue()
 	if !ok {
@@ -245,7 +243,8 @@ func (v *topicView[T]) Dequeue() (any, bool) {
 	return data, true
 }
 
-// Values returns raw payloads, not jobs. Only externalBaseQueue.Purge would call it, and Subscription overrides Purge so payloads are never closed.
+// Values returns raw payloads, not jobs. Only externalBaseQueue.Purge would
+// call it, and Subscription overrides Purge so payloads are never closed.
 func (v *topicView[T]) Values() []any {
 	vals := v.cursor.Values()
 	out := make([]any, len(vals))

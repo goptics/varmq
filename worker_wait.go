@@ -46,14 +46,13 @@ func (w *worker[T, JobType]) Wait() {
 
 // waitForChange blocks until the waiters are woken. Callers hold w.mx.
 //
-// The job that brings the running count to 0 always wakes them under w.mx,
-// after the decrement, so it cannot slip past a caller: either the caller
-// sees 0, or it is already waiting when the broadcast comes. But a source shared with other workers or
-// processes (one queue bound to several workers, a persistent or distributed
-// queue) can be drained by someone else while this worker runs
-// nothing, and nothing then wakes its waiters. So while no job is running, it
-// also wakes them after waitRecheck to re-check. It decides on the running
-// count alone: NumPending may already have changed since the caller checked.
+// The job that brings the running count to 0 broadcasts under w.mx after the
+// decrement, so a caller either sees 0 or is already waiting. But a source
+// shared with other workers or processes (one queue bound to several workers,
+// a persistent or distributed queue) can be drained elsewhere while this
+// worker runs nothing, and then nothing wakes its waiters. So while no job
+// runs, a timer also wakes them after waitRecheck. It decides on the running
+// count alone: NumPending may have changed since the caller checked.
 func (w *worker[T, JobType]) waitForChange() {
 	if w.curProcessing.Load() == 0 {
 		t := time.AfterFunc(waitRecheck, func() {

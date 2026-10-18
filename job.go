@@ -79,9 +79,8 @@ type job[T any] struct {
 	ackRef atomic.Pointer[jobAck] // nil for in-memory jobs; set by ackSource.Next, taken by acknowledge
 }
 
-// jobAck is what a job needs to acknowledge itself: the storage that handed
-// it out and the ack id that storage gave it. Folding both behind one pointer
-// keeps job[T] in the 64-byte size class for the in-memory hot path.
+// jobAck holds the storage that handed out a job and the ack id it gave.
+// One pointer to both keeps in-memory job[T] in the 64-byte size class.
 type jobAck struct {
 	q  IAcknowledgeable
 	id string
@@ -137,8 +136,8 @@ func newJob[T any](data T, configs jobConfigs) *job[T] {
 	return j
 }
 
-// setAck attaches the storage and ack id that Close acknowledges with. An
-// empty id means the storage has nothing to acknowledge, so nothing is kept.
+// setAck records the storage and ack id Close acknowledges with. An empty id
+// means there is nothing to acknowledge, so nothing is stored.
 // ponytail: one 32-byte allocation per acked job; that path already pays
 // json.Unmarshal, so this is not pooled.
 func (j *job[T]) setAck(q IAcknowledgeable, id string) {
@@ -249,10 +248,9 @@ func notClosed(s status) error {
 	return nil
 }
 
-// transition moves the job to the state to with one CAS when allowed accepts
-// the state it is in, retrying while other goroutines move it. The CAS makes
-// each transition exactly-once: of two concurrent callers one wins and the
-// other sees the new state.
+// transition CASes the job to state to if allowed accepts its current state,
+// retrying while other goroutines move it. Of two concurrent callers exactly
+// one wins; the other sees the new state.
 func (j *job[T]) transition(to status, allowed func(status) error) error {
 	for {
 		s := j.status.Load()
@@ -284,14 +282,12 @@ func (j *job[T]) startProcessing() bool {
 	return j.transition(processing, notClosed) == nil
 }
 
-// closeOnce acknowledges the job's storage, if it has one, and claims the
-// move to closed. The claim is one CAS and the acknowledgement happens once
-// per job (acknowledge takes the ack out of the job before calling storage),
-// so of two concurrent Close calls exactly one acknowledges and exactly one
-// wins; the other gets ErrJobAlreadyClosed. A job from acknowledgeable
-// storage is acknowledged before the claim and never shows Closed meanwhile,
-// so a failed acknowledgement leaves it untouched: a worker that took it still
-// runs it, and a finished one stays Finished and unwaited.
+// closeOnce acknowledges the job's storage, if any, then claims the move to
+// closed. acknowledge runs at most once and the claim is one CAS, so of two
+// concurrent Close calls exactly one acknowledges and exactly one wins; the
+// other gets ErrJobAlreadyClosed. Acking before the claim means the job never
+// shows Closed while unacked, so a failed ack leaves it untouched: a worker
+// that took it still runs it, and a finished one stays Finished and unwaited.
 func (j *job[T]) closeOnce() error {
 	if j.ackRef.Load() != nil {
 		if err := closeable(j.status.Load()); err != nil {
@@ -399,9 +395,9 @@ type iResultJob[T, R any] interface {
 }
 
 // resultJob is a single job whose worker reports a result or an error, stored
-// in place like errorJob.err. It holds the two fields rather than a Result[R]:
-// Result's JobId would be a copy of job.id that Result() never returns, and
-// without it the job stays in the 80-byte size class.
+// in place like errorJob.err. It holds data and err, not a Result[R], whose
+// JobId would be an unused copy of job.id and push it out of the 80-byte
+// size class.
 type resultJob[T, R any] struct {
 	job[T]
 	data R
