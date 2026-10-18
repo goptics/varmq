@@ -11,11 +11,10 @@ type Elem[T any] struct {
 	next  atomic.Pointer[Elem[T]]
 }
 
-// Pool is a LIFO stack of idle workers. Pushes are lock free, so workers
-// finishing at once never wait on each other. Removals (PopBack, Prune)
-// serialise on a mutex: with a single remover at a time, a node cannot be
-// popped and pushed back between a remover's load and its CAS, so the CAS
-// cannot succeed on a stale head (no ABA).
+// Pool is a LIFO stack of idle workers. Pushes are lock free, so finishing
+// workers never wait on each other. Removals (PopBack, Prune) serialise on
+// popMx: with one remover, a node cannot be popped and pushed back between
+// a remover's load and CAS, so the CAS never succeeds on a stale head (no ABA).
 type Pool[T any] struct {
 	head  atomic.Pointer[Elem[T]]
 	len   atomic.Int64

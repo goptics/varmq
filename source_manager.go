@@ -32,7 +32,7 @@ const (
 //   - strategyManager: two or more; picks a source by the worker's Strategy.
 //
 // add and remove return the manager for the new set of sources, so the
-// worker swaps implementations as sources come and go, in both directions.
+// worker swaps implementations as sources come and go.
 type sourceManager[JobType any] interface {
 	source[JobType]
 	add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType]
@@ -111,10 +111,9 @@ func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 
 func (m *directManager[JobType]) count() int { return 1 }
 
-// strategyManager is the manager of a worker with two or more bound sources.
-// A remove leaves at least one, so it only ever steps down to directManager.
-// It picks the next source by strategy (RoundRobin, MaxLen, MinLen, or
-// Priority).
+// strategyManager is the manager of a worker with two or more bound sources;
+// it picks the next source by Strategy. A remove leaves at least one, so it
+// only ever steps down to directManager.
 type strategyManager[JobType any] struct {
 	*helpers.Manager[source[JobType]]
 	strategy Strategy
@@ -127,9 +126,8 @@ func newStrategyManager[JobType any](strategy Strategy) *strategyManager[JobType
 	}
 }
 
-// maxBatch is 1: the strategy picks a source per Next, so a batch would mix
-// sources and skip the pick a strategy like Priority or MaxLen would make
-// for each later job.
+// maxBatch is 1: the strategy picks a source per Next, and a batch would
+// skip that pick for every job after the first.
 func (sm *strategyManager[JobType]) maxBatch() int { return 1 }
 
 // purgeGen is nil: batches of one never wait behind another job.

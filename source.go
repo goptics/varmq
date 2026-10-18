@@ -112,9 +112,8 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 	return toJob[T, JobType](v)
 }
 
-// ackSource reads storage that acknowledges: persistent and distributed
-// queues. Every job it returns knows its storage
-// and ack id, so job.Close can acknowledge it.
+// ackSource reads acknowledging storage: persistent and distributed queues.
+// Each job it returns carries its storage and ack id so job.Close can ack it.
 type ackSource[T any, JobType iJob[T]] struct {
 	q ackQueue
 }
@@ -123,9 +122,8 @@ func (s *ackSource[T, JobType]) Len() int {
 	return s.q.Len()
 }
 
-// maxBatch is 1: every dequeued message is unacknowledged until its job is
-// done, so holding a batch would hide messages from other consumers and
-// stretch the time before they are acknowledged.
+// maxBatch is 1: a dequeued message stays unacknowledged until its job is
+// done, so a batch would hide messages from other consumers and delay acks.
 func (s *ackSource[T, JobType]) maxBatch() int {
 	return 1
 }

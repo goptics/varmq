@@ -51,10 +51,9 @@ type worker[T any, JobType iJob[T]] struct {
 	cancel          context.CancelFunc
 	Configs         configs
 	registryTimer   *time.Timer
-	// status sits apart from the counters above, which every batch writes:
-	// a worker reads it before each job of a batch and should hit its cache.
-	// The park fields share its line: they change only on a stop or pause
-	// and while the parked jobs are handed out again.
+	// status is read before every job, so it sits apart from the per-batch
+	// counters above. The park fields share its line: they change only on a
+	// stop or pause and while parked jobs are handed out again.
 	status       atomic.Uint32
 	nParked      atomic.Int64 // len of all parked batches, read without parkMx
 	parkMx       sync.Mutex
@@ -423,10 +422,9 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 }
 
 func (w *worker[T, JobType]) NumPending() int {
-	// Each busy worker runs exactly one job, so taken minus running is what
-	// sits in batch buffers. The loads are not a snapshot: clamp at 0, and
-	// jobs a stopping worker just parked count twice, parked and still taken,
-	// until it finishes its batch a moment later.
+	// Each busy worker runs one job, so taken minus running sits in batch
+	// buffers. The loads are not a snapshot: clamp at 0. Jobs a stopping worker
+	// just parked count twice (parked and still taken) until its batch ends.
 	taken, running := w.curProcessing.Load(), w.busyWorkers.Load()
 	buffered := 0
 	if taken > running {

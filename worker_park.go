@@ -23,15 +23,14 @@ func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
 	return m.Len() + int(w.nParked.Load())
 }
 
-// park keeps jobs a worker took in a batch but did not start because the
-// worker is stopping or pausing. They stay Queued and count as pending, and
-// the event loop hands them out before anything in the sources once the
-// worker runs again, in dispatch order across all workers. A batch a Purge
-// reached first is closed instead: the check runs under parkMx, so a Purge
-// either sees the batch parked or the batch sees the Purge.
+// park sets aside the unstarted jobs of a batch whose worker is stopping or
+// pausing. They stay Queued, count as pending, and go out before the sources
+// once the worker runs again, in dispatch order across all workers. A batch a
+// Purge reached first is closed instead; the check runs under parkMx, so
+// either the Purge sees the batch parked or the batch sees the Purge.
 //
-// Batches are appended as workers park them and sorted once, by the first
-// unpark after, so a stop of many workers costs O(n log n), not O(n²).
+// Batches are appended unsorted and sorted once by the next unpark, so a stop
+// of many workers costs O(n log n), not O(n²).
 func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 	w.parkMx.Lock()
 	defer w.parkMx.Unlock()
@@ -134,9 +133,8 @@ type purgeState struct {
 	mx    sync.Mutex
 	hooks []weak.Pointer[parkHook]
 	// Workers load gen before every job. Padded to 128 bytes, a size class
-	// whose objects start on a cache-line boundary, so gen never shares a line
-	// with another object that is written per job (the queue's own struct did,
-	// next to its cursor, and cost a single producer 15%).
+	// aligned to cache lines, so gen never shares a line with anything written
+	// per job.
 	_ [128 - 8 - 8 - 24]byte
 }
 

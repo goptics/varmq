@@ -10,20 +10,18 @@ import (
 )
 
 const (
-	// chunkCapacity is the fixed size of every chunk. The log frees memory a
-	// whole chunk at a time, once the slowest cursor has passed it, so chunks
-	// stay small instead of growing like the queue's: a grown chunk would keep
-	// up to that many read payloads alive. One allocation per 1024 appends.
+	// chunkCapacity is the fixed size of every chunk. Memory is freed a whole
+	// chunk at a time, once the slowest cursor has passed it, so chunks stay
+	// small: a bigger chunk would keep that many read payloads alive.
 	chunkCapacity = 1024
-	// linkSpins is how many times an Append past the end of a chunk yields
-	// for the one linking the next chunk before it allocates one itself.
+	// linkSpins is how many times an Append past the end of a chunk yields to
+	// the one linking the next chunk before allocating it itself.
 	linkSpins = 4
 )
 
-// chunk is one block of the log, holding the items at offsets base to
-// base+len(data). A writer that claimed offset o fills data[o-base] and then
-// publishes it by setting its ready flag; a reader reads a slot only once it
-// is ready, so readers and writers never touch the same slot at once. Writers
+// chunk holds the items at offsets base to base+len(data). The writer that
+// claimed offset o fills data[o-base], then publishes it by setting its ready
+// flag; readers read only ready slots, so none is read mid-write. Writers
 // claim in order but may finish out of order. next is linked by the writer
 // that claims the first offset past the end.
 type chunk[T any] struct {
@@ -43,19 +41,17 @@ func (ch *chunk[T]) end() uint64 {
 	return ch.base + uint64(len(ch.data))
 }
 
-// Log is an append-only, in-memory log stored in linked chunks. Each Cursor
-// reads at its own position. The log keeps only the write chunk; chunks link
-// forward, so a chunk stays reachable only while a cursor sits on it or on an
-// earlier one. Once the slowest cursor moves past a chunk nothing references
-// it and the garbage collector frees it. Appending never copies: a full chunk
-// links a new one.
+// Log is an append-only, in-memory log of linked chunks; each Cursor reads at
+// its own position. The log keeps only the write chunk and chunks link
+// forward, so a chunk is reachable only while a cursor sits on it or an
+// earlier one, and is garbage collected once the slowest cursor passes it. A
+// full chunk links a new one; nothing is copied.
 //
-// Reads never block writes and writes never block reads. An Append to an
-// unbounded log takes no lock: it claims an offset with one atomic add on
-// head and writes its slot. So the chain of chunks is never cut or replaced
-// once started, or a claimed slot could land in a chunk no cursor reaches.
-// Appends to a bounded log serialise on mx, so the bound holds exactly.
-// Dequeue takes only its own cursor's lock.
+// Reads and writes never block each other. An unbounded Append takes no
+// lock: it claims an offset with one atomic add on head and writes its slot,
+// so the chunk chain must never be cut or replaced, or a claimed slot could land
+// in a chunk no cursor reaches. Bounded Appends serialise on mx so the bound
+// holds exactly. Dequeue takes only its own cursor's lock.
 type Log[T any] struct {
 	mx     sync.Mutex               // cursor bookkeeping (open, limit) and bounded Appends
 	tail   atomic.Pointer[chunk[T]] // newest chunk, or one behind while it is linked; nil until the first cursor
@@ -138,9 +134,9 @@ func (l *Log[T]) Append(item T) int {
 		next := t.next.Load()
 		if next == nil {
 			// The first Append past the end links the next chunk; the others
-			// yield a few times for it. Its base is fixed, so if the linker
-			// was parked they allocate one themselves and the CAS losers
-			// drop a spare chunk, instead of waiting on the scheduler.
+			// yield up to linkSpins times, then allocate it themselves rather
+			// than wait on a parked linker. Its base is fixed, so CAS losers
+			// just drop a spare.
 			if t.linking.CompareAndSwap(false, true) || spins == linkSpins {
 				t.next.CompareAndSwap(nil, newChunk[T](t.end()))
 				continue
@@ -336,9 +332,8 @@ func (c *Cursor[T]) Purge() {
 }
 
 // each calls fn on every slot from the cursor up to offset end, waiting for
-// slots whose writer is between its claim and its publish, and returns the
-// position at end. It does not move the cursor. Callers hold c.mx and every
-// offset below end is claimed.
+// any still being written, and returns the position at end without moving
+// the cursor. Callers hold c.mx and every offset below end is claimed.
 func (c *Cursor[T]) each(end uint64, fn func(ch *chunk[T], i int)) (*chunk[T], int) {
 	ch, i := c.chunk, c.idx
 	for off := c.offset.Load(); off < end; off++ {
