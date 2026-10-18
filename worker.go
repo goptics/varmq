@@ -55,10 +55,13 @@ type worker[T any, JobType iJob[T]] struct {
 	// a worker reads it before each job of a batch and should hit its cache.
 	// The park fields share its line: they change only on a stop or pause
 	// and while the parked jobs are handed out again.
-	status  atomic.Uint32
-	nParked atomic.Int64 // len of all parked batches, read without parkMx
-	parkMx  sync.Mutex
-	parked  []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause, by Seq
+	status       atomic.Uint32
+	nParked      atomic.Int64 // len of all parked batches, read without parkMx
+	parkMx       sync.Mutex
+	parked       []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause
+	parkUnsorted bool                   // parked gained a batch since unpark last sorted it by Seq
+	hookOnce     sync.Once
+	hook         *parkHook // how a Purge reaches parked; storage holds it weakly
 }
 
 // Worker represents a worker that processes Jobs.
@@ -104,8 +107,10 @@ type Worker interface {
 	// NumPending returns the number of jobs that have not started: those
 	// still in the bound queues plus those already handed to a worker in a
 	// batch and waiting their turn, or parked by a Stop or Pause. A bound
-	// queue's own Len counts only the former.
-	// Submitted == NumPending + NumProcessing + Completed.
+	// queue's own Len counts only the former. A job closed while it waits in
+	// storage, a batch or the park counts until the worker reaches and
+	// discards it. Submitted == NumPending + NumProcessing + Completed, except
+	// for an instant while a stopping worker parks its batch.
 	NumPending() int
 	// NumConcurrency returns the upper bound on jobs processed at once. It
 	// is a limit, not a pool size: goroutines are spawned on demand and only
@@ -419,7 +424,9 @@ func (w *worker[T, JobType]) Errs() <-chan error {
 
 func (w *worker[T, JobType]) NumPending() int {
 	// Each busy worker runs exactly one job, so taken minus running is what
-	// sits in batch buffers. The two loads are not a snapshot; clamp at 0.
+	// sits in batch buffers. The loads are not a snapshot: clamp at 0, and
+	// jobs a stopping worker just parked count twice, parked and still taken,
+	// until it finishes its batch a moment later.
 	taken, running := w.curProcessing.Load(), w.busyWorkers.Load()
 	buffered := 0
 	if taken > running {

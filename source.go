@@ -70,9 +70,9 @@ func toJob[T any, JobType iJob[T]](v any) (JobType, error) {
 // queues and priority queues, their error and result variants, and custom
 // WithQueue / WithPriorityQueue implementations.
 type queueSource[T any, JobType iJob[T]] struct {
-	q      IBaseQueue
-	batch  int // decided once in bind: 1 for priority storage
-	purges atomic.Uint64
+	q     IBaseQueue
+	batch int         // decided once in bind: 1 for priority storage
+	purge *purgeState // shared by every worker bound to q when q supports it; nil if it never batches
 }
 
 func (s *queueSource[T, JobType]) Len() int {
@@ -86,11 +86,20 @@ func (s *queueSource[T, JobType]) maxBatch() int {
 // purgeGen is nil for priority storage: a batch of one starts at once, so
 // nothing waits for Purge to cancel.
 func (s *queueSource[T, JobType]) purgeGen() *atomic.Uint64 {
+	if s.batch == 1 || s.purge == nil {
+		return nil
+	}
+
+	return &s.purge.gen
+}
+
+// purgeStateOf is what the Queue handle's Purge drives.
+func (s *queueSource[T, JobType]) purgeStateOf() *purgeState {
 	if s.batch == 1 {
 		return nil
 	}
 
-	return &s.purges
+	return s.purge
 }
 
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
@@ -153,7 +162,7 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 type topicSource[T any] struct {
 	cursor *topics.Cursor[T]
 	w      *worker[T, iJob[T]]
-	purges atomic.Uint64
+	purge  *purgeState // this subscription's own: a cursor is never shared
 }
 
 func (s *topicSource[T]) Len() int {
@@ -165,7 +174,7 @@ func (s *topicSource[T]) maxBatch() int {
 }
 
 func (s *topicSource[T]) purgeGen() *atomic.Uint64 {
-	return &s.purges
+	return &s.purge.gen
 }
 
 func (s *topicSource[T]) Next() (iJob[T], error) {
@@ -194,7 +203,9 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	} else if _, ok := q.(IPriorityQueue); ok {
 		src = &queueSource[T, JobType]{q: q, batch: 1}
 	} else {
-		src = &queueSource[T, JobType]{q: q, batch: maxBatch}
+		purge := purgeStateFor(q)
+		purge.register(w.parkHook())
+		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge}
 	}
 
 	w.addSource(src, priority)

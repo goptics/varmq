@@ -517,7 +517,9 @@ func WithTopicCapacity(capacity int) TopicConfigFunc {
 //
 // When the queue reaches its capacity, subsequent Add calls will return false,
 // indicating the item was not enqueued. This allows callers to implement
-// backpressure or overflow handling.
+// backpressure or overflow handling. Capacity bounds the jobs in storage: jobs
+// a worker has taken in a batch, or parked on Stop or Pause, no longer count,
+// so up to 32 more per worker can be pending.
 //
 // Parameters:
 //   - capacity: The maximum number of items the queue can hold.

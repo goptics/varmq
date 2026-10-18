@@ -1256,26 +1256,164 @@ func TestParkedBatchesKeepDispatchOrder(t *testing.T) {
 	w.WaitUntilStopped()
 
 	inner.parkMx.Lock()
-	var parked []int
-	for _, b := range inner.parked {
-		for _, j := range b.jobs {
-			parked = append(parked, j.Data())
-		}
-	}
 	batches := len(inner.parked)
 	inner.parkMx.Unlock()
-
 	require.GreaterOrEqual(t, batches, 2, "several workers parked a batch")
-	assert.True(t, slices.IsSorted(parked), "parked jobs in dispatch order: %v", parked)
-	assert.Equal(t, 120, len(ran)+len(parked)+q.Len(), "every job ran, is parked or is in storage")
 
-	require.NoError(t, w.Start())
-	w.Wait()
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Len(t, ran, 120, "every job ran after Restart")
-	for d, n := range ran {
-		assert.Equal(t, 1, n, "job %d ran once", d)
+	// Drain the way the event loop would, while stopped: the order it hands
+	// parked jobs out in.
+	var drained []int
+	buf := make([]iJob[int], maxBatch)
+	for {
+		n, _ := inner.unpark(buf)
+		if n == 0 {
+			break
+		}
+		for _, j := range buf[:n] {
+			drained = append(drained, j.Data())
+		}
 	}
-	w.Stop()
+	assert.True(t, slices.IsSorted(drained), "parked jobs come back in dispatch order: %v", drained)
+	mu.Lock()
+	assert.Equal(t, 120, len(ran)+len(drained)+q.Len(), "every job ran, was parked or is in storage")
+	mu.Unlock()
+}
+
+// A queue bound to several workers shares one Purge state: a Purge through
+// any handle closes the jobs another worker parked.
+func TestPurgeReachesJobsParkedByAnotherWorker(t *testing.T) {
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	var first atomic.Bool
+	b := NewWorker(func(j Job[int]) {
+		if first.CompareAndSwap(false, true) {
+			started <- struct{}{}
+			<-release
+		}
+	}, WithConcurrency(1), WithAutoRun(false))
+	b.(*workerBinder[int]).jobNanos.Store(1) // measured: cheap jobs batch
+	a := NewWorker(func(j Job[int]) {}, WithAutoRun(false))
+
+	store := queues.NewQueue[any]()
+	qa, qb := a.WithQueue(store), b.WithQueue(store)
+	jobs := make([]EnqueuedJob, 40)
+	for i := range jobs {
+		j, ok := qb.Add(i)
+		require.True(t, ok)
+		jobs[i] = j
+	}
+
+	require.NoError(t, b.Start())
+	<-started
+	require.NoError(t, b.Pause())
+	close(release)
+	b.WaitUntilPaused()
+	require.Equal(t, 39, b.NumPending(), "31 parked on b, 8 in storage")
+
+	qa.Purge() // through the other worker's handle
+
+	for i, j := range jobs[1:] {
+		done := make(chan struct{})
+		go func() { j.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("job %d was not closed by a Purge through another handle", i+1)
+		}
+		assert.Equal(t, "Closed", j.Status(), "job %d", i+1)
+	}
+	assert.Equal(t, 0, b.NumPending())
+	b.Stop()
+}
+
+// The rest of Purge on parked jobs: through a topic subscription, while
+// stopped, and what an Unsubscribe leaves.
+func TestParkedJobsPurgeAndUnsubscribe(t *testing.T) {
+	type fixture struct {
+		w       IWorkerBinder[int]
+		started chan struct{}
+		release chan struct{}
+		ran     *atomic.Int32
+	}
+	newFixture := func() fixture {
+		var ran atomic.Int32
+		started, release := make(chan struct{}, 1), make(chan struct{})
+		w := NewWorker(func(j Job[int]) {
+			if ran.Add(1) == 1 {
+				started <- struct{}{}
+				<-release
+			}
+		}, WithConcurrency(1), WithAutoRun(false))
+		w.(*workerBinder[int]).jobNanos.Store(1) // measured: cheap jobs batch
+		return fixture{w, started, release, &ran}
+	}
+	publish := func(t *testing.T, topic Topic[int], n int) {
+		t.Helper()
+		for i := range n {
+			require.True(t, topic.Publish(i))
+		}
+	}
+
+	t.Run("topic Purge while paused closes the parked jobs", func(t *testing.T) {
+		f := newFixture()
+		topic := NewTopic[int]()
+		sub := f.w.WithTopic(topic)
+		publish(t, topic, 40)
+		require.NoError(t, f.w.Start())
+		<-f.started
+		require.NoError(t, f.w.Pause())
+		close(f.release)
+		f.w.WaitUntilPaused()
+		require.Equal(t, 39, f.w.NumPending())
+
+		sub.Purge()
+
+		assert.Equal(t, 0, f.w.NumPending())
+		require.NoError(t, f.w.Resume())
+		f.w.Wait()
+		assert.Equal(t, int32(1), f.ran.Load(), "nothing purged ran")
+		f.w.Stop()
+	})
+
+	t.Run("queue Purge while stopped, then Restart runs nothing purged", func(t *testing.T) {
+		f := newFixture()
+		q := f.w.BindQueue()
+		for i := range 40 {
+			_, ok := q.Add(i)
+			require.True(t, ok)
+		}
+		require.NoError(t, f.w.Start())
+		<-f.started
+		require.NoError(t, f.w.Stop())
+		close(f.release)
+		f.w.WaitUntilStopped()
+		require.Equal(t, 39, f.w.NumPending())
+
+		q.Purge()
+		assert.Equal(t, 0, f.w.NumPending())
+
+		require.NoError(t, f.w.Start())
+		f.w.Wait()
+		assert.Equal(t, int32(1), f.ran.Load())
+		f.w.Stop()
+	})
+
+	t.Run("Unsubscribe while stopped: parked jobs were already taken and still run", func(t *testing.T) {
+		f := newFixture()
+		topic := NewTopic[int]()
+		sub := f.w.WithTopic(topic)
+		publish(t, topic, 40)
+		require.NoError(t, f.w.Start())
+		<-f.started
+		require.NoError(t, f.w.Stop())
+		close(f.release)
+		f.w.WaitUntilStopped()
+
+		sub.Unsubscribe()
+		assert.Equal(t, 31, f.w.NumPending(), "the 8 unread payloads are dropped, the 31 parked jobs stay")
+
+		require.NoError(t, f.w.Start())
+		f.w.Wait()
+		assert.Equal(t, int32(32), f.ran.Load(), "the job that ran plus the 31 parked")
+		f.w.Stop()
+	})
 }

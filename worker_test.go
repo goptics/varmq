@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/goptics/varmq/internal/pool"
+	"github.com/stretchr/testify/require"
 	"math"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"sync"
@@ -1636,4 +1639,89 @@ func TestColdDispatchIsOneJobPerWorker(t *testing.T) {
 	mu.Lock()
 	assert.Len(t, started, 3)
 	mu.Unlock()
+}
+
+// park appends and unpark sorts once, so batches come back in dispatch order
+// whatever order they were parked in, and a split batch parked again by a
+// second stop keeps its place ahead of its own remainder.
+func TestParkUnparkOrder(t *testing.T) {
+	w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	batch := func(seq, n int) ([]iJob[int], pool.Stamp) {
+		jobs := make([]iJob[int], n)
+		for i := range jobs {
+			jobs[i] = newJob(seq+i, loadJobConfigs(w.configs()))
+		}
+		return jobs, pool.Stamp{Gen: gen, Seq: uint64(seq)}
+	}
+	for _, seq := range []int{20, 0, 10} { // parked out of order
+		w.park(batch(seq, 5))
+	}
+	assert.Equal(t, 15, w.NumPending())
+
+	buf := make([]iJob[int], 3) // smaller than a batch: batches get split
+	n, stamp := w.unpark(buf)
+	require.Equal(t, 3, n)
+	assert.Equal(t, uint64(0), stamp.Seq)
+	w.park(buf[:n], stamp) // a second stop parks the piece handed out
+
+	var got []int
+	for {
+		n, stamp := w.unpark(buf)
+		if n == 0 {
+			break
+		}
+		assert.Equal(t, uint64(buf[0].Data()), stamp.Seq, "the stamp numbers the first job handed out")
+		for _, j := range buf[:n] {
+			got = append(got, j.Data())
+		}
+	}
+	assert.Equal(t, []int{0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 20, 21, 22, 23, 24}, got)
+	assert.Equal(t, 0, w.NumPending())
+}
+
+// A stop of tens of thousands of workers parks one batch each; parking and
+// draining them must stay linear, or the event loop stalls on Restart.
+func TestParkScales(t *testing.T) {
+	w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	const n = 200_000
+	seqs := rand.Perm(n)
+
+	start := time.Now()
+	for _, seq := range seqs {
+		w.park([]iJob[int]{newJob(seq, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: uint64(seq)})
+	}
+	buf := make([]iJob[int], 1)
+	prev := -1
+	for {
+		k, _ := w.unpark(buf)
+		if k == 0 {
+			break
+		}
+		require.Greater(t, buf[0].Data(), prev, "dispatch order")
+		prev = buf[0].Data()
+	}
+	assert.Equal(t, n-1, prev, "every batch came back")
+	assert.Less(t, time.Since(start), 5*time.Second, "park and unpark of %d batches must be linear", n)
+}
+
+// One worker runs jobs in queue order whatever the batch, so a concurrency
+// of 1 batches like before the budget: up to 32 jobs a hand-off.
+func TestConcurrencyOneKeepsFullBatches(t *testing.T) {
+	block := make(chan struct{})
+	w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(1))
+	defer close(block)
+	defer w.Stop()
+
+	q := queues.NewQueue[any]()
+	for range 100 {
+		q.Enqueue(newJob("x", loadJobConfigs(w.configs())))
+	}
+	w.bind(q, 1)
+	w.jobNanos.Store(50_000) // 50 µs: the budget alone would allow 1
+
+	_, err := w.processNextJob()
+	assert.NoError(t, err)
+	assert.Equal(t, 100-maxBatch, q.Len(), "a full batch of 32")
 }

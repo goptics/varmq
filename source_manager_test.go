@@ -126,9 +126,9 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 	var m sourceManager[iJob[string]] = newSourceManager[iJob[string]]()
 	assert.Nil(t, m.purgeGen(), "empty")
 
-	fifo := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: maxBatch}
+	fifo := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: maxBatch, purge: &purgeState{}}
 	m = m.add(fifo, math.MaxInt, RoundRobin)
-	assert.Same(t, &fifo.purges, m.purgeGen(), "direct forwards the source's counter")
+	assert.Same(t, &fifo.purge.gen, m.purgeGen(), "direct forwards the source's counter")
 
 	m = m.add(newTestSource(), math.MaxInt, RoundRobin)
 	assert.Nil(t, m.purgeGen(), "strategy")
