@@ -19,10 +19,10 @@
   </p>
 
   <p>
-    A high-performance message queue and pool system for Go that simplifies concurrent task processing using <a href="#concurrency">worker pool</a>. Through Go generics, it provides type safety without sacrificing performance.
+    A typed worker pool and message queue for Go. Each worker is its own <a href="#concurrency">pool</a> and pulls jobs from any mix of sources: in-memory, priority, <a href="#persistent-and-distributed-queues">persistent and distributed</a> queues, or <a href="#topic-fan-out">topic</a> subscriptions. Go generics keep every job type-safe.
   </p>
   <p>
-    With <code>VarMQ</code>, you can process messages asynchronously, handle errors properly, store data persistently, and scale across systems using <a href="#built-in-adapters">adapters</a>. All through a clean, intuitive API that feels natural to Go developers.
+    Built for throughput: lock-free appends, <a href="#batched-dispatch">batched dispatch</a> and small in-memory jobs keep the hot path lean (<a href="#benchmarks">benchmarks</a>). Pause, stop, purge or resize a pool safely, inspect it over <a href="#rest-api">REST</a>, and plug in your own storage through <a href="#built-in-adapters">adapters</a>.
   </p>
 </div>
 
@@ -40,7 +40,7 @@
   - `NewResultWorker` - Returns result and error
 - **🚦 Concurrency control**: Fine-grained control over worker pool size, dynamic tuning and idle workers management
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
-- **📢 Topic Fan-out**: Publish once, every subscribed worker gets its own copy
+- **📢 Topic Fan-out**: Publish once, every subscribed worker gets its own job from one shared log
 - **💾 Persistence**: Support for durable storage through adapter interfaces
 - **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
 - **📡 REST API**: Built-in HTTP endpoints to inspect worker status and manage state (pause, resume, stop, restart)
@@ -85,29 +85,38 @@ A single event loop sleeps until something signals it: `Add()` putting a job in 
 
 ![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
 
+### Priority Queue
+
+You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
+
+```go
+// just bind priority queue
+queue := worker.BindPriorityQueue()
+
+// add jobs to priority queue
+for i := range 10 {
+    queue.Add(i, i%2) // prioritize even tasks
+}
+```
+
+↗️ **[Run it on Playground](https://go.dev/play/p/CHF8PVyrBI0)**
+
+Jobs waiting in a priority queue are reordered, so a higher-priority job added later is dispatched first:
+
+![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
+
 ### Concurrency
 
 ```go
-package main
+worker := varmq.NewWorker(func(j varmq.Job[int]) {
+  fmt.Printf("Processing %d\n", j.Data())
+  time.Sleep(500 * time.Millisecond)
+}, 10) // with concurrency 10 or set 0 for parallelism
+defer worker.WaitUntilIdle()
+queue := worker.BindQueue()
 
-import (
-    "fmt"
-    "time"
-
-    "github.com/goptics/varmq"
-)
-
-func main() {
-  worker := varmq.NewWorker(func(j varmq.Job[int]) {
-    fmt.Printf("Processing %d\n", j.Data())
-    time.Sleep(500 * time.Millisecond)
-  }, 10) // with concurrency 10 or set 0 for parallelism
-  defer worker.WaitUntilIdle()
-  queue := worker.BindQueue()
-
-  for i := range 100 {
-    queue.Add(i)
-  }
+for i := range 100 {
+  queue.Add(i)
 }
 ```
 
@@ -160,26 +169,6 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Priority queue | No | A higher-priority job added later must not wait behind a batch. |
 | Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
 | Worker bound to several queues | No | The strategy picks a queue for every single job. |
-
-### Priority Queue
-
-You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
-
-```go
-// just bind priority queue
-queue := worker.BindPriorityQueue()
-
-// add jobs to priority queue
-for i := range 10 {
-    queue.Add(i, i%2) // prioritize even tasks
-}
-```
-
-↗️ **[Run it on Playground](https://go.dev/play/p/CHF8PVyrBI0)**
-
-Jobs waiting in a priority queue are reordered, so a higher-priority job added later is dispatched first:
-
-![VarMQ priority queue with one worker](./assets/diagrams/varmq-priority-queue.svg)
 
 ## 💡 Highlighted Features
 
