@@ -397,12 +397,12 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 1,036        | 98            | 1                       |
-|                  | Priority       | 1,121        | 112           | 2                       |
-| **ErrWorker**    | ErrQueue       | 1,224        | 274           | 4                       |
-|                  | ErrPriority    | 1,254        | 288           | 5                       |
-| **ResultWorker** | ResultQueue    | 1,219        | 322           | 4                       |
-|                  | ResultPriority | 1,274        | 336           | 5                       |
+| **Worker**       | Queue          | 1,020        | 86            | 1                       |
+|                  | Priority       | 1,057        | 64            | 1                       |
+| **ErrWorker**    | ErrQueue       | 1,055        | 110           | 1                       |
+|                  | ErrPriority    | 1,093        | 88            | 1                       |
+| **ResultWorker** | ResultQueue    | 1,053        | 102           | 1                       |
+|                  | ResultPriority | 1,093        | 80            | 1                       |
 
 ### `AddAll` Operation
 
@@ -410,22 +410,32 @@ Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
 
 | Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
 | ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 230,162      | 132,171       | 3,004                   |
-|                  | Priority       | 886,444      | 146,142       | 4,002                   |
-| **ErrWorker**    | ErrQueue       | 262,999      | 156,695       | 3,507                   |
-|                  | ErrPriority    | 912,068      | 170,664       | 4,505                   |
-| **ResultWorker** | ResultQueue    | 272,624      | 173,296       | 3,007                   |
-|                  | ResultPriority | 924,255      | 187,264       | 4,005                   |
+| **Worker**       | Queue          | 144,307      | 86,163        | 1,004                   |
+|                  | Priority       | 700,103      | 64,129        | 1,002                   |
+| **ErrWorker**    | ErrQueue       | 171,741      | 126,701       | 1,507                   |
+|                  | ErrPriority    | 745,010      | 104,669       | 1,505                   |
+| **ResultWorker** | ResultQueue    | 181,409      | 143,299       | 1,007                   |
+|                  | ResultPriority | 735,915      | 121,268       | 1,005                   |
 
 > [!Note]
 >
 > `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
-> e.g. for default `Queue`, the average time per item is approximately **230ns**, against about **1,036ns** for a single `Add` followed by `Wait`.
+> e.g. for default `Queue`, the average time per item is approximately **144ns**, against about **1,020ns** for a single `Add` followed by `Wait`.
 
 Why is `AddAll` so much faster per item than individual `Add` calls?
 
 1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
 2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
+
+### `Publish` Operation
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
+
+| Source | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ------ | ------------ | ------------- | ----------------------- |
+| Topic  | 126.8        | 76            | 1                       |
+
+One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
 
 ### Comparison with Other Packages
 
