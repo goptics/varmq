@@ -506,10 +506,10 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 - 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
 - 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
 
-**Summary**: time to run all 15M tasks in **seconds** and memory per 1M tasks in **MB** (**lower is better**); throughput in **million tasks/s**, averaged over every run (**higher is better**).
+**Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
 
-| Pool             | 4 CPUs   | 8 CPUs   | 24 CPUs  | Throughput | Memory |
-| ---------------- | -------: | -------: | -------: | ---------: | -----: |
+| Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
+| ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
 | **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
 | BufferedPool²    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
 | ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
