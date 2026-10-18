@@ -26,14 +26,24 @@
   </p>
 </div>
 
+<p align="center">
+  <a href="#-features">Features</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#-highlighted-features">Highlighted Features</a> ·
+  <a href="#how-it-works">How It Works</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="#api-reference">API Reference</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
+
 ## ✨ Features
 
 - **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load. [see benchmarks](#benchmarks)
-- **🛠️ Variants of queue types**:
+- **🛠️ Queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
-  - Persistent queues for durability across restarts
-  - Distributed queues for processing across multiple systems
+  - Persistent queues that survive restarts, via [adapters](#built-in-adapters)
+  - Distributed queues shared across instances, via [adapters](#built-in-adapters)
 - **🧩 Worker abstractions**:
   - `NewWorker` - Fire-and-forget operations (most performant)
   - `NewErrWorker` - Returns only error (when result isn't needed)
@@ -41,8 +51,6 @@
 - **🚦 Concurrency control**: Fine-grained control over worker pool size, dynamic tuning and idle workers management
 - **🧬 Multi Queue Binding**: Bind multiple queues to a single worker
 - **📢 Topic Fan-out**: Publish once, every subscribed worker gets its own job from one shared log
-- **💾 Persistence**: Support for durable storage through adapter interfaces
-- **🌐 Distribution**: Scale processing across multiple instances via adapter interfaces
 - **📡 REST API**: Built-in HTTP endpoints to inspect worker status and manage state (pause, resume, stop, restart)
 - **🧩 Extensible**: Build your own storage adapters by implementing VarMQ's [internal queue interfaces](./assets/diagrams/interface.drawio.png)
 
@@ -81,10 +89,6 @@ func main() {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/mobZd9pKcug)**
 
-A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
-
-![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
-
 ### Priority Queue
 
 You can use priority queue to prioritize jobs based on their priority. `Lower number = higher priority`
@@ -122,53 +126,10 @@ for i := range 100 {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/uP0rA-NrzZB)**
 
-Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free, and it hands each worker its share of the backlog in one go (a batch) rather than one job per wake-up.
-
-![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
-
 > [!Note]
 > Concurrency is a limit, not a pool size. A worker starts with a single goroutine and spawns more only while jobs are waiting, up to the limit. As the queue drains, the extra goroutines exit one by one, keeping one idle (or the share set by `varmq.WithMinIdleWorkerRatio`). To keep idle goroutines around for reuse, set `varmq.WithIdleWorkerExpiryDuration`: they are then removed only after sitting idle that long.
 
-### Batched dispatch
-
-Handing a job to a worker costs the event loop about the same whether the job takes a nanosecond or a minute. With many short jobs, handing them out one by one would keep the loop busier than the workers. So a worker can receive several jobs at once, a batch, and run them one after the other.
-
-A batch holds the smallest of three numbers:
-
-- **Fair share.** The waiting jobs split evenly across the workers, so every worker gets a job before any worker gets two.
-- **What the loop needs.** VarMQ measures how long jobs take and gives each worker just enough that, all together, the workers come back for more about once every 32 µs. Until a job has been measured, a worker gets one at a time.
-- **32**, the hard cap.
-
-With enough jobs waiting, that works out to:
-
-| Setup | Jobs per hand-off |
-|---|---|
-| 10 workers, 3 s jobs | 1, so jobs start in queue order |
-| 24 workers, 1 ms jobs | 1 |
-| 3,000 workers, 10 ms jobs | 10 |
-| 10,000+ workers, 10 ms jobs | 32 |
-| Concurrency 1, any jobs | up to 32: one worker runs jobs in order anyway |
-
-So slow jobs go out one at a time and keep their order, and batches only grow when the loop would otherwise become the bottleneck. The job time comes from the last finished batch: if jobs suddenly get slower, one worker can still receive a batch sized for the old, fast jobs before the size adjusts.
-
-Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time as workers free up.
-
-![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
-
-**While jobs wait in a batch.** A worker runs its batch one job after another and tells the loop once, when the batch is done. Jobs still waiting their turn are `Queued`: `NumPending` counts them, `NumProcessing` does not, and you can still close them.
-
-**On `Stop` or `Pause`.** Each worker finishes the job it is running and keeps the rest of its batch aside (parks them). Parked jobs stay `Queued`. `NumPending` counts them, but the queue's own `Len` does not, since they have already left the queue. On `Restart` or `Resume` they run first, in their original order. A `Purge` of their queue closes them at once.
-
-**Capacity.** A queue's capacity limit counts only jobs still in the queue, not jobs in a batch or parked, so up to 32 more per worker can be pending.
-
-**Which queues batch.**
-
-| Queue | Batches? | Why |
-|---|---|---|
-| In-memory queue, topic | Yes | |
-| Priority queue | No | A higher-priority job added later must not wait behind a batch. |
-| Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
-| Worker bound to several queues | No | The strategy picks a queue for every single job. |
+How jobs reach workers, and why some arrive in batches: [How It Works](#how-it-works).
 
 ## 💡 Highlighted Features
 
@@ -218,27 +179,27 @@ Bind multiple queues to a single worker, enabling efficient processing of jobs f
 
 ```go
 worker := varmq.NewWorker(func(j varmq.Job[string]) {
-	fmt.Println("Processing:", j.Data())
-	time.Sleep(500 * time.Millisecond) // Simulate work
+  fmt.Println("Processing:", j.Data())
+  time.Sleep(500 * time.Millisecond) // Simulate work
 }) // change strategy through using varmq.WithStrategy default is varmq.Priority
 defer worker.WaitUntilIdle()
 
-// Bind to a standard queues with coronological priorities
+// Bind to standard queues in chronological priority order
 // You can change queue priority using varmq.WithQueuePriority function
 q1 := worker.BindQueue()         // highest
 q2 := worker.BindQueue()         // medium
 pq := worker.BindPriorityQueue() // lowest
 
 for i := range 15 {
-	q2.Add(fmt.Sprintf("Task queue-2 %d", i))
+  q2.Add(fmt.Sprintf("Task queue-2 %d", i))
 }
 
 for i := range 10 {
-	pq.Add(fmt.Sprintf("Task priority-queue %d", i), i%2) // prioritize even tasks
+  pq.Add(fmt.Sprintf("Task priority-queue %d", i), i%2) // prioritize even tasks
 }
 
 for i := range 10 {
-	q1.Add(fmt.Sprintf("Task queue-1 %d", i))
+  q1.Add(fmt.Sprintf("Task queue-1 %d", i))
 }
 ```
 
@@ -293,36 +254,28 @@ VarMQ provides a `NewResultWorker` that returns both the result and error for ea
 
 ```go
 worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
- fmt.Println("Processing:", j.Data())
- time.Sleep(500 * time.Millisecond) // Simulate work
- data := j.Data()
+  fmt.Println("Processing:", j.Data())
+  time.Sleep(500 * time.Millisecond) // Simulate work
+  data := j.Data()
 
- if data == "error" {
-  return 0, errors.New("error occurred")
- }
+  if data == "error" {
+    return 0, errors.New("error occurred")
+  }
 
- return len(data), nil
+  return len(data), nil
 })
 defer worker.WaitUntilIdle()
 queue := worker.BindQueue()
 
-// Add jobs to the queue (non-blocking)
+// Add returns at once; Result blocks until that job is done
 if job, ok := queue.Add("The length of this string is 31"); ok {
- fmt.Println("Job 1 added to queue.")
-
- go func() {
-  result, _ := job.Result()
-  fmt.Println("Result:", result)
- }()
+  result, err := job.Result()
+  fmt.Println("Result:", result, err) // Result: 31 <nil>
 }
 
 if job, ok := queue.Add("error"); ok {
- fmt.Println("Job 2 added to queue.")
-
- go func() {
   _, err := job.Result()
-  fmt.Println("Result:", err)
- }()
+  fmt.Println("Error:", err) // Error: error occurred
 }
 ```
 
@@ -357,6 +310,30 @@ for i := range 100 {
 > [!Important]
 > Function helpers don't support persistence or distribution since functions cannot be serialized.
 
+### Lifecycle and Errors
+
+A worker can be paused, resumed, resized and restarted while it runs. Each call returns at once; jobs already running always finish.
+
+```go
+worker := varmq.NewWorker(process, 4,
+  varmq.WithContext(ctx), // cancelling ctx stops the worker
+  varmq.WithErrHandler(func(w varmq.Worker, err error) {
+    log.Println("varmq:", err) // dequeue, parse and other internal errors
+  }),
+)
+
+worker.Pause()     // stop taking new jobs; unstarted jobs stay queued
+worker.Resume()    // carry on
+worker.TunePool(8) // change concurrency on the fly
+worker.Restart()   // stop and start again, keeping pending jobs
+worker.Stop()      // graceful stop
+
+worker.Wait()          // block until no job is running or pending
+worker.WaitUntilIdle() // block until the worker is Idle (never returns while paused or stopped)
+```
+
+`Status()` reports the state (`Running`, `Idle`, `Paused`, `Stopped`, ...), and `PauseAndWait`, `StopAndWait`, `WaitUntilPaused` and `WaitUntilStopped` block until a state is reached.
+
 ### REST API
 
 VarMQ provides a built-in HTTP REST API for inspecting worker status and managing worker state remotely. Register the handler on any `http.Server` to expose endpoints:
@@ -380,68 +357,68 @@ Available endpoints:
 > [!Warning]
 > The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.
 
+## How It Works
+
+### Event loop
+
+A single event loop sleeps until something signals it: `Add()` putting a job in the queue, or a worker finishing one. On each signal it hands jobs to workers while the queue has work and a worker slot is free, then goes back to waiting.
+
+![VarMQ event loop with one worker](./assets/diagrams/varmq-single-worker.svg)
+
+### Worker pool
+
+Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are simply dropped. One wake-up is enough: the loop keeps dispatching jobs back to back while the queue has work and a worker slot is free, and it hands each worker its share of the backlog in one go (a batch) rather than one job per wake-up.
+
+![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
+
+### Batched dispatch
+
+Handing a job to a worker costs the event loop about the same whether the job takes a nanosecond or a minute. With many short jobs, handing them out one by one would keep the loop busier than the workers. So a worker can receive several jobs at once, a batch, and run them one after the other.
+
+A batch holds the smallest of three numbers:
+
+- **Fair share.** The waiting jobs split evenly across the workers, so every worker gets a job before any worker gets two.
+- **What the loop needs.** VarMQ measures how long jobs take and gives each worker just enough that, all together, the workers come back for more about once every 32 µs. Until a job has been measured, a worker gets one at a time.
+- **32**, the hard cap.
+
+With enough jobs waiting, that works out to:
+
+| Setup | Jobs per hand-off |
+|---|---|
+| 10 workers, 3 s jobs | 1, so jobs start in queue order |
+| 24 workers, 1 ms jobs | 1 |
+| 3,000 workers, 10 ms jobs | 10 |
+| 10,000+ workers, 10 ms jobs | 32 |
+| Concurrency 1, any jobs | up to 32: one worker runs jobs in order anyway |
+
+So slow jobs go out one at a time and keep their order, and batches only grow when the loop would otherwise become the bottleneck. The job time comes from the last finished batch: if jobs suddenly get slower, one worker can still receive a batch sized for the old, fast jobs before the size adjusts.
+
+Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time as workers free up.
+
+![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
+
+**While jobs wait in a batch.** A worker runs its batch one job after another and tells the loop once, when the batch is done. Jobs still waiting their turn are `Queued`: `NumPending` counts them, `NumProcessing` does not, and you can still close them.
+
+**On `Stop` or `Pause`.** Each worker finishes the job it is running and keeps the rest of its batch aside (parks them). Parked jobs stay `Queued`. `NumPending` counts them, but the queue's own `Len` does not, since they have already left the queue. On `Restart` or `Resume` they run first, in their original order. A `Purge` of their queue closes them at once.
+
+**Capacity.** A queue's capacity limit counts only jobs still in the queue, not jobs in a batch or parked, so up to 32 more per worker can be pending.
+
+**Which queues batch.**
+
+| Queue | Batches? | Why |
+|---|---|---|
+| In-memory queue, topic | Yes | |
+| Priority queue | No | A higher-priority job added later must not wait behind a batch. |
+| Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
+| Worker bound to several queues | No | The strategy picks a queue for every single job. |
+
 ## Benchmarks
-
-```text
-goos: linux
-goarch: amd64
-pkg: github.com/goptics/varmq
-cpu: 13th Gen Intel(R) Core(TM) i7-13700
-```
-
-### `Add` Operation
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
-
-> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
-
-| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 1,020        | 86            | 1                       |
-|                  | Priority       | 1,057        | 64            | 1                       |
-| **ErrWorker**    | ErrQueue       | 1,055        | 110           | 1                       |
-|                  | ErrPriority    | 1,093        | 88            | 1                       |
-| **ResultWorker** | ResultQueue    | 1,053        | 102           | 1                       |
-|                  | ResultPriority | 1,093        | 80            | 1                       |
-
-### `AddAll` Operation
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
-
-| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 144,307      | 86,163        | 1,004                   |
-|                  | Priority       | 700,103      | 64,129        | 1,002                   |
-| **ErrWorker**    | ErrQueue       | 171,741      | 126,701       | 1,507                   |
-|                  | ErrPriority    | 745,010      | 104,669       | 1,505                   |
-| **ResultWorker** | ResultQueue    | 181,409      | 143,299       | 1,007                   |
-|                  | ResultPriority | 735,915      | 121,268       | 1,005                   |
-
-> [!Note]
->
-> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
-> e.g. for default `Queue`, the average time per item is approximately **144ns**, against about **1,020ns** for a single `Add` followed by `Wait`.
-
-Why is `AddAll` so much faster per item than individual `Add` calls?
-
-1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
-2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
-
-### `Publish` Operation
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
-
-| Worker Type | Queue Type | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ----------- | ---------- | ------------ | ------------- | ----------------------- |
-| **Worker**  | Topic      | 126.8        | 76            | 1                       |
-
-One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
 
 ### Comparison with Other Packages
 
 `VarMQ` is benchmarked against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
 
-#### Features
+#### Feature matrix
 
 | Feature                                   | VarMQ | ants | pond v2 | conc | workerpool |
 | ----------------------------------------- | :---: | :--: | :-----: | :--: | :--------: |
@@ -504,7 +481,7 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 
 - 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
 - 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
-- 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
+- 📋 **[Bench Logs](https://varmq.goptics.org/bench-log/)** - Release benchmark tracking
 
 **Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
 
@@ -518,7 +495,71 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 | workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
 | pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
 
+Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
+
 <sub>² Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
+
+### Micro-benchmarks
+
+<details>
+<summary>Cost of a single <code>Add</code>, <code>AddAll</code> and <code>Publish</code> call</summary>
+
+```text
+goos: linux
+goarch: amd64
+pkg: github.com/goptics/varmq
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
+```
+
+#### `Add`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
+
+> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
+
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 1,020        | 86            | 1                       |
+|                  | Priority       | 1,057        | 64            | 1                       |
+| **ErrWorker**    | ErrQueue       | 1,055        | 110           | 1                       |
+|                  | ErrPriority    | 1,093        | 88            | 1                       |
+| **ResultWorker** | ResultQueue    | 1,053        | 102           | 1                       |
+|                  | ResultPriority | 1,093        | 80            | 1                       |
+
+#### `AddAll`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
+
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 144,307      | 86,163        | 1,004                   |
+|                  | Priority       | 700,103      | 64,129        | 1,002                   |
+| **ErrWorker**    | ErrQueue       | 171,741      | 126,701       | 1,507                   |
+|                  | ErrPriority    | 745,010      | 104,669       | 1,505                   |
+| **ResultWorker** | ResultQueue    | 181,409      | 143,299       | 1,007                   |
+|                  | ResultPriority | 735,915      | 121,268       | 1,005                   |
+
+> [!Note]
+>
+> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
+> e.g. for default `Queue`, the average time per item is approximately **144ns**, against about **1,020ns** for a single `Add` followed by `Wait`.
+
+Why is `AddAll` so much faster per item than individual `Add` calls?
+
+1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
+2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
+
+#### `Publish`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
+
+| Worker Type | Queue Type | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ----------- | ---------- | ------------ | ------------- | ----------------------- |
+| **Worker**  | Topic      | 126.8        | 76            | 1                       |
+
+One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
+
+</details>
 
 ## API Reference
 
