@@ -439,9 +439,9 @@ One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait
 
 ### Comparison with Other Packages
 
-The [benchmark repository](https://github.com/goptics/varmq-benchmarks) runs `VarMQ` against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools, across producer counts from one to a million, CPU-bound and I/O-bound tasks, and 4, 8 and 24 CPUs. `VarMQ` draws on some of Pond's design patterns and adds queue management and persistence on top.
+`VarMQ` is benchmarked against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
 
-**Feature comparison:**
+#### Features
 
 | Feature                                   | VarMQ | ants | pond v2 | conc | workerpool |
 | ----------------------------------------- | :---: | :--: | :-----: | :--: | :--------: |
@@ -462,99 +462,63 @@ The [benchmark repository](https://github.com/goptics/varmq-benchmarks) runs `Va
 | Task counters (submitted, failed, ...)    |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |
 | Built-in REST API                         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
 
-<sub>Based on each package's documentation as of October 2026: ants v2 (`PoolWithFuncGeneric`, `Tune`, `Reboot`, `PanicHandler`), pond v2 (`NewResultPool`, `NewGroup`, `Resize`, `WithQueueSize`), conc `pool`, workerpool v1 (`Pause(ctx)`). ¹ conc re-raises a task's panic from `Wait` by design.</sub>
+<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design.</sub>
 
-### Performance
+#### Performance
 
-Each run submits 1M tasks to a pool of 50K workers in five producer patterns, from one producer with 1M tasks (`1u-1Mt`) to 1M producers with one task each (`1Mu-1t`). Seven pools take part: VarMQ, ants, pond v2, conc, workerpool, and two hand-rolled pools of fixed workers reading a channel (`GoroutinePool` unbuffered, `BufferedPool` with 1M slots). Measured on an i7-13700 with `GOMAXPROCS` set to 4, 8 and 24. The best value in each row is in bold; each workload name links to its live chart.
-
-Charts for the I/O workload, stacked by producer pattern. A chart's *Total* adds up the five patterns, while the throughput and memory tables below average them.
+Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Charts for the sleep task:
 
 <details>
-<summary><b>4 CPUs</b>: sleep 10 ms tasks, 50K workers</summary>
+<summary><b>4 CPUs</b></summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-4cpu-dark.png">
   <img alt="Execution time, throughput and memory of seven Go worker pools on 4 CPUs" src="./assets/bench/bench-4cpu-light.png">
 </picture>
 
-[Open this chart live](https://goptics.github.io/varmq-benchmarks/?d=2&g=0)
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=2&g=0)
 
 </details>
 <details>
-<summary><b>8 CPUs</b>: sleep 10 ms tasks, 50K workers</summary>
+<summary><b>8 CPUs</b></summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-8cpu-dark.png">
   <img alt="Execution time, throughput and memory of seven Go worker pools on 8 CPUs" src="./assets/bench/bench-8cpu-light.png">
 </picture>
 
-[Open this chart live](https://goptics.github.io/varmq-benchmarks/?d=1&g=0)
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=1&g=0)
 
 </details>
 <details>
-<summary><b>24 CPUs</b>: sleep 10 ms tasks, 50K workers</summary>
+<summary><b>24 CPUs</b></summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-24cpu-dark.png">
   <img alt="Execution time, throughput and memory of seven Go worker pools on 24 CPUs" src="./assets/bench/bench-24cpu-light.png">
 </picture>
 
-[Open this chart live](https://goptics.github.io/varmq-benchmarks/?d=0&g=0)
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=0&g=0)
 
 </details>
 
-Full results, with every workload and pool size:
-
 - 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
-- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Visual performance comparisons
+- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
 - 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
 
-#### Summary
+**Summary**: time to run all 15M tasks in **seconds** and memory per 1M tasks in **MB**, **lower is better**.
 
-The tables below sum up the full benchmark suite through its three task types at 50K workers. The live charts above hold every workload and pool size.
+| Pool             | 4 CPUs   | 8 CPUs   | 24 CPUs  | Memory |
+| ---------------- | -------: | -------: | -------: | -----: |
+| **VarMQ**        | **5.10** | **3.55** | **3.97** | 115    |
+| BufferedPool²    | 5.57     | 5.44     | 10.38    | 23     |
+| ants             | 6.71     | 6.53     | 8.11     | 16     |
+| GoroutinePool²   | 7.45     | 7.26     | 14.44    | **15** |
+| conc             | 8.66     | 8.65     | 16.75    | **15** |
+| workerpool       | 10.72    | 12.76    | 16.00    | 28     |
+| pond v2          | 21.82    | 23.20    | 46.76    | 317    |
 
-Execution time in **seconds**, sum of the 5 producer patterns: **lower is better**
-
-| CPUs | Workload | VarMQ | Ants | Pond | Conc | WorkerPool | GoroutinePool | BufferedPool |
-| :--: | -------- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=0) | 2.29 | 2.53 | 7.52 | 3.15 | 3.71 | 2.74 | **1.77** |
-| 4 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=2&g=1) | **0.68** | 1.72 | 6.95 | 2.15 | 3.04 | 1.89 | 1.67 |
-| 4 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=2) | **2.13** | 2.46 | 7.35 | 3.36 | 3.98 | 2.82 | **2.13** |
-| 8 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=0) | **1.65** | 2.43 | 7.81 | 3.25 | 4.70 | 2.65 | 1.72 |
-| 8 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=1&g=1) | **0.61** | 1.79 | 8.10 | 2.29 | 3.31 | 2.05 | 1.80 |
-| 8 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=2) | **1.28** | 2.32 | 7.29 | 3.11 | 4.74 | 2.56 | 1.92 |
-| 24 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=0) | **1.93** | 2.92 | 12.79 | 5.54 | 6.78 | 4.66 | 3.36 |
-| 24 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=0&g=1) | **0.71** | 2.56 | 15.99 | 4.92 | 3.59 | 4.56 | 3.80 |
-| 24 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=2) | **1.33** | 2.63 | 17.99 | 6.29 | 5.63 | 5.22 | 3.22 |
-
-Throughput in **million tasks/s**, average of the 5 producer patterns: **higher is better**
-
-| CPUs | Workload | VarMQ | Ants | Pond | Conc | WorkerPool | GoroutinePool | BufferedPool |
-| :--: | -------- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=0) | 2.31 | 2.02 | 0.67 | 1.61 | 1.38 | 1.86 | **3.20** |
-| 4 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=2&g=1) | **8.12** | 2.96 | 0.74 | 2.41 | 1.76 | 2.72 | 3.16 |
-| 4 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=2) | 2.50 | 2.09 | 0.69 | 1.51 | 1.32 | 1.80 | **2.64** |
-| 8 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=0) | 3.04 | 2.09 | 0.65 | 1.59 | 1.27 | 1.91 | **3.25** |
-| 8 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=1&g=1) | **8.65** | 2.82 | 0.66 | 2.22 | 1.67 | 2.53 | 2.91 |
-| 8 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=2) | **3.96** | 2.19 | 0.69 | 1.63 | 1.29 | 1.98 | 2.92 |
-| 24 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=0) | **2.61** | 1.76 | 0.40 | 0.93 | 0.85 | 1.13 | 2.06 |
-| 24 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=0&g=1) | **9.08** | 2.10 | 0.32 | 1.08 | 1.49 | 1.16 | 1.62 |
-| 24 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=2) | **3.87** | 1.94 | 0.28 | 1.04 | 0.96 | 1.05 | 1.74 |
-
-Memory in **MB** allocated per pattern, average of the 5: **lower is better**
-
-| CPUs | Workload | VarMQ | Ants | Pond | Conc | WorkerPool | GoroutinePool | BufferedPool |
-| :--: | -------- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=0) | 132 | 24 | 345 | 18 | 43 | **17** | 26 |
-| 4 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=2&g=1) | 93 | **8** | 256 | 11 | 13 | 11 | 19 |
-| 4 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=2&g=2) | 119 | 17 | 339 | 16 | **15** | 16 | 24 |
-| 8 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=0) | 131 | 23 | 351 | 18 | 55 | **17** | 26 |
-| 8 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=1&g=1) | 94 | **8** | 259 | 11 | 15 | 11 | 19 |
-| 8 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=1&g=2) | 118 | **16** | 344 | **16** | 17 | **16** | 24 |
-| 24 | [I/O: sleep 10 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=0) | 132 | 22 | 353 | 17 | 61 | **16** | 27 |
-| 24 | [CPU: loop of 10](https://goptics.github.io/varmq-benchmarks/?d=0&g=1) | 93 | **8** | 264 | 11 | 19 | 11 | 19 |
-| 24 | [Mixed: loop 5 + sleep 5 ms](https://goptics.github.io/varmq-benchmarks/?d=0&g=2) | 118 | **15** | 346 | 16 | 18 | 16 | 24 |
+<sub>² Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
 
 ## API Reference
 
