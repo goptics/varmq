@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -1725,3 +1726,89 @@ func TestConcurrencyOneKeepsFullBatches(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 100-maxBatch, q.Len(), "a full batch of 32")
 }
+
+// The park paths the end-to-end tests do not reach on their own.
+func TestParkEdges(t *testing.T) {
+	newJobs := func(w *worker[int, iJob[int]], n int) []iJob[int] {
+		jobs := make([]iJob[int], n)
+		for i := range jobs {
+			jobs[i] = newJob(i, loadJobConfigs(w.configs()))
+		}
+		return jobs
+	}
+
+	t.Run("a batch purged before it is parked is closed, not parked", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		gen := &atomic.Uint64{}
+		stamp := pool.Stamp{Gen: gen, Epoch: gen.Load()}
+		gen.Add(1) // a Purge landed after the batch was taken
+
+		jobs := newJobs(w, 3)
+		w.park(jobs, stamp)
+
+		assert.Equal(t, 0, w.NumPending())
+		for _, j := range jobs {
+			assert.True(t, j.IsClosed())
+		}
+	})
+
+	t.Run("dropParked closes only the purged storage's jobs", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		purged, other := &atomic.Uint64{}, &atomic.Uint64{}
+		a, b := newJobs(w, 2), newJobs(w, 3)
+		w.park(a, pool.Stamp{Gen: purged})
+		w.park(b, pool.Stamp{Gen: other, Seq: 2})
+
+		w.dropParked(purged)
+
+		assert.Equal(t, 3, w.NumPending(), "the other storage's jobs stay parked")
+		for _, j := range a {
+			assert.True(t, j.IsClosed())
+		}
+		for _, j := range b {
+			assert.False(t, j.IsClosed())
+		}
+	})
+
+	t.Run("a worker registers once per storage", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		p := &purgeState{}
+		p.register(w.parkHook())
+		p.register(w.parkHook())
+		assert.Len(t, p.hooks, 1)
+	})
+
+	t.Run("custom storage gets its own state, the in-memory queue a shared one", func(t *testing.T) {
+		custom := &noAttachQueue{queues.NewQueue[any]()}
+		assert.NotSame(t, purgeStateFor(custom), purgeStateFor(custom))
+
+		q := queues.NewQueue[any]()
+		assert.Same(t, purgeStateFor(q), purgeStateFor(q))
+		assert.Nil(t, purgeStateOf(nil), "a source without purge state")
+	})
+
+	t.Run("purge forgets workers that were collected", func(t *testing.T) {
+		p := &purgeState{}
+		live := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		p.register(live.parkHook())
+		p.register(&parkHook{drop: func(*atomic.Uint64) { t.Error("a collected worker was called") }})
+		runtime.GC()
+		runtime.GC()
+
+		p.purge()
+
+		assert.Len(t, p.hooks, 1, "only the live worker remains")
+		assert.Equal(t, uint64(1), p.gen.Load())
+		runtime.KeepAlive(live)
+	})
+}
+
+// noAttachQueue is custom FIFO storage that cannot carry shared state.
+type noAttachQueue struct{ q *queues.Queue[any] }
+
+func (n *noAttachQueue) Len() int              { return n.q.Len() }
+func (n *noAttachQueue) Dequeue() (any, bool)  { return n.q.Dequeue() }
+func (n *noAttachQueue) Values() []any         { return n.q.Values() }
+func (n *noAttachQueue) Purge()                { n.q.Purge() }
+func (n *noAttachQueue) Close() error          { return n.q.Close() }
+func (n *noAttachQueue) Enqueue(item any) bool { return n.q.Enqueue(item) }
