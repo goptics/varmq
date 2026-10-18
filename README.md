@@ -122,7 +122,27 @@ Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the si
 
 ### Batched dispatch
 
-Each wake-up of the event loop costs the same whether the job is tiny or slow, so instead of one job per wake-up a worker gets its share of the backlog in one go: the waiting jobs split evenly across the workers, at most 32 per hand-off. Every worker gets a job before any worker gets two, so parallelism is never lost. A batch is also only as big as the loop needs: with the job time measured from the previous batch, a worker gets just enough jobs that the workers together come back for a hand-off at most about every 32 µs, and a worker that has not run a job yet takes one at a time. Ten workers on 3 s jobs therefore take one job each, so jobs start in queue order (job 1 before job 59); ten thousand or more workers on 10 ms jobs take the full 32, which is what keeps the loop out of the way. A worker with a concurrency of 1 always takes full batches: one worker runs jobs in queue order anyway. The measure is one sample from the last batch, so a worker whose jobs suddenly turn slow still buffers one batch of them before it adapts. Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second is spawned for 2, and the last two go out one at a time as workers free up.
+Handing a job to a worker costs the event loop about the same whether the job takes a nanosecond or a minute. With many short jobs, handing them out one by one would keep the loop busier than the workers. So a worker can receive several jobs at once, a batch, and run them one after the other.
+
+A batch holds the smallest of three numbers:
+
+- **Fair share.** The waiting jobs split evenly across the workers, so every worker gets a job before any worker gets two.
+- **What the loop needs.** VarMQ measures how long jobs take and gives each worker just enough that, all together, the workers come back for more about once every 32 µs. Until a job has been measured, a worker gets one at a time.
+- **32**, the hard cap.
+
+With enough jobs waiting, that works out to:
+
+| Setup | Jobs per hand-off |
+|---|---|
+| 10 workers, 3 s jobs | 1, so jobs start in queue order |
+| 24 workers, 1 ms jobs | 1 |
+| 3,000 workers, 10 ms jobs | 10 |
+| 10,000+ workers, 10 ms jobs | 32 |
+| Concurrency 1, any jobs | up to 32: one worker runs jobs in order anyway |
+
+So slow jobs go out one at a time and keep their order, and batches only grow when the loop would otherwise become the bottleneck. The job time comes from the last finished batch: if jobs suddenly get slower, one worker can still receive a batch sized for the old, fast jobs before the size adjusts.
+
+Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time as workers free up.
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
