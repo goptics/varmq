@@ -98,13 +98,27 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 	node := w.pool.Cache.Get().(*pool.Elem[JobType])
 
 	go node.Value.Serve(func(jobs []JobType, stamp pool.Stamp) {
-		start := time.Now()
-		for _, j := range jobs {
+		start, ran := time.Now(), 0
+		for i, j := range jobs {
 			// Purged after it was taken: close it as Purge would have. Close
 			// fails only if the user closed it meanwhile; Purge ignores that too.
 			if stamp.Stale() {
 				_ = j.Close()
 				continue
+			}
+			// Stopping or pausing: the jobs not started yet stay with the
+			// worker, still Queued, and go out first, in order, when it runs
+			// again. Parked before the processing count drops, so Paused and
+			// Stopped are reached only once they are accounted for. The first
+			// job of a batch always runs: NumProcessing has counted it since
+			// the hand-off, so Stop waits for it as it always did. A job from
+			// a source that never batches (priority, acknowledging, several
+			// sources) has no Gen and runs for the same reason.
+			if i > 0 && stamp.Gen != nil && w.halting() {
+				rest := stamp
+				rest.Seq += uint64(i)
+				w.park(jobs[i:], rest)
+				break
 			}
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
@@ -120,10 +134,14 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()
+			ran++
 		}
 
-		if n := len(jobs); n > 0 {
-			w.jobNanos.Store(int64(time.Since(start)) / int64(n))
+		// Over the jobs that ran, so a batch mostly parked does not make
+		// jobs look cheaper than they are. At least 1: 0 means "not measured
+		// yet" to batchBudget.
+		if ran > 0 {
+			w.jobNanos.Store(max(1, int64(time.Since(start))/int64(ran)))
 		}
 
 		// Drop the job references before the node is up for grabs again, then
@@ -148,7 +166,7 @@ func (w *worker[T, JobType]) freePoolNode(node *pool.Elem[JobType]) {
 
 	// Keep the goroutine while there is more backlog than idle workers to
 	// run it; stopping it would only make the next dispatch spawn another.
-	if w.manager().Len() > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
+	if w.pending(w.manager()) > w.pool.Len() || enabledIdleWorkersRemover || w.pool.Len() < w.numMinIdleWorkers() {
 		w.pool.PushNode(node)
 		return
 	}

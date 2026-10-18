@@ -1,9 +1,12 @@
 """varmq-batch.svg: batched dispatch. 1 queue, concurrency 2, Add() called 8 times.
 
 processNextJob hands a worker its fair share of the backlog, pending / min(concurrency, pending),
-in one go (worker_eventloop.go batchSize). First wake-up: 8 / 2 = 4 jobs to Worker 1, then 4 / 2 = 2
-to a spawned Worker 2, both slots busy, 2 jobs wait. A worker runs its buffered jobs back to back and
-signals done once per hand-off; the later wake-ups find pending <= workers, so one job each.
+in one go (worker_eventloop.go batchSize), capped by batchBudget: with one live worker a batch of 4
+needs jobs measured under about 10.7 µs (ceil(32 µs / job) >= 4) by an earlier batch, which the seamless
+loop implies. First wake-up: 8 / 2 = 4 jobs to Worker 1,
+then 4 / 2 = 2 to a spawned Worker 2, both slots busy, 2 jobs wait. A worker runs its buffered jobs
+back to back and signals done once per hand-off; the later wake-ups find pending <= workers, so one
+job each.
 """
 import sys
 import kfu

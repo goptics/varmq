@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/goptics/varmq/internal/pool"
+	"github.com/stretchr/testify/require"
 	"math"
+	"math/rand"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -1539,6 +1543,17 @@ func TestBatchSize(t *testing.T) {
 	}
 }
 
+func TestBatchBudget(t *testing.T) {
+	assert.Equal(t, 1, batchBudget(0, 10), "nothing measured: one job, so slow jobs never queue behind each other")
+	assert.Equal(t, 1, batchBudget(3_000_000_000, 10), "ten workers on 3 s jobs: one at a time, in queue order")
+	assert.Equal(t, 1, batchBudget(1_000_000, 24), "24 workers on 1 ms jobs: 24k hand-offs/s is affordable")
+	assert.Equal(t, 4, batchBudget(100_000, 10), "ten workers on 100 µs jobs: a wake-up per 4 jobs")
+	assert.Equal(t, 10, batchBudget(10_000_000, 3_000), "3k workers on 10 ms jobs")
+	assert.Equal(t, maxBatch, batchBudget(10_000_000, 30_000), "30k workers on 10 ms jobs: the cap")
+	assert.Equal(t, maxBatch, batchBudget(50, 1), "trivial jobs fill the cap even on one worker")
+	assert.Equal(t, maxBatch, batchBudget(50, 0), "...and before the first worker is spawned")
+}
+
 func TestWorthSpawning(t *testing.T) {
 	assert.True(t, worthSpawning(1, 0, 0), "nothing measured: fair share")
 	assert.True(t, worthSpawning(1000, 50, 0), "no goroutine yet")
@@ -1587,3 +1602,213 @@ func TestDispatchWaitsInsteadOfSpawning(t *testing.T) {
 
 	close(block)
 }
+
+// A worker that has not measured its jobs yet takes them one at a time: the
+// first N jobs start first on N workers, and a Stop leaves every job not yet
+// started in the queue rather than in a worker's buffer.
+func TestColdDispatchIsOneJobPerWorker(t *testing.T) {
+	var mu sync.Mutex
+	var started []int
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		mu.Lock()
+		started = append(started, j.Data())
+		mu.Unlock()
+		<-release
+	}, WithConcurrency(3), WithAutoRun(false))
+	q := w.BindQueue()
+	for i := range 10 {
+		_, ok := q.Add(i)
+		assert.True(t, ok)
+	}
+
+	assert.NoError(t, w.Start())
+	// NumProcessing counts slots the dispatcher reserved, before the job
+	// body runs; wait for the bodies.
+	assert.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(started) == 3 }, time.Second, time.Millisecond)
+
+	mu.Lock()
+	assert.ElementsMatch(t, []int{0, 1, 2}, started, "the first three jobs start first")
+	mu.Unlock()
+	assert.Equal(t, 7, q.Len(), "the rest stay in the queue, not in worker buffers")
+
+	assert.NoError(t, w.Stop())
+	close(release)
+	w.WaitUntilStopped()
+
+	assert.Equal(t, 7, q.Len(), "Stop runs only the jobs already started")
+	mu.Lock()
+	assert.Len(t, started, 3)
+	mu.Unlock()
+}
+
+// park appends and unpark sorts once, so batches come back in dispatch order
+// whatever order they were parked in, and a split batch parked again by a
+// second stop keeps its place ahead of its own remainder.
+func TestParkUnparkOrder(t *testing.T) {
+	w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	batch := func(seq, n int) ([]iJob[int], pool.Stamp) {
+		jobs := make([]iJob[int], n)
+		for i := range jobs {
+			jobs[i] = newJob(seq+i, loadJobConfigs(w.configs()))
+		}
+		return jobs, pool.Stamp{Gen: gen, Seq: uint64(seq)}
+	}
+	for _, seq := range []int{20, 0, 10} { // parked out of order
+		w.park(batch(seq, 5))
+	}
+	assert.Equal(t, 15, w.NumPending())
+
+	buf := make([]iJob[int], 3) // smaller than a batch: batches get split
+	n, stamp := w.unpark(buf)
+	require.Equal(t, 3, n)
+	assert.Equal(t, uint64(0), stamp.Seq)
+	w.park(buf[:n], stamp) // a second stop parks the piece handed out
+
+	var got []int
+	for {
+		n, stamp := w.unpark(buf)
+		if n == 0 {
+			break
+		}
+		assert.Equal(t, uint64(buf[0].Data()), stamp.Seq, "the stamp numbers the first job handed out")
+		for _, j := range buf[:n] {
+			got = append(got, j.Data())
+		}
+	}
+	assert.Equal(t, []int{0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 20, 21, 22, 23, 24}, got)
+	assert.Equal(t, 0, w.NumPending())
+}
+
+// A stop of tens of thousands of workers parks one batch each; parking and
+// draining them must stay linear, or the event loop stalls on Restart.
+func TestParkScales(t *testing.T) {
+	w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	const n = 200_000
+	seqs := rand.Perm(n)
+
+	start := time.Now()
+	for _, seq := range seqs {
+		w.park([]iJob[int]{newJob(seq, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: uint64(seq)})
+	}
+	buf := make([]iJob[int], 1)
+	prev := -1
+	for {
+		k, _ := w.unpark(buf)
+		if k == 0 {
+			break
+		}
+		require.Greater(t, buf[0].Data(), prev, "dispatch order")
+		prev = buf[0].Data()
+	}
+	assert.Equal(t, n-1, prev, "every batch came back")
+	assert.Less(t, time.Since(start), 5*time.Second, "park and unpark of %d batches must be linear", n)
+}
+
+// One worker runs jobs in queue order whatever the batch, so a concurrency
+// of 1 batches like before the budget: up to 32 jobs a hand-off.
+func TestConcurrencyOneKeepsFullBatches(t *testing.T) {
+	block := make(chan struct{})
+	w := newWorker(func(j iJob[string]) { <-block }, WithAutoRun(false), WithConcurrency(1))
+	defer close(block)
+	defer w.Stop()
+
+	q := queues.NewQueue[any]()
+	for range 100 {
+		q.Enqueue(newJob("x", loadJobConfigs(w.configs())))
+	}
+	w.bind(q, 1)
+	w.jobNanos.Store(50_000) // 50 µs: the budget alone would allow 1
+
+	_, err := w.processNextJob()
+	assert.NoError(t, err)
+	assert.Equal(t, 100-maxBatch, q.Len(), "a full batch of 32")
+}
+
+// The park paths the end-to-end tests do not reach on their own.
+func TestParkEdges(t *testing.T) {
+	newJobs := func(w *worker[int, iJob[int]], n int) []iJob[int] {
+		jobs := make([]iJob[int], n)
+		for i := range jobs {
+			jobs[i] = newJob(i, loadJobConfigs(w.configs()))
+		}
+		return jobs
+	}
+
+	t.Run("a batch purged before it is parked is closed, not parked", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		gen := &atomic.Uint64{}
+		stamp := pool.Stamp{Gen: gen, Epoch: gen.Load()}
+		gen.Add(1) // a Purge landed after the batch was taken
+
+		jobs := newJobs(w, 3)
+		w.park(jobs, stamp)
+
+		assert.Equal(t, 0, w.NumPending())
+		for _, j := range jobs {
+			assert.True(t, j.IsClosed())
+		}
+	})
+
+	t.Run("dropParked closes only the purged storage's jobs", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		purged, other := &atomic.Uint64{}, &atomic.Uint64{}
+		a, b := newJobs(w, 2), newJobs(w, 3)
+		w.park(a, pool.Stamp{Gen: purged})
+		w.park(b, pool.Stamp{Gen: other, Seq: 2})
+
+		w.dropParked(purged)
+
+		assert.Equal(t, 3, w.NumPending(), "the other storage's jobs stay parked")
+		for _, j := range a {
+			assert.True(t, j.IsClosed())
+		}
+		for _, j := range b {
+			assert.False(t, j.IsClosed())
+		}
+	})
+
+	t.Run("a worker registers once per storage", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		p := &purgeState{}
+		p.register(w.parkHook())
+		p.register(w.parkHook())
+		assert.Len(t, p.hooks, 1)
+	})
+
+	t.Run("custom storage gets its own state, the in-memory queue a shared one", func(t *testing.T) {
+		custom := &noAttachQueue{queues.NewQueue[any]()}
+		assert.NotSame(t, purgeStateFor(custom), purgeStateFor(custom))
+
+		q := queues.NewQueue[any]()
+		assert.Same(t, purgeStateFor(q), purgeStateFor(q))
+		assert.Nil(t, purgeStateOf(nil), "a source without purge state")
+	})
+
+	t.Run("purge forgets workers that were collected", func(t *testing.T) {
+		p := &purgeState{}
+		live := newWorker(func(j iJob[int]) {}, WithAutoRun(false))
+		p.register(live.parkHook())
+		p.register(&parkHook{drop: func(*atomic.Uint64) { t.Error("a collected worker was called") }})
+		runtime.GC()
+		runtime.GC()
+
+		p.purge()
+
+		assert.Len(t, p.hooks, 1, "only the live worker remains")
+		assert.Equal(t, uint64(1), p.gen.Load())
+		runtime.KeepAlive(live)
+	})
+}
+
+// noAttachQueue is custom FIFO storage that cannot carry shared state.
+type noAttachQueue struct{ q *queues.Queue[any] }
+
+func (n *noAttachQueue) Len() int              { return n.q.Len() }
+func (n *noAttachQueue) Dequeue() (any, bool)  { return n.q.Dequeue() }
+func (n *noAttachQueue) Values() []any         { return n.q.Values() }
+func (n *noAttachQueue) Purge()                { n.q.Purge() }
+func (n *noAttachQueue) Close() error          { return n.q.Close() }
+func (n *noAttachQueue) Enqueue(item any) bool { return n.q.Enqueue(item) }

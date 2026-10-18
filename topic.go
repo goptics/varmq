@@ -140,10 +140,11 @@ func (t *topic[T]) subscribe(w *worker[T, iJob[T]], priority int) *subscription[
 
 	cursor := t.log.NewCursor()
 	view := &topicView[T]{cursor: cursor}
-	src := &topicSource[T]{cursor: cursor, w: w}
+	src := &topicSource[T]{cursor: cursor, w: w, purge: &purgeState{}}
+	src.purge.register(w.parkHook())
 	s := &subscription[T]{
 		// The topic's capacity makes IsFull report this subscription holding the topic full.
-		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity)), &src.purges),
+		externalBaseQueue: newExternalQueue(view, w, loadQueueConfigs(WithQueueCapacity(t.capacity)), src.purge),
 		worker:            w,
 		view:              view,
 		src:               src,

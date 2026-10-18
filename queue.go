@@ -2,7 +2,6 @@ package varmq
 
 import (
 	"io"
-	"sync/atomic"
 )
 
 // queue is the base implementation of the Queue interface
@@ -42,7 +41,7 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 	src := w.bind(q, c.priority)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
+		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
 		internalQueue:     q,
 	}
 }
@@ -105,7 +104,7 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 	src := w.bind(q, c.priority)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
+		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
 		internalQueue:     q,
 	}
 }
@@ -167,7 +166,7 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 	src := w.bind(q, c.priority)
 
 	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, w, c, src.purgeGen()),
+		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
 		internalQueue:     q,
 	}
 }
@@ -211,7 +210,7 @@ type externalBaseQueue struct {
 	w      Worker
 	q      IBaseQueue
 	config queueConfig
-	purges *atomic.Uint64 // the bound source's purge counter; nil if it never batches
+	purge  *purgeState // what Purge drives for the bound source; nil if it never batches
 }
 
 type IExternalBaseQueue interface {
@@ -224,7 +223,9 @@ type IExternalBaseQueue interface {
 	// NumPending counts them.
 	Len() int
 	// IsFull returns true if the queue has reached its configured capacity.
-	// If no capacity is set, it always returns false.
+	// If no capacity is set, it always returns false. Capacity bounds the
+	// jobs in storage: jobs a worker took in a batch, or parked on Stop or
+	// Pause, are outside it, at most 32 per worker.
 	IsFull() bool
 	// Purge removes all pending Jobs from the queue.
 	Purge()
@@ -232,7 +233,7 @@ type IExternalBaseQueue interface {
 	Close() error
 }
 
-func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purges *atomic.Uint64) *externalBaseQueue {
+func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purge *purgeState) *externalBaseQueue {
 	if cap, ok := q.(CapacitySetter); ok {
 		cap.SetCapacity(config.capacity)
 	}
@@ -241,7 +242,7 @@ func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purges *a
 		w:      worker,
 		q:      q,
 		config: config,
-		purges: purges,
+		purge:  purge,
 	}
 }
 
@@ -277,9 +278,12 @@ func (eq *externalBaseQueue) Purge() {
 	}
 }
 
+// bumpPurges makes every worker bound to this storage close, not run, the
+// jobs it took from it and has not started: those in a batch as it reaches
+// them, and those parked by a stop or pause at once.
 func (eq *externalBaseQueue) bumpPurges() {
-	if eq.purges != nil {
-		eq.purges.Add(1)
+	if eq.purge != nil {
+		eq.purge.purge()
 	}
 }
 

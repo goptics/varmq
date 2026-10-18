@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
   <title id="title">VarMQ batched dispatch: one hand-off carries a worker's share of the backlog</title>
-  <desc id="desc">Add is called eight times on a queue bound to a worker with concurrency 2. One signal wakes the event loop. processNextJob hands each worker its fair share of the backlog in a single hand-off: the first takes 8 / 2 = 4 jobs into Worker 1's channel buffer, the next takes 4 / 2 = 2 jobs into a freshly spawned Worker 2, and both slots are busy, so the last two jobs wait in the queue. Each worker runs its buffered jobs one after the other and signals done once per hand-off. When a worker frees, the share is one job because fewer jobs than workers are waiting, so the remaining two jobs go out one per wake-up. Eight jobs cost four wake-ups, four dequeue passes and four done signals instead of eight of each. When the queue is empty Worker 2 exits and the pool is back to the single idle Worker 1.</desc>
+  <desc id="desc">Add is called eight times on a queue bound to a worker with concurrency 2. One signal wakes the event loop. processNextJob hands each worker its fair share of the backlog in a single hand-off: the first takes 8 / 2 = 4 jobs into Worker 1's channel buffer, the next takes 4 / 2 = 2 jobs into a freshly spawned Worker 2, and both slots are busy, so the last two jobs wait in the queue. Each worker runs its buffered jobs one after the other and signals done once per hand-off. When a worker frees, the share is one job because fewer jobs than workers are waiting, so the remaining two jobs go out one per wake-up. Eight jobs cost four wake-ups, four dequeue passes and four done signals instead of eight of each. A batch is also capped by a budget, just enough jobs that the live workers come back for a hand-off about once every 32 microseconds, and by 32; these jobs are cheap, so neither cap binds here. When the queue is empty Worker 2 exits and the pool is back to the single idle Worker 1.</desc>
   <style>
     :root {
       --dur: 17s;
@@ -229,7 +229,7 @@
   <text id="k2" class="k a" x="535" y="362">4 / min(2, 4) = 2</text>
   <text id="k1" class="k a" x="535" y="362">2 / min(2, 2) = 1</text>
   <text id="k1b" class="k a" x="535" y="362">1 / min(2, 1) = 1</text>
-  <text class="m" x="535" y="380">at most 32 per hand-off</text>
+  <text class="m" x="535" y="380">batch = min(share, ⌈alive × 32 µs / job⌉, 32)</text>
   <path class="edge" d="M620 296H650M650 262V322"/>
   <path class="edge" d="M650 262H680" marker-end="url(#a)"/>
   <path class="edge" d="M650 322H680" marker-end="url(#a)"/>

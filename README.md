@@ -122,13 +122,44 @@ Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the si
 
 ### Batched dispatch
 
-Each wake-up of the event loop costs the same whether the job is tiny or slow, so instead of one job per wake-up a worker gets its share of the backlog in one go: the waiting jobs split evenly across the workers, at most 32 per hand-off. Every worker gets a job before any worker gets two, so parallelism is never lost. Below, 8 jobs with concurrency 2: the first worker takes 4, a second is spawned for 2, and the last two go out one at a time as workers free up.
+Handing a job to a worker costs the event loop about the same whether the job takes a nanosecond or a minute. With many short jobs, handing them out one by one would keep the loop busier than the workers. So a worker can receive several jobs at once, a batch, and run them one after the other.
+
+A batch holds the smallest of three numbers:
+
+- **Fair share.** The waiting jobs split evenly across the workers, so every worker gets a job before any worker gets two.
+- **What the loop needs.** VarMQ measures how long jobs take and gives each worker just enough that, all together, the workers come back for more about once every 32 µs. Until a job has been measured, a worker gets one at a time.
+- **32**, the hard cap.
+
+With enough jobs waiting, that works out to:
+
+| Setup | Jobs per hand-off |
+|---|---|
+| 10 workers, 3 s jobs | 1, so jobs start in queue order |
+| 24 workers, 1 ms jobs | 1 |
+| 3,000 workers, 10 ms jobs | 10 |
+| 10,000+ workers, 10 ms jobs | 32 |
+| Concurrency 1, any jobs | up to 32: one worker runs jobs in order anyway |
+
+So slow jobs go out one at a time and keep their order, and batches only grow when the loop would otherwise become the bottleneck. The job time comes from the last finished batch: if jobs suddenly get slower, one worker can still receive a batch sized for the old, fast jobs before the size adjusts.
+
+Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time as workers free up.
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
-A worker runs its batch back to back from its own channel buffer and signals the loop once at the end. Jobs waiting in a buffer are still `Queued`: they count as pending, not processing, and can still be closed.
+**While jobs wait in a batch.** A worker runs its batch one job after another and tells the loop once, when the batch is done. Jobs still waiting their turn are `Queued`: `NumPending` counts them, `NumProcessing` does not, and you can still close them.
 
-Only in-memory FIFO queues and topics batch. A priority queue hands out one job at a time, so a higher-priority job added later is not stuck behind a batch; an acknowledging source (persistent or distributed queues) hands out one at a time, so no worker holds unacknowledged messages that other consumers could take; and a worker bound to several queues takes one at a time, so the strategy picks a source for every job.
+**On `Stop` or `Pause`.** Each worker finishes the job it is running and keeps the rest of its batch aside (parks them). Parked jobs stay `Queued`. `NumPending` counts them, but the queue's own `Len` does not, since they have already left the queue. On `Restart` or `Resume` they run first, in their original order. A `Purge` of their queue closes them at once.
+
+**Capacity.** A queue's capacity limit counts only jobs still in the queue, not jobs in a batch or parked, so up to 32 more per worker can be pending.
+
+**Which queues batch.**
+
+| Queue | Batches? | Why |
+|---|---|---|
+| In-memory queue, topic | Yes | |
+| Priority queue | No | A higher-priority job added later must not wait behind a batch. |
+| Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
+| Worker bound to several queues | No | The strategy picks a queue for every single job. |
 
 ### Priority Queue
 

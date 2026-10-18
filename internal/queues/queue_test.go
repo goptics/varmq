@@ -485,3 +485,14 @@ func TestQueue(t *testing.T) {
 		})
 	})
 }
+
+func TestQueueAttach(t *testing.T) {
+	q := NewQueue[int]()
+	calls := 0
+	make := func() any { calls++; return &calls }
+
+	first := q.Attach(make)
+	assert.Same(t, first, q.Attach(make), "every caller gets the same value")
+	assert.Equal(t, 1, calls, "made once")
+	assert.NotSame(t, first, NewQueue[int]().Attach(func() any { return new(int) }), "each queue has its own")
+}

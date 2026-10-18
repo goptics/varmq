@@ -1,6 +1,10 @@
 package queues
 
-import "github.com/goptics/varmq/internal/topics"
+import (
+	"sync"
+
+	"github.com/goptics/varmq/internal/topics"
+)
 
 // Queue is a FIFO queue: an append-only log in fixed-size linked chunks read
 // by one consuming cursor, the same log a topic uses. Producers serialise only
@@ -10,6 +14,26 @@ import "github.com/goptics/varmq/internal/topics"
 type Queue[T any] struct {
 	log *topics.Log[T]
 	cur *topics.Cursor[T]
+
+	attachOnce sync.Once
+	attached   any
+
+	// Every Enqueue reads log. Padded to 128 bytes, a size class whose
+	// objects start on a cache-line boundary, so that read never shares a
+	// line with the cursor, allocated just before and written on every
+	// Dequeue: at 48 bytes the two sat side by side and cost a single
+	// producer 15%.
+	_ [128 - 8 - 8 - 16 - 16]byte
+}
+
+// Attach returns the value kept with this queue, made by make on the first
+// call. Every caller gets the same value, so it is state shared by everyone
+// holding the queue; varmq keeps the Purge state of the workers bound to it
+// here.
+func (q *Queue[T]) Attach(make func() any) any {
+	q.attachOnce.Do(func() { q.attached = make() })
+
+	return q.attached
 }
 
 // NewQueue creates a new empty queue.
