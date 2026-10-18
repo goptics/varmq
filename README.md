@@ -441,10 +441,28 @@ One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait
 
 The [benchmark repository](https://github.com/goptics/varmq-benchmarks) runs `VarMQ` against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools, across producer counts from one to a million, CPU-bound and I/O-bound tasks, and 4, 8 and 24 CPUs. `VarMQ` draws on some of Pond's design patterns and adds queue management and persistence on top.
 
-**Key Differences:**
+**Feature comparison:**
 
-- **Queue Types**: `VarMQ` provides multiple queue variants (standard, priority, persistent, distributed) vs Pond's single pool type
-- **Multi-Queue Management**: `VarMQ` supports binding multiple queues to a single worker with configurable strategies (Priority, RoundRobin, MaxLen, MinLen)
+| Feature                                   | VarMQ | ants | pond v2 | conc | workerpool |
+| ----------------------------------------- | :---: | :--: | :-----: | :--: | :--------: |
+| Generic (type-safe) API                   |  ✅   |  ✅  |   ✅    |  ✅  |     ❌     |
+| Tasks return results and errors           |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
+| Task groups (submit many, wait once)      |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
+| Priority queue                            |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Persistent queues (survive restarts)      |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Distributed queues (across instances)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Several queues bound to one pool          |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Topic fan-out (publish once, many pools)  |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Bounded queue, reject when full           |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |
+| Pause and resume                          |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |
+| Restart after stop                        |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |
+| Resize pool at runtime                    |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |
+| Cancel work via context                   |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
+| Panic recovery                            |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |
+| Task counters (submitted, failed, ...)    |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |
+| Built-in REST API                         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+
+<sub>Based on each package's documentation as of October 2026: ants v2 (`PoolWithFuncGeneric`, `Tune`, `Reboot`, `PanicHandler`), pond v2 (`NewResultPool`, `NewGroup`, `Resize`, `WithQueueSize`), conc `pool`, workerpool v1 (`Pause(ctx)`). ¹ conc re-raises a task's panic from `Wait` by design.</sub>
 
 For detailed performance comparisons and benchmarking results, visit:
 
