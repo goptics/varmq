@@ -506,17 +506,17 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 - 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
 - 📋 **[Bench Logs](https://goptics.github.io/varmq/bench-log/)** - Release benchmark tracking
 
-**Summary**: time to run all 15M tasks in **seconds** and memory per 1M tasks in **MB**, **lower is better**.
+**Summary**: time to run all 15M tasks in **seconds** and memory per 1M tasks in **MB** (**lower is better**); throughput in **million tasks/s**, averaged over every run (**higher is better**).
 
-| Pool             | 4 CPUs   | 8 CPUs   | 24 CPUs  | Memory |
-| ---------------- | -------: | -------: | -------: | -----: |
-| **VarMQ**        | **5.10** | **3.55** | **3.97** | 115    |
-| BufferedPool²    | 5.57     | 5.44     | 10.38    | 23     |
-| ants             | 6.71     | 6.53     | 8.11     | 16     |
-| GoroutinePool²   | 7.45     | 7.26     | 14.44    | **15** |
-| conc             | 8.66     | 8.65     | 16.75    | **15** |
-| workerpool       | 10.72    | 12.76    | 16.00    | 28     |
-| pond v2          | 21.82    | 23.20    | 46.76    | 317    |
+| Pool             | 4 CPUs   | 8 CPUs   | 24 CPUs  | Throughput | Memory |
+| ---------------- | -------: | -------: | -------: | ---------: | -----: |
+| **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
+| BufferedPool²    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
+| ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
+| GoroutinePool²   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
+| conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
+| workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
+| pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
 
 <sub>² Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
 
