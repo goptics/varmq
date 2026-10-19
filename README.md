@@ -479,9 +479,7 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 
 </details>
 
-- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
-- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
-- 📋 **[Bench Logs](https://varmq.goptics.org/bench-log/)** - Release benchmark tracking
+The charts above show only the sleep task at 50K workers. For every task, workload, pool size and CPU count, see the [interactive charts](https://goptics.github.io/varmq-benchmarks/); the harness and raw results live in [varmq-benchmarks](https://github.com/goptics/varmq-benchmarks).
 
 **Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
 
