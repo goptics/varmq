@@ -22,7 +22,7 @@
     A typed worker pool and message queue for Go. Each worker is its own <a href="#concurrency">pool</a> and pulls jobs from any mix of sources: in-memory, priority, <a href="#persistent-and-distributed-queues">persistent and distributed</a> queues, or <a href="#topic-fan-out">topic</a> subscriptions. Go generics keep every job type-safe.
   </p>
   <p>
-    Built for throughput: lock-free appends, <a href="#batched-dispatch">batched dispatch</a> and small in-memory jobs keep the hot path lean (<a href="#benchmarks">benchmarks</a>). Pause, stop, purge or resize a pool safely, inspect it over <a href="#rest-api">REST</a>, and plug in your own storage through <a href="#built-in-adapters">adapters</a>.
+    Built for throughput: lock-free appends, <a href="#batched-dispatch">batched dispatch</a> and small in-memory jobs keep the hot path lean (<a href="#comparison-and-benchmarks">benchmarks</a>). Pause, stop, purge or resize a pool safely, inspect it over <a href="#rest-api">REST</a>, and plug in your own storage through <a href="#built-in-adapters">adapters</a>.
   </p>
 </div>
 
@@ -31,14 +31,14 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#-highlighted-features">Highlighted Features</a> ·
   <a href="#how-it-works">How It Works</a> ·
-  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="#comparison-and-benchmarks">Comparison</a> ·
   <a href="#api-reference">API Reference</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
 ## ✨ Features
 
-- **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load. [see benchmarks](#benchmarks)
+- **⚡ High performance**: Optimized for high throughput with minimal overhead, even under heavy load. [see benchmarks](#performance)
 - **🛠️ Queue types**:
   - Standard queues for in-memory processing
   - Priority queues for importance-based ordering
@@ -412,13 +412,13 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
 | Worker bound to several queues | No | The strategy picks a queue for every single job. |
 
-## Benchmarks
+<a id="benchmarks"></a>
 
-### Comparison with Other Packages
+## Comparison and Benchmarks
 
-`VarMQ` is benchmarked against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
+`VarMQ` is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
 
-#### Feature matrix
+### Feature comparison
 
 | Feature                                  | VarMQ | ants | pond | conc | workerpool | errgroup | gopool |
 | ---------------------------------------- | :---: | :--: | :-----: | :--: | :--------: | :------: | :----: |
@@ -441,7 +441,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 <sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ `TryGo` refuses a task while every slot is busy; there is no queue.</sub>
 
-#### Performance
+### Performance
 
 Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Charts for the sleep task:
 
