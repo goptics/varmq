@@ -27,14 +27,163 @@
 </div>
 
 <p align="center">
+  <a href="#comparison-and-benchmarks">Comparison</a> ·
   <a href="#-features">Features</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#-highlighted-features">Highlighted Features</a> ·
   <a href="#how-it-works">How It Works</a> ·
-  <a href="#comparison-and-benchmarks">Comparison</a> ·
   <a href="#api-reference">API Reference</a> ·
   <a href="#contributing">Contributing</a>
 </p>
+
+<a id="benchmarks"></a>
+
+## Comparison and Benchmarks
+
+`VarMQ` is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
+
+### Feature comparison
+
+| Feature                                  | VarMQ | ants | pond | conc | workerpool | errgroup | gopool |
+| ---------------------------------------- | :---: | :--: | :-----: | :--: | :--------: | :------: | :----: |
+| Generic (type-safe) API                  |  ✅   |  ✅  |   ✅    |  ✅  |     ❌     |    ❌    |   ❌   |
+| Tasks return results and errors          |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |   ❌²    |   ❌   |
+| Task groups (submit many, wait once)     |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
+| Priority queue                           |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Persistent queues (survive restarts)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Distributed queues (across instances)    |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Several queues bound to one pool         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Topic fan-out (publish once, many pools) |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ✅³    |   ❌   |
+| Pause and resume                         |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |    ❌    |   ❌   |
+| Restart after stop                       |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Resize pool at runtime                   |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |    ❌    |   ✅   |
+| Cancel work via context                  |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
+| Panic recovery                           |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |    ❌    |   ✅   |
+| Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+
+<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ `TryGo` refuses a task while every slot is busy; there is no queue.</sub>
+
+### Performance
+
+Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Charts for the sleep task:
+
+<details>
+<summary><b>4 CPUs</b></summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-4cpu-dark.png">
+  <img alt="Execution time, throughput and memory of seven Go worker pools on 4 CPUs" src="./assets/bench/bench-4cpu-light.png">
+</picture>
+
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=2&g=0)
+
+</details>
+<details>
+<summary><b>8 CPUs</b></summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-8cpu-dark.png">
+  <img alt="Execution time, throughput and memory of seven Go worker pools on 8 CPUs" src="./assets/bench/bench-8cpu-light.png">
+</picture>
+
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=1&g=0)
+
+</details>
+<details>
+<summary><b>24 CPUs</b></summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-24cpu-dark.png">
+  <img alt="Execution time, throughput and memory of seven Go worker pools on 24 CPUs" src="./assets/bench/bench-24cpu-light.png">
+</picture>
+
+[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=0&g=0)
+
+</details>
+
+- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
+- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
+- 📋 **[Bench Logs](https://varmq.goptics.org/bench-log/)** - Release benchmark tracking
+
+**Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
+
+| Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
+| ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
+| **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
+| BufferedPool³    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
+| ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
+| GoroutinePool³   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
+| conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
+| workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
+| pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
+
+Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
+
+<sub>³ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
+
+### Micro-benchmarks
+
+<details>
+<summary>Cost of a single <code>Add</code>, <code>AddAll</code> and <code>Publish</code> call</summary>
+
+```text
+goos: linux
+goarch: amd64
+pkg: github.com/goptics/varmq
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
+```
+
+#### `Add`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
+
+> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
+
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 1,020        | 86            | 1                       |
+|                  | Priority       | 1,057        | 64            | 1                       |
+| **ErrWorker**    | ErrQueue       | 1,055        | 110           | 1                       |
+|                  | ErrPriority    | 1,093        | 88            | 1                       |
+| **ResultWorker** | ResultQueue    | 1,053        | 102           | 1                       |
+|                  | ResultPriority | 1,093        | 80            | 1                       |
+
+#### `AddAll`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
+
+| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
+| **Worker**       | Queue          | 144,307      | 86,163        | 1,004                   |
+|                  | Priority       | 700,103      | 64,129        | 1,002                   |
+| **ErrWorker**    | ErrQueue       | 171,741      | 126,701       | 1,507                   |
+|                  | ErrPriority    | 745,010      | 104,669       | 1,505                   |
+| **ResultWorker** | ResultQueue    | 181,409      | 143,299       | 1,007                   |
+|                  | ResultPriority | 735,915      | 121,268       | 1,005                   |
+
+> [!Note]
+>
+> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
+> e.g. for default `Queue`, the average time per item is approximately **144ns**, against about **1,020ns** for a single `Add` followed by `Wait`.
+
+Why is `AddAll` so much faster per item than individual `Add` calls?
+
+1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
+2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
+
+#### `Publish`
+
+Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
+
+| Worker Type | Queue Type | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
+| ----------- | ---------- | ------------ | ------------- | ----------------------- |
+| **Worker**  | Topic      | 126.8        | 76            | 1                       |
+
+One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
+
+</details>
 
 ## ✨ Features
 
@@ -411,155 +560,6 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Priority queue | No | A higher-priority job added later must not wait behind a batch. |
 | Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
 | Worker bound to several queues | No | The strategy picks a queue for every single job. |
-
-<a id="benchmarks"></a>
-
-## Comparison and Benchmarks
-
-`VarMQ` is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
-
-### Feature comparison
-
-| Feature                                  | VarMQ | ants | pond | conc | workerpool | errgroup | gopool |
-| ---------------------------------------- | :---: | :--: | :-----: | :--: | :--------: | :------: | :----: |
-| Generic (type-safe) API                  |  ✅   |  ✅  |   ✅    |  ✅  |     ❌     |    ❌    |   ❌   |
-| Tasks return results and errors          |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |   ❌²    |   ❌   |
-| Task groups (submit many, wait once)     |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
-| Priority queue                           |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Persistent queues (survive restarts)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Distributed queues (across instances)    |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Several queues bound to one pool         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Topic fan-out (publish once, many pools) |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ✅³    |   ❌   |
-| Pause and resume                         |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |    ❌    |   ❌   |
-| Restart after stop                       |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Resize pool at runtime                   |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |    ❌    |   ✅   |
-| Cancel work via context                  |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
-| Panic recovery                           |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |    ❌    |   ✅   |
-| Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-
-<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ `TryGo` refuses a task while every slot is busy; there is no queue.</sub>
-
-### Performance
-
-Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Charts for the sleep task:
-
-<details>
-<summary><b>4 CPUs</b></summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-4cpu-dark.png">
-  <img alt="Execution time, throughput and memory of seven Go worker pools on 4 CPUs" src="./assets/bench/bench-4cpu-light.png">
-</picture>
-
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=2&g=0)
-
-</details>
-<details>
-<summary><b>8 CPUs</b></summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-8cpu-dark.png">
-  <img alt="Execution time, throughput and memory of seven Go worker pools on 8 CPUs" src="./assets/bench/bench-8cpu-light.png">
-</picture>
-
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=1&g=0)
-
-</details>
-<details>
-<summary><b>24 CPUs</b></summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-24cpu-dark.png">
-  <img alt="Execution time, throughput and memory of seven Go worker pools on 24 CPUs" src="./assets/bench/bench-24cpu-light.png">
-</picture>
-
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=0&g=0)
-
-</details>
-
-- 📊 **[Benchmark Repository](https://github.com/goptics/varmq-benchmarks)** - Complete benchmark suite
-- 📈 **[Interactive Charts](https://goptics.github.io/varmq-benchmarks/)** - Every workload, pool size and CPU count
-- 📋 **[Bench Logs](https://varmq.goptics.org/bench-log/)** - Release benchmark tracking
-
-**Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
-
-| Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
-| ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
-| **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
-| BufferedPool³    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
-| ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
-| GoroutinePool³   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
-| conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
-| workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
-| pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
-
-Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
-
-<sub>³ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
-
-### Micro-benchmarks
-
-<details>
-<summary>Cost of a single <code>Add</code>, <code>AddAll</code> and <code>Publish</code> call</summary>
-
-```text
-goos: linux
-goarch: amd64
-pkg: github.com/goptics/varmq
-cpu: 13th Gen Intel(R) Core(TM) i7-13700
-```
-
-#### `Add`
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
-
-> Why use `-cpu=1`? Since the benchmark doesn’t test with more than 1 concurrent worker, a single CPU is ideal to accurately measure performance.
-
-| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 1,020        | 86            | 1                       |
-|                  | Priority       | 1,057        | 64            | 1                       |
-| **ErrWorker**    | ErrQueue       | 1,055        | 110           | 1                       |
-|                  | ErrPriority    | 1,093        | 88            | 1                       |
-| **ResultWorker** | ResultQueue    | 1,053        | 102           | 1                       |
-|                  | ResultPriority | 1,093        | 80            | 1                       |
-
-#### `AddAll`
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
-
-| Worker Type      | Queue Type     | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ---------------- | -------------- | ------------ | ------------- | ----------------------- |
-| **Worker**       | Queue          | 144,307      | 86,163        | 1,004                   |
-|                  | Priority       | 700,103      | 64,129        | 1,002                   |
-| **ErrWorker**    | ErrQueue       | 171,741      | 126,701       | 1,507                   |
-|                  | ErrPriority    | 745,010      | 104,669       | 1,505                   |
-| **ResultWorker** | ResultQueue    | 181,409      | 143,299       | 1,007                   |
-|                  | ResultPriority | 735,915      | 121,268       | 1,005                   |
-
-> [!Note]
->
-> `AddAll` benchmarks use a batch of **1000 items** per call. The reported numbers (`ns/op`, `B/op`, `allocs/op`) are totals for the whole batch. For per-item values, divide each by 1000.
-> e.g. for default `Queue`, the average time per item is approximately **144ns**, against about **1,020ns** for a single `Add` followed by `Wait`.
-
-Why is `AddAll` so much faster per item than individual `Add` calls?
-
-1. **Batched dispatch**: with a thousand jobs queued at once, the event loop hands each worker its share of the backlog in one wake-up instead of one job per wake-up, so the hand-off cost is spread over the batch. In-memory FIFO queues and topics do this; priority queues deliberately take one job per hand-off (a higher-priority job must never wait behind a batch), which is why their `AddAll` gains much less.
-2. **One wait, one group**: a single group job tracks the whole batch and the caller waits once, instead of a full enqueue, wake-up, run, wake-the-caller round trip per job.
-
-#### `Publish`
-
-Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
-
-| Worker Type | Queue Type | Time (ns/op) | Memory (B/op) | Allocations (allocs/op) |
-| ----------- | ---------- | ------------ | ------------- | ----------------------- |
-| **Worker**  | Topic      | 126.8        | 76            | 1                       |
-
-One worker subscribed to the topic. Unlike the `Add` benchmark, it does not wait for each job: it publishes `b.N` payloads and waits once at the end, so the number is per-payload throughput with batched dispatch, not a round trip.
-
-</details>
 
 ## API Reference
 
