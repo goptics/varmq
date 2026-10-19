@@ -416,30 +416,30 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 ### Comparison with Other Packages
 
-`VarMQ` is benchmarked against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
+`VarMQ` is benchmarked against [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
 
 #### Feature matrix
 
-| Feature                                   | VarMQ | ants | pond v2 | conc | workerpool |
-| ----------------------------------------- | :---: | :--: | :-----: | :--: | :--------: |
-| Generic (type-safe) API                   |  ✅   |  ✅  |   ✅    |  ✅  |     ❌     |
-| Tasks return results and errors           |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
-| Task groups (submit many, wait once)      |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
-| Priority queue                            |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
-| Persistent queues (survive restarts)      |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
-| Distributed queues (across instances)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
-| Several queues bound to one pool          |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
-| Topic fan-out (publish once, many pools)  |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
-| Bounded queue, reject when full           |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |
-| Pause and resume                          |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |
-| Restart after stop                        |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |
-| Resize pool at runtime                    |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |
-| Cancel work via context                   |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |
-| Panic recovery                            |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |
-| Task counters (submitted, failed, ...)    |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |
-| Built-in REST API                         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |
+| Feature                                  | VarMQ | ants | pond | conc | workerpool | errgroup | gopool |
+| ---------------------------------------- | :---: | :--: | :-----: | :--: | :--------: | :------: | :----: |
+| Generic (type-safe) API                  |  ✅   |  ✅  |   ✅    |  ✅  |     ❌     |    ❌    |   ❌   |
+| Tasks return results and errors          |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |   ❌²    |   ❌   |
+| Task groups (submit many, wait once)     |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
+| Priority queue                           |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Persistent queues (survive restarts)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Distributed queues (across instances)    |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Several queues bound to one pool         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Topic fan-out (publish once, many pools) |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ✅³    |   ❌   |
+| Pause and resume                         |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |    ❌    |   ❌   |
+| Restart after stop                       |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Resize pool at runtime                   |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |    ❌    |   ✅   |
+| Cancel work via context                  |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
+| Panic recovery                           |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |    ❌    |   ✅   |
+| Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 
-<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design.</sub>
+<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ `TryGo` refuses a task while every slot is busy; there is no queue.</sub>
 
 #### Performance
 
@@ -488,16 +488,16 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 | Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
 | ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
 | **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
-| BufferedPool²    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
+| BufferedPool³    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
 | ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
-| GoroutinePool²   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
+| GoroutinePool³   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
 | conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
 | workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
 | pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
 
 Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
 
-<sub>² Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
+<sub>³ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
 
 ### Micro-benchmarks
 
