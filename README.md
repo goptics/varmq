@@ -428,7 +428,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Priority queue                           |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Persistent queues (survive restarts)     |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Distributed queues (across instances)    |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Several queues bound to one pool         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Several queues bound to one pool         |  ✅   |  ❌  |   ✅⁴   |  ❌  |     ❌     |    ❌    |   ❌   |
 | Topic fan-out (publish once, many pools) |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ❌³    |   ❌   |
 | Pause and resume                         |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |    ❌    |   ❌   |
@@ -439,7 +439,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 
-<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ errgroup has no queue; `TryGo` only refuses a task while every slot is busy.</sub>
+<sub>Checked against each package's source, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ errgroup has no queue; `TryGo` only refuses a task while every slot is busy. ⁴ pond subpools: each has its own queue and runs on the parent pool's workers.</sub>
 
 ### Performance
 
@@ -488,16 +488,16 @@ Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short C
 | Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
 | ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
 | **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
-| BufferedPool³    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
+| BufferedPool⁵    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
 | ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
-| GoroutinePool³   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
+| GoroutinePool⁵   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
 | conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
 | workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
 | pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
 
 Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
 
-<sub>³ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
+<sub>⁵ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
 
 ### Micro-benchmarks
 
