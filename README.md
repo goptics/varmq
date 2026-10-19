@@ -32,7 +32,7 @@
     A typed worker pool and message queue for Go. Each worker is its own <a href="#concurrency">pool</a> and pulls jobs from any mix of sources: in-memory, priority, <a href="#persistent-and-distributed-queues">persistent and distributed</a> queues, or <a href="#topic-fan-out">topic</a> subscriptions. Go generics keep every job type-safe.
   </p>
   <p>
-    Built for throughput: lock-free appends, <a href="#batched-dispatch">batched dispatch</a> and small in-memory jobs keep the hot path lean (<a href="#comparison-and-benchmarks">benchmarks</a>). Pause, stop, purge or resize a pool safely, inspect it over <a href="#rest-api">REST</a>, and plug in your own storage through <a href="#built-in-adapters">adapters</a>.
+    Built for throughput: lock-free appends, <a href="#batched-dispatch">batched dispatch</a> and small in-memory jobs keep the hot path lean. Pause, stop, purge or resize a pool safely, inspect it over <a href="#rest-api">REST</a>, and plug in your own storage through <a href="#built-in-adapters">adapters</a>.
   </p>
 </div>
 
