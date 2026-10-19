@@ -430,7 +430,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Distributed queues (across instances)    |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Several queues bound to one pool         |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Topic fan-out (publish once, many pools) |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
-| Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ✅³    |   ❌   |
+| Bounded queue, reject when full          |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |   ❌³    |   ❌   |
 | Pause and resume                         |  ✅   |  ❌  |   ❌    |  ❌  |     ✅     |    ❌    |   ❌   |
 | Restart after stop                       |  ✅   |  ✅  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Resize pool at runtime                   |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |    ❌    |   ✅   |
@@ -439,7 +439,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 
-<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ `TryGo` refuses a task while every slot is busy; there is no queue.</sub>
+<sub>Checked against each package's docs, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ errgroup has no queue; `TryGo` only refuses a task while every slot is busy.</sub>
 
 ### Performance
 
