@@ -240,18 +240,20 @@ func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriority
 	return h
 }
 
-// subscribe forwards q's notifications to the worker. An "enqueued" also
-// pokes src's ready hint, if src keeps one.
+// subscribe forwards q's notifications to the worker. For a batch source,
+// an "enqueued" also pokes its ready hint, and wake-ups replace the persistent
+// resync.
 func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
-	poke := pokeOf(src)
-	if poke == nil {
+	bs, ok := src.(*batchAckSource[T, iJob[T]])
+	if !ok {
 		q.Subscribe(wb.handleQueueSubscription)
 		return
 	}
 
+	bs.subscribed.Store(true)
 	q.Subscribe(func(action string) {
 		if action == "enqueued" {
-			poke()
+			bs.poke()
 		}
 		wb.handleQueueSubscription(action)
 	})

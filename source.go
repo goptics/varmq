@@ -196,7 +196,7 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 
 	bq         IBatchAcknowledgeable
 	w          *worker[T, JobType]
-	persistent bool          // not ISubscribable: every add pokes in this process
+	subscribed atomic.Bool   // bound as a distributed queue: wake-ups poke; else every add pokes in this process
 	remaining  atomic.Int64  // storage length after the last pop
 	pokes      atomic.Uint64 // +1 whenever work may have appeared
 	dryAt      atomic.Uint64 // pokes when the storage was last seen empty; neverDry if it was not
@@ -206,8 +206,7 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 }
 
 func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
-	_, subscribable := q.(ISubscribable)
-	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q}, bq: bq, w: w, persistent: !subscribable}
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q}, bq: bq, w: w}
 	s.dryAt.Store(neverDry)
 
 	return s
@@ -252,12 +251,15 @@ func (s *batchAckSource[T, JobType]) fetch(want int, emit func(JobType), report 
 		return err
 	}
 
+	if n == 0 {
+		remaining = 0 // nothing to hand out now, whatever the count says: wait for a poke
+	}
 	s.remaining.Store(int64(remaining))
 	// A short pop ran the storage dry. So did a full one that emptied a
 	// persistent queue: every add after it pokes. A distributed consumer
 	// whose full pop emptied the queue probes once more, since it did not
 	// join the idle set and an enqueue would not wake it.
-	if n < want || (s.persistent && remaining == 0) {
+	if n < want || (!s.subscribed.Load() && remaining == 0) {
 		s.markDry(g)
 	} else {
 		s.dryAt.Store(neverDry)
@@ -289,7 +291,7 @@ func (s *batchAckSource[T, JobType]) markDry(g uint64) {
 // armResync covers what no poke announces to a persistent source: items a
 // visibility timeout requeued, and items another process or handle added.
 func (s *batchAckSource[T, JobType]) armResync() {
-	if !s.persistent || s.resyncing.Load() || !s.resyncing.CompareAndSwap(false, true) {
+	if s.subscribed.Load() || s.resyncing.Load() || !s.resyncing.CompareAndSwap(false, true) {
 		return
 	}
 
@@ -297,13 +299,13 @@ func (s *batchAckSource[T, JobType]) armResync() {
 }
 
 // resync checks the exact length once per resyncEvery while the worker is
-// active and the hint is dry, and pokes when items wait. Otherwise it stops;
-// the next time the hint reads 0 arms it again. It clears resyncing first, so
-// an arm racing with the stop either sees it cleared or is followed by the
-// checks below.
+// active, the hint is dry and this is the worker's only source, and pokes
+// when items wait. Otherwise it stops; the next time the hint reads 0 arms it
+// again. It clears resyncing first, so an arm racing with the stop either
+// sees it cleared or is followed by the checks below.
 func (s *batchAckSource[T, JobType]) resync() {
 	s.resyncing.Store(false)
-	if !s.w.IsActive() || s.ready() > 0 {
+	if !s.w.IsActive() || s.ready() > 0 || !s.sole() {
 		return
 	}
 
@@ -314,6 +316,13 @@ func (s *batchAckSource[T, JobType]) resync() {
 	}
 
 	s.armResync()
+}
+
+// sole reports whether s is the worker's only source. With others bound the
+// hint is not kept, and the strategy reads the exact length on every wake.
+func (s *batchAckSource[T, JobType]) sole() bool {
+	cm, ok := s.w.manager().(*creditManager[JobType])
+	return ok && cm.src == creditSource[JobType](s)
 }
 
 // pokeOf returns src's poke if src keeps a ready hint, else nil.
@@ -416,5 +425,10 @@ func (w *worker[T, JobType]) removeSource(src source[JobType]) {
 	w.sourcesMx.Lock()
 	defer w.sourcesMx.Unlock()
 
-	w.sources.Store(managerBox[JobType]{w.manager().remove(src)})
+	m := w.manager().remove(src)
+	w.sources.Store(managerBox[JobType]{m})
+
+	if _, ok := m.(*creditManager[JobType]); ok {
+		w.notifyToPullNextJobs() // its hint was reset: one pop finds out, after the swap so the loop sees the new manager
+	}
 }

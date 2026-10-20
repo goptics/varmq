@@ -238,6 +238,7 @@ func TestBatchAckSourceHint(t *testing.T) {
 	t.Run("distributed full pop probes again", func(t *testing.T) {
 		q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
 		s := newSrc(q, q)
+		s.subscribed.Store(true)
 		q.push(jobBytes(t, "a"))
 		fetch(t, s, 1)
 		assert.Equal(t, 1, s.ready(), "the consumer did not join the idle set")
@@ -277,6 +278,42 @@ func TestBatchAckSourceHint(t *testing.T) {
 		// with items left; the count wins over the dry mark.
 		s.remaining.Store(4)
 		assert.Equal(t, 4, s.ready())
+	})
+
+	t.Run("error after a pop that left items", func(t *testing.T) {
+		q := &batchTestQueue{}
+		s := newSrc(q, q)
+		q.push(jobBytes(t, "a"))
+		q.push(jobBytes(t, "b"))
+		q.push(jobBytes(t, "c"))
+		fetch(t, s, 1)
+		require.Equal(t, 2, s.ready())
+		q.fail.Store(true)
+		assert.Error(t, s.fetch(1, func(iJob[string]) {}, func(error) {}))
+		assert.Equal(t, 0, s.ready(), "a failed pop forgets the count")
+	})
+
+	t.Run("empty pop with items left", func(t *testing.T) {
+		q := &heldQueue{batchTestQueue: &batchTestQueue{}}
+		s := newSrc(q, q)
+		q.push(jobBytes(t, "a"))
+		q.hold.Store(true)
+		fetch(t, s, 1)
+		assert.Equal(t, 0, s.ready(), "nothing poppable now: wait for a poke, do not spin")
+	})
+
+	t.Run("distributed full pop clears a dry mark", func(t *testing.T) {
+		q := &shortOnceQueue{batchTestDistQueue: &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}}
+		s := newSrc(q, q)
+		s.subscribed.Store(true)
+		q.push(jobBytes(t, "a"))
+		q.push(jobBytes(t, "b"))
+		jobs, _ := fetch(t, s, 2)
+		require.Len(t, jobs, 1, "a short pop with an item left")
+		require.Equal(t, 1, s.ready())
+		jobs, _ = fetch(t, s, 1)
+		require.Len(t, jobs, 1)
+		assert.Equal(t, 1, s.ready(), "a full pop that emptied a distributed queue probes once more")
 	})
 
 	t.Run("error marks dry", func(t *testing.T) {
@@ -478,13 +515,13 @@ func TestBatchSourceStepDown(t *testing.T) {
 	sub := wb.WithTopic(topic)
 	_, isStrategy := w.manager().(*strategyManager[iJob[string]])
 	require.True(t, isStrategy)
+	time.Sleep(20 * time.Millisecond) // the subscribe's wake-up has passed
+	q.push(jobBytes(t, "x"))          // no poke, and nothing wakes the worker
 	sub.Unsubscribe()
 	_, isCredit := w.manager().(*creditManager[iJob[string]])
 	require.True(t, isCredit)
-	q.push(jobBytes(t, "x"))
 
-	w.notifyToPullNextJobs()
-	require.Eventually(t, func() bool { return r.has("x") }, 300*time.Millisecond, time.Millisecond)
+	require.Eventually(t, func() bool { return r.has("x") }, 300*time.Millisecond, time.Millisecond, "the step-down signals the worker")
 }
 
 // Items stored before the bind are popped at once: bind signals the worker.
@@ -512,4 +549,254 @@ func TestBatchSourceSkipsClosedJob(t *testing.T) {
 	wb.WithPersistentQueue(q)
 	require.Eventually(t, func() bool { return r.has("next") }, 500*time.Millisecond, time.Millisecond)
 	assert.False(t, r.has("closed"))
+}
+
+// heldQueue's head cannot be popped yet but still counts in its length (a
+// delayed item, say): an empty pop with items left.
+type heldQueue struct {
+	*batchTestQueue
+	hold atomic.Bool
+}
+
+func (q *heldQueue) DequeueBatchWithAckIds(items []any, ackIDs []string) (int, int, error) {
+	if !q.hold.Load() {
+		return q.batchTestQueue.DequeueBatchWithAckIds(items, ackIDs)
+	}
+	q.pops.Add(1)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return 0, len(q.items), nil
+}
+
+// shortOnceQueue's first pop takes one item whatever the count, as storage
+// handing back an earlier failed call's items may.
+type shortOnceQueue struct {
+	*batchTestDistQueue
+	done atomic.Bool
+}
+
+func (q *shortOnceQueue) DequeueBatchWithAckIds(items []any, ackIDs []string) (int, int, error) {
+	if q.done.CompareAndSwap(false, true) {
+		items, ackIDs = items[:1], ackIDs[:1]
+	}
+	return q.batchTestDistQueue.DequeueBatchWithAckIds(items, ackIDs)
+}
+
+// An empty pop with items left does not spin the event loop, Stop still
+// returns, and the item is popped once it can be.
+func TestBatchSourceEmptyPopWithItemsLeft(t *testing.T) {
+	q := &heldQueue{batchTestQueue: &batchTestQueue{}}
+	var r recorder
+	wb := NewWorker(r.run)
+	pq := wb.WithPersistentQueue(q)
+	waitPops(t, q.batchTestQueue, 1)
+
+	q.hold.Store(true)
+	before := q.pops.Load()
+	require.True(t, pq.Add("delayed"))
+	time.Sleep(100 * time.Millisecond)
+	assert.Less(t, q.pops.Load()-before, int64(5))
+
+	q.hold.Store(false) // poppable now; no poke announces it
+	require.Eventually(t, func() bool { return r.has("delayed") }, 1500*time.Millisecond, 10*time.Millisecond)
+
+	q.hold.Store(true)
+	require.True(t, pq.Add("held"))
+	done := make(chan struct{})
+	go func() { wb.StopAndWait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		q.hold.Store(false)
+		t.Fatal("StopAndWait hangs")
+	}
+}
+
+// A distributed adapter bound as a persistent queue is not subscribed, so it
+// gets the persistent resync.
+func TestBatchSourcePersistentBindingOfSubscribable(t *testing.T) {
+	t.Parallel()
+	q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
+	var r recorder
+	wb := NewWorker(r.run)
+	defer wb.Stop()
+	wb.WithPersistentQueue(q)
+	waitPops(t, q.batchTestQueue, 1)
+	q.push(jobBytes(t, "behind"))
+	require.Eventually(t, func() bool { return r.has("behind") }, 1500*time.Millisecond, 10*time.Millisecond)
+}
+
+// The resync probes only while it is needed: never for a distributed source,
+// not while another source shares the worker, not while the hint already
+// reads ready, and not once the worker is paused or stopped. Many dry
+// wake-ups keep one timer.
+func TestBatchSourceResyncProbes(t *testing.T) {
+	idle := func(t *testing.T, q *batchTestQueue, msg string) {
+		t.Helper()
+		before := q.lens.Load()
+		time.Sleep(2300 * time.Millisecond)
+		assert.Equal(t, before, q.lens.Load(), msg)
+	}
+
+	t.Run("distributed", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
+		wb := NewWorker(func(Job[string]) {})
+		defer wb.Stop()
+		wb.WithDistributedQueue(q)
+		waitPops(t, q.batchTestQueue, 1)
+		idle(t, q.batchTestQueue, "wake-ups replace the resync")
+	})
+
+	t.Run("shared worker", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestQueue{}
+		wb := NewWorker(func(Job[string]) {})
+		defer wb.Stop()
+		wb.WithPersistentQueue(q)
+		waitPops(t, q, 1) // dry: a resync is pending
+		wb.WithTopic(NewTopic[string]())
+		before := q.lens.Load()
+		time.Sleep(2300 * time.Millisecond)
+		assert.LessOrEqual(t, q.lens.Load()-before, int64(0), "the strategy reads the exact length itself")
+	})
+
+	t.Run("ready", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestQueue{}
+		release := make(chan struct{})
+		wb := NewWorker(func(j Job[string]) {
+			if j.Data() == "slow" {
+				<-release
+			}
+		})
+		defer wb.Stop()
+		defer close(release)
+		pq := wb.WithPersistentQueue(q)
+		waitPops(t, q, 1)
+		require.True(t, pq.Add("slow"))
+		require.True(t, pq.Add("x")) // waits behind slow: the hint reads 1
+		before := q.lens.Load()
+		time.Sleep(1300 * time.Millisecond) // the pending resync fires
+		assert.Equal(t, before, q.lens.Load(), "the hint already says ready")
+	})
+
+	t.Run("paused", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestQueue{}
+		wb := NewWorker(func(Job[string]) {})
+		defer wb.Stop()
+		wb.WithPersistentQueue(q)
+		waitPops(t, q, 1)
+		require.NoError(t, wb.Pause())
+		idle(t, q, "no probes while paused")
+	})
+
+	t.Run("stopped", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestQueue{}
+		wb := NewWorker(func(Job[string]) {})
+		wb.WithPersistentQueue(q)
+		waitPops(t, q, 1)
+		require.NoError(t, wb.StopAndWait())
+		idle(t, q, "no probes after Stop")
+	})
+
+	t.Run("one timer", func(t *testing.T) {
+		t.Parallel()
+		q := &batchTestQueue{}
+		wb := NewWorker(func(Job[string]) {})
+		defer wb.Stop()
+		w := internalWorker(wb)
+		wb.WithPersistentQueue(q)
+		waitPops(t, q, 1)
+		for range 50 {
+			w.notifyToPullNextJobs() // each wake-up reads the hint as 0
+			time.Sleep(time.Millisecond)
+		}
+		before := q.lens.Load()
+		time.Sleep(2100 * time.Millisecond)
+		assert.LessOrEqual(t, q.lens.Load()-before, int64(3), "one probe a second")
+	})
+}
+
+// An unparsable item reaches the error handler, and the next job still runs.
+func TestBatchSourceBadItemReported(t *testing.T) {
+	q := &batchTestQueue{}
+	q.push([]byte("not json"))
+	q.push(jobBytes(t, "ok"))
+	var errs atomic.Int64
+	var r recorder
+	wb := NewWorker(r.run, WithErrHandler(func(_ Worker, err error) {
+		if errors.Is(err, ErrParseJob) {
+			errs.Add(1)
+		}
+	}))
+	defer wb.Stop()
+	wb.WithPersistentQueue(q)
+	require.Eventually(t, func() bool { return r.has("ok") }, time.Second, time.Millisecond)
+	assert.EqualValues(t, 1, errs.Load())
+}
+
+// slowEnqQueue runs hook inside Enqueue, before the item lands.
+type slowEnqQueue struct {
+	*batchTestQueue
+	hook func()
+}
+
+func (q *slowEnqQueue) Enqueue(v any) bool {
+	if q.hook != nil {
+		q.hook()
+	}
+	return q.batchTestQueue.Enqueue(v)
+}
+
+// The poke follows the storage's confirmation: a pop that runs while the add
+// is in flight must not leave the item waiting for the resync.
+func TestBatchSourcePokeAfterEnqueue(t *testing.T) {
+	q := &slowEnqQueue{batchTestQueue: &batchTestQueue{}}
+	var r recorder
+	wb := NewWorker(r.run)
+	defer wb.Stop()
+	w := internalWorker(wb)
+	pq := wb.WithPersistentQueue(q)
+	waitPops(t, q.batchTestQueue, 1)
+	time.Sleep(1100 * time.Millisecond) // the bind's resync has run and re-armed: it is mid-period
+	q.hook = func() {
+		p := q.pops.Load()
+		w.notifyToPullNextJobs() // another wake-up while the add is in flight
+		for deadline := time.Now().Add(100 * time.Millisecond); q.pops.Load() == p && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	start := time.Now()
+	require.True(t, pq.Add("x"))
+	require.Eventually(t, func() bool { return r.has("x") }, 2*time.Second, time.Millisecond)
+	assert.Less(t, time.Since(start), 400*time.Millisecond, "the add's own poke brings the pop")
+}
+
+// Jobs a pause parked count in NumPending when the batch source is alone.
+func TestBatchSourceNumPendingCountsParked(t *testing.T) {
+	q := &batchTestQueue{}
+	release := make(chan struct{})
+	wb := NewWorker(func(Job[string]) { <-release }, WithConcurrency(1), WithAutoRun(false))
+	defer func() { close(release); wb.Stop() }()
+	w := internalWorker(wb)
+	topic := NewTopic[string]()
+	sub := wb.WithTopic(topic)
+	for i := range 10 {
+		topic.Publish(fmt.Sprint(i))
+	}
+	require.NoError(t, wb.Start()) // one batch of 10
+	require.Eventually(t, func() bool { return wb.NumProcessing() == 1 }, time.Second, time.Millisecond)
+	require.NoError(t, wb.Pause()) // the rest of the batch parks once the running job ends
+	wb.WithPersistentQueue(q)
+	sub.Unsubscribe()
+	_, isCredit := w.manager().(*creditManager[iJob[string]])
+	require.True(t, isCredit)
+	release <- struct{}{}
+	wb.WaitUntilPaused()
+	parked := int(w.nParked.Load())
+	require.Positive(t, parked)
+	assert.Equal(t, parked, wb.NumPending())
 }
