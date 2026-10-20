@@ -21,6 +21,7 @@ type batchTestQueue struct {
 	n         int
 	lens      atomic.Int64
 	pops      atomic.Int64
+	maxWant   atomic.Int64           // the largest count a pop asked for
 	fail      atomic.Bool            // pops fail
 	closed    atomic.Bool            // like a closed adapter: Len is 0, Enqueue and pops fail
 	duringPop atomic.Pointer[func()] // runs once inside the next pop, after it took its items
@@ -90,6 +91,12 @@ func (q *batchTestQueue) DequeueWithAckId() (any, bool, string) {
 
 func (q *batchTestQueue) DequeueBatchWithAckIds(items []any, ackIDs []string) (int, int, error) {
 	q.pops.Add(1)
+	for want := int64(min(len(items), len(ackIDs))); ; {
+		m := q.maxWant.Load()
+		if want <= m || q.maxWant.CompareAndSwap(m, want) {
+			break
+		}
+	}
 	if q.fail.Load() || q.closed.Load() {
 		return 0, 0, errors.New("pop failed")
 	}
@@ -359,8 +366,7 @@ func TestBatchSourceNoLenProbes(t *testing.T) {
 	wg.Wait()
 
 	assert.LessOrEqual(t, q.lens.Load(), int64(2), "Len is for Wait, strategies and the resync only")
-	assert.GreaterOrEqual(t, q.pops.Load(), int64(n))
-	assert.LessOrEqual(t, q.pops.Load(), int64(2*n+2), "about one pop per job")
+	assert.LessOrEqual(t, q.pops.Load(), int64(n+2), "at most about one pop per job")
 }
 
 // An Add followed by Wait waits for that job, through each binding.
@@ -775,12 +781,14 @@ func TestBatchSourcePokeAfterEnqueue(t *testing.T) {
 	assert.Less(t, time.Since(start), 400*time.Millisecond, "the add's own poke brings the pop")
 }
 
-// Jobs a pause parked count in NumPending when the batch source is alone.
+// Jobs a pause parked count in NumPending when the batch source is alone,
+// and run after a Resume.
 func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 	q := &batchTestQueue{}
 	release := make(chan struct{})
-	wb := NewWorker(func(Job[string]) { <-release }, WithConcurrency(1), WithAutoRun(false))
-	defer func() { close(release); wb.Stop() }()
+	var ran atomic.Int64
+	wb := NewWorker(func(Job[string]) { <-release; ran.Add(1) }, WithConcurrency(1), WithAutoRun(false))
+	defer wb.Stop()
 	w := internalWorker(wb)
 	topic := NewTopic[string]()
 	sub := wb.WithTopic(topic)
@@ -799,4 +807,8 @@ func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 	parked := int(w.nParked.Load())
 	require.Positive(t, parked)
 	assert.Equal(t, parked, wb.NumPending())
+
+	close(release)
+	require.NoError(t, wb.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 10 }, time.Second, time.Millisecond, "parked jobs run first")
 }

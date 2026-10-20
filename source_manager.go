@@ -160,9 +160,10 @@ func (m *creditManager[JobType]) maxBatch() int { return 1 }
 
 func (m *creditManager[JobType]) purgeGen() *atomic.Uint64 { return nil }
 
-// Next pops one job. It pops again past a job that did not come out (one
-// the user closed) while the hint says more may wait, and reports an empty
-// pop as errNoReadySource.
+// Next pops one job, for the classic loop, which serves the source only
+// while parked jobs wait (see dispatchCredit otherwise). It pops again past a
+// job that did not come out (one the user closed) while the hint says more
+// may wait, and reports an empty pop as errNoReadySource.
 func (m *creditManager[JobType]) Next() (JobType, error) {
 	var zero JobType
 
