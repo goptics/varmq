@@ -30,6 +30,22 @@ type IAcknowledgeable interface {
 	DequeueWithAckId() (any, bool, string)
 }
 
+// IBatchAcknowledgeable is optional for acknowledgeable storage. A worker
+// whose only source implements it reads that source through one pop per
+// dispatch, with no length probes in between.
+type IBatchAcknowledgeable interface {
+	IAcknowledgeable
+	// DequeueBatchWithAckIds moves up to min(len(items), len(ackIDs)) items
+	// to pending in one atomic step, each under its own ack id, into
+	// items[:n] and ackIDs[:n]. remaining is the storage length right after
+	// the move. n is 0 with a nil error when the storage is empty. A short
+	// pop (n below the count) normally means the storage ran dry; storage may
+	// also return a short pop with remaining > 0, for example items it hands
+	// back from an earlier failed call. err is a failure: the worker reports
+	// it and pulls again on the next sign of work.
+	DequeueBatchWithAckIds(items []any, ackIDs []string) (n, remaining int, err error)
+}
+
 type IPersistentQueue interface {
 	IQueue
 	IAcknowledgeable

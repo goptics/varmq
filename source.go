@@ -1,7 +1,9 @@
 package varmq
 
 import (
+	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/goptics/varmq/internal/topics"
 )
@@ -154,6 +156,175 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 	return j, nil
 }
 
+// creditSource is a source that pops many jobs per storage call and keeps a
+// ready hint, so the scheduler needs no length probe between pops. The
+// worker reads it through creditManager while it is the only source.
+type creditSource[JobType any] interface {
+	source[JobType]
+	// ready is the hint: a positive count when a pop may find a job, 0 when
+	// the storage was last seen empty and nothing has announced work since.
+	// It does no I/O. Len stays the exact storage length.
+	ready() int
+	// fetch pops up to want jobs in one storage call and hands each to emit,
+	// in pop order. Event loop only.
+	fetch(want int, emit func(JobType), report func(error)) error
+	// armResync starts the persistent resync, if the source needs one and
+	// none is pending.
+	armResync()
+	// reset forgets that the storage was seen empty.
+	reset()
+}
+
+// neverDry is batchAckSource.dryAt while the storage is not known to be
+// empty: no pokes count reaches it.
+const neverDry = math.MaxUint64
+
+// resyncEvery is how often a dry persistent source rechecks its storage for
+// items no poke announced.
+const resyncEvery = time.Second
+
+// batchAckSource reads IBatchAcknowledgeable storage. Each pop says how many
+// items are left, and each add or wake-up pokes the source, so the scheduler
+// knows whether to pop again without asking the storage.
+//
+// No wake-up is lost: fetch reads pokes before the storage call, so a poke
+// that lands while the call is in flight keeps ready above 0 even if the
+// call comes back empty, and every poke is followed by a signal to the
+// event loop.
+type batchAckSource[T any, JobType iJob[T]] struct {
+	ackSource[T, JobType] // Len (exact), Next (one item, for strategyManager), maxBatch 1, purgeGen nil
+
+	bq         IBatchAcknowledgeable
+	w          *worker[T, JobType]
+	persistent bool          // not ISubscribable: every add pokes in this process
+	remaining  atomic.Int64  // storage length after the last pop
+	pokes      atomic.Uint64 // +1 whenever work may have appeared
+	dryAt      atomic.Uint64 // pokes when the storage was last seen empty; neverDry if it was not
+	resyncing  atomic.Bool   // a resync timer is pending
+	items      []any         // fetch's buffers
+	ackIDs     []string
+}
+
+func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
+	_, subscribable := q.(ISubscribable)
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q}, bq: bq, w: w, persistent: !subscribable}
+	s.dryAt.Store(neverDry)
+
+	return s
+}
+
+func (s *batchAckSource[T, JobType]) ready() int {
+	if r := s.remaining.Load(); r > 0 {
+		return int(r)
+	}
+
+	if s.pokes.Load() != s.dryAt.Load() {
+		return 1
+	}
+
+	return 0
+}
+
+// poke records that work may have appeared: an add confirmed by the
+// storage, or a distributed wake-up. Callers signal the event loop after it.
+func (s *batchAckSource[T, JobType]) poke() {
+	s.pokes.Add(1)
+}
+
+func (s *batchAckSource[T, JobType]) reset() {
+	s.dryAt.Store(neverDry)
+}
+
+// fetch hands a job that does not parse to report and leaves it pending, and
+// skips one the user already closed, as ackSource.Next does. The returned
+// error is the storage call's.
+func (s *batchAckSource[T, JobType]) fetch(want int, emit func(JobType), report func(error)) error {
+	if cap(s.items) < want {
+		s.items, s.ackIDs = make([]any, want), make([]string, want)
+	}
+	items, ackIDs := s.items[:want], s.ackIDs[:want]
+
+	g := s.pokes.Load()
+	n, remaining, err := s.bq.DequeueBatchWithAckIds(items, ackIDs)
+	if err != nil {
+		s.remaining.Store(0)
+		s.markDry(g)
+		return err
+	}
+
+	s.remaining.Store(int64(remaining))
+	// A short pop ran the storage dry. So did a full one that emptied a
+	// persistent queue: every add after it pokes. A distributed consumer
+	// whose full pop emptied the queue probes once more, since it did not
+	// join the idle set and an enqueue would not wake it.
+	if n < want || (s.persistent && remaining == 0) {
+		s.markDry(g)
+	} else {
+		s.dryAt.Store(neverDry)
+	}
+
+	for i := range n {
+		j, err := toJob[T, JobType](items[i])
+		if err != nil {
+			report(err)
+			continue
+		}
+
+		if !j.IsClosed() { // never mutate a job the user already closed
+			j.setAck(s.q, ackIDs[i])
+			emit(j)
+		}
+	}
+	clear(items[:n])
+
+	return nil
+}
+
+// markDry records that the storage was empty as of pokes value g.
+func (s *batchAckSource[T, JobType]) markDry(g uint64) {
+	s.dryAt.Store(g)
+	s.armResync()
+}
+
+// armResync covers what no poke announces to a persistent source: items a
+// visibility timeout requeued, and items another process or handle added.
+func (s *batchAckSource[T, JobType]) armResync() {
+	if !s.persistent || s.resyncing.Load() || !s.resyncing.CompareAndSwap(false, true) {
+		return
+	}
+
+	time.AfterFunc(resyncEvery, s.resync)
+}
+
+// resync checks the exact length once per resyncEvery while the worker is
+// active and the hint is dry, and pokes when items wait. Otherwise it stops;
+// the next time the hint reads 0 arms it again. It clears resyncing first, so
+// an arm racing with the stop either sees it cleared or is followed by the
+// checks below.
+func (s *batchAckSource[T, JobType]) resync() {
+	s.resyncing.Store(false)
+	if !s.w.IsActive() || s.ready() > 0 {
+		return
+	}
+
+	if s.Len() > 0 {
+		s.poke()
+		s.w.notifyToPullNextJobs()
+		return
+	}
+
+	s.armResync()
+}
+
+// pokeOf returns src's poke if src keeps a ready hint, else nil.
+func pokeOf[JobType any](src source[JobType]) func() {
+	if p, ok := src.(interface{ poke() }); ok {
+		return p.poke
+	}
+
+	return nil
+}
+
 // topicSource reads one subscription's cursor on an in-memory topic log. It
 // is the only source that creates jobs: a topic stores payloads, and each
 // subscriber's worker gets its own job with an ID from its own generator.
@@ -188,6 +359,8 @@ var (
 	_ source[iJob[int]] = (*queueSource[int, iJob[int]])(nil)
 	_ source[iJob[int]] = (*ackSource[int, iJob[int]])(nil)
 	_ source[iJob[int]] = (*topicSource[int])(nil)
+
+	_ creditSource[iJob[int]] = (*batchAckSource[int, iJob[int]])(nil)
 )
 
 // bind wraps q in the matching source and registers it with the worker. The
@@ -197,7 +370,11 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	var src source[JobType]
 
 	if aq, ok := q.(ackQueue); ok {
-		src = &ackSource[T, JobType]{q: aq}
+		if bq, ok := q.(IBatchAcknowledgeable); ok {
+			src = newBatchAckSource(aq, bq, w)
+		} else {
+			src = &ackSource[T, JobType]{q: aq}
+		}
 	} else if _, ok := q.(IPriorityQueue); ok {
 		src = &queueSource[T, JobType]{q: q, batch: 1}
 	} else {
@@ -207,6 +384,10 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	}
 
 	w.addSource(src, priority)
+
+	if _, ok := src.(creditSource[JobType]); ok {
+		w.notifyToPullNextJobs() // the storage may already hold items; no add will announce them
+	}
 
 	return src
 }

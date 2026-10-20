@@ -29,6 +29,8 @@ const (
 //
 //   - emptyManager: nothing bound; there is never a job.
 //   - directManager: one source; pulls from it directly, with no strategy.
+//   - creditManager: one source that is a creditSource; dispatch reads its
+//     ready hint instead of probing the storage.
 //   - strategyManager: two or more; picks a source by the worker's Strategy.
 //
 // add and remove return the manager for the new set of sources, so the
@@ -60,7 +62,22 @@ func (m *emptyManager[JobType]) Next() (JobType, error) {
 }
 
 func (m *emptyManager[JobType]) add(src source[JobType], priority int, _ Strategy) sourceManager[JobType] {
-	return &directManager[JobType]{src: src, priority: priority}
+	return singleManager(src, priority)
+}
+
+// singleManager is the manager of a worker whose only source is src.
+func singleManager[JobType any](src source[JobType], priority int) sourceManager[JobType] {
+	cs, ok := src.(creditSource[JobType])
+	if !ok {
+		return &directManager[JobType]{src: src, priority: priority}
+	}
+
+	cs.reset() // the hint is not kept while other sources share the worker
+	m := &creditManager[JobType]{src: cs, priority: priority}
+	m.emit = func(j JobType) { m.job, m.got = j, true }
+	m.report = func(err error) { m.err = err }
+
+	return m
 }
 
 func (m *emptyManager[JobType]) remove(source[JobType]) sourceManager[JobType] { return m }
@@ -110,6 +127,82 @@ func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 }
 
 func (m *directManager[JobType]) count() int { return 1 }
+
+// creditManager is the manager of a worker whose only source is a
+// creditSource. Len is the source's ready hint: the scheduler reads it on
+// every wake-up and after every job, and it costs no I/O. Strategies are not
+// involved, and NumPending reads the exact length itself.
+type creditManager[JobType any] struct {
+	src      creditSource[JobType]
+	priority int // kept so the source keeps its rank if a second one is bound
+
+	// Next's result, filled by fetch through emit and report. The event
+	// loop is the only caller of Next.
+	job    JobType
+	got    bool
+	err    error
+	emit   func(JobType)
+	report func(error)
+}
+
+// Len reading 0 arms the persistent resync, so a worker that sees nothing to
+// do still finds items no poke announced; a Resume reads it too.
+func (m *creditManager[JobType]) Len() int {
+	n := m.src.ready()
+	if n == 0 {
+		m.src.armResync()
+	}
+
+	return n
+}
+
+func (m *creditManager[JobType]) maxBatch() int { return 1 }
+
+func (m *creditManager[JobType]) purgeGen() *atomic.Uint64 { return nil }
+
+// Next pops one job. It pops again past a job that did not come out (one
+// the user closed) while the hint says more may wait, and reports an empty
+// pop as errNoReadySource.
+func (m *creditManager[JobType]) Next() (JobType, error) {
+	var zero JobType
+
+	for m.src.ready() > 0 {
+		m.got, m.err = false, nil
+		if err := m.src.fetch(1, m.emit, m.report); err != nil {
+			return zero, err
+		}
+
+		if m.got {
+			j := m.job
+			m.job = zero
+			return j, nil
+		}
+
+		if m.err != nil {
+			return zero, m.err
+		}
+	}
+
+	return zero, errNoReadySource
+}
+
+func (m *creditManager[JobType]) add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType] {
+	s := newStrategyManager[JobType](strategy)
+	s.Register(m.src, m.priority)
+	s.Register(src, priority)
+
+	return s
+}
+
+func (m *creditManager[JobType]) remove(src source[JobType]) sourceManager[JobType] {
+	if src != m.src {
+		return m
+	}
+
+	return &emptyManager[JobType]{}
+}
+
+func (m *creditManager[JobType]) count() int { return 1 }
 
 // strategyManager is the manager of a worker with two or more bound sources;
 // it picks the next source by Strategy. A remove leaves at least one, so it
@@ -167,7 +260,7 @@ func (sm *strategyManager[JobType]) remove(src source[JobType]) sourceManager[Jo
 	sm.UnregisterItem(src)
 
 	if only, priority, ok := sm.Only(); ok {
-		return &directManager[JobType]{src: only, priority: priority}
+		return singleManager(only, priority)
 	}
 
 	return sm
@@ -178,5 +271,6 @@ func (sm *strategyManager[JobType]) count() int { return sm.Count() }
 var (
 	_ sourceManager[iJob[int]] = (*emptyManager[iJob[int]])(nil)
 	_ sourceManager[iJob[int]] = (*directManager[iJob[int]])(nil)
+	_ sourceManager[iJob[int]] = (*creditManager[iJob[int]])(nil)
 	_ sourceManager[iJob[int]] = (*strategyManager[iJob[int]])(nil)
 )

@@ -226,18 +226,35 @@ func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQue
 
 func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
 	c := loadQueueConfigs(configs...)
-	defer dq.Subscribe(wb.handleQueueSubscription)
-	defer wb.bind(dq, c.priority)
+	h := NewDistributedQueue[T](dq, configs...)
+	wb.subscribe(dq, wb.bind(dq, c.priority))
 
-	return NewDistributedQueue[T](dq, configs...)
+	return h
 }
 
 func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
-	defer dpq.Subscribe(wb.handleQueueSubscription)
-	defer wb.bind(dpq, c.priority)
+	h := NewDistributedPriorityQueue[T](dpq, configs...)
+	wb.subscribe(dpq, wb.bind(dpq, c.priority))
 
-	return NewDistributedPriorityQueue[T](dpq, configs...)
+	return h
+}
+
+// subscribe forwards q's notifications to the worker. An "enqueued" also
+// pokes src's ready hint, if src keeps one.
+func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
+	poke := pokeOf(src)
+	if poke == nil {
+		q.Subscribe(wb.handleQueueSubscription)
+		return
+	}
+
+	q.Subscribe(func(action string) {
+		if action == "enqueued" {
+			poke()
+		}
+		wb.handleQueueSubscription(action)
+	})
 }
 
 func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T] {

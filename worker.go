@@ -431,7 +431,14 @@ func (w *worker[T, JobType]) NumPending() int {
 		buffered = int(taken - running)
 	}
 
-	return w.pending(w.manager()) + buffered
+	// A creditManager's Len is a dispatch hint; Wait needs the storage's
+	// exact length, a storage call, as it is for any other source.
+	m := w.manager()
+	if cm, ok := m.(*creditManager[JobType]); ok {
+		return cm.src.Len() + int(w.nParked.Load()) + buffered
+	}
+
+	return w.pending(m) + buffered
 }
 
 func (w *worker[T, JobType]) NumProcessing() int {
