@@ -786,8 +786,9 @@ func TestBatchSourcePokeAfterEnqueue(t *testing.T) {
 func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 	q := &batchTestQueue{}
 	release := make(chan struct{})
+	started := make(chan struct{}, 10)
 	var ran atomic.Int64
-	wb := NewWorker(func(Job[string]) { <-release; ran.Add(1) }, WithConcurrency(1), WithAutoRun(false))
+	wb := NewWorker(func(Job[string]) { started <- struct{}{}; <-release; ran.Add(1) }, WithConcurrency(1), WithAutoRun(false))
 	defer wb.Stop()
 	w := internalWorker(wb)
 	topic := NewTopic[string]()
@@ -796,7 +797,7 @@ func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 		topic.Publish(fmt.Sprint(i))
 	}
 	require.NoError(t, wb.Start()) // one batch of 10
-	require.Eventually(t, func() bool { return wb.NumProcessing() == 1 }, time.Second, time.Millisecond)
+	<-started                      // the first job runs: the whole batch was taken
 	require.NoError(t, wb.Pause()) // the rest of the batch parks once the running job ends
 	wb.WithPersistentQueue(q)
 	sub.Unsubscribe()

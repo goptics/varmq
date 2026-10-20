@@ -144,7 +144,9 @@ type Worker interface {
 	//     continue until completion, then the status becomes Paused. Jobs a
 	//     worker holds in its batch but has not started are parked on the
 	//     worker: still Queued and counted by NumPending, and handed out
-	//     first, in order, on Resume.
+	//     first, in order, on Resume. Jobs a pop from acknowledging storage
+	//     already took still run: they are unacknowledged, and a long pause
+	//     would let their visibility timeout hand them to another consumer.
 	//
 	// Once Paused, no new jobs are processed from the queue. Use Resume()
 	// to resume processing, or PauseAndWait() to block until fully paused.
@@ -165,7 +167,8 @@ type Worker interface {
 	// waits for in-flight jobs to finish, removes all worker goroutines,
 	// and transitions to Stopped. Jobs a worker holds in its batch but has
 	// not started are parked on the worker: still Queued and counted by
-	// NumPending, and handed out first, in order, on Restart.
+	// NumPending, and handed out first, in order, on Restart. Jobs a pop
+	// from acknowledging storage already took still run, as for Pause.
 	//
 	// A stopped worker cannot be resumed; use Restart() instead.
 	// Use StopAndWait() to block until fully stopped.
@@ -435,6 +438,7 @@ func (w *worker[T, JobType]) NumPending() int {
 	// exact length, a storage call, as it is for any other source.
 	m := w.manager()
 	if cm, ok := m.(*creditManager[JobType]); ok {
+		buffered = max(0, buffered-int(cm.unspent.Load())) // a pass reserves its credit before the pop
 		return cm.src.Len() + int(w.nParked.Load()) + buffered
 	}
 

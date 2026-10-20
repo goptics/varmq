@@ -134,7 +134,8 @@ func (m *directManager[JobType]) count() int { return 1 }
 // involved, and NumPending reads the exact length itself.
 type creditManager[JobType any] struct {
 	src      creditSource[JobType]
-	priority int // kept so the source keeps its rank if a second one is bound
+	priority int          // kept so the source keeps its rank if a second one is bound
+	unspent  atomic.Int64 // credit of the pass in flight not yet spent on a job; NumPending leaves it out
 
 	// Next's result, filled by fetch through emit and report. The event
 	// loop is the only caller of Next.

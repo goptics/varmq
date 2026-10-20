@@ -26,7 +26,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				// A lone batch source pops for every free slot at once; parked
 				// jobs go first through the classic loop.
 				if cm, ok := w.manager().(*creditManager[JobType]); ok && w.nParked.Load() == 0 {
-					w.dispatchCredit(cm.src)
+					w.dispatchCredit(cm)
 					continue
 				}
 
