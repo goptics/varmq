@@ -15,7 +15,8 @@ type enqItem[T any] struct {
 type PriorityQueue[T any] struct {
 	internal       *heapQueue[T]
 	insertionCount int
-	capacity       int // Maximum size of the queue
+	capacity       int                 // Maximum size of the queue
+	ids            map[string]struct{} // ids of stored items EnqueueOnce added; nil until the first
 	mx             sync.RWMutex
 	closed         atomic.Bool
 }
@@ -50,6 +51,19 @@ func (q *PriorityQueue[T]) Values() []any {
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
 func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
+	return q.enqueue(item, priority, "")
+}
+
+// EnqueueOnce pushes item, which must return id from its ID method, unless
+// an item with the same id is in the queue. It returns false for a repeat and
+// where Enqueue would. The id is free again once Dequeue or Purge takes the
+// item.
+func (q *PriorityQueue[T]) EnqueueOnce(item any, priority int, id string) bool {
+	return q.enqueue(item, priority, id)
+}
+
+// enqueue pushes item, once per id when id is not empty.
+func (q *PriorityQueue[T]) enqueue(item any, priority int, id string) bool {
 	typedValue, ok := item.(T)
 
 	if !ok {
@@ -68,6 +82,18 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 	if q.capacity > 0 && q.internal.Len() == q.capacity {
 		q.mx.Unlock()
 		return false
+	}
+
+	if id != "" {
+		if _, dup := q.ids[id]; dup {
+			q.mx.Unlock()
+			return false
+		}
+
+		if q.ids == nil {
+			q.ids = make(map[string]struct{})
+		}
+		q.ids[id] = struct{}{}
 	}
 
 	q.internal.push(enqItem[T]{
@@ -90,7 +116,16 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	if q.internal.Len() == 0 {
 		return zeroValue, false
 	}
-	return q.internal.pop().Value, true // O(log n)
+
+	v := q.internal.pop().Value // O(log n)
+
+	if q.ids != nil {
+		if j, ok := any(v).(identified); ok {
+			delete(q.ids, j.ID())
+		}
+	}
+
+	return v, true
 }
 
 func (q *PriorityQueue[T]) Purge() {
@@ -99,6 +134,7 @@ func (q *PriorityQueue[T]) Purge() {
 	// Drop the backing array rather than reslicing to 0: it holds the purged
 	// values and, at 32 B a slot, would pin the queue's high-water memory.
 	q.internal.items = nil
+	q.ids = nil
 }
 
 // to satisfy the IQueue interface

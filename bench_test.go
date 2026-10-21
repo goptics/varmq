@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 )
 
@@ -128,6 +129,39 @@ func BenchmarkAdd(b *testing.B) {
 			if job, ok := q.Add(i, i%10); ok {
 				job.Result()
 			}
+		}
+	})
+}
+
+// BenchmarkAddWithId reports what a job id costs an in-memory Add: Unique
+// stores and runs every job, Repeat is refused because a job with the same id
+// is waiting.
+func BenchmarkAddWithId(b *testing.B) {
+	ids := make([]string, 1024)
+	for i := range ids {
+		ids[i] = strconv.Itoa(i)
+	}
+
+	b.Run("Unique", func(b *testing.B) {
+		worker := NewWorker(task)
+		q := worker.BindQueue()
+		defer worker.StopAndWait()
+
+		b.ResetTimer()
+		for j := range b.N {
+			job, _ := q.Add(j, WithJobId(ids[j%len(ids)]))
+			job.Wait()
+		}
+	})
+
+	b.Run("Repeat", func(b *testing.B) {
+		worker := NewWorker(task, WithAutoRun(false))
+		q := worker.BindQueue()
+		q.Add(0, WithJobId("a"))
+
+		b.ResetTimer()
+		for j := range b.N {
+			q.Add(j, WithJobId("a"))
 		}
 	})
 }

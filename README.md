@@ -131,6 +131,17 @@ for i := range 100 {
 
 How jobs reach workers, and why some arrive in batches: [How It Works](#how-it-works).
 
+### Deduplicate by Job ID
+
+Give a job an id with `varmq.WithJobId` (or every job, with `varmq.WithJobIdGenerator`), and an in-memory queue holds at most one waiting job per id: `Add` returns `nil, false` while a job with the same id is in the queue. The id is free again once a worker takes the job or `Purge` drops it.
+
+```go
+queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued
+queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already waiting
+```
+
+Unlike an adapter's window (see [Persistent and Distributed Queues](#persistent-and-distributed-queues)), the in-memory set holds an id only while its job waits, so a business key such as `refresh:<user>` works here. Jobs without an id are never deduplicated, and varmq assigns none by default. `AddAll` item ids get a `g:` prefix, so an item and an `Add` with the same id do not collide. A job a worker has taken into a [batch](#batched-dispatch) is out of the queue, so its id is free; a job closed with `Close` keeps its id until a worker reaches and skips it.
+
 ## 💡 Highlighted Features
 
 ### Persistent and Distributed Queues

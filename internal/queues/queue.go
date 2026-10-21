@@ -2,6 +2,7 @@ package queues
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/goptics/varmq/internal/topics"
 )
@@ -11,6 +12,10 @@ import (
 // with each other, readers only with each other, so an Enqueue never waits
 // for a Dequeue. The cursor clears each slot as it reads it, so a dequeued
 // item is freed at once; a fully read chunk is garbage collected.
+//
+// EnqueueOnce adds one more lock, idMu, shared with the Dequeue of an item
+// stored with an id; plain Enqueue and Dequeue of items without one never
+// take it.
 type Queue[T any] struct {
 	log *topics.Log[T]
 	cur *topics.Cursor[T]
@@ -21,8 +26,20 @@ type Queue[T any] struct {
 	// Every Enqueue reads log. Padded to 128 bytes, a size class whose
 	// objects start on a cache-line boundary, so that read never shares a
 	// line with the cursor, allocated just before and written on every
-	// Dequeue.
-	_ [128 - 8 - 8 - 16 - 16]byte
+	// Dequeue. The id set sits on the second line, so EnqueueOnce's writes to
+	// idMu never share a line with log either.
+	_ [64 - 8 - 8 - 16 - 16]byte
+
+	ids   map[string]struct{} // ids of stored items EnqueueOnce added; under idMu
+	idMu  sync.Mutex
+	idsOn atomic.Bool // set by the first EnqueueOnce, before its Append
+
+	_ [64 - 8 - 8 - 4]byte
+}
+
+// identified is an item that carries the id EnqueueOnce stored it under.
+type identified interface {
+	ID() string
 }
 
 // Attach returns the value kept with this queue, made by make on the first
@@ -63,9 +80,63 @@ func (q *Queue[T]) Enqueue(item any) bool {
 	return q.log.Append(typedItem) > 0
 }
 
-// Dequeue removes and returns the front item.
+// EnqueueOnce adds item, which must return id from its ID method, unless an
+// item with the same id is in the queue. It returns false for a repeat and
+// where Enqueue would. The id is free again once Dequeue or Purge takes the
+// item.
+func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
+	typedItem, ok := item.(T)
+	if !ok {
+		return false
+	}
+
+	q.idMu.Lock()
+	defer q.idMu.Unlock()
+
+	if q.ids == nil {
+		q.ids = make(map[string]struct{})
+		q.idsOn.Store(true)
+	}
+
+	if _, dup := q.ids[id]; dup {
+		return false
+	}
+
+	if q.log.Append(typedItem) == 0 {
+		return false
+	}
+
+	q.ids[id] = struct{}{}
+
+	return true
+}
+
+// Dequeue removes and returns the front item, freeing its id if
+// EnqueueOnce stored it.
 func (q *Queue[T]) Dequeue() (any, bool) {
-	return q.cur.Dequeue()
+	v, ok := q.cur.Dequeue()
+
+	// Read after the dequeue: EnqueueOnce sets idsOn before its Append, so an
+	// item stored with an id always finds it set. An item dequeued between
+	// that Append and the insert waits on idMu, so the delete comes after.
+	if ok && q.idsOn.Load() {
+		q.release(v)
+	}
+
+	return v, ok
+}
+
+func (q *Queue[T]) release(v T) {
+	j, ok := any(v).(identified)
+	if !ok {
+		return
+	}
+
+	if id := j.ID(); id != "" {
+		q.idMu.Lock()
+		delete(q.ids, id)
+		q.idMu.Unlock()
+	}
 }
 
 // Values returns a copy of the items in the queue, front first.
@@ -79,9 +150,16 @@ func (q *Queue[T]) Values() []any {
 	return out
 }
 
-// Purge removes every item.
+// Purge removes every item and frees their ids. Holding idMu keeps an
+// EnqueueOnce from landing between the two.
+// ponytail: a Dequeue that took an item before Purge and frees its id after a
+// re-add of that id frees the new one, letting one repeat in; no id leaks.
 func (q *Queue[T]) Purge() {
+	q.idMu.Lock()
+	defer q.idMu.Unlock()
+
 	q.cur.Purge()
+	q.ids = nil
 }
 
 // Close makes every later Enqueue return false. Stored items can still be

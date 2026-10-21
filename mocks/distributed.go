@@ -30,6 +30,11 @@ func (m *MockDistributedQueue) Enqueue(item any) bool {
 	return ok
 }
 
+// EnqueueOnce notifies subscribers like Enqueue; the promoted one would not.
+func (m *MockDistributedQueue) EnqueueOnce(item any, _ string) bool {
+	return m.Enqueue(item)
+}
+
 // MockDistributedPriorityQueue inherits from MockPersistentPriorityQueue and implements IDistributedPriorityQueue
 type MockDistributedPriorityQueue struct {
 	*MockPersistentPriorityQueue
@@ -58,4 +63,9 @@ func (m *MockDistributedPriorityQueue) Enqueue(item any, priority int) bool {
 		}
 	}
 	return ok
+}
+
+// EnqueueOnce notifies subscribers like Enqueue; the promoted one would not.
+func (m *MockDistributedPriorityQueue) EnqueueOnce(item any, priority int, _ string) bool {
+	return m.Enqueue(item, priority)
 }

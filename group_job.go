@@ -31,7 +31,13 @@ func newGroupJob[T any](bufferSize int) *groupJob[T] {
 	return gj
 }
 
+// generateGroupId prefixes a group member's id. A member without one keeps
+// "", like a single job, so in-memory storage never treats it as having an id.
 func generateGroupId(id string) string {
+	if id == "" {
+		return ""
+	}
+
 	return groupIdPrefixed + id
 }
 

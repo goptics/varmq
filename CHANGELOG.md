@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### ✨ New Features
+
+- **In-memory dedupe by job id**: queue and priority queue (plain, error, result) store one waiting job per id (`WithJobId` or a generator). `Add` of an id already in queue returns `nil, false`; `AddAll` skips that item. Id free again once worker takes job or `Purge` drops it. Jobs without id untouched, no cost. In-memory storage implements `IDedupQueue` / `IDedupPriorityQueue`, returning `false` for repeat (persistent storage returns `true`).
+  - **Behavioral change**: in-memory `Add` reusing an id while a job with it is queued now returns `false`.
+  - **Behavioral change**: `AddAll` items without id now have job id `""`, not `"g:"`.
+
 ## [v1.9.0] (2026-10-18)
 
 ### ✨ New Features
