@@ -820,7 +820,7 @@ func TestCreditManagerLenArmsResync(t *testing.T) {
 	s := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
 	s.dryAt.Store(s.pokes.Load()) // seen empty, nothing announced since
 	require.False(t, s.resyncing.Load())
-	m := &creditManager[iJob[string]]{src: s}
+	m := &creditManager[iJob[string]]{directManager: directManager[iJob[string]]{src: s}, cs: s}
 	assert.Equal(t, 0, m.Len())
 	assert.True(t, s.resyncing.Load(), "a dry hint arms the resync")
 }
