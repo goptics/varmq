@@ -73,11 +73,8 @@ func singleManager[JobType any](src source[JobType], priority int) sourceManager
 	}
 
 	cs.reset() // the hint is not kept while other sources share the worker
-	m := &creditManager[JobType]{src: cs, priority: priority}
-	m.emit = func(j JobType) { m.job, m.got = j, true }
-	m.report = func(err error) { m.err = err }
 
-	return m
+	return &creditManager[JobType]{directManager: directManager[JobType]{src: src, priority: priority}, cs: cs}
 }
 
 func (m *emptyManager[JobType]) remove(source[JobType]) sourceManager[JobType] { return m }
@@ -129,71 +126,31 @@ func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 func (m *directManager[JobType]) count() int { return 1 }
 
 // creditManager is the manager of a worker whose only source is a
-// creditSource. Len is the source's ready hint: the scheduler reads it on
-// every wake-up and after every job, and it costs no I/O. Strategies are not
-// involved, and NumPending reads the exact length itself.
+// creditSource. dispatchCredit pops for it; Len is the source's ready hint,
+// which the scheduler reads on every wake-up and after every job, and it
+// costs no I/O. The embedded directManager serves the rest, Next included:
+// the classic loop pops through it only while jobs parked by another
+// manager drain, one exact Len and one DequeueWithAckId per job. Those pops
+// never touch the hint, so it can only read high, and the next credit pass's
+// empty pop corrects it. NumPending reads the exact length.
 type creditManager[JobType any] struct {
-	src      creditSource[JobType]
-	priority int // kept so the source keeps its rank if a second one is bound
-
-	// Next's result, filled by fetch through emit and report. The event
-	// loop is the only caller of Next.
-	job    JobType
-	got    bool
-	err    error
-	emit   func(JobType)
-	report func(error)
+	directManager[JobType]
+	cs      creditSource[JobType]
+	unspent atomic.Int64 // credit of the pass in flight not yet spent on a job; NumPending leaves it out
 }
 
 // Len reading 0 arms the persistent resync, so a worker that sees nothing to
 // do still finds items no poke announced; a Resume reads it too.
 func (m *creditManager[JobType]) Len() int {
-	n := m.src.ready()
+	n := m.cs.ready()
 	if n == 0 {
-		m.src.armResync()
+		m.cs.armResync()
 	}
 
 	return n
 }
 
-func (m *creditManager[JobType]) maxBatch() int { return 1 }
-
-func (m *creditManager[JobType]) purgeGen() *atomic.Uint64 { return nil }
-
-// Next pops one job. It pops again past a job that did not come out (one
-// the user closed) while the hint says more may wait, and reports an empty
-// pop as errNoReadySource.
-func (m *creditManager[JobType]) Next() (JobType, error) {
-	var zero JobType
-
-	for m.src.ready() > 0 {
-		m.got, m.err = false, nil
-		if err := m.src.fetch(1, m.emit, m.report); err != nil {
-			return zero, err
-		}
-
-		if m.got {
-			j := m.job
-			m.job = zero
-			return j, nil
-		}
-
-		if m.err != nil {
-			return zero, m.err
-		}
-	}
-
-	return zero, errNoReadySource
-}
-
-func (m *creditManager[JobType]) add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType] {
-	s := newStrategyManager[JobType](strategy)
-	s.Register(m.src, m.priority)
-	s.Register(src, priority)
-
-	return s
-}
-
+// remove is directManager's, returning m itself while its source stays.
 func (m *creditManager[JobType]) remove(src source[JobType]) sourceManager[JobType] {
 	if src != m.src {
 		return m
@@ -201,8 +158,6 @@ func (m *creditManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 
 	return &emptyManager[JobType]{}
 }
-
-func (m *creditManager[JobType]) count() int { return 1 }
 
 // strategyManager is the manager of a worker with two or more bound sources;
 // it picks the next source by Strategy. A remove leaves at least one, so it

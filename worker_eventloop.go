@@ -23,6 +23,13 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.mx.Unlock()
 				return
 			case <-signal:
+				// A lone batch source pops for every free slot at once; parked
+				// jobs go first through the classic loop.
+				if cm, ok := w.manager().(*creditManager[JobType]); ok && w.nParked.Load() == 0 {
+					w.dispatchCredit(cm)
+					continue
+				}
+
 				for w.IsActive() && w.busyWorkers.Load() < w.concurrency.Load() && w.pending(w.manager()) > 0 {
 					cont, err := w.processNextJob()
 					if err != nil {

@@ -322,7 +322,7 @@ func (s *batchAckSource[T, JobType]) resync() {
 // hint is not kept, and the strategy reads the exact length on every wake.
 func (s *batchAckSource[T, JobType]) sole() bool {
 	cm, ok := s.w.manager().(*creditManager[JobType])
-	return ok && cm.src == creditSource[JobType](s)
+	return ok && cm.cs == creditSource[JobType](s)
 }
 
 // pokeOf returns src's poke if src keeps a ready hint, else nil.
