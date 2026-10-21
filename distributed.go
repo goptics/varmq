@@ -43,7 +43,7 @@ func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
 		return false
 	}
 
-	if ok := dq.Enqueue(jBytes); !ok {
+	if ok := enqueue(dq.IDistributedQueue, jBytes, j.id); !ok {
 		j.Close()
 		return false
 	}
