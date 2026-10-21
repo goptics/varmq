@@ -43,6 +43,13 @@ type IBatchAcknowledgeable interface {
 	// also return a short pop with remaining > 0, for example items it hands
 	// back from an earlier failed call. err is a failure: the worker reports
 	// it and pulls again on the next sign of work.
+	//
+	// A worker bound to it as a distributed queue does not probe the storage
+	// on its own: after a short or failed pop it waits for an "enqueued"
+	// notification. A subscribable implementation must therefore also send
+	// "enqueued" for items no Enqueue announced (visibility-timeout requeues,
+	// other clients' pushes, items left after a failed call), for example
+	// once a second while items wait, as redisq does.
 	DequeueBatchWithAckIds(items []any, ackIDs []string) (n, remaining int, err error)
 }
 
