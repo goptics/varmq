@@ -24,8 +24,9 @@ type IPriorityQueue interface {
 // IDedupQueue is optional for IQueue storage. A persistent or distributed
 // queue adds a job that has an id with EnqueueOnce, which stores item unless
 // an item with the same id was stored within a window the storage sets, and
-// returns true in both cases. A retried Add, or a storage client's re-send of
-// a push whose reply was lost, then stores the job once.
+// returns true in both cases. A storage client's re-send of a push whose reply
+// was lost, or an Add retried with the same id, then stores the job once. A
+// repeat still counts as submitted.
 type IDedupQueue interface {
 	EnqueueOnce(item any, id string) bool
 }

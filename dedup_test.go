@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -13,15 +14,18 @@ type dedupLog struct {
 	mu     sync.Mutex
 	seen   map[string]bool
 	onceID []string // ids EnqueueOnce got, in order
+	items  []any    // items EnqueueOnce got, in order
+	prios  []int    // priorities EnqueueOnce got, in order (priority storage)
 	plain  int      // Enqueue calls
 	stored int      // items stored
 }
 
-// once reports whether id is new, recording it.
-func (l *dedupLog) once(id string) bool {
+// once reports whether id is new, recording the call.
+func (l *dedupLog) once(item any, id string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.onceID = append(l.onceID, id)
+	l.items = append(l.items, item)
 	if l.seen == nil {
 		l.seen = map[string]bool{}
 	}
@@ -51,7 +55,7 @@ func (q *dedupDistQueue) Enqueue(item any) bool {
 }
 
 func (q *dedupDistQueue) EnqueueOnce(item any, id string) bool {
-	if q.log.once(id) {
+	if q.log.once(item, id) {
 		return q.MockDistributedQueue.Enqueue(item)
 	}
 	return true
@@ -68,7 +72,10 @@ func (q *dedupDistPrioQueue) Enqueue(item any, priority int) bool {
 }
 
 func (q *dedupDistPrioQueue) EnqueueOnce(item any, priority int, id string) bool {
-	if q.log.once(id) {
+	q.log.mu.Lock()
+	q.log.prios = append(q.log.prios, priority)
+	q.log.mu.Unlock()
+	if q.log.once(item, id) {
 		return q.MockDistributedPriorityQueue.Enqueue(item, priority)
 	}
 	return true
@@ -98,7 +105,7 @@ func TestAddWithIdUsesEnqueueOnce(t *testing.T) {
 			s := &dedupDistPrioQueue{MockDistributedPriorityQueue: mocks.NewMockDistributedPriorityQueue()}
 			q := NewWorker(noop).WithPersistentPriorityQueue(s)
 			t.Cleanup(func() { q.Worker().Stop() })
-			return func(id string) bool { return q.Add("x", 1, WithJobId(id)) }, &s.log
+			return func(id string) bool { return q.Add("x", 3, WithJobId(id)) }, &s.log
 		}},
 		{"distributed", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistQueue{MockDistributedQueue: mocks.NewMockDistributedQueue()}
@@ -108,7 +115,7 @@ func TestAddWithIdUsesEnqueueOnce(t *testing.T) {
 		{"distributed priority", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistPrioQueue{MockDistributedPriorityQueue: mocks.NewMockDistributedPriorityQueue()}
 			q := NewDistributedPriorityQueue[string](s)
-			return func(id string) bool { return q.Add("x", 1, WithJobId(id)) }, &s.log
+			return func(id string) bool { return q.Add("x", 3, WithJobId(id)) }, &s.log
 		}},
 	}
 
@@ -124,6 +131,18 @@ func TestAddWithIdUsesEnqueueOnce(t *testing.T) {
 			log.mu.Lock()
 			defer log.mu.Unlock()
 			assert.Equal(t, []string{"a", "a", "b"}, log.onceID)
+			for i, item := range log.items {
+				var j struct {
+					Id   string `json:"id"`
+					Data string `json:"data"`
+				}
+				assert.NoError(t, json.Unmarshal(item.([]byte), &j))
+				assert.Equal(t, log.onceID[i], j.Id, "the job carries its id")
+				assert.Equal(t, "x", j.Data)
+			}
+			if log.prios != nil {
+				assert.Equal(t, []int{3, 3, 3}, log.prios, "the priority Add got")
+			}
 			assert.Equal(t, 1, log.plain, "a job without an id takes the plain push")
 			assert.Equal(t, 3, log.stored, "a, b and the job without an id")
 		})

@@ -86,6 +86,11 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 //   - fn: A function that returns a unique string ID.
 //
 // Default: A no-op generator that returns an empty string (no job ID).
+//
+// A persistent or distributed Add on storage that deduplicates by job id
+// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// window and still returns true, so ids must be globally unique (a UUID or
+// nanoid, never a business key or a counter that restarts).
 func DefaultJobIdGenerator(fn func() string) {
 	if fn == nil {
 		return
@@ -290,6 +295,11 @@ func WithAutoRun(run bool) ConfigFunc {
 
 // WithJobIdGenerator sets the job ID generator function for the worker.
 // If not set there wouldn't be any job id
+//
+// A persistent or distributed Add on storage that deduplicates by job id
+// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// window and still returns true, so ids must be globally unique (a UUID or
+// nanoid, never a business key or a counter that restarts).
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		if fn == nil {
@@ -403,6 +413,11 @@ func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
 }
 
 // WithJobId sets the job ID for the job.
+//
+// A persistent or distributed Add on storage that deduplicates by job id
+// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// window and still returns true, so ids must be globally unique (a UUID or
+// nanoid, never a business key or a counter that restarts).
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
 		if id == "" {
