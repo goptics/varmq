@@ -430,3 +430,31 @@ func TestMocksDoNotDeduplicate(t *testing.T) {
 		})
 	}
 }
+
+// rejectDistQueue and rejectDistPrioQueue reject every EnqueueOnce.
+type rejectDistQueue struct{ *mocks.MockDistributedQueue }
+
+func (q *rejectDistQueue) EnqueueOnce(any, string) bool { return false }
+
+type rejectDistPrioQueue struct {
+	*mocks.MockDistributedPriorityQueue
+}
+
+func (q *rejectDistPrioQueue) EnqueueOnce(any, int, string) bool { return false }
+
+// An Add whose EnqueueOnce the storage rejects reports failure.
+func TestAddWithIdFailsWhenEnqueueOnceFails(t *testing.T) {
+	noop := func(Job[string]) {}
+	p := NewWorker(noop).WithPersistentQueue(&rejectDistQueue{mocks.NewMockDistributedQueue()})
+	defer p.Worker().Stop()
+	pp := NewWorker(noop).WithPersistentPriorityQueue(&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
+	defer pp.Worker().Stop()
+	d := NewDistributedQueue[string](&rejectDistQueue{mocks.NewMockDistributedQueue()})
+	dp := NewDistributedPriorityQueue[string](&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
+
+	assert.False(t, p.Add("x", WithJobId("a")), "persistent")
+	assert.False(t, pp.Add("x", 1, WithJobId("a")), "persistent priority")
+	assert.False(t, d.Add("x", WithJobId("a")), "distributed")
+	assert.False(t, dp.Add("x", 1, WithJobId("a")), "distributed priority")
+	assert.Zero(t, p.Worker().Metrics().Submitted(), "nothing was submitted")
+}
