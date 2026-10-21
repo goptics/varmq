@@ -144,6 +144,10 @@ func (q *batchTestDistQueue) Enqueue(v any) bool {
 
 type batchTestPrioQueue struct{ *batchTestQueue }
 
+type batchTestDistPrioQueue struct{ *batchTestDistQueue }
+
+func (q *batchTestDistPrioQueue) Enqueue(v any, _ int) bool { return q.batchTestDistQueue.Enqueue(v) }
+
 func (q *batchTestPrioQueue) Enqueue(v any, _ int) bool { return q.batchTestQueue.Enqueue(v) }
 
 var (
@@ -383,6 +387,11 @@ func TestBatchSourceAddThenWait(t *testing.T) {
 			q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
 			dq := wb.WithDistributedQueue(q)
 			return q.batchTestQueue, func(s string) bool { return dq.Add(s) }
+		}},
+		{"distributed priority", func(wb IWorkerBinder[string]) (*batchTestQueue, func(string) bool) {
+			q := &batchTestDistPrioQueue{&batchTestDistQueue{batchTestQueue: &batchTestQueue{}}}
+			dq := wb.WithDistributedPriorityQueue(q)
+			return q.batchTestQueue, func(s string) bool { return dq.Add(s, 1) }
 		}},
 	}
 	for _, c := range cases {
@@ -751,28 +760,76 @@ func (q *slowEnqQueue) Enqueue(v any) bool {
 	return q.batchTestQueue.Enqueue(v)
 }
 
+// slowEnqPrioQueue is slowEnqQueue for priority storage.
+type slowEnqPrioQueue struct{ *slowEnqQueue }
+
+func (q *slowEnqPrioQueue) Enqueue(v any, _ int) bool { return q.slowEnqQueue.Enqueue(v) }
+
 // The poke follows the storage's confirmation: a pop that runs while the add
 // is in flight must not leave the item waiting for the resync.
 func TestBatchSourcePokeAfterEnqueue(t *testing.T) {
-	q := &slowEnqQueue{batchTestQueue: &batchTestQueue{}}
-	var r recorder
-	wb := NewWorker(r.run)
-	defer wb.Stop()
-	w := internalWorker(wb)
-	pq := wb.WithPersistentQueue(q)
-	waitPops(t, q.batchTestQueue, 1)
-	time.Sleep(1100 * time.Millisecond) // the bind's resync has run and re-armed: it is mid-period
-	q.hook = func() {
-		p := q.pops.Load()
-		w.notifyToPullNextJobs() // another wake-up while the add is in flight
-		for deadline := time.Now().Add(100 * time.Millisecond); q.pops.Load() == p && time.Now().Before(deadline); {
-			time.Sleep(time.Millisecond)
-		}
+	cases := []struct {
+		name string
+		bind func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool
+	}{
+		{"persistent", func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool {
+			pq := wb.WithPersistentQueue(q)
+			return func(s string) bool { return pq.Add(s) }
+		}},
+		{"persistent priority", func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool {
+			pq := wb.WithPersistentPriorityQueue(&slowEnqPrioQueue{q})
+			return func(s string) bool { return pq.Add(s, 1) }
+		}},
 	}
-	start := time.Now()
-	require.True(t, pq.Add("x"))
-	require.Eventually(t, func() bool { return r.has("x") }, 2*time.Second, time.Millisecond)
-	assert.Less(t, time.Since(start), 400*time.Millisecond, "the add's own poke brings the pop")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := &slowEnqQueue{batchTestQueue: &batchTestQueue{}}
+			var r recorder
+			wb := NewWorker(r.run)
+			defer wb.Stop()
+			w := internalWorker(wb)
+			add := c.bind(wb, q)
+			waitPops(t, q.batchTestQueue, 1)
+			time.Sleep(1100 * time.Millisecond) // the bind's resync has run and re-armed: it is mid-period
+			q.hook = func() {
+				p := q.pops.Load()
+				w.notifyToPullNextJobs() // another wake-up while the add is in flight
+				for deadline := time.Now().Add(100 * time.Millisecond); q.pops.Load() == p && time.Now().Before(deadline); {
+					time.Sleep(time.Millisecond)
+				}
+			}
+			start := time.Now()
+			require.True(t, add("x"))
+			require.Eventually(t, func() bool { return r.has("x") }, 2*time.Second, time.Millisecond)
+			assert.Less(t, time.Since(start), 400*time.Millisecond, "the add's own poke brings the pop")
+		})
+	}
+}
+
+// A dry hint read through the manager arms the resync: the classic loop's
+// only contact with the source while parked jobs drain.
+func TestCreditManagerLenArmsResync(t *testing.T) {
+	q := &batchTestQueue{}
+	// never active: the timer the arm starts finds the worker inactive and stops
+	s := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
+	s.dryAt.Store(s.pokes.Load()) // seen empty, nothing announced since
+	require.False(t, s.resyncing.Load())
+	m := &creditManager[iJob[string]]{src: s}
+	assert.Equal(t, 0, m.Len())
+	assert.True(t, s.resyncing.Load(), "a dry hint arms the resync")
+}
+
+// Removing a source the manager does not hold keeps the credit manager, so
+// dispatch stays on credit.
+func TestCreditManagerRemoveOtherKeepsIt(t *testing.T) {
+	q := &batchTestQueue{}
+	s := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
+	m := singleManager[iJob[string]](s, 0)
+	cm, ok := m.(*creditManager[iJob[string]])
+	require.True(t, ok)
+	other := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
+	assert.Same(t, cm, cm.remove(other))
+	assert.IsType(t, &emptyManager[iJob[string]]{}, cm.remove(s))
 }
 
 // Jobs a pause parked count in NumPending when the batch source is alone.
