@@ -33,7 +33,9 @@ type IPriorityQueue interface {
 // In-memory storage (BindQueue, WithQueue) keeps an id while its item is in
 // the queue, until Dequeue or Purge takes it, and returns false for a repeat:
 // Add hands back the job, which would never finish if it was not stored. The
-// in-memory item is the job itself, and its ID method returns id.
+// in-memory item is the job itself, and its ID method returns id. An
+// in-memory Add calls EnqueueOnce only for an id the caller gave (WithJobId,
+// Item.ID), not a generated one.
 type IDedupQueue interface {
 	EnqueueOnce(item any, id string) bool
 }

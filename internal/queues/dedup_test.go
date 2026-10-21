@@ -1,6 +1,7 @@
 package queues
 
 import (
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -195,6 +196,45 @@ func TestPriorityEnqueueOnceKeepsOrder(t *testing.T) {
 // The id set must not move Queue out of its 128-byte size class, whose
 // objects start on a cache line (see Queue), nor PriorityQueue out of 64.
 func TestQueueSizeClass(t *testing.T) {
-	assert.Equal(t, uintptr(128), unsafe.Sizeof(Queue[int]{}))
+	var q Queue[int]
+	assert.Equal(t, uintptr(128), unsafe.Sizeof(q))
+	assert.GreaterOrEqual(t, unsafe.Offsetof(q.ids), uintptr(64), "the id set is on the second line")
+	assert.Less(t, unsafe.Offsetof(q.idsOn), uintptr(128))
 	assert.LessOrEqual(t, unsafe.Sizeof(PriorityQueue[int]{}), uintptr(64))
+}
+
+// A set that held more than idsShrinkPeak ids is dropped once drained, so a
+// burst does not pin its peak memory; a small one is kept for the next id.
+func TestDrainedIdSetIsDropped(t *testing.T) {
+	q := NewQueue[idItem]()
+	pq := NewPriorityQueue[idItem]()
+
+	q.EnqueueOnce(idItem("a"), "a")
+	pq.EnqueueOnce(idItem("a"), 0, "a")
+	q.Dequeue()
+	pq.Dequeue()
+	assert.NotNil(t, q.ids, "small: kept")
+	assert.NotNil(t, pq.ids, "small: kept")
+
+	for i := range idsShrinkPeak + 1 {
+		id := strconv.Itoa(i)
+		q.EnqueueOnce(idItem(id), id)
+		pq.EnqueueOnce(idItem(id), 0, id)
+	}
+	for range idsShrinkPeak {
+		q.Dequeue()
+		pq.Dequeue()
+	}
+	assert.NotNil(t, q.ids, "not drained yet")
+	assert.NotNil(t, pq.ids, "not drained yet")
+
+	q.Dequeue()
+	pq.Dequeue()
+	assert.Nil(t, q.ids)
+	assert.Nil(t, pq.ids)
+	assert.Zero(t, q.idsPeak)
+	assert.Zero(t, pq.idsPeak)
+
+	assert.True(t, q.EnqueueOnce(idItem("a"), "a"), "a dropped set is made again")
+	assert.True(t, pq.EnqueueOnce(idItem("a"), 0, "a"))
 }

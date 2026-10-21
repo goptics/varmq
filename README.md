@@ -133,7 +133,7 @@ How jobs reach workers, and why some arrive in batches: [How It Works](#how-it-w
 
 ### Deduplicate by Job ID
 
-Give a job an id with `varmq.WithJobId` (or every job, with `varmq.WithJobIdGenerator`), and an in-memory queue holds at most one waiting job per id: `Add` returns `nil, false` while a job with the same id is in the queue. The id is free again once a worker takes the job or `Purge` drops it.
+Give a job an id with `varmq.WithJobId` (or an `AddAll` item its `ID`), and an in-memory queue holds at most one waiting job per id: `Add` returns `nil, false` while a job with the same id is in the queue. The id is free again once a worker takes the job or `Purge` drops it. Ids from a job id generator are not checked: a generator never repeats an id for the same work.
 
 ```go
 queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued

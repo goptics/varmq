@@ -10,6 +10,7 @@ import (
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // dedupLog records what reached a storage's push methods.
@@ -157,15 +158,10 @@ func TestAddWithIdUsesEnqueueOnce(t *testing.T) {
 // memDedup is one in-memory queue kind, through what the dedupe tests use.
 type memDedup struct {
 	add    func(id string) (EnqueuedJob, bool)
-	addAll func(ids ...string) memGroup
+	addAll func(ids ...string) EnqueuedGroupJob
 	q      IExternalBaseQueue
 	w      Worker
 	ran    func() []string // ids of the jobs that ran, in order
-}
-
-type memGroup interface {
-	PendingTracker
-	Awaitable
 }
 
 // memDedupKinds builds each in-memory queue kind on a worker that is not
@@ -202,7 +198,7 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			stop(q.Worker())
 			return memDedup{
 				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, WithJobId(id)) },
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -212,7 +208,7 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			stop(q.Worker())
 			return memDedup{
 				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, 1, WithJobId(id)) },
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -221,14 +217,8 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			q := NewErrWorker(func(j Job[int]) error { rec(j.ID()); return nil }, cfg...).BindQueue()
 			stop(q.Worker())
 			return memDedup{
-				add: func(id string) (EnqueuedJob, bool) {
-					j, ok := q.Add(0, WithJobId(id))
-					if !ok {
-						return nil, false
-					}
-					return j, true
-				},
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, WithJobId(id)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -237,14 +227,8 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			q := NewErrWorker(func(j Job[int]) error { rec(j.ID()); return nil }, cfg...).BindPriorityQueue()
 			stop(q.Worker())
 			return memDedup{
-				add: func(id string) (EnqueuedJob, bool) {
-					j, ok := q.Add(0, 1, WithJobId(id))
-					if !ok {
-						return nil, false
-					}
-					return j, true
-				},
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, 1, WithJobId(id)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -253,14 +237,8 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			q := NewResultWorker(func(j Job[int]) (int, error) { rec(j.ID()); return 0, nil }, cfg...).BindQueue()
 			stop(q.Worker())
 			return memDedup{
-				add: func(id string) (EnqueuedJob, bool) {
-					j, ok := q.Add(0, WithJobId(id))
-					if !ok {
-						return nil, false
-					}
-					return j, true
-				},
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, WithJobId(id)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -269,14 +247,8 @@ func memDedupKinds(t *testing.T, cfg ...any) map[string]func() memDedup {
 			q := NewResultWorker(func(j Job[int]) (int, error) { rec(j.ID()); return 0, nil }, cfg...).BindPriorityQueue()
 			stop(q.Worker())
 			return memDedup{
-				add: func(id string) (EnqueuedJob, bool) {
-					j, ok := q.Add(0, 1, WithJobId(id))
-					if !ok {
-						return nil, false
-					}
-					return j, true
-				},
-				addAll: func(ids ...string) memGroup { return q.AddAll(items(ids)) },
+				add:    func(id string) (EnqueuedJob, bool) { return q.Add(0, 1, WithJobId(id)) },
+				addAll: func(ids ...string) EnqueuedGroupJob { return q.AddAll(items(ids)) },
 				q:      q, w: q.Worker(), ran: ran,
 			}
 		},
@@ -292,7 +264,7 @@ func TestInMemoryAddWithId(t *testing.T) {
 			t.Run("a repeat is refused while the job is queued", func(t *testing.T) {
 				k := newKind()
 				a, ok := k.add("a")
-				assert.True(t, ok)
+				require.True(t, ok)
 				dup, ok := k.add("a")
 				assert.False(t, ok)
 				assert.Nil(t, dup)
@@ -314,10 +286,10 @@ func TestInMemoryAddWithId(t *testing.T) {
 				k := newKind()
 				assert.NoError(t, k.w.Start())
 				a, ok := k.add("a")
-				assert.True(t, ok)
+				require.True(t, ok)
 				a.Wait()
 				again, ok := k.add("a")
-				assert.True(t, ok)
+				require.True(t, ok)
 				again.Wait()
 				assert.Equal(t, []string{"a", "a"}, k.ran())
 			})
@@ -339,7 +311,7 @@ func TestInMemoryAddWithId(t *testing.T) {
 				_, ok := k.add("x")
 				assert.True(t, ok, "item ids are prefixed, so Add's x is another id")
 				dup := k.addAll("x")
-				assert.Equal(t, 0, dup.NumPending())
+				require.Equal(t, 0, dup.NumPending())
 				dup.Wait()
 
 				assert.NoError(t, k.w.Start())
@@ -371,13 +343,16 @@ func TestInMemoryAddWithId(t *testing.T) {
 		})
 	}
 
-	t.Run("a generated id is deduplicated too", func(t *testing.T) {
+	// A generator never repeats an id for the same work, so in-memory queues
+	// skip the check: even a constant generator stores every job.
+	t.Run("a generated id is not checked", func(t *testing.T) {
 		for name, newKind := range memDedupKinds(t, WithJobIdGenerator(func() string { return "same" })) {
 			k := newKind()
 			_, ok := k.add("")
 			assert.True(t, ok, name)
 			_, ok = k.add("")
-			assert.False(t, ok, name)
+			assert.True(t, ok, name)
+			assert.Equal(t, 2, k.q.Len(), name)
 		}
 	})
 }
@@ -457,4 +432,19 @@ func TestAddWithIdFailsWhenEnqueueOnceFails(t *testing.T) {
 	assert.False(t, d.Add("x", WithJobId("a")), "distributed")
 	assert.False(t, dp.Add("x", 1, WithJobId("a")), "distributed priority")
 	assert.Zero(t, p.Worker().Metrics().Submitted(), "nothing was submitted")
+}
+
+// Persistent and distributed Adds check generated ids too: they guard the
+// storage client's re-send of a push, which repeats the id.
+func TestGeneratedIdUsesEnqueueOnceOnStorage(t *testing.T) {
+	s := &dedupDistQueue{MockDistributedQueue: mocks.NewMockDistributedQueue()}
+	q := NewWorker(func(Job[string]) {}, WithAutoRun(false), WithJobIdGenerator(func() string { return "g1" })).WithPersistentQueue(s)
+
+	assert.True(t, q.Add("x"))
+	assert.True(t, q.Add("x"))
+
+	s.log.mu.Lock()
+	defer s.log.mu.Unlock()
+	assert.Equal(t, []string{"g1", "g1"}, s.log.onceID)
+	assert.Equal(t, 1, s.log.stored)
 }

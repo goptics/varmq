@@ -30,17 +30,23 @@ type Queue[T any] struct {
 	// idMu never share a line with log either.
 	_ [64 - 8 - 8 - 16 - 16]byte
 
-	ids   map[string]struct{} // ids of stored items EnqueueOnce added; under idMu
-	idMu  sync.Mutex
-	idsOn atomic.Bool // set by the first EnqueueOnce, before its Append
+	ids     map[string]struct{} // ids of stored items EnqueueOnce added; under idMu
+	idsPeak int                 // most ids held since ids was made; under idMu
+	idMu    sync.Mutex
+	idsOn   atomic.Bool // set by the first EnqueueOnce, before its Append
 
-	_ [64 - 8 - 8 - 4]byte
+	_ [64 - 8 - 8 - 8 - 4]byte
 }
 
 // identified is an item that carries the id EnqueueOnce stored it under.
 type identified interface {
 	ID() string
 }
+
+// idsShrinkPeak is the set size above which a drained set is dropped. A map
+// keeps its buckets after its keys are deleted, so a burst of ids would hold
+// its peak memory; a small set is kept, sparing an allocation per refill.
+const idsShrinkPeak = 1024
 
 // Attach returns the value kept with this queue, made by make on the first
 // call and shared by everyone holding the queue. varmq keeps the Purge state
@@ -107,6 +113,7 @@ func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
 	}
 
 	q.ids[id] = struct{}{}
+	q.idsPeak = max(q.idsPeak, len(q.ids))
 
 	return true
 }
@@ -135,6 +142,9 @@ func (q *Queue[T]) release(v T) {
 	if id := j.ID(); id != "" {
 		q.idMu.Lock()
 		delete(q.ids, id)
+		if len(q.ids) == 0 && q.idsPeak > idsShrinkPeak {
+			q.ids, q.idsPeak = nil, 0
+		}
 		q.idMu.Unlock()
 	}
 }
@@ -159,7 +169,7 @@ func (q *Queue[T]) Purge() {
 	defer q.idMu.Unlock()
 
 	q.cur.Purge()
-	q.ids = nil
+	q.ids, q.idsPeak = nil, 0
 }
 
 // Close makes every later Enqueue return false. Stored items can still be

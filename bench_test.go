@@ -3,6 +3,7 @@ package varmq
 import (
 	"errors"
 	"strconv"
+	"sync/atomic"
 	"testing"
 )
 
@@ -152,6 +153,23 @@ func BenchmarkAddWithId(b *testing.B) {
 			job, _ := q.Add(j, WithJobId(ids[j%len(ids)]))
 			job.Wait()
 		}
+	})
+
+	// Parallel adds from every P with no per-job Wait, so producers contend
+	// on the id set the way a busy service would.
+	b.Run("Parallel", func(b *testing.B) {
+		worker := NewWorker(task)
+		q := worker.BindQueue()
+		defer worker.StopAndWait()
+
+		var n atomic.Uint64
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+			}
+		})
 	})
 
 	b.Run("Repeat", func(b *testing.B) {

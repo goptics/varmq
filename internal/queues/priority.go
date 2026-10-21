@@ -19,6 +19,7 @@ type PriorityQueue[T any] struct {
 	ids            map[string]struct{} // ids of stored items EnqueueOnce added; nil until the first
 	mx             sync.RWMutex
 	closed         atomic.Bool
+	idsPeak        uint32 // most ids held since ids was made; under mx
 }
 
 // newPriorityQueue initializes an empty priority queue.
@@ -94,6 +95,7 @@ func (q *PriorityQueue[T]) enqueue(item any, priority int, id string) bool {
 			q.ids = make(map[string]struct{})
 		}
 		q.ids[id] = struct{}{}
+		q.idsPeak = max(q.idsPeak, uint32(len(q.ids)))
 	}
 
 	q.internal.push(enqItem[T]{
@@ -119,9 +121,14 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 
 	v := q.internal.pop().Value // O(log n)
 
-	if q.ids != nil {
+	if len(q.ids) != 0 {
 		if j, ok := any(v).(identified); ok {
-			delete(q.ids, j.ID())
+			if id := j.ID(); id != "" {
+				delete(q.ids, id)
+				if len(q.ids) == 0 && q.idsPeak > idsShrinkPeak {
+					q.ids, q.idsPeak = nil, 0
+				}
+			}
 		}
 	}
 
@@ -134,7 +141,7 @@ func (q *PriorityQueue[T]) Purge() {
 	// Drop the backing array rather than reslicing to 0: it holds the purged
 	// values and, at 32 B a slot, would pin the queue's high-water memory.
 	q.internal.items = nil
-	q.ids = nil
+	q.ids, q.idsPeak = nil, 0
 }
 
 // to satisfy the IQueue interface
