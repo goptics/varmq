@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -181,52 +182,63 @@ func TestCreditSecondSourceMidDrain(t *testing.T) {
 	assert.Less(t, len(order), n, "served before the batch source drained")
 }
 
-// A TunePool down while a pop is in flight: the popped jobs that find no slot
-// are parked and start one slot at a time, in order.
+// A TunePool down while a pop is in flight applies from the next pop: every
+// job the pop took starts at once (they are unacknowledged in storage), and
+// the jobs later pops take run no more at once than the new limit.
 func TestCreditTunePoolDuringPop(t *testing.T) {
-	const n = 40 // enough parked jobs that an unstable sort would reorder them
+	const n = 40
 	q := &batchTestQueue{}
-	var g gauge
-	var mu sync.Mutex
-	var order []string
-	var tuned atomic.Bool
-	var after gauge
+	var later gauge // jobs from pops after the shrink
+	var ran atomic.Int64
 	wb := NewWorker(func(j Job[string]) {
-		late := tuned.Load()
-		g.enter()
-		if late {
-			after.enter()
+		if !strings.HasPrefix(j.Data(), "first") {
+			later.enter()
+			defer later.leave()
 		}
-		time.Sleep(200 * time.Microsecond)
-		mu.Lock()
-		order = append(order, j.Data())
-		mu.Unlock()
-		if late {
-			after.leave()
-		}
-		g.leave()
+		time.Sleep(2 * time.Millisecond)
+		ran.Add(1)
 	}, WithConcurrency(n))
 	defer wb.Stop()
 	pq := wb.WithPersistentQueue(q)
 	waitPops(t, q, 1)
 
-	block := func() {
+	shrink := func() { require.NoError(t, wb.TunePool(1)) }
+	q.duringPop.Store(&shrink) // the pop has taken its items; the shrink lands before any starts
+	for i := range n - 1 {
+		q.push(jobBytes(t, fmt.Sprint("first", i)))
+	}
+	require.True(t, pq.Add("first-x")) // the pop takes all n
+	for i := range 10 {
+		require.True(t, pq.Add(fmt.Sprint("later", i)))
+	}
+	require.Eventually(t, func() bool { return ran.Load() == n+10 }, 5*time.Second, time.Millisecond)
+	assert.LessOrEqual(t, later.max.Load(), int64(1), "later pops respect the new limit")
+}
+
+// Jobs a pop took still run when a TunePool shrink and then a Pause land
+// while the pop is in flight: none is held on the worker, unacknowledged.
+func TestCreditTunePoolThenPauseDuringPop(t *testing.T) {
+	q := &batchTestQueue{}
+	var r recorder
+	wb := NewWorker(r.run, WithConcurrency(4))
+	defer wb.Stop()
+	w := internalWorker(wb)
+	pq := wb.WithPersistentQueue(q)
+	waitPops(t, q, 1)
+
+	during := func() {
 		require.NoError(t, wb.TunePool(1))
-		tuned.Store(true)
+		require.NoError(t, wb.Pause())
 	}
-	q.duringPop.Store(&block) // the pop has taken its items; the shrink lands before any starts
-	var want []string
-	for i := range n {
-		q.push(jobBytes(t, fmt.Sprint(i)))
-		want = append(want, fmt.Sprint(i))
+	q.duringPop.Store(&during)
+	for _, v := range []string{"a", "b", "c"} {
+		q.push(jobBytes(t, v))
 	}
-	require.True(t, pq.Add("x"))
-	want = append(want, "x")
-	require.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(order) == n+1 }, 5*time.Second, time.Millisecond)
-	assert.LessOrEqual(t, after.max.Load(), int64(1), "no job starts over the new limit")
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Equal(t, want, order, "parked jobs keep their order")
+	require.True(t, pq.Add("d"))
+	wb.WaitUntilPaused()
+	assert.Equal(t, 4, r.count(), "every popped job ran")
+	assert.Zero(t, w.nParked.Load())
+	assert.Zero(t, wb.NumPending())
 }
 
 // NumPending leaves out the credit a pass reserved but has not spent: a pop
