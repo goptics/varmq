@@ -33,6 +33,7 @@ func TestGroupJob(t *testing.T) {
 		// Group ID should have the expected prefix
 		assert.True(strings.HasPrefix(groupId, groupIdPrefixed), "group ID should have the correct prefix")
 		assert.Equal(groupIdPrefixed+baseId, groupId, "group ID should be prefix + base ID")
+		assert.Empty(generateGroupId(""), "a member without an id has none, like a single job")
 	})
 
 	t.Run("creating new job in a group", func(t *testing.T) {

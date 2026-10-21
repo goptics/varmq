@@ -63,3 +63,29 @@ func TestMockDistributedPriorityQueue(t *testing.T) {
 		m.ShouldFailEnqueue = false
 	})
 }
+
+// The distributed mocks' EnqueueOnce stores a repeat and notifies
+// subscribers like Enqueue.
+func TestMockDistributedEnqueueOnce(t *testing.T) {
+	q := NewMockDistributedQueue()
+	var n int
+	q.Subscribe(func(string) { n++ })
+	assert.True(t, q.EnqueueOnce("x", "a"))
+	assert.True(t, q.EnqueueOnce("x", "a"))
+	assert.Equal(t, 2, q.Len())
+	assert.Equal(t, 2, n)
+	q.ShouldFailEnqueue = true
+	assert.False(t, q.EnqueueOnce("x", "b"))
+	assert.Equal(t, 2, n, "a failed push is not announced")
+
+	pq := NewMockDistributedPriorityQueue()
+	var pn int
+	pq.Subscribe(func(string) { pn++ })
+	assert.True(t, pq.EnqueueOnce("x", 1, "a"))
+	assert.True(t, pq.EnqueueOnce("x", 1, "a"))
+	assert.Equal(t, 2, pq.Len())
+	assert.Equal(t, 2, pn)
+	pq.ShouldFailEnqueue = true
+	assert.False(t, pq.EnqueueOnce("x", 1, "b"))
+	assert.Equal(t, 2, pn)
+}

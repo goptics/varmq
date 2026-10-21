@@ -90,7 +90,8 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 // A persistent or distributed Add on storage that deduplicates by job id
 // (IDedupQueue, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts).
+// nanoid, never a business key or a counter that restarts). In-memory queues
+// do not check generated ids.
 func DefaultJobIdGenerator(fn func() string) {
 	if fn == nil {
 		return
@@ -299,7 +300,8 @@ func WithAutoRun(run bool) ConfigFunc {
 // A persistent or distributed Add on storage that deduplicates by job id
 // (IDedupQueue, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts).
+// nanoid, never a business key or a counter that restarts). In-memory queues
+// do not check generated ids.
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		if fn == nil {
@@ -367,6 +369,21 @@ type JobConfigFunc func(*jobConfigs)
 
 type jobConfigs struct {
 	Id string
+	// given marks an id from WithJobId or an AddAll Item.ID, which an
+	// in-memory queue refuses while a job with it is queued. A generated id
+	// leaves it false: a generator never repeats an id for the same work, so
+	// checking it would only cost the set's lock.
+	given bool
+}
+
+// onceId is the id an in-memory queue checks for the job, whose own id is id
+// (prefixed for a group member): id when the caller gave one, else "".
+func (c jobConfigs) onceId(id string) string {
+	if !c.given {
+		return ""
+	}
+
+	return id
 }
 
 func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
@@ -393,10 +410,10 @@ func loadJobConfigs(qConfig configs, config ...JobConfigFunc) jobConfigs {
 // concat in generateGroupId.
 func (c *configs) jobConfigsFor(id string) jobConfigs {
 	if id == "" {
-		id = c.jobIdGenerator()
+		return jobConfigs{Id: c.jobIdGenerator()}
 	}
 
-	return jobConfigs{Id: id}
+	return jobConfigs{Id: id, given: true}
 }
 
 // applyJobConfigs is split out so c escapes only when config funcs take its
@@ -417,13 +434,15 @@ func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
 // A persistent or distributed Add on storage that deduplicates by job id
 // (IDedupQueue, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts).
+// nanoid, never a business key or a counter that restarts). An in-memory Add
+// returns false while a job with the same id is in the queue.
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
 		if id == "" {
 			return
 		}
 		c.Id = id
+		c.given = true
 	}
 }
 

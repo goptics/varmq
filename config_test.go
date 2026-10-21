@@ -261,12 +261,14 @@ func TestConfig(t *testing.T) {
 			jc := jobConfigs{Id: "original-id"}
 			configFunc(&jc)
 			assert.Equal(t, "test-id", jc.Id)
+			assert.True(t, jc.given, "an id the caller gives is checked in memory")
 
 			// Test with empty ID (should not change the original ID)
 			configFunc = WithJobId("")
 			jc = jobConfigs{Id: "original-id"}
 			configFunc(&jc)
 			assert.Equal(t, "original-id", jc.Id)
+			assert.False(t, jc.given)
 		})
 	})
 
@@ -548,7 +550,7 @@ func TestJobConfigsFor(t *testing.T) {
 	}}
 
 	t.Run("explicit id is kept and the generator is not called", func(t *testing.T) {
-		assert.Equal(t, jobConfigs{Id: "mine"}, c.jobConfigsFor("mine"))
+		assert.Equal(t, jobConfigs{Id: "mine", given: true}, c.jobConfigsFor("mine"))
 		assert.Equal(t, 0, calls)
 	})
 

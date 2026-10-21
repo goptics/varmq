@@ -17,9 +17,13 @@ type Queue[T any] interface {
 	// Worker returns the bound worker.
 	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedJob to handle the job.
+	// It returns false when the queue is full or closed, or while a job with the
+	// same id (WithJobId) is in the queue. Generated ids are not checked.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool)
 	// AddAll adds multiple Jobs to the queue and returns a EnqueuedGroupJob to handle the job.
+	// An item that does not fit, or whose id is in the queue, is skipped. Item
+	// ids get a "g:" prefix, so item "a" and an Add with id "a" do not collide.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedGroupJob
 }
@@ -47,9 +51,10 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 }
 
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
-	j := newJob(data, loadJobConfigs(q.w.configs(), configs...))
+	c := loadJobConfigs(q.w.configs(), configs...)
+	j := newJob(data, c)
 
-	if ok := q.internalQueue.Enqueue(j); !ok {
+	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
 		return nil, false
 	}
@@ -67,8 +72,9 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	cfg := q.w.configs()
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
-		if ok := q.internalQueue.Enqueue(j); !ok {
+		c := cfg.jobConfigsFor(item.ID)
+		j := groupJob.newJob(item.Data, c)
+		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
 			continue
 		}
@@ -92,9 +98,13 @@ type ErrQueue[T any] interface {
 	// Worker returns the bound worker.
 	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedErrJob to handle the job with error receiving.
+	// It returns false when the queue is full or closed, or while a job with the
+	// same id (WithJobId) is in the queue. Generated ids are not checked.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool)
 	// AddAll adds multiple Jobs to the queue and returns a EnqueuedErrGroupJob to handle the job with error receiving.
+	// An item that does not fit, or whose id is in the queue, is skipped. Item
+	// ids get a "g:" prefix, so item "a" and an Add with id "a" do not collide.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedErrGroupJob
 }
@@ -110,9 +120,10 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 }
 
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
-	j := newErrorJob(data, loadJobConfigs(q.w.configs(), configs...))
+	c := loadJobConfigs(q.w.configs(), configs...)
+	j := newErrorJob(data, c)
 
-	if ok := q.internalQueue.Enqueue(j); !ok {
+	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
 		return nil, false
 	}
@@ -130,8 +141,9 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	cfg := q.w.configs()
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
-		if ok := q.internalQueue.Enqueue(j); !ok {
+		c := cfg.jobConfigsFor(item.ID)
+		j := groupJob.newJob(item.Data, c)
+		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
 			continue
 		}
@@ -154,9 +166,13 @@ type ResultQueue[T, R any] interface {
 	// Worker returns the bound worker.
 	Worker() Worker
 	// Add adds a new Job to the queue and returns a EnqueuedResultJob to handle the job with result receiving.
+	// It returns false when the queue is full or closed, or while a job with the
+	// same id (WithJobId) is in the queue. Generated ids are not checked.
 	// Time complexity: O(1)
 	Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool)
 	// AddAll adds multiple Jobs to the queue and returns a EnqueuedResultGroupJob to handle the job with result receiving.
+	// An item that does not fit, or whose id is in the queue, is skipped. Item
+	// ids get a "g:" prefix, so item "a" and an Add with id "a" do not collide.
 	// Time complexity: O(n) where n is the number of Jobs added
 	AddAll(data []Item[T]) EnqueuedResultGroupJob[R]
 }
@@ -172,9 +188,10 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 }
 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
-	j := newResultJob[T, R](data, loadJobConfigs(q.w.configs(), configs...))
+	c := loadJobConfigs(q.w.configs(), configs...)
+	j := newResultJob[T, R](data, c)
 
-	if ok := q.internalQueue.Enqueue(j); !ok {
+	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
 		return nil, false
 	}
@@ -192,8 +209,9 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	cfg := q.w.configs()
 
 	for _, item := range items {
-		j := groupJob.newJob(item.Data, cfg.jobConfigsFor(item.ID))
-		if ok := q.internalQueue.Enqueue(j); !ok {
+		c := cfg.jobConfigsFor(item.ID)
+		j := groupJob.newJob(item.Data, c)
+		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
 			continue
 		}

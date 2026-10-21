@@ -2,6 +2,8 @@ package varmq
 
 import (
 	"errors"
+	"strconv"
+	"sync/atomic"
 	"testing"
 )
 
@@ -128,6 +130,56 @@ func BenchmarkAdd(b *testing.B) {
 			if job, ok := q.Add(i, i%10); ok {
 				job.Result()
 			}
+		}
+	})
+}
+
+// BenchmarkAddWithId reports what a job id costs an in-memory Add: Unique
+// stores and runs every job, Repeat is refused because a job with the same id
+// is waiting.
+func BenchmarkAddWithId(b *testing.B) {
+	ids := make([]string, 1024)
+	for i := range ids {
+		ids[i] = strconv.Itoa(i)
+	}
+
+	b.Run("Unique", func(b *testing.B) {
+		worker := NewWorker(task)
+		q := worker.BindQueue()
+		defer worker.StopAndWait()
+
+		b.ResetTimer()
+		for j := range b.N {
+			job, _ := q.Add(j, WithJobId(ids[j%len(ids)]))
+			job.Wait()
+		}
+	})
+
+	// Parallel adds from every P with no per-job Wait, so producers contend
+	// on the id set the way a busy service would.
+	b.Run("Parallel", func(b *testing.B) {
+		worker := NewWorker(task)
+		q := worker.BindQueue()
+		defer worker.StopAndWait()
+
+		var n atomic.Uint64
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+			}
+		})
+	})
+
+	b.Run("Repeat", func(b *testing.B) {
+		worker := NewWorker(task, WithAutoRun(false))
+		q := worker.BindQueue()
+		q.Add(0, WithJobId("a"))
+
+		b.ResetTimer()
+		for j := range b.N {
+			q.Add(j, WithJobId("a"))
 		}
 	})
 }

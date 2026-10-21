@@ -35,6 +35,13 @@ func (m *MockPersistentQueue) Enqueue(item any) bool {
 	return m.Queue.Enqueue(item)
 }
 
+// EnqueueOnce shadows the embedded in-memory queue's, which would track ids
+// it can never free (the items here are JSON bytes, with no ID method) and
+// skip the overrides above. This mock does not deduplicate.
+func (m *MockPersistentQueue) EnqueueOnce(item any, _ string) bool {
+	return m.Enqueue(item)
+}
+
 func (m *MockPersistentQueue) DequeueWithAckId() (any, bool, string) {
 	if m.ShouldFailDequeue {
 		return nil, false, ""
@@ -73,6 +80,12 @@ func (m *MockPersistentPriorityQueue) Enqueue(item any, priority int) bool {
 		return false
 	}
 	return m.PriorityQueue.Enqueue(item, priority)
+}
+
+// EnqueueOnce shadows the embedded in-memory queue's; see
+// MockPersistentQueue.EnqueueOnce.
+func (m *MockPersistentPriorityQueue) EnqueueOnce(item any, priority int, _ string) bool {
+	return m.Enqueue(item, priority)
 }
 
 func (m *MockPersistentPriorityQueue) DequeueWithAckId() (any, bool, string) {
