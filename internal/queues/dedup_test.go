@@ -193,13 +193,13 @@ func TestPriorityEnqueueOnceKeepsOrder(t *testing.T) {
 	assert.Equal(t, idItem("high"), v)
 }
 
-// The id set must not move Queue out of its 128-byte size class, whose
-// objects start on a cache line (see Queue), nor PriorityQueue out of 64.
+// The hot fields fill Queue's first 128 bytes and the id set sits after them,
+// out of their prefetch pair (see Queue); PriorityQueue stays in class 64.
 func TestQueueSizeClass(t *testing.T) {
 	var q Queue[int]
-	assert.Equal(t, uintptr(128), unsafe.Sizeof(q))
-	assert.GreaterOrEqual(t, unsafe.Offsetof(q.ids), uintptr(64), "the id set is on the second line")
-	assert.Less(t, unsafe.Offsetof(q.idsOn), uintptr(128))
+	assert.Equal(t, uintptr(192), unsafe.Sizeof(q))
+	assert.GreaterOrEqual(t, unsafe.Offsetof(q.ids), uintptr(128), "the id set is past the hot 128-byte block")
+	assert.Less(t, unsafe.Offsetof(q.idsOn), uintptr(192))
 	assert.LessOrEqual(t, unsafe.Sizeof(PriorityQueue[int]{}), uintptr(64))
 }
 
