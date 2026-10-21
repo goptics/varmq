@@ -25,11 +25,9 @@ type Queue[T any] struct {
 
 	// Every Enqueue reads log. Padded to 128 bytes, so that read never shares
 	// a line with the cursor, allocated just before and written on every
-	// Dequeue. The id set sits after this hot 128-byte block, not on its
-	// second line: the adjacent-line prefetcher pairs 64-byte lines into
-	// 128-byte blocks, and sharing that pair with the hot fields cost about
-	// 10% on dispatch-bound benchmarks even with no id in use. The struct is
-	// 192 bytes, a size class of its own.
+	// Dequeue. The id set sits after this hot 128-byte block, so
+	// EnqueueOnce's writes to idMu stay out of the block's 128-byte prefetch
+	// pair. The struct is 192 bytes, a size class of its own.
 	_ [128 - 8 - 8 - 16 - 16]byte
 
 	ids     map[string]struct{} // ids of stored items EnqueueOnce added; under idMu
