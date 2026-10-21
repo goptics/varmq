@@ -44,7 +44,7 @@ func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfig
 		return false
 	}
 
-	if ok := dpq.Enqueue(jBytes, priority); !ok {
+	if ok := enqueuePriority(dpq.IDistributedPriorityQueue, jBytes, priority, j.id); !ok {
 		j.Close()
 		return false
 	}

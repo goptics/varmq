@@ -33,7 +33,7 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 		return false
 	}
 
-	if ok := q.internalQueue.Enqueue(val, priority); !ok {
+	if ok := enqueuePriority(q.internalQueue, val, priority, j.id); !ok {
 		return false
 	}
 

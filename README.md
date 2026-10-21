@@ -158,6 +158,18 @@ See complete working examples in the [examples directory](./examples):
 
 Create your own adapters by implementing the `IPersistentQueue` or `IDistributedQueue` interfaces.
 
+Give each job a globally unique id (a UUID or nanoid, never a per-process
+counter) when the adapter can deduplicate pushes (`IDedupQueue`, which redisq
+implements): a retried `Add`, or the client's re-send of a push whose reply was
+lost, then stores the job once. A job without an id takes the plain push and
+can be stored twice in those cases.
+
+```go
+queue.Add(data, varmq.WithJobId(uuid.NewString()))
+// or for every job of a worker:
+worker := varmq.NewWorker(fn, varmq.WithJobIdGenerator(uuid.NewString))
+```
+
 > [!Note]
 > Before testing examples, make sure to start the Redis server using `docker compose up -d`.
 

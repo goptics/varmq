@@ -21,6 +21,37 @@ type IPriorityQueue interface {
 	Enqueue(item any, priority int) bool
 }
 
+// IDedupQueue is optional for IQueue storage. A persistent or distributed
+// queue adds a job that has an id with EnqueueOnce, which stores item unless
+// an item with the same id was stored within a window the storage sets, and
+// returns true in both cases. A retried Add, or a storage client's re-send of
+// a push whose reply was lost, then stores the job once.
+type IDedupQueue interface {
+	EnqueueOnce(item any, id string) bool
+}
+
+// IDedupPriorityQueue is IDedupQueue for IPriorityQueue storage.
+type IDedupPriorityQueue interface {
+	EnqueueOnce(item any, priority int, id string) bool
+}
+
+// enqueue stores item in q, once per id when the job has one and q
+// implements IDedupQueue.
+func enqueue(q IQueue, item []byte, id string) bool {
+	if d, ok := q.(IDedupQueue); ok && id != "" {
+		return d.EnqueueOnce(item, id)
+	}
+	return q.Enqueue(item)
+}
+
+// enqueuePriority is enqueue for priority storage (see IDedupPriorityQueue).
+func enqueuePriority(q IPriorityQueue, item []byte, priority int, id string) bool {
+	if d, ok := q.(IDedupPriorityQueue); ok && id != "" {
+		return d.EnqueueOnce(item, priority, id)
+	}
+	return q.Enqueue(item, priority)
+}
+
 // IAcknowledgeable is the root interface of acknowledgeable operations.
 type IAcknowledgeable interface {
 	// Returns true if the item was successfully acknowledged, false otherwise.
