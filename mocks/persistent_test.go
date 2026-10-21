@@ -85,3 +85,21 @@ func TestMockPersistentPriorityQueue(t *testing.T) {
 		assert.Equal(t, "mock-ack-id", ackID)
 	})
 }
+
+// The mocks shadow the embedded in-memory EnqueueOnce: a repeated id is
+// stored again, and ShouldFailEnqueue still applies.
+func TestMockPersistentEnqueueOnce(t *testing.T) {
+	q := NewMockPersistentQueue()
+	assert.True(t, q.EnqueueOnce("x", "a"))
+	assert.True(t, q.EnqueueOnce("x", "a"))
+	assert.Equal(t, 2, q.Len())
+	q.ShouldFailEnqueue = true
+	assert.False(t, q.EnqueueOnce("x", "b"))
+
+	pq := NewMockPersistentPriorityQueue()
+	assert.True(t, pq.EnqueueOnce("x", 1, "a"))
+	assert.True(t, pq.EnqueueOnce("x", 1, "a"))
+	assert.Equal(t, 2, pq.Len())
+	pq.ShouldFailEnqueue = true
+	assert.False(t, pq.EnqueueOnce("x", 1, "b"))
+}

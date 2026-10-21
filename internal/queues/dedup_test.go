@@ -238,3 +238,30 @@ func TestDrainedIdSetIsDropped(t *testing.T) {
 	assert.True(t, q.EnqueueOnce(idItem("a"), "a"), "a dropped set is made again")
 	assert.True(t, pq.EnqueueOnce(idItem("a"), 0, "a"))
 }
+
+// EnqueueOnce refuses an item that is not a T, and an item without an ID
+// method dequeues cleanly once ids are in use.
+func TestEnqueueOnceOddItems(t *testing.T) {
+	assert.False(t, NewQueue[int]().EnqueueOnce("x", "a"), "not a T")
+	assert.False(t, NewPriorityQueue[int]().EnqueueOnce("x", 0, "a"), "not a T")
+
+	q := NewQueue[any]()
+	assert.True(t, q.EnqueueOnce(idItem("a"), "a"))
+	assert.True(t, q.Enqueue(42))
+	v, ok := q.Dequeue()
+	assert.True(t, ok)
+	assert.Equal(t, idItem("a"), v)
+	v, ok = q.Dequeue()
+	assert.True(t, ok)
+	assert.Equal(t, 42, v)
+	assert.True(t, q.EnqueueOnce(idItem("a"), "a"), "the queue still works")
+
+	pq := NewPriorityQueue[any]()
+	assert.True(t, pq.EnqueueOnce(idItem("a"), 1, "a"))
+	assert.True(t, pq.Enqueue(42, 0))
+	v, _ = pq.Dequeue()
+	assert.Equal(t, 42, v, "an item without an ID dequeues while ids are held")
+	assert.False(t, pq.EnqueueOnce(idItem("a"), 1, "a"), "a is still held")
+	v, _ = pq.Dequeue()
+	assert.Equal(t, idItem("a"), v)
+}
