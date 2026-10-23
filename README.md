@@ -279,7 +279,7 @@ for i := range 100 {
 
 ### Lifecycle and Errors
 
-Every call returns at once; running jobs always finish.
+`Pause`, `Resume`, `TunePool` and `Stop` return at once. `Restart` waits for the worker to stop before starting it again, and the `Wait*` methods block until their condition is met. Running jobs always finish.
 
 ```go
 worker := varmq.NewWorker(process, 4,
