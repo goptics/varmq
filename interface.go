@@ -84,11 +84,13 @@ type IBatchAcknowledgeable interface {
 	// DequeueBatchWithAckIds moves up to min(len(items), len(ackIDs)) items
 	// to pending in one atomic step, each under its own ack id, into
 	// items[:n] and ackIDs[:n]. remaining is the storage length right after
-	// the move. n is 0 with a nil error when the storage is empty. A short
-	// pop (n below the count) normally means the storage ran dry; storage may
-	// also return a short pop with remaining > 0, for example items it hands
-	// back from an earlier failed call. err is a failure: the worker reports
-	// it and pulls again on the next sign of work.
+	// the move, or a lower bound when the storage caps its count; it is above
+	// 0 whenever items remain. n is 0 with a nil error when the storage is
+	// empty. A short pop (n below the count) normally means the storage ran
+	// dry; storage may also return a short pop with remaining > 0, for
+	// example items it hands back from an earlier failed call. err is a
+	// failure: the worker reports it and pulls again on the next sign of
+	// work.
 	//
 	// A worker bound to it as a distributed queue does not probe the storage
 	// on its own: after a short or failed pop it waits for an "enqueued"
