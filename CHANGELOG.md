@@ -10,7 +10,7 @@
 
 ### 📚 Documentation
 
-- **Benchmarks moved to [goptics/benchmarks](https://github.com/goptics/benchmarks)** (#128): README links the new repo and live charts at [benchmarks.goptics.org](https://benchmarks.goptics.org). Worker pool table rerun, now with errgroup and gopool. New Redis-backed (vs Asynq, rmq, taskq, gocraft/work) and SQLite-backed (vs River, goqite, backlite) queue comparisons. PNG charts dropped for live chart links.
+- README benchmarks moved to [goptics/benchmarks](https://github.com/goptics/benchmarks), with Redis and SQLite queue comparisons (#128).
 
 ## [v1.9.0] (2026-10-18)
 
