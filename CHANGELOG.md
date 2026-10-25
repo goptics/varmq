@@ -8,6 +8,10 @@
   - **Behavioral change**: in-memory `Add` reusing an id while a job with it is queued now returns `false`.
   - **Behavioral change**: `AddAll` items without id now have job id `""`, not `"g:"`.
 
+### 📚 Documentation
+
+- **Benchmarks moved to [goptics/benchmarks](https://github.com/goptics/benchmarks)** (#128): README links the new repo and live charts at [benchmarks.goptics.org](https://benchmarks.goptics.org). Worker pool table rerun, now with errgroup and gopool. New Redis-backed (vs Asynq, rmq, taskq, gocraft/work) and SQLite-backed (vs River, goqite, backlite) queue comparisons. PNG charts dropped for live chart links.
+
 ## [v1.9.0] (2026-10-18)
 
 ### ✨ New Features
