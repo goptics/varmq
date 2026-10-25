@@ -396,7 +396,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 ### Performance
 
-Run of 2026-10-25 on an i7-13700 (24 threads), Go 1.26, varmq main (upcoming v1.10.0). Raw results and harness in [goptics/benchmarks](https://github.com/goptics/benchmarks), charts at [benchmarks.goptics.org](https://benchmarks.goptics.org).
+Run of 2026-10-25 on an i7-13700 (24 threads), Go 1.26, varmq v1.10.0. Raw results and harness in [goptics/benchmarks](https://github.com/goptics/benchmarks), charts at [benchmarks.goptics.org](https://benchmarks.goptics.org).
 
 #### Worker pool
 
