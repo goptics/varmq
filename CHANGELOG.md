@@ -4,9 +4,19 @@
 
 ### ✨ New Features
 
-- **In-memory dedupe by job id**: queue and priority queue (plain, error, result) store one waiting job per id given with `WithJobId` or `Item.ID`. `Add` of an id already in queue returns `nil, false`; `AddAll` skips that item. Id free again once worker takes job or `Purge` drops it. Generated ids not checked (generator never repeats one for same work); persistent and distributed queues still check them. Jobs without id: no cost, except a type check on dequeue once the queue has stored a job with an id. A drained id set over 1024 ids is dropped, so a burst does not keep its peak memory. In-memory storage implements `IDedupQueue` / `IDedupPriorityQueue`, returning `false` for repeat (persistent storage returns `true`).
+- Persistent and distributed queues add a job with an id through the storage's `EnqueueOnce` (`IDedupQueue`, `IDedupPriorityQueue`), so a retried `Add` stores it once (#123).
+- In-memory queues and priority queues skip a job whose id (`WithJobId`, `Item.ID`) is already queued (#124).
   - **Behavioral change**: in-memory `Add` reusing an id while a job with it is queued now returns `false`.
   - **Behavioral change**: `AddAll` items without id now have job id `""`, not `"g:"`.
+
+### ⚡ Performance
+
+- A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
+
+### 📚 Documentation
+
+- README trimmed; errgroup and gopool added to the benchmark comparison (#119, #120, #126).
+- README benchmarks moved to [goptics/benchmarks](https://github.com/goptics/benchmarks), with Redis and SQLite queue comparisons (#128).
 
 ## [v1.9.0] (2026-10-18)
 

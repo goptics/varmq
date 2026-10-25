@@ -369,7 +369,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 ## Comparison and Benchmarks
 
-`VarMQ` is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools in the [benchmark repository](https://github.com/goptics/varmq-benchmarks).
+`VarMQ` is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools as a worker pool, and with Redis- and SQLite-backed job queues as a persistent queue, in the [benchmark repository](https://github.com/goptics/benchmarks).
 
 ### Feature comparison
 
@@ -396,59 +396,77 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 
 ### Performance
 
-Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Charts for the sleep task:
+Run of 2026-10-25 on an i7-13700 (24 threads), Go 1.26, varmq v1.10.0. Raw results and harness in [goptics/benchmarks](https://github.com/goptics/benchmarks), charts at [benchmarks.goptics.org](https://benchmarks.goptics.org).
 
-<details>
-<summary><b>24 CPUs</b></summary>
+#### Worker pool
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-24cpu-dark.png">
-  <img alt="Execution time, throughput, memory and allocations of nine Go worker pools on 24 CPUs" src="./assets/bench/bench-24cpu-light.png">
-</picture>
+Every pool gets 50K workers and runs three kinds of task (sleep 10 ms, a short CPU loop, and a mix of both), 5M tasks of each, sent by anywhere from 1 to 1M producers. Live charts: ↗️ [24 CPUs](https://benchmarks.goptics.org/?id=pool-24cpu) · ↗️ [8 CPUs](https://benchmarks.goptics.org/?id=pool-8cpu) · ↗️ [4 CPUs](https://benchmarks.goptics.org/?id=pool-4cpu).
 
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=0&g=0)
-
-</details>
-<details>
-<summary><b>8 CPUs</b></summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-8cpu-dark.png">
-  <img alt="Execution time, throughput, memory and allocations of nine Go worker pools on 8 CPUs" src="./assets/bench/bench-8cpu-light.png">
-</picture>
-
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=1&g=0)
-
-</details>
-<details>
-<summary><b>4 CPUs</b></summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/bench/bench-4cpu-dark.png">
-  <img alt="Execution time, throughput, memory and allocations of nine Go worker pools on 4 CPUs" src="./assets/bench/bench-4cpu-light.png">
-</picture>
-
-[Open live chart](https://goptics.github.io/varmq-benchmarks/?d=2&g=0)
-
-</details>
-
-The charts above show only the sleep task at 50K workers. For every task, workload, pool size and CPU count, see the [interactive charts](https://goptics.github.io/varmq-benchmarks/); the harness and raw results live in [varmq-benchmarks](https://github.com/goptics/varmq-benchmarks).
-
-**Summary**: time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
+Time to run all 15M tasks per CPU count and memory per 1M tasks, **lower is better**; throughput in million tasks per second, averaged over every run, **higher is better**.
 
 | Pool             | 4 CPUs (s) | 8 CPUs (s) | 24 CPUs (s) | Throughput (M/s) | Memory (MB) |
 | ---------------- | ---------: | ---------: | ----------: | ---------------: | ----------: |
-| **VarMQ**        | **5.10** | **3.55** | **3.97** | **4.90**   | 115    |
-| BufferedPool⁵    | 5.57     | 5.44     | 10.38    | 2.61       | 23     |
-| ants             | 6.71     | 6.53     | 8.11     | 2.22       | 16     |
-| GoroutinePool⁵   | 7.45     | 7.26     | 14.44    | 1.79       | **15** |
-| conc             | 8.66     | 8.65     | 16.75    | 1.56       | **15** |
-| workerpool       | 10.72    | 12.76    | 16.00    | 1.33       | 28     |
-| pond v2          | 21.82    | 23.20    | 46.76    | 0.57       | 317    |
+| **VarMQ**        | **5.07** | **3.54** | **3.85** | **4.89**   | 115    |
+| BufferedPool⁵    | 5.43     | 5.41     | 8.49     | 2.73       | 23     |
+| errgroup         | 6.38     | 5.69     | 9.23     | 2.29       | 111    |
+| ants             | 6.74     | 6.51     | 8.00     | 2.22       | 15     |
+| gopool           | 7.13     | 7.48     | 11.00    | 1.92       | 52     |
+| GoroutinePool⁵   | 7.24     | 6.96     | 12.85    | 1.90       | **14** |
+| conc             | 8.45     | 8.61     | 17.38    | 1.56       | 15     |
+| workerpool       | 10.20    | 11.58    | 16.42    | 1.35       | 28     |
+| pond v2          | 20.67    | 22.23    | 42.38    | 0.60       | 318    |
 
-Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
+Why more memory: `Add` never blocks, so VarMQ queues every task as a job (ID, status, result handle) until a worker takes it; errgroup starts a goroutine per task. ants, conc and the unbuffered pool make the producer wait instead, so far fewer tasks are held at once.
 
-<sub>⁵ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool). Measured on an i7-13700.</sub>
+The full matrix (100K, 300K and single-worker pools) is on the live charts; the harness is in [pool](https://github.com/goptics/benchmarks/tree/main/pool).
+
+<sub>⁵ Hand-rolled: fixed workers reading a channel, unbuffered (GoroutinePool) or with 1M slots (BufferedPool).</sub>
+
+#### Redis-backed queues
+
+<details>
+<summary>Throughput and latency against Asynq, rmq, taskq and gocraft/work</summary>
+
+VarMQ with [redisq](https://github.com/goptics/redisq) against [Asynq](https://github.com/hibiken/asynq), [rmq](https://github.com/wellle/rmq), [taskq](https://github.com/vmihailenco/taskq) and [gocraft/work](https://github.com/gocraft/work). Each run moves 100K no-op jobs from 100 producers, with one library instance (C1) or four in one process (C4); Redis 7.2 is pinned to its own core. ↗️ [Live chart](https://benchmarks.goptics.org/?id=redis).
+
+Jobs per second, **higher is better**; enqueue-to-handler latency, **lower is better**.
+
+| Library      | C1, 10 workers | C1, 100 workers | C4, 10 workers | C4, 100 workers | Latency p50 (ms) |
+| ------------ | -------------: | --------------: | -------------: | --------------: | ---------------: |
+| **VarMQ**⁶   | 41,816         | **59,898**      | 54,371         | **64,352**      | **0.058**        |
+| gocraft/work | **48,917**     | 44,775          | 47,484         | 42,707          | 0.082            |
+| taskq        | 34,434         | 34,499          | 18,989         | 15,898          | 0.062            |
+| rmq          | 29,616         | 28,521          | **60,003**     | 59,094          | 1.25             |
+| Asynq        | 17,823         | 17,744          | 17,397         | 17,670          | 998⁷             |
+
+With a single producer, rmq is fastest in every row (about 35K jobs/s against VarMQ's 21K). Every row, including the single-producer ones, is in [redis](https://github.com/goptics/benchmarks/tree/main/redis).
+
+<sub>⁶ C1 uses a persistent queue, C4 a distributed queue (a persistent queue serves one instance); latency is the persistent queue, 0.068 ms for the distributed one. ⁷ Asynq sleeps 0.5 to 1.5 s after an empty poll.</sub>
+
+</details>
+
+#### SQLite-backed queues
+
+<details>
+<summary>Throughput against River, goqite and backlite</summary>
+
+VarMQ with [sqliteq](https://github.com/goptics/sqliteq) against [River](https://github.com/riverqueue/river) (SQLite driver), [goqite](https://github.com/maragudk/goqite) and [backlite](https://github.com/mikestefanello/backlite), all in one process on WAL. Mixed produces and consumes at once; Drain adds every job first, then times the consumers; Prio adds priorities; 10Q spreads the jobs over 10 queues. 20K jobs per run (10K for Prio), SQLite's default checkpoint of 1000 pages. ↗️ [Live chart](https://benchmarks.goptics.org/?id=sqlite).
+
+Jobs per second, **higher is better**.
+
+| Library             | Mixed     | Drain      | Drain, Prio | Mixed, 10Q |
+| ------------------- | --------: | ---------: | ----------: | ---------: |
+| **VarMQ**           | **8,575** | **14,725** | **12,937**  | **29,624**⁸ |
+| VarMQ, one file     |           |            |             | 4,553      |
+| goqite              | 3,032     | 2,933      | 2,908       | 2,131      |
+| River               | 1,375     | 3,230      | 3,240       | 1,431      |
+| backlite            | 924       | 1,119      |             | 5,326      |
+
+VarMQ is also fastest at a 10000-page checkpoint. Both checkpoint sizes and WAL sizes are in [sqlite](https://github.com/goptics/benchmarks/tree/main/sqlite).
+
+<sub>⁸ One database file per queue, sqliteq's default. The other libraries keep every queue in one file; so does "VarMQ, one file" (`WithSingleFile`). backlite does not run Prio.</sub>
+
+</details>
 
 ### Micro-benchmarks
 
