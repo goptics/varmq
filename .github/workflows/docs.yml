@@ -60,10 +60,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: docs/pnpm-lock.yaml
 
+      # The coverage script runs `go doc` on the varmq package at the repo root.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
       - run: pnpm install --frozen-lockfile
         working-directory: docs
 
       - run: pnpm test
+        working-directory: docs
+
+      - run: pnpm coverage
         working-directory: docs
 
       - run: pnpm build

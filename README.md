@@ -9,6 +9,7 @@
 
 
   <p>
+    <a href="https://varmq.goptics.org/"><img src="https://img.shields.io/badge/Docs-blue?logo=readthedocs&logoColor=white" alt="Docs" /></a>
     <a href="https://github.com/avelino/awesome-go?tab=readme-ov-file#messaging"><img src="https://awesome.re/mentioned-badge-flat.svg" alt="Mentioned in Awesome Go" /></a>
     <a href="https://pkg.go.dev/github.com/goptics/varmq"><img src="https://img.shields.io/badge/go-pkg-00ADD8.svg?logo=go" alt="Go Reference" /></a>
     <a href="https://github.com/goptics/varmq/actions/workflows/ci.yml"><img src="https://github.com/goptics/varmq/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
@@ -19,6 +20,7 @@
   </p>
 
   <p align="center">
+    <a href="https://varmq.goptics.org/">Docs</a> ·
     <a href="#features">Features</a> ·
     <a href="#quick-start">Quick Start</a> ·
     <a href="#usage">Usage</a> ·

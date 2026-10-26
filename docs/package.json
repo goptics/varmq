@@ -7,7 +7,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "coverage": "bash scripts/api-coverage.sh"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.4",

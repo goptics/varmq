@@ -58,7 +58,7 @@ Every handle has [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiab
 
 ## Which queues each worker can bind
 
-The in-memory binding methods return a queue handle whose type follows the worker.
+Each constructor returns a binder that holds the binding methods: [`IWorkerBinder[T]`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder) from `NewWorker`, [`IErrWorkerBinder[T]`](https://pkg.go.dev/github.com/goptics/varmq#IErrWorkerBinder) from `NewErrWorker` and [`IResultWorkerBinder[T, R]`](https://pkg.go.dev/github.com/goptics/varmq#IResultWorkerBinder) from `NewResultWorker`. The in-memory binding methods return a queue handle whose type follows the worker.
 
 | | `NewWorker` | `NewErrWorker` | `NewResultWorker` |
 |---|---|---|---|
