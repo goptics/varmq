@@ -1,0 +1,290 @@
+---
+title: Redis
+description: Persistent and distributed queues on Redis with redisq v1.4.0. Setup, the four queue types, runnable programs, and what redisq does with a job that was not acknowledged.
+sidebar:
+  order: 2
+---
+
+[redisq](https://github.com/goptics/redisq) is the Redis adapter for varmq. It provides first-in first-out and priority queues on one Redis server, each in a persistent and a distributed form. This page uses redisq v1.4.0, the version the repository's `examples/` pin. Read [persistence and distribution](/persistence/overview/) first for what the two kinds of queue do.
+
+## Setup
+
+redisq v1.4.0 needs Redis 6.0 or newer, and its `go.mod` asks for Go 1.24.1. The repository's `examples/compose.yml` starts Redis 7.2 on port 6375, and the programs below use that port. From a clone of the repository:
+
+```bash
+docker compose -f examples/compose.yml up -d
+```
+
+Without a clone, the same image does the job:
+
+```bash
+docker run -d --name varmq-redis -p 6375:6379 redis:7.2-alpine
+```
+
+Add the two modules to yours. varmq's version is the release these pages describe:
+
+```bash
+go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+```
+
+[`redisq.New`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#New) takes a Redis URL and returns a [`Queues`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues) value. It panics when the URL does not parse. `Queues` has one constructor for each kind of queue. Each takes a key, which names the queue in Redis:
+
+| Constructor | Order | Bind it with |
+|---|---|---|
+| [`NewQueue`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues.NewQueue) | first in, first out, on a Redis list | [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue) |
+| [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues.NewPriorityQueue) | lowest number first, on a sorted set | [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) |
+| [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues.NewDistributedQueue) | first in, first out, plus notifications | [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), or [`varmq.NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) with no worker |
+| [`NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues.NewDistributedPriorityQueue) | lowest number first, plus notifications | [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue), or [`varmq.NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedPriorityQueue) |
+
+A queue with the key `jobs` keeps its waiting jobs under `jobs`. It keeps the jobs a worker took and has not acknowledged under `jobs:nacked`, with their deadlines under `jobs:timeouts`. A distributed queue also publishes on `jobs:notifications`.
+
+Redis keeps these in memory. Whether they survive a restart of Redis itself is up to Redis's own persistence settings, which neither varmq nor redisq changes.
+
+## A persistent queue
+
+The program below binds a persistent queue to a worker with concurrency 1, adds ten jobs, and waits for them.
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/goptics/redisq"
+	"github.com/goptics/varmq"
+)
+
+func main() {
+	rdb := redisq.New("redis://localhost:6375")
+	defer rdb.Close()
+
+	pq := rdb.NewQueue("persistent_queue")
+	defer pq.Close()
+
+	worker := varmq.NewWorker(func(j varmq.Job[int]) {
+		fmt.Println("processing", j.Data())
+		time.Sleep(time.Second)
+		fmt.Println("processed", j.Data())
+	}, varmq.WithAutoRun(false))
+
+	queue := worker.WithPersistentQueue(pq)
+	fmt.Println("left in Redis by an earlier run:", queue.Len())
+
+	// Start after the bind, so the worker looks at jobs already in Redis.
+	worker.Start()
+
+	for i := range 10 {
+		queue.Add(i)
+	}
+
+	worker.WaitAndStop()
+	worker.WaitUntilStopped()
+}
+```
+
+Three choices in it matter:
+
+- **The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) and started after the bind.** That is what makes it look at jobs a previous run left in Redis. [The overview](/persistence/overview/#starting-a-worker-on-a-non-empty-queue) says why.
+- **[`queue.Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) is read before [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start).** It asks Redis, so it counts the waiting jobs from the earlier run.
+- **The worker is stopped before the deferred closes run.** [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) lets every job run, and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) waits for the stop to finish. A job acknowledges when its function returns. After a redisq queue is closed, its [`Acknowledge`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Acknowledge) returns `false`, so closing it under a running job makes that acknowledgement fail.
+
+### Run locally
+
+1. Start Redis, as in [Setup](#setup).
+2. Make a module, save the program as `main.go` and add the dependencies:
+
+   ```bash
+   mkdir redis-persistent && cd redis-persistent
+   go mod init redis-persistent
+   go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+   ```
+
+3. Run it with `go run .`. The first run prints `left in Redis by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.
+4. Run it again, and press Ctrl+C a few seconds in. The jobs that had not started are still in Redis.
+5. Run it a third time. It prints how many jobs are left, and the worker runs those first, before the ten new ones.
+
+The job that was running when you pressed Ctrl+C is not in that count, and it does not run again at once. [The section on unacknowledged jobs](#jobs-that-were-not-acknowledged) explains why.
+
+You can also run the repository's `examples/redis-persistent`, which does the same with a worker that starts on creation.
+
+## A priority queue
+
+`NewPriorityQueue` gives a queue that hands out the lowest number first. [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) binds it, and [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentPriorityQueue.Add) on the handle takes the priority after the data.
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/goptics/redisq"
+	"github.com/goptics/varmq"
+)
+
+func main() {
+	rdb := redisq.New("redis://localhost:6375")
+	defer rdb.Close()
+
+	pq := rdb.NewPriorityQueue("persistent_priority_queue")
+	defer pq.Close()
+
+	worker := varmq.NewWorker(func(j varmq.Job[string]) {
+		fmt.Println("processing", j.Data())
+	}, varmq.WithAutoRun(false))
+
+	queue := worker.WithPersistentPriorityQueue(pq)
+
+	// A lower number runs first.
+	queue.Add("report", 10)
+	queue.Add("alert", 1)
+	queue.Add("newsletter", 5)
+
+	worker.Start()
+	worker.WaitAndStop()
+	worker.WaitUntilStopped()
+}
+```
+
+### Run locally
+
+Follow the steps for the persistent queue, with this program as `main.go`. It prints:
+
+```
+processing alert
+processing newsletter
+processing report
+```
+
+redisq stores a priority job as a member of a Redis sorted set, and a sorted set holds a member once. So in v1.4.0, two jobs whose stored JSON is identical collapse into one, and the later priority wins. Adding `"same"` three times at priority 1 and once more at priority 3 leaves a single `"same"` job, at priority 3, although every `Add` returned `true`. Give jobs that must stay apart different IDs with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId), which puts the ID in the JSON. The first-in first-out queue is a list and keeps duplicates.
+
+## A distributed queue
+
+A distributed queue is shared by any number of processes. The producer below has no worker. It wraps the Redis queue with [`varmq.NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) and adds jobs.
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/goptics/redisq"
+	"github.com/goptics/varmq"
+)
+
+func main() {
+	rdb := redisq.New("redis://localhost:6375")
+	defer rdb.Close()
+
+	dq := rdb.NewDistributedQueue("distributed_queue")
+	defer dq.Close()
+
+	// No worker here: this process only adds jobs.
+	producer := varmq.NewDistributedQueue[string](dq)
+
+	for i := range 20 {
+		if !producer.Add(fmt.Sprintf("https://example.com/%d", i)) {
+			fmt.Println("not added:", i)
+		}
+	}
+
+	fmt.Println("waiting in Redis:", producer.Len())
+}
+```
+
+The consumer binds the same Redis queue to a worker with concurrency 5, and runs until you stop it.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/goptics/redisq"
+	"github.com/goptics/varmq"
+)
+
+func main() {
+	rdb := redisq.New("redis://localhost:6375")
+	defer rdb.Close()
+
+	dq := rdb.NewDistributedQueue("distributed_queue")
+	defer dq.Close()
+
+	worker := varmq.NewWorker(func(j varmq.Job[string]) {
+		fmt.Println("scraping", j.Data())
+		time.Sleep(2 * time.Second)
+		fmt.Println("scraped", j.Data())
+	}, 5, varmq.WithAutoRun(false))
+
+	queue := worker.WithDistributedQueue(dq)
+	fmt.Println("waiting in Redis:", queue.Len())
+
+	worker.Start()
+	fmt.Println("listening")
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+
+	// Let running jobs finish and acknowledge before the queue closes.
+	worker.StopAndWait()
+}
+```
+
+How it fits together in redisq v1.4.0:
+
+- **A job reaches one consumer.** The consumer takes a job from the Redis list, and a job that has been taken is not in the list for another consumer. Two consumers on one key divide the jobs between them.
+- **`Add` publishes a notification.** [`Enqueue`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#DistributedQueue.Enqueue) on a distributed queue publishes `"enqueued"` on the key's `notifications` channel. Every consumer subscribed to the key receives it, and its worker pulls. Redis pub/sub does not keep messages for a process that is not listening, and redisq v1.4.0 has no timer that checks the queue again. That is why the consumer starts the worker after the bind: it pulls once at the start, so jobs that were added while it was not running do not wait for the next notification.
+- **The producer has a `Len` and a [`Purge`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Purge).** On a distributed handle they are redisq's own. `Len` is the length of the Redis list. `Purge` deletes the list, which removes every waiting job. A job that a consumer took and is running is not in the list, and `Purge` leaves it alone.
+- **Each consumer's counters are its own.** Jobs run in one process and are added in another, so one instance's [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) and [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) need not match. [The overview](/persistence/overview/#metrics) points to [Metrics](/guides/metrics/) for that.
+- **The consumer stops its worker before it exits.** A worker that is not stopped leaves its running jobs unacknowledged when the process ends. redisq has a [`Listen`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Listen) method that blocks until SIGINT or SIGTERM, and the repository's consumer example uses it. It does not stop the worker.
+
+### Run locally
+
+1. Start Redis, as in [Setup](#setup).
+2. In one module, save the producer as `producer/main.go` and the consumer as `consumer/main.go`:
+
+   ```bash
+   mkdir redis-distributed && cd redis-distributed
+   go mod init redis-distributed
+   mkdir producer consumer
+   go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+   ```
+
+3. In one terminal run `go run ./consumer`. It prints `waiting in Redis: 0` and `listening`.
+4. For a second consumer, run `go run ./consumer` in another terminal. Each job goes to one of the two.
+5. In a third terminal run `go run ./producer`. It prints `waiting in Redis:` and a number. The number is 20 when no consumer is running, and lower when one has already taken some jobs.
+6. The consumers print a `scraping` line and, two seconds later, a `scraped` line for each job. Each consumer runs up to five jobs at a time, so five lines appear together.
+7. Press Ctrl+C in a consumer terminal. It finishes the jobs it is running, acknowledges them and exits.
+
+The repository's `examples/redis-distributed` has a similar pair. Its `provider` adds 1000 jobs, each with a generated ID, and purges whatever is left after five seconds.
+
+## Jobs that were not acknowledged
+
+[The overview](/persistence/overview/#acknowledgement) describes when varmq acknowledges a job. This is what redisq v1.4.0 does with a job that was taken and not acknowledged, for example because the process died.
+
+- **A taken job is recorded in Redis.** The job moves from the list to a hash, `<key>:nacked`, under its acknowledgement ID, and gets a deadline in the sorted set `<key>:timeouts`. The deadline is the current time plus the visibility timeout, five minutes by default. `Acknowledge` removes both entries.
+- **Expired jobs go back when a queue object is created.** [`RequeueNackedItems`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.RequeueNackedItems) moves every job whose deadline has passed to the front of the queue. redisq runs it when you create a queue, with `NewQueue`, `NewPriorityQueue`, `NewDistributedQueue` or `NewDistributedPriorityQueue`, and it runs when you call it. Nothing in redisq v1.4.0 runs it while a process is up.
+- **So a job from a crashed run comes back on a start after its deadline.** If the process dies while a job runs, the job stays in `:nacked`. A restart before the deadline, five minutes after the job was taken with the default, leaves it there. The job is not in `Len`, and it does not run. A start after the deadline creates a queue object, which puts the job back at the front of the queue, and it runs first.
+- **The visibility timeout is set per queue object.** [`SetVisibilityTimeout`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.SetVisibilityTimeout) changes the deadline for jobs taken after the call, so call it right after you create the queue. A deadline already in Redis keeps the value it was given.
+- **Keep the timeout longer than your slowest job.** A process that creates a queue object for the same key after a job's deadline requeues that job, even while the first process is still running it. The job then runs twice.
+- **[`GetNackedItemsCount`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.GetNackedItemsCount) counts the jobs in `:nacked`.** The handle's `Len` does not, because they have left the list.
+
+## Limits of redisq v1.4.0
+
+- **A job can be lost between the pop and its record.** redisq takes the job with one Redis call and writes it to `:nacked` with a second. If the process dies between them, or the second call fails, nothing holds the job. The redisq v1.5.0 changelog lists this as fixed.
+- **[`SetAckTimeout`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.SetAckTimeout) drops jobs.** It sets a Redis expiry on `:nacked` and `:timeouts`. When it passes, Redis deletes them, so an in-flight job is gone, not requeued. Use `SetVisibilityTimeout` and leave `SetAckTimeout` alone.
+- **Identical priority jobs collapse.** See [the priority section](#a-priority-queue).
+- **There is no deduplication.** redisq v1.4.0 does not implement [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). `WithJobId` is stored in the JSON and not checked, so adding the same ID twice stores two jobs.
+- **[`Close`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Close) does not hand jobs back.** It stops the queue object. After it, `Enqueue` and `Acknowledge` on that object return `false`, and the jobs it took stay in `:nacked` until their deadline.
+- **No batch pops.** redisq v1.4.0 does not implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable), so a worker pulls one job at a time.
+
+## Newer redisq releases
+
+redisq v1.5.0 was tagged on 24 October 2026. It needs Go 1.26, and it changes the behaviour described above: it recovers unacknowledged jobs while a process runs, adds batch pops and [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/redisq@v1.5.0#Queue.EnqueueOnce), and makes several changes that its changelog marks as breaking. This page does not describe it. The programs above compile unchanged against it. Read its [changelog](https://github.com/goptics/redisq/blob/v1.5.0/CHANGELOG.md) and [README](https://github.com/goptics/redisq/blob/v1.5.0/README.md) before you upgrade, and upgrade consumers before producers.
