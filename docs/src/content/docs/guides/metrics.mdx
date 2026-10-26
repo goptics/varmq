@@ -24,9 +24,9 @@ This page covers workers bound to in-memory queues. For persistent and distribut
 
 A job that runs counts once in `Completed` and once in `Successful` or `Failed`. After a worker has gone idle, `Completed` equals `Successful` plus `Failed`, unless you called [`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) partway.
 
-A job that never runs counts in `Submitted` and in none of the others. That happens to a job that is closed before it starts: [closed through its handle](/concepts/jobs/#closing-a-queued-job), or removed by [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge). Only a job that ran increments `Completed`.
+A job that never runs counts in `Submitted` and in none of the others. That happens to a job that is closed before it starts: [closed through its handle](/concepts/jobs/#closing-a-queued-job), or removed by [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge). It also happens to a topic payload that is dropped unread, as below. Only a job that ran increments `Completed`.
 
-A [topic](/guides/topics/) counts too: each [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) adds one to `Submitted` of every worker subscribed to it at that moment.
+A [topic](/guides/topics/) counts too: each [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) adds one to `Submitted` of every worker subscribed to it at that moment. The subscriber's worker turns a payload into a job only when it takes the payload, so a payload that is still unread has been counted as submitted but is not a job yet. [Unsubscribing](/guides/topics/#unsubscribing) drops such payloads.
 
 ## Reading them
 
@@ -52,9 +52,11 @@ Submitted == NumPending + NumProcessing + Completed
 
 - **A job closed before it ran breaks it.** `Purge`, and closing a queued job through its handle, leave `Submitted` higher than the sum. Such a job was counted when it was added, and it never reaches `Completed`, because only a job that ran does. Once the worker has dropped it, it is not pending either, so nothing on the right counts it. A job closed through its handle still counts in `NumPending` until the worker reaches it, so the gap opens then.
 - **While jobs run, the sum can be too high.** A goroutine can take several jobs from an in-memory FIFO queue or a topic into a batch ([batched dispatch](/concepts/how-it-works/#batched-dispatch)). `NumProcessing` counts that goroutine as one, and `NumPending` keeps counting the jobs of the batch that have already finished until the whole batch has ended, while `Completed` counts each as it finishes. For that time the sum can run above `Submitted`.
+- **Unsubscribing with unread payloads breaks it.** [`Unsubscribe`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Unsubscribe), [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the subscription, and [`Close`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Close) on the topic all end a subscription and drop the payloads it has not read. `Publish` counted them in `Submitted`. They never run, so they never reach `Completed`, and the worker no longer counts them as pending, because the subscription it read them from is gone. `Purge` on a subscription drops the unread payloads the same way.
+- **Storage shared between workers breaks it.** `Add` counts in `Submitted` on the worker whose handle you call. The worker that takes the job counts it in `Completed`. A queue you wrote and bound to two workers with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) splits the counters between them, so the equation holds for neither.
 - **`Reset` breaks it.** It zeroes `Submitted` and `Completed`. The jobs still waiting or running count on the right side of the equation, and no longer on the left.
 
-So use the equation on a worker with nothing running, no `Reset`, and no job closed before it ran. That is the case it describes. The example below checks it on an idle worker and on a paused one with jobs waiting. On an idle worker, where `NumPending` and `NumProcessing` are 0, the difference between `Submitted` and `Completed` is the number of jobs that never ran. Do not use the equation as a live check while jobs run.
+So use the equation on a worker with nothing running, where none of these cases applies. The example below checks it on an idle worker and on a paused one with jobs waiting. On an idle worker, `NumPending` and `NumProcessing` are 0 and the equation reduces to `Submitted == Completed`. If it does not hold, look at the cases above first. Do not use the equation as a live check while jobs run.
 
 ## Reset
 
