@@ -28,7 +28,7 @@ The error for a panic reads `panic recovered inside worker: <value>`. For an err
 
 The worker itself can also report an error that belongs to no job function: a [storage problem](#sent-to-errs-and-the-handler) or a failed acknowledgement. Those go to `Errs()` and the handler only.
 
-For a group of jobs added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll), the group handle has its own [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrGroupJob.Errs). That one is a different channel, and it is closed once the group has ended. The worker's `Errs()` below is not. See [adding many jobs](/guides/adding-many/#reading-errors). A failure in a group job also reaches the worker's `Errs()` and the handler.
+For a group of jobs added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll), an error group handle has its own [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrGroupJob.Errs). That one is a different channel, and it is closed once the group has ended. The worker's `Errs()` below is not. See [adding many jobs](/guides/adding-many/#reading-errors). A failure in a group job also reaches the worker's `Errs()` and the handler.
 
 ## The Errs channel
 
@@ -75,7 +75,7 @@ The output, line by line:
 2. `job 1: <nil>` to `job 5: <nil>`, with `bad input` for job 2 and the `panic recovered inside err-worker: boom` text for job 4. Each handle has its own outcome. The panic came back through `Err()` as an error.
 3. `handler calls: 2`. Both failures reached the handler.
 4. `errors waiting on Errs(): 1`. The channel holds one error. Two failures happened, and the channel had room for the first.
-5. `first on Errs(): bad input`, then `no second error on Errs()`. The panic was dropped from the channel. The handler and job 4's handle still have it.
+5. `first on Errs(): bad input`, then `no second error on Errs()`. The panic's error was never put on the channel, because the channel was full. The handler and job 4's handle still have it.
 6. `Resume: worker is stopped` and `is ErrWorkerStopped: true`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns a sentinel error, and `errors.Is` matches it.
 
 ## Matching an error
@@ -119,4 +119,4 @@ These four are not returned from any call. The worker reports them when it pulls
 
 Only persistent and distributed storage hands out bytes to decode or jobs to acknowledge, so `ErrParseJob` and `ErrAcknowledgeJob` do not come from the built-in in-memory queues. [Persistence](/persistence/overview/) covers those queues.
 
-One more error has no variable. The helpers [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) report a `nil` function as `provided function is nil`. It is not exported, so match it by its text. See [function helpers](/guides/function-helpers/#details).
+One more error has no variable. The helpers [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) handle a `nil` function with the error `provided function is nil`. `ErrFunc` and `ResultFunc` return it; `Func` panics with it, so the text arrives inside the panic message. It is not exported, so match it with `strings.Contains`. See [function helpers](/guides/function-helpers/#details).

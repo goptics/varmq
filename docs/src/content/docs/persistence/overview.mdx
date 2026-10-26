@@ -85,7 +85,7 @@ Adapters that implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/
 [Metrics](/guides/metrics/) describes the four counters for in-memory queues. For these queues, keep three things in mind.
 
 - **[`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) on a persistent queue counts this process's accepted `Add` calls.** A job that was already in storage, or that another process added, is not counted there. It still counts in [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) when this worker runs it, so `Completed` can be higher than `Submitted`.
-- **The counters of a worker on a distributed queue may differ from what you expect.** `Submitted` in particular. See [Metrics](/guides/metrics/).
+- **The counters of a worker on a distributed queue may differ from what you expect.** `Submitted` in particular. These docs do not cover how a distributed queue's counters count yet.
 - **[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) asks the storage.** It is the number of jobs waiting there, plus jobs the worker has taken and not yet started. The queue handle's `Len` leaves out the second kind. Each call is a call to the storage.
 
 ## Persistent topics are not released

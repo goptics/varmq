@@ -37,8 +37,8 @@ Four methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) r
 | Method | Returns |
 |---|---|
 | `NumConcurrency` | the limit |
-| [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | the jobs running right now |
-| [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | the jobs that have not started: waiting in a queue, in a batch a goroutine took, or parked by a pause or stop |
+| [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | the jobs running right now, counted as busy goroutines |
+| [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | the jobs that have not started: waiting in a queue, in a batch a goroutine took, or parked by a pause or stop. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
 | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | the idle goroutines waiting in the pool for a job |
 
 `NumProcessing` stays at or below the limit, except for a while after `TunePool` lowers the limit. All four are snapshots: they can change right after you read them.
@@ -62,11 +62,11 @@ It returns an error in two cases:
 
 The worker starts jobs on new goroutines as soon as it can. That covers the jobs still in a queue and the jobs you add later.
 
-A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1, where one goroutine can take up to 32 jobs at once from an in-memory queue: raising the limit does not spread out jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches. The example below adds its jobs after the change for this reason.
+A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1, where one goroutine can take up to 32 jobs at once from an in-memory FIFO queue: raising the limit does not spread out jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches. The example below adds its jobs after the change for this reason.
 
 ### Lowering the limit
 
-Nothing running is interrupted. The worker hands out no new batch until fewer goroutines are busy than the new limit, so `NumProcessing` can stay above `NumConcurrency` until enough running jobs finish. A goroutine that already holds a batch keeps running it one job after another, so jobs from batches already handed out still start after the change. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
+Nothing running is interrupted. The worker hands out no new batch until fewer goroutines are busy than the new limit, so `NumProcessing` can stay above `NumConcurrency` until those goroutines finish their batches. A goroutine that already holds a batch keeps running it one job after another, so jobs from batches already handed out still start after the change. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
 
 ## Try it
 

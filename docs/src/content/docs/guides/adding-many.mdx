@@ -44,7 +44,7 @@ There is no [`Close`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Cl
 
 ## Items the queue refuses
 
-`AddAll` adds the items one at a time, and skips each one the queue does not take: the queue is full or closed, or the item's ID belongs to a job still in the queue. That includes a repeated ID inside the same slice. A skipped item never runs and sends nothing to `Results()` or `Errs()`. It does not count in `NumPending`, so `NumPending` can start below `len(items)`.
+`AddAll` adds the items one at a time, and skips each one the queue does not take: the queue is full or closed, or the item's ID belongs to a job still in the queue. That includes a repeated ID inside the same slice, while the first copy is still in the queue (a running worker may already have taken it). A skipped item never runs and sends nothing to `Results()` or `Errs()`. It does not count in `NumPending`, so `NumPending` can start below `len(items)`.
 
 `AddAll` does not say which items it skipped. If you need to know, call `Add` for each job: it returns a `bool` per job.
 

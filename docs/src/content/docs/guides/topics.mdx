@@ -89,7 +89,7 @@ worker.WithTopic(orders, varmq.WithTopicPriority(1)) // read orders before other
 
 With the default [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority) strategy, a worker with a topic subscription ranked 1 and a queue without a rank takes the payloads first. If the two have the same rank, the one bound first goes first. [Strategies](/guides/strategies/#what-priority-does-under-the-other-strategies) covers what priority does under the other three.
 
-A worker whose only source is a topic takes payloads in batches, like a worker with one in-memory queue. With more than one source it takes one job at a time. [How it works](/concepts/how-it-works/#batched-dispatch) has both.
+A worker whose only source is a topic takes payloads in batches, like a worker with one in-memory FIFO queue. With more than one source it takes one job at a time. [How it works](/concepts/how-it-works/#batched-dispatch) has both.
 
 ## Try it
 

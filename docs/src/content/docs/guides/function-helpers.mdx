@@ -48,7 +48,7 @@ The output, line by line:
 
 **Panics.** A panic inside your function is handled like a panic in any worker function. [Worker types](/guides/worker-types/) says where each kind reports it.
 
-**Closures run later.** A function runs on a worker goroutine, not on the goroutine that called `Add`. Anything it captures has to be safe to share, and a variable you change after `Add` is seen changed.
+**Closures run later.** A function runs on a worker goroutine, not on the goroutine that called `Add`. Anything it captures has to be safe to share. Changing a captured variable after `Add` is a data race unless you synchronise the access.
 
 **No persistence.** A persistent or distributed queue stores each job as JSON, and a function cannot be encoded as JSON. Keep function jobs for in-memory queues. For jobs that must survive a restart, use plain data and put the logic in the worker function.
 

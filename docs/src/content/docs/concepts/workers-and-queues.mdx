@@ -7,7 +7,7 @@ sidebar:
 
 import GoPlay from '../../../components/GoPlay.astro';
 
-A worker runs jobs; a queue holds them until the worker has a free slot. You never create a queue on its own. You ask a worker for one, and that binds the two.
+A worker runs jobs; a queue holds them until the worker has a free slot. Apart from a producer-only distributed queue ([`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue)), you ask a worker for a queue, and that binds the two.
 
 ## Binding a queue
 
@@ -27,6 +27,7 @@ queue.Add("hello")
 | `BindPriorityQueue` | a new in-memory priority queue |
 | `WithQueue`, `WithPriorityQueue` | your own `IQueue` or `IPriorityQueue` implementation |
 | `WithPersistentQueue`, `WithDistributedQueue` | a storage adapter, such as redisq or sqliteq |
+| `WithPersistentPriorityQueue`, `WithDistributedPriorityQueue` | a storage adapter's priority queue |
 | `WithTopic` | a subscription to a topic, which you publish to instead of adding |
 
 ## One worker, several queues
@@ -37,7 +38,7 @@ A worker can have any number of queues bound to it. They all feed the same pool,
 
 The worker has concurrency 2 and two queues: `emails`, bound first, and `reports`. Three jobs go into each. The output shows six `Processing` lines, at most two at a time, then `All jobs done` once [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) returns. Two jobs that start together race to print, so a pair can come out in either order, `email 1` before `email 0` for example.
 
-When a slot frees up, the worker's strategy picks which queue the next job comes from. The default strategy, [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), takes the queue with the highest priority. Queues bound without [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) tie, and a tie goes to the queue bound first, which is why every email starts before any report. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) switches to `RoundRobin`, `MaxLen` or `MinLen`.
+When a slot frees up, the worker's strategy picks which queue the next job comes from. The default strategy, [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), takes the queue with the lowest priority number. Queues bound without [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) tie, and a tie goes to the queue bound first, which is why every email starts before any report. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) switches to `RoundRobin`, `MaxLen` or `MinLen`.
 
 With more than one queue bound, the worker hands out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may hand a goroutine several waiting jobs at once.
 

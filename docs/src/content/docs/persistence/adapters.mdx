@@ -110,7 +110,7 @@ Binding one wraps it so that `Add` writes JSON and the worker reads with `Dequeu
 
 `WithDistributedQueue` and `WithDistributedPriorityQueue` call `Subscribe` once, while binding, and pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull, and it also feeds the worker's counters. Any other action is ignored, so an adapter may send others, as redisq v1.4.0 does with `"dequeued"`. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewDistributedQueue` does not call `Subscribe`, because it has no worker.
 
-What the notification does to [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) is a question for [Metrics](/guides/metrics/). For a distributed queue the count may differ from what you expect.
+For a distributed queue, [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) may differ from what you expect. These docs do not cover how a distributed queue's counters count yet; [Metrics](/guides/metrics/) covers in-memory queues only.
 
 ### `IDistributedQueue` and `IDistributedPriorityQueue`
 
@@ -138,7 +138,7 @@ The job interfaces are small pieces that the job and group handles are built fro
 |---|---|---|
 | [`Identifiable`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable) | [`ID() string`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), empty when no ID was set | [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), the argument of the worker function, and every job handle |
 | [`StatusProvider`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider) | [`IsClosed() bool`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) and [`Status() string`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) | every job handle. The worker calls `IsClosed` on each job it takes from a queue and skips a closed one. |
-| [`Awaitable`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable) | [`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait), which blocks until the job has been processed | every job handle, and the group handles |
+| [`Awaitable`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable) | [`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait), which blocks until the job is closed, or for a group until every job in it has ended | every job handle, and the group handles |
 | [`Drainer`](https://pkg.go.dev/github.com/goptics/varmq#Drainer) | [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain), which discards the results or errors a group's channel still holds. A single job has no channel, so it does nothing there. | error and result job handles, and error and result group handles |
 | [`PendingTracker`](https://pkg.go.dev/github.com/goptics/varmq#PendingTracker) | [`NumPending() int`](https://pkg.go.dev/github.com/goptics/varmq#PendingTracker.NumPending), the number of pending jobs in a group | the handles [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns |
 

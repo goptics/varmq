@@ -1,6 +1,6 @@
 ---
 title: Job IDs
-description: Give a job an ID with WithJobId, Item.ID or a generator, and use IDs to keep at most one waiting job per ID on an in-memory queue.
+description: Give a job an ID with WithJobId, Item.ID or a generator, and use IDs to keep at most one job per ID in an in-memory queue.
 sidebar:
   order: 5
 ---
@@ -41,7 +41,7 @@ An in-memory queue keeps at most one job per given ID in the queue. While a job 
 
 ```go
 queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued
-queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already waiting
+queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already in the queue
 ```
 
 That suits work where many callers ask for the same thing, and one waiting job is enough.

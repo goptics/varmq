@@ -67,7 +67,7 @@ func registerMetrics(w varmq.Worker, namespace string) {
 	gauge("workers_processing", "Jobs being processed right now", w.NumProcessing)
 	gauge("workers_concurrency", "Maximum number of jobs processed at once", w.NumConcurrency)
 	gauge("workers_idle", "Idle goroutines in the pool", w.NumIdleWorkers)
-	gauge("waiting_total", "Jobs that have not started", w.NumPending)
+	gauge("waiting_total", "Jobs not started yet; can read high while batches run", w.NumPending)
 
 	counter("submitted_total", "Jobs the queue accepted", m.Submitted)
 	counter("completed_total", "Jobs whose function has returned", m.Completed)
@@ -121,7 +121,7 @@ With the namespace `foo_worker`, each name starts with `foo_worker_`.
 | `workers_processing` | gauge | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | jobs being processed right now |
 | `workers_concurrency` | gauge | [`NumConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) | the concurrency limit |
 | `workers_idle` | gauge | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | idle goroutines in the pool |
-| `waiting_total` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started |
+| `waiting_total` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
 | `submitted_total` | counter | [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) | jobs the queue accepted |
 | `completed_total` | counter | [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) | jobs whose function has returned |
 | `successful_total` | counter | [`Successful`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Successful) | jobs that returned without an error or a panic |
@@ -136,7 +136,7 @@ The four counters are the four of [`Metrics()`](https://pkg.go.dev/github.com/go
 - **The counters start at zero when the worker is created.** They are totals. Use `rate()` or `increase()` in Prometheus to see how many jobs ran in a period. A restart of the process zeroes them, and Prometheus functions such as `rate()` read a drop as a counter reset.
 - **[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) makes a counter fall.** It zeroes the four counters, and Prometheus reads that as a reset, like a restart. Do not call it on a worker you export unless you want that.
 - **One namespace for each worker.** `MustRegister` panics when a collector with the same metric name is registered twice, with `duplicate metrics collector registration attempted`. Register each worker under its own namespace.
-- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite, so every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics). The `Submitted` count of a distributed queue may differ from what you expect.
+- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite, so every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics). The `Submitted` count of a distributed queue may differ from what you expect, and these docs do not cover how a distributed queue's counters count yet.
 
 ## Scraping it
 

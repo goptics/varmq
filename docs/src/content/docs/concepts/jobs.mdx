@@ -7,7 +7,7 @@ sidebar:
 
 import GoPlay from '../../../components/GoPlay.astro';
 
-A job is one unit of work: your data, an optional ID, and a status that changes as the worker deals with it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and hands you a handle.
+A job is one unit of work: your data, an optional ID, and a status that changes as the worker deals with it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and, on an in-memory queue, hands you a handle.
 
 ## Two views of a job
 
@@ -38,7 +38,7 @@ Every handle has `ID()`, `Status()`, `IsClosed()`, `Wait()` and `Close()`. `Err`
 A job has no ID unless you give it one. `ID()` returns an empty string by default.
 
 - [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) sets the ID of one job: `queue.Add(data, varmq.WithJobId("job-1"))`. An empty string is ignored.
-- [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) sets a function the worker calls to make an ID for every job added without one.
+- [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) sets a function that makes IDs. `Add` calls it, on the caller's goroutine, for every job; its value is used when the job has no ID of its own.
 
 An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds: it returns `ok == false`. A job a worker has already taken into a batch, or parked, has released its ID, so a duplicate `Add` is accepted even though that job's status still reads `Queued`. IDs from a generator are not checked. Items added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) get a `g:` prefix, so an item with ID `a` shows up in the worker function as `g:a`. [Job IDs](/guides/job-ids/) covers the details.
 

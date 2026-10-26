@@ -72,7 +72,7 @@ On a tie, both take the queue that comes first in the list.
 
 ## Try it
 
-The program binds three queues to one worker and runs the same jobs under each strategy. The worker has concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is full, and the worker takes one job at a time, so the order in which jobs are taken is the order they run. The queues are `alerts` (priority 1, 2 jobs), `reports` (priority 2, 1 job) and `emails` (no priority, 3 jobs). Each line is the order in which the worker took the jobs.
+The program binds three queues to one worker and runs the same jobs under each strategy. The worker has concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is filled, and the worker takes one job at a time, so the order in which jobs are taken is the order they run. The queues are `alerts` (priority 1, 2 jobs), `reports` (priority 2, 1 job) and `emails` (no priority, 3 jobs). Each line is the order in which the worker took the jobs.
 
 <GoPlay example="strategies" />
 

@@ -55,7 +55,7 @@ A stop also cancels the worker's [`Context()`](https://pkg.go.dev/github.com/gop
 - [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) is `Pause` followed by `WaitUntilPaused`.
 - [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) is `Stop` followed by `WaitUntilStopped`.
 - [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one state, and never return if the worker does not reach it.
-- [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) waits for `Idle` with no pending jobs, so on a paused or stopped worker it never returns either.
+- [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) waits for `Idle` with no pending jobs, so on a paused or stopped worker it keeps waiting until `Resume`, `Restart` or `Start` brings it back to `Idle` and it drains.
 
 [`WaitAndPause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndPause) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) go the other way: they wait for the queue to drain, then pause or stop. [Waiting](/guides/waiting/) compares all of them.
 
@@ -88,7 +88,7 @@ Pass `WithAutoRun(false)` to get an `Initiated` worker instead. You can bind que
 
 ### `WithStoppedRetention`
 
-This setting matters only for a worker you named with [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName). `Start` adds a named worker to [`WorkerRegistry`](https://pkg.go.dev/github.com/goptics/varmq#WorkerRegistry), the map that the REST [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) reads. A worker without a name is never registered.
+This setting matters only for a worker with a name ([`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) or a string argument to `NewWorker`). `Start` adds a named worker to [`WorkerRegistry`](https://pkg.go.dev/github.com/goptics/varmq#WorkerRegistry), the map that the REST [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) reads. A worker without a name is never registered.
 
 When a registered worker reaches `Stopped`, it stays in the registry for a while, so it still shows up as `Stopped`. [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) sets how long. When the time is up and the worker is still stopped, it is removed from the registry.
 
