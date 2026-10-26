@@ -4,6 +4,9 @@
 # `Name`, `Name(`, `Name[T]` or qualified like `worker.Name()`, or in a
 # pkg.go.dev anchor link, #Name or #Type.Method. A bare word does not count,
 # and neither does code inside a fenced block.
+#
+# The API is read from the varmq release docs/examples/go.mod pins, the one the
+# docs describe, not from the source at the repo root.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -15,8 +18,9 @@ docs=docs/src/content/docs
 # One "name<TAB>label" line per exported identifier, read from `go doc -all`:
 # funcs, types, single const/var lines, every name in a const or var group
 # (go doc -short collapses those), and the methods of each interface.
+# go doc does not fetch modules, so download the pinned one first.
 wanted() {
-  go doc -all "$pkg" | awk -F'\t' '
+  (cd docs/examples && go mod download "$pkg" && go doc -all "$pkg") | awk -F'\t' '
     /^func [A-Z]/      { split($0, a, /[ (\[]/); print a[2] "\t" a[2]; next }
     /^type [A-Z]/      { split($0, a, /[ \[]/);  print a[2] "\t" a[2]
                          iface = ($0 ~ / interface \{$/) ? a[2] : ""; next }

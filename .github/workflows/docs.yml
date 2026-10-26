@@ -60,10 +60,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: docs/pnpm-lock.yaml
 
-      # The coverage script runs `go doc` on the varmq package at the repo root.
+      # The coverage script runs `go doc` on the varmq release that
+      # docs/examples/go.mod pins.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: docs/examples/go.mod
+          cache-dependency-path: docs/examples/go.sum
 
       - run: pnpm install --frozen-lockfile
         working-directory: docs
@@ -85,7 +87,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [examples, build]
     permissions:
       contents: write
@@ -96,6 +98,7 @@ jobs:
   verify:
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -108,9 +111,14 @@ jobs:
 
       - name: Wait for the site and bench-log to be live
         run: |
+          # Live means HTTP 200 exactly, not just a non-error status.
+          live() {
+            local code
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "$1") || true
+            [[ $code == 200 ]]
+          }
           for attempt in $(seq 1 20); do
-            if curl -fsS -o /dev/null https://varmq.goptics.org/ &&
-              curl -fsS -o /dev/null https://varmq.goptics.org/bench-log/; then
+            if live https://varmq.goptics.org/ && live https://varmq.goptics.org/bench-log/; then
               echo "site is live"
               exit 0
             fi
