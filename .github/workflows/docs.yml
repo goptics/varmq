@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      # Pages embed the README's diagrams from here.
+      - "assets/diagrams/**"
       - ".github/workflows/docs.yml"
       - ".github/workflows/publish-site.yml"
   push:
@@ -11,6 +13,8 @@ on:
       - main
     paths:
       - "docs/**"
+      # Pages embed the README's diagrams from here.
+      - "assets/diagrams/**"
       - ".github/workflows/docs.yml"
       - ".github/workflows/publish-site.yml"
   workflow_dispatch:

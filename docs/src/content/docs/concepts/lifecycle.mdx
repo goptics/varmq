@@ -57,7 +57,7 @@ A stop also cancels the worker's [`Context()`](https://pkg.go.dev/github.com/gop
 - [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one state, and never return if the worker does not reach it.
 - [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) waits for `Idle` with no pending jobs, so on a paused or stopped worker it keeps waiting until `Resume`, `Restart` or `Start` brings it back to `Idle` and it drains.
 
-[`WaitAndPause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndPause) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) go the other way: they wait for the queue to drain, then pause or stop. [Waiting](/guides/waiting/) compares all of them.
+[`WaitAndPause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndPause) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) go the other way: they call `Wait` first, then pause or stop. [Waiting](/guides/waiting/) compares all of them.
 
 ## Try it
 

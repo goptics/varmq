@@ -18,7 +18,7 @@ The REST API has no authentication. Anyone who can reach it can stop your worker
 ```go
 mux := http.NewServeMux()
 mux.Handle("/varmq/", varmq.Handler("/varmq"))
-http.ListenAndServe(":8080", mux)
+http.ListenAndServe("127.0.0.1:8080", mux)
 ```
 
 You can also pass the handler to `ListenAndServe` itself, as `examples/api-control` does with `varmq.Handler("/api")`. Then the routes start at `/api`.

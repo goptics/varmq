@@ -103,6 +103,7 @@ const hintId = `go-play-hint-${example}`;
 		}
 
 		onKey(e: KeyboardEvent) {
+			if (e.isComposing) return; // the keys belong to the input method
 			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
 				this.run();
