@@ -1,0 +1,58 @@
+---
+title: Quick start
+description: Run your first varmq worker in the browser.
+sidebar:
+  order: 3
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+This program creates a worker, binds a queue to it and adds two jobs. Press **Run** to run it on the Go Playground. Press **Edit** to change it, then **Run** again (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, <kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac).
+
+<GoPlay example="quick-start" />
+
+It prints `Processing 1`, then `Processing 2` once the first job's one-second sleep is over, then `Program exited.`
+
+## Line by line
+
+```go
+worker := varmq.NewWorker(func(j varmq.Job[int]) {
+	fmt.Printf("Processing %d\n", j.Data())
+	time.Sleep(1 * time.Second)
+}) // default concurrency is 1
+```
+
+[`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) builds a worker around a function that handles one job. The job type is generic: a [`Job[int]`](https://pkg.go.dev/github.com/goptics/varmq#Job) carries an `int`, which [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) returns. With no concurrency argument the worker runs one job at a time, which is why `Processing 2` waits for the first job to finish.
+
+```go
+defer worker.WaitUntilIdle()
+```
+
+[`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) blocks until the worker has no jobs left and is idle. Deferring it holds `main` open until both jobs are done. Without it, `main` would return straight after the two `Add` calls and the program would exit before the jobs ran.
+
+```go
+queue := worker.BindQueue()
+```
+
+[`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) creates a first-in, first-out queue and binds it to this worker. Jobs added to it go to this worker and no other.
+
+```go
+queue.Add(1)
+queue.Add(2)
+```
+
+[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns at once, without waiting for the job to run. It returns a handle to the job and `true`, or `false` if the queue did not take the job (it is full or closed, for example). This example ignores both.
+
+## Try it
+
+Press **Edit** and pass a concurrency of 2 as the last argument to `NewWorker`:
+
+```go
+}, 2)
+```
+
+Run it again: both jobs now start together, so their two lines appear at the same moment, in either order.
+
+:::note
+The Go Playground runs programs on a simulated clock. `time.Sleep` costs it no real time; the page replays the pauses the program recorded. Output pacing on this site says nothing about how fast varmq is.
+:::

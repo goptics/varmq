@@ -1,0 +1,51 @@
+---
+title: Workers and queues
+description: Bind queues to a worker, feed one worker from several queues, and why each queue has exactly one worker.
+sidebar:
+  order: 1
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A worker runs jobs; a queue holds them until the worker has a free slot. You never create a queue on its own. You ask a worker for one, and that binds the two.
+
+## Binding a queue
+
+[`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) creates an in-memory, first-in first-out queue, binds it to the worker and returns a [`Queue[T]`](https://pkg.go.dev/github.com/goptics/varmq#Queue) handle. You add jobs through the handle; the worker takes them from there.
+
+```go
+worker := varmq.NewWorker(process, 2)
+queue := worker.BindQueue()
+queue.Add("hello")
+```
+
+`BindQueue` is one of several ways to bind a source to a worker ([`IWorkerBinder`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder) lists them all):
+
+| Method | Binds |
+|---|---|
+| `BindQueue` | a new in-memory FIFO queue |
+| `BindPriorityQueue` | a new in-memory priority queue |
+| `WithQueue`, `WithPriorityQueue` | your own `IQueue` or `IPriorityQueue` implementation |
+| `WithPersistentQueue`, `WithDistributedQueue` | a storage adapter, such as redisq or sqliteq |
+| `WithTopic` | a subscription to a topic, which you publish to instead of adding |
+
+## One worker, several queues
+
+A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from.
+
+<GoPlay example="workers-and-queues" />
+
+The worker has concurrency 2 and two queues: `emails`, bound first, and `reports`. Three jobs go into each. The output shows six `Processing` lines, at most two at a time, then `All jobs done` once [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) returns. Two jobs that start together race to print, so a pair can come out in either order, `email 1` before `email 0` for example.
+
+When a slot frees up, the worker's strategy picks which queue the next job comes from. The default strategy, [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), takes the queue with the highest priority. Queues bound without [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) tie, and a tie goes to the queue bound first, which is why every email starts before any report. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) switches to `RoundRobin`, `MaxLen` or `MinLen`.
+
+With more than one queue bound, the worker hands out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may hand a goroutine several waiting jobs at once.
+
+## A queue belongs to one worker
+
+Each queue is bound to the worker that created it, and [`Worker()`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Worker) on the handle returns that worker. Adding a job to a queue wakes only its own worker, and each job is processed once.
+
+To get jobs to more than one worker, use a different source:
+
+- **Every worker gets every job:** publish to a [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) and subscribe each worker with `WithTopic`. Topics are in-memory only.
+- **Workers in several processes share the jobs:** bind each one to the same distributed queue with `WithDistributedQueue`. Each job goes to one of them.

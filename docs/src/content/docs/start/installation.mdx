@@ -1,0 +1,22 @@
+---
+title: Installation
+description: Add varmq to a Go module.
+sidebar:
+  order: 2
+---
+
+varmq needs Go 1.24 or newer. Add it to your module:
+
+```bash
+go get github.com/goptics/varmq
+```
+
+Then import it:
+
+```go
+import "github.com/goptics/varmq"
+```
+
+The in-memory worker pool, queues and topics are all in this one package. Persistent and distributed queues also need a storage adapter, which is its own module: [redisq](https://github.com/goptics/redisq) for Redis or [sqliteq](https://github.com/goptics/sqliteq) for SQLite.
+
+Next: the [quick start](/start/quick-start/).
