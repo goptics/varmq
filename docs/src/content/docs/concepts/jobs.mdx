@@ -1,0 +1,88 @@
+---
+title: Jobs
+description: What a job is, the handle Add returns, job IDs and statuses, closing a queued job, and waiting on a job.
+sidebar:
+  order: 2
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A job is one unit of work: your data, an optional ID, and a status that changes as the worker deals with it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and hands you a handle.
+
+## Two views of a job
+
+The worker function and the code that called `Add` see different things.
+
+**The worker function gets a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job).** It has two methods: [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) returns what you passed to `Add`, and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) returns the job's ID. The interface has nothing else: no status and no `Close`.
+
+**The caller gets a handle.** `Add` returns the handle and a `bool`:
+
+```go
+job, ok := queue.Add("resize photo")
+```
+
+`ok` is `false` when the queue did not take the job: it is full or closed, or a job with the same ID is already queued. In that case `job` is `nil`, so check `ok` before you use it.
+
+With a plain worker the handle is an [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob). The other two worker types add one method that returns the outcome:
+
+| Worker | `Add` returns | Extra method |
+|---|---|---|
+| [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) | `EnqueuedJob` | none |
+| [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | `Err() error` |
+| [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | `Result() (R, error)` |
+
+Every handle has `ID()`, `Status()`, `IsClosed()`, `Wait()` and `Close()`. `Err` and `Result` block until the job is closed, then return what the worker function sent. For a job that was closed before it ran, `Err` returns `nil` and `Result` returns the zero value and a `nil` error. See [worker types](/guides/worker-types/) for the three workers side by side.
+
+## Job IDs
+
+A job has no ID unless you give it one. `ID()` returns an empty string by default.
+
+- [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) sets the ID of one job: `queue.Add(data, varmq.WithJobId("job-1"))`. An empty string is ignored.
+- [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) sets a function the worker calls to make an ID for every job added without one.
+
+An in-memory queue refuses a second `Add` with an ID that is already queued: it returns `ok == false`. IDs from a generator are not checked. Items added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) get a `g:` prefix, so an item with ID `a` shows up in the worker function as `g:a`. [Job IDs](/guides/job-ids/) covers the details.
+
+## Job status
+
+[`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) on a handle returns one of five strings:
+
+| Status | Meaning |
+|---|---|
+| `Created` | The job exists but `Add` has not stored it yet. A handle you get back from `Add` is past this. |
+| `Queued` | The job is waiting. It may be in the queue, in a batch a worker took but has not started, or parked by a [pause or stop](/concepts/lifecycle/). |
+| `Processing` | The worker function is running it. |
+| `Finished` | The worker function returned. |
+| `Closed` | The job is done with: it ran, or it was closed before it could. |
+
+`Finished` is short-lived. As soon as your function returns, the worker closes the job to release anyone waiting on it. By the time [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, the status is `Closed`, and [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) is `true`. So `Closed` does not tell you whether the job ran. Record that in your own worker function if it matters.
+
+## Closing a queued job
+
+[`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) cancels a job that has not started. It only marks the job closed; it does not take it out of the queue. When the worker reaches a closed job it skips it, and your function never sees it. Closing also releases `Wait` at once.
+
+It succeeds while the job waits. It fails in two cases:
+
+- A running job returns [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing). You cannot stop it from the outside.
+- A closed job returns [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed). That includes a job that already ran, since the worker closes those too.
+
+Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. It counts as submitted, and because it never ran, it never counts as completed.
+
+## Waiting on a job
+
+[`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) blocks until the job is closed, whether it ran or you closed it. If that has already happened, it returns at once. To wait for everything a worker has queued instead of one job, see [waiting](/guides/waiting/).
+
+## Try it
+
+The program below uses one worker with concurrency 1. It adds three named jobs while the first one is held inside the worker function, so the first is running and the other two are queued.
+
+<GoPlay example="jobs" />
+
+The output reads in this order.
+
+1. `running resize photo (id job-1)` comes from the worker function. It is the only job that has started.
+2. Three lines show each handle's ID and status: `job-1 Processing`, then `job-2 Queued` and `job-3 Queued`.
+3. `close job-1: job is processing, you can't close processing job` is `ErrJobProcessing`, and the next line prints `is ErrJobProcessing: true`.
+4. `close job-2: <nil>` means the queued job closed. `job-2 wait returned, status Closed` shows `Wait` returning at once even though job-1 is still held.
+5. `close job-2 again: job is already closed` is `ErrJobAlreadyClosed`.
+6. Then the program lets job-1 finish. The worker runs job-3, which prints `running build report (id job-3)`. No `running send email` line ever appears: job-2 was skipped.
+7. The last three lines all say `Closed`, including job-1 and job-3, which did run.
