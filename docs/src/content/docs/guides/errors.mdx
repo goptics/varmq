@@ -34,7 +34,7 @@ For a group of jobs added with [`AddAll`](https://pkg.go.dev/github.com/goptics/
 
 The worker's `Errs()` returns a read-only channel of `error`. Three things to know about it:
 
-- **It holds one error.** The channel has room for a single value. When a job fails and the channel is full, the error is dropped from the channel, and the worker does not wait for you. A reader that is slow, or absent, loses errors. The handler does not.
+- **It holds one error.** The channel has room for a single value. When a job fails and the channel is full, the error is not put on the channel, and the worker does not wait for you. A reader that is slow, or absent, loses errors. The handler does not.
 - **It is never closed.** `for err := range worker.Errs()` does not end when the worker stops, so run it in a goroutine of its own, or read with `select` and a `default`.
 - **An error does not say which job it came from.** Put the job's ID or something that identifies the work in the message you return.
 
@@ -76,7 +76,7 @@ The output, line by line:
 3. `handler calls: 2`. Both failures reached the handler.
 4. `errors waiting on Errs(): 1`. The channel holds one error. Two failures happened, and the channel had room for the first.
 5. `first on Errs(): bad input`, then `no second error on Errs()`. The panic was dropped from the channel. The handler and job 4's handle still have it.
-6. `Resume: worker is stopped` and `is ErrWorkerStopped: true`. After `StopAndWait`, `Resume` returns a sentinel error, and `errors.Is` matches it.
+6. `Resume: worker is stopped` and `is ErrWorkerStopped: true`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns a sentinel error, and `errors.Is` matches it.
 
 ## Matching an error
 
@@ -94,7 +94,7 @@ The next two sections list all thirteen, grouped by how you meet them. The messa
 
 | Error | Message | Returned when |
 |---|---|---|
-| [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker) | `worker is already running` | [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) on a worker that is `Idle` or `Running`, which includes any worker created with auto-run on. [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) when another goroutine restarted the worker first. |
+| [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker) | `worker is already running` | [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) on a worker that is `Idle` or `Running`, such as one just created with auto-run on. [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) when another goroutine restarted the worker first. |
 | [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) | `worker is not running` | [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume), [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop), `Restart` or [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) on a worker that is `Initiated`: created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) and not started. The combined calls that end in a pause or stop return it too. |
 | [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused) | `worker is paused` | `Start` or `TunePool` on a `Paused` worker. |
 | [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing) | `worker is pausing` | `Start`, `Resume` or `TunePool` while the worker is `Pausing`. |
@@ -112,7 +112,7 @@ These four are not returned from any call. The worker reports them when it pulls
 
 | Error | Message | Reported when |
 |---|---|---|
-| [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue) | `failed to dequeue job` | A bound queue's `Dequeue` returned no job at the moment the worker pulled from it. The worker checks that a queue is not empty before it pulls, so the built-in queues rarely give it. |
+| [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue) | `failed to dequeue job` | A bound queue's [`Dequeue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Dequeue) returned no job at the moment the worker pulled from it. The worker checks that a queue is not empty before it pulls, so the built-in queues rarely give it. |
 | [`ErrFailedToCastJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToCastJob) | `failed to cast job` | The storage returned something that is not a job of the worker's type. The built-in queues hold jobs, so this comes from custom, persistent or distributed storage. |
 | [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob) | `failed to parse job`, followed by the decoder's message | A persistent or distributed queue returned bytes that do not decode as a job. The error wraps `ErrParseJob`, so match it with `errors.Is`. |
 | [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) | `queue failed to acknowledge job`, followed by the job and acknowledgement IDs | A persistent or distributed queue refused the acknowledgement when the worker closed a job it had taken from it. The error wraps `ErrAcknowledgeJob`. |

@@ -74,7 +74,7 @@ The program below creates an error worker with concurrency 1 and adds three jobs
 The output, line by line:
 
 1. `after the run: submitted 3, completed 3, successful 2, failed 1`. Job 2 returned an error, so it is the one failed job. All three completed. The next line, `pending 0 + processing 0 + completed 3 = 3`, equals `Submitted`.
-2. `paused, three jobs queued: submitted 6, completed 3, successful 2, failed 1`. A paused worker starts nothing, so the three jobs added after `PauseAndWait` wait in the queue. `Submitted` went up when `Add` took them. The equation holds again: `pending 3 + processing 0 + completed 3 = 6`.
+2. `paused, three jobs queued: submitted 6, completed 3, successful 2, failed 1`. A paused worker starts nothing, so the three jobs added after [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) wait in the queue. `Submitted` went up when `Add` took them. The equation holds again: `pending 3 + processing 0 + completed 3 = 6`.
 3. `after Purge: submitted 6, completed 3, successful 2, failed 1`. `Purge` closed the three waiting jobs. They stay in `Submitted` and never reach `Completed`. The equation now reads `pending 0 + processing 0 + completed 3 = 3`, which is three short of `Submitted`: the three jobs that never ran.
 4. `after Reset: submitted 0, completed 0, successful 0, failed 0`. The program resumed the worker and waited for idle. Nothing ran, because the queue was empty. Then `Reset` zeroed the counters.
 
