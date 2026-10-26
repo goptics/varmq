@@ -34,11 +34,14 @@ wanted() {
     }'
 }
 
-# Every name the docs mention, one per line.
-covered=$(grep -rhoE \
+# Every name the docs mention, one per line. awk drops fenced blocks first.
+covered=$(find "$docs" -type f -name '*.md*' -exec awk '
+    FNR == 1 { fence = 0 }
+    /^[ \t]*```/ { fence = !fence; next }
+    !fence' {} + |
+  grep -oE \
   -e '`([A-Za-z0-9_]+\.)*[A-Za-z_][A-Za-z0-9_]*[`(\[]' \
-  -e "pkg\.go\.dev/${pkg}#([A-Za-z0-9_]+\.)?[A-Za-z_][A-Za-z0-9_]*" \
-  "$docs" |
+  -e "pkg\.go\.dev/${pkg}#([A-Za-z0-9_]+\.)?[A-Za-z_][A-Za-z0-9_]*" |
   sed -E 's/[`(\[]$//; s/^.*[`.#]//' | sort -u)
 
 # Read into a variable first, so a failing `go doc` stops the script instead of

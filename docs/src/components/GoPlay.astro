@@ -17,6 +17,7 @@ const sources = import.meta.glob<string>('../../examples/*/main.go', {
 const { example, title = `${example}/main.go` } = Astro.props;
 const src = sources[`../../examples/${example}/main.go`];
 if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
+const hintId = `go-play-hint-${example}`;
 ---
 
 <go-play class="not-content" data-pins={JSON.stringify(pins(goMod))}>
@@ -31,8 +32,10 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		autocomplete="off"
 		autocapitalize="off"
 		wrap="off"
-		aria-label={`Edit ${title}`}>{src}</textarea
+		aria-label={`Edit ${title}`}
+		aria-describedby={hintId}>{src}</textarea
 	>
+	<p class="hint" id={hintId}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
 	<div class="actions">
 		<button type="button" data-run class="primary">Run</button>
 		<button type="button" data-edit>Edit</button>
@@ -103,6 +106,9 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
 				this.run();
+			} else if (e.key === 'Escape') {
+				// Tab is taken for indenting, so Esc is the keyboard way out to the buttons.
+				this.runBtn.focus();
 			} else if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
 				e.preventDefault();
 				// execCommand keeps the browser's undo history; setRangeText is the fallback.
@@ -225,6 +231,16 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 	textarea:focus-visible {
 		outline: 2px solid var(--sl-color-text-accent);
 		outline-offset: -1px;
+	}
+
+	.hint {
+		margin: 0.375rem 0 0;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-xs);
+	}
+
+	textarea[hidden] + .hint {
+		display: none;
 	}
 
 	.actions {

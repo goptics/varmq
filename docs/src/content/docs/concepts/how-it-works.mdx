@@ -45,7 +45,7 @@ With enough jobs waiting, that works out like this:
 | 10,000 or more goroutines, 10 ms jobs | 32 |
 | Concurrency 1, any jobs | up to 32, because one goroutine runs jobs in order anyway |
 
-The diagram shows 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. It loops, so by the second pass the jobs count as timed and cheap.
+The diagram shows a worker that has already timed its jobs, with 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. A fresh worker hands out one job at a time until its first batch finishes.
 
 ![Batched dispatch with concurrency 2: eight Add calls, the first worker takes four jobs in one hand-off, a second worker is spawned for two, and the last two jobs go out one at a time](../../../../../assets/diagrams/varmq-batch.svg)
 

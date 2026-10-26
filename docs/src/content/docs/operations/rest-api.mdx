@@ -65,8 +65,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/varmq/", varmq.Handler("/varmq"))
 
-	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	// The API has no authentication, so listen on loopback only.
+	log.Println("listening on 127.0.0.1:8080")
+	log.Fatal(http.ListenAndServe("127.0.0.1:8080", mux))
 }
 ```
 

@@ -75,6 +75,14 @@ describe('share', () => {
 			share('B', async () => new Response('', { status: 500 })),
 			/playground returned 500/,
 		));
+	it('sends a deadline signal', async () => {
+		let signal: AbortSignal | null | undefined;
+		await share('B', async (_url, init) => {
+			signal = init?.signal;
+			return new Response('abc123');
+		});
+		assert.ok(signal instanceof AbortSignal);
+	});
 });
 
 describe('replay', () => {

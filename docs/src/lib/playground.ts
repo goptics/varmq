@@ -43,7 +43,9 @@ export async function compile(
 
 /** Store the snippet and return its shareable go.dev URL. */
 export async function share(body: string, fetchFn: typeof fetch = fetch): Promise<string> {
-	const res = await ok(await fetchFn(`${PLAYGROUND}/share`, { method: 'POST', body }));
+	// A deadline, so a stalled request rejects and the caller can close its blank tab.
+	const signal = AbortSignal.timeout(15_000);
+	const res = await ok(await fetchFn(`${PLAYGROUND}/share`, { method: 'POST', body, signal }));
 	return `https://go.dev/play/p/${(await res.text()).trim()}`;
 }
 
