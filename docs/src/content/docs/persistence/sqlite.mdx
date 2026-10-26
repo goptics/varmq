@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-[sqliteq](https://github.com/goptics/sqliteq) is the SQLite adapter for varmq. It keeps jobs in a database file, so they survive a restart of the process with no server to run. It provides persistent queues only: it has no distributed queue, so [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) does not take it. This page uses sqliteq v0.2.3, the version the repository's `examples/` pin. Read [persistence and distribution](/persistence/overview/) first for what a persistent queue does.
+[sqliteq](https://github.com/goptics/sqliteq) is the SQLite adapter for varmq. It keeps jobs in a database file, so jobs survive a restart of the process with no server to run, with one exception in v0.2.3: a priority queue cannot be reopened, as [the limits](#limits-of-sqliteq-v023) say. It provides persistent queues only: it has no distributed queue, so [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) does not take it. This page uses sqliteq v0.2.3, the version the repository's `examples/` pin. Read [persistence and distribution](/persistence/overview/) first for what a persistent queue does.
 
 ## Setup
 
@@ -24,7 +24,7 @@ sqliteq uses [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3), which is b
 | [`NewQueue`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queues.NewQueue) | first in, first out | [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue) |
 | [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queues.NewPriorityQueue) | lowest number first | [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) |
 
-Both take the name of the queue, which is its table, and return an error as well as the queue. [`WithRemoveOnComplete(false)`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#WithRemoveOnComplete) is an option for either. It keeps an acknowledged job in the table, marked as completed, where the default deletes it.
+Both take the name of the queue, which is its table, and return an error as well as the queue. In v0.2.3 `NewPriorityQueue` succeeds only the first time it opens a table. A restart cannot reopen a priority queue ([see the limits](#limits-of-sqliteq-v023)), so use `NewQueue` for jobs that have to survive one. [`WithRemoveOnComplete(false)`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#WithRemoveOnComplete) is an option for either. It keeps an acknowledged job in the table, marked as completed, where the default deletes it.
 
 ## A persistent queue
 
@@ -139,7 +139,7 @@ func main() {
 
 ### Run locally
 
-Follow the steps for the persistent queue, with this program as `main.go`. It prints:
+Make a module the way the persistent queue's steps do, with this program as `main.go` and `sqlite-priority` as the module name, and run it once. It prints:
 
 ```
 processing alert
@@ -147,18 +147,21 @@ processing newsletter
 processing report
 ```
 
+Run it once for each `test.db`. A second run in the same folder panics at `panic(err)` with `failed to initialize priority column: duplicate column name: priority`, because sqliteq v0.2.3 cannot reopen a priority queue. Delete `test.db` before you run it again. [The limits](#limits-of-sqliteq-v023) explain it.
+
 ## Jobs that were not acknowledged
 
 [The overview](/persistence/overview/#acknowledgement) describes when varmq acknowledges a job. This is what sqliteq v0.2.3 does with a job that was taken and not acknowledged, for example because the process died.
 
 - **A job has a status in its row.** A new row is `pending`. When the worker takes the job, in one transaction, the row becomes `processing`. [`Acknowledge`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queue.Acknowledge) deletes the row, or marks it `completed` with `WithRemoveOnComplete(false)`.
-- **Taken jobs return to `pending` when a queue is created.** `NewQueue` and `NewPriorityQueue` run an update that sets every `processing` row that was not acknowledged back to `pending`. sqliteq runs it when the queue is created and at no other time. The queue also has an exported [`RequeueNoAckRows`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queue.RequeueNoAckRows) method that runs it on demand.
-- **So a job from a crashed run comes back on the next start.** The job that was running when the process died is `processing` in the file. The next program that creates the queue puts it back, and it runs again. There is no timeout. In the run above, that is the job you interrupted.
+- **Taken jobs return to `pending` when a first-in first-out queue is created.** `NewQueue` runs an update that sets every `processing` row that was not acknowledged back to `pending`. sqliteq runs it when the queue is created and at no other time. A priority queue gets no use of it, because it cannot be reopened (see [the limits](#limits-of-sqliteq-v023)). The queue also has an exported [`RequeueNoAckRows`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queue.RequeueNoAckRows) method that runs it on demand.
+- **So a job from a crashed first-in first-out queue comes back on the next start.** The job that was running when the process died is `processing` in the file. The next program that creates the queue puts it back, and it runs again. There is no timeout. In the run above, that is the job you interrupted.
 - **It also puts back jobs that are still running.** The update does not know which process took a row. Another process that creates a queue on the same file returns the first process's running jobs to `pending`, and they run twice. To avoid that, use one process for each database file.
 - **[`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) counts `pending` rows only.** A job that is `processing` is counted by the worker's [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing), not by `Len`.
 
 ## Limits of sqliteq v0.2.3
 
+- **A priority queue cannot be reopened.** `NewPriorityQueue` tries to add the `priority` column every time it opens a table, because its check for an existing column never succeeds. On a table that already has the column, the statement fails and the constructor returns `failed to initialize priority column: duplicate column name: priority`. So a priority queue works once for each table. After a restart, the jobs stored in it cannot be reached through sqliteq v0.2.3, whether they are `pending` or `processing`. For jobs that must survive a restart, use `NewQueue`.
 - **[`Purge`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.2.3#Queue.Purge) deletes every row.** That includes the `processing` row of a job that is running. When the job finishes, its `Acknowledge` finds no row and returns `false`, and the worker reports [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) to [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) and the handler. The job's function has run, so the error is about the bookkeeping.
 - **There is no deduplication.** sqliteq v0.2.3 does not implement [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) is stored in the JSON and not checked.
 - **There is no capacity.** sqliteq does not implement [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter), so [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) does not make `Add` refuse jobs.
@@ -167,4 +170,4 @@ processing report
 
 ## Newer sqliteq releases
 
-sqliteq v0.3.0 changes the API that this page uses. `sqliteq.New` takes a folder and returns an error as well as the `Queues` value, and each queue gets its own file in it. The programs above do not compile against v0.3.0: `sdb := sqliteq.New("test.db")` fails with `assignment mismatch: 1 variable but sqliteq.New returns 2 values`. Release v0.3.0 also adds batch pops and [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.3.0#Queue.EnqueueOnce), and it changes when unacknowledged jobs are put back. This page does not describe it. If you use it, read its [README](https://github.com/goptics/sqliteq/blob/v0.3.0/README.md) and [changelog](https://github.com/goptics/sqliteq/blob/v0.3.0/CHANGELOG.md), and pin the version you want with `go get`, since `go get` without a version fetches the latest release.
+sqliteq v0.3.0 changes the API that this page uses. `sqliteq.New` takes a folder and returns an error as well as the `Queues` value, and each queue gets its own file in it. The programs above do not compile against v0.3.0: `sdb := sqliteq.New("test.db")` fails with `assignment mismatch: 1 variable but sqliteq.New returns 2 values`. Its changelog lists the priority-queue reopen failure as fixed. Release v0.3.0 also adds batch pops and [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/sqliteq@v0.3.0#Queue.EnqueueOnce), and it changes when unacknowledged jobs are put back. This page does not describe it. If you use it, read its [README](https://github.com/goptics/sqliteq/blob/v0.3.0/README.md) and [changelog](https://github.com/goptics/sqliteq/blob/v0.3.0/CHANGELOG.md), and pin the version you want with `go get`, since `go get` without a version fetches the latest release.
