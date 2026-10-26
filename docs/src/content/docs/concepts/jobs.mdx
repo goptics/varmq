@@ -21,7 +21,7 @@ The worker function and the code that called `Add` see different things.
 job, ok := queue.Add("resize photo")
 ```
 
-`ok` is `false` when the queue did not take the job: it is full or closed, or a job with the same ID is already queued. In that case `job` is `nil`, so check `ok` before you use it.
+`ok` is `false` when the queue did not take the job: it is full or closed, or a job with the same ID is still in the queue (a job a worker has already taken into a batch, or parked, has released its ID). In that case `job` is `nil`, so check `ok` before you use it.
 
 With a plain worker the handle is an [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob). The other two worker types add one method that returns the outcome:
 
@@ -40,7 +40,7 @@ A job has no ID unless you give it one. `ID()` returns an empty string by defaul
 - [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) sets the ID of one job: `queue.Add(data, varmq.WithJobId("job-1"))`. An empty string is ignored.
 - [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) sets a function the worker calls to make an ID for every job added without one.
 
-An in-memory queue refuses a second `Add` with an ID that is already queued: it returns `ok == false`. IDs from a generator are not checked. Items added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) get a `g:` prefix, so an item with ID `a` shows up in the worker function as `g:a`. [Job IDs](/guides/job-ids/) covers the details.
+An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds: it returns `ok == false`. A job a worker has already taken into a batch, or parked, has released its ID, so a duplicate `Add` is accepted even though that job's status still reads `Queued`. IDs from a generator are not checked. Items added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) get a `g:` prefix, so an item with ID `a` shows up in the worker function as `g:a`. [Job IDs](/guides/job-ids/) covers the details.
 
 ## Job status
 
