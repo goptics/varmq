@@ -133,10 +133,16 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 			const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
 			try {
 				const res = await compile(this.body(), fetch, ctl.signal);
-				this.out.replaceChildren();
+				// Clear on the first write, not now: replay may wait before it, and an
+				// empty output collapses (pre:empty), which would make the box jump.
+				let first = true;
 				await replay(
 					res,
-					(text, kind) => this.write(text, kind),
+					(text, kind) => {
+						if (first) this.out.replaceChildren();
+						first = false;
+						this.write(text, kind);
+					},
 					(ms) => new Promise((r) => setTimeout(r, ms)),
 				);
 			} catch {
