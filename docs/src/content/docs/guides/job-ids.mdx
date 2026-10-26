@@ -59,7 +59,7 @@ Closing a job with its handle's [`Close`](https://pkg.go.dev/github.com/goptics/
 ### What is checked
 
 - Only IDs you gave, with `WithJobId` or `Item.ID`. A generated ID is not checked, and two jobs with no ID are both stored.
-- `AddAll` applies the same rule per item. An item whose ID is held by a job in the queue is skipped, and so is a repeat within the same slice. Items get a `g:` prefix, so an item with ID `a` and an `Add` with `WithJobId("a")` do not collide.
+- `AddAll` applies the same rule per item. An item whose ID is held by a job in the queue is skipped, and so is a repeat within the same slice, while the first copy is still in the queue (a running worker may already have taken it). Items get a `g:` prefix, so an item with ID `a` and an `Add` with `WithJobId("a")` do not collide.
 - Every in-memory queue is checked: FIFO and priority queues, and their error and result variants.
 - A queue you bind with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) takes part only if it implements [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue) or [`IDedupPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupPriorityQueue). Without that, the queue stores the duplicate.
 
