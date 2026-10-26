@@ -66,7 +66,7 @@ A job a goroutine has already taken into a batch stays with that goroutine, whic
 
 ### Lowering the limit
 
-Nothing running is interrupted. No new job starts until fewer jobs are running than the new limit, so `NumProcessing` can stay above `NumConcurrency` for a while. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
+Nothing running is interrupted. The worker hands out no new batch until fewer goroutines are busy than the new limit, so `NumProcessing` can stay above `NumConcurrency` until enough running jobs finish. A goroutine that already holds a batch keeps running it one job after another, so jobs from batches already handed out still start after the change. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
 
 ## Try it
 
