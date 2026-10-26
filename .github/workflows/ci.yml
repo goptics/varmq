@@ -8,6 +8,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "!docs/**"
   pull_request:
     branches:
       - main
@@ -15,6 +16,7 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "!docs/**"
 
 jobs:
   test:

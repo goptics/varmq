@@ -1,0 +1,39 @@
+name: Publish Site
+
+on:
+  workflow_call:
+    inputs:
+      artifact_pattern:
+        required: true
+        type: string
+        description: "Site artifacts to combine before publishing"
+      keep_files:
+        required: false
+        type: boolean
+        default: true
+        description: "Preserve files already present on the website branch"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: website-pages
+      queue: max
+    steps:
+      - name: Download site artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.artifact_pattern }}
+          path: dist
+          merge-multiple: true
+
+      - name: Publish website
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: dist
+          keep_files: ${{ inputs.keep_files }}
+          cname: varmq.goptics.org
