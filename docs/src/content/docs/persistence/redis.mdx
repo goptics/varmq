@@ -281,8 +281,8 @@ The repository's `examples/redis-distributed` has a similar pair. Its `provider`
 - **A job can be lost between the pop and its record.** redisq takes the job with one Redis call and writes it to `:nacked` with a second. If the process dies between them, or the second call fails, nothing holds the job. The redisq v1.5.0 changelog lists this as fixed.
 - **[`SetAckTimeout`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.SetAckTimeout) drops jobs.** It sets a Redis expiry on `:nacked` and `:timeouts`. When it passes, Redis deletes them, so an in-flight job is gone, not requeued. Use `SetVisibilityTimeout` and leave `SetAckTimeout` alone.
 - **Identical priority jobs collapse.** See [the priority section](#a-priority-queue).
-- **There is no deduplication.** redisq v1.4.0 does not implement [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). `WithJobId` is stored in the JSON and not checked, so adding the same ID twice stores two jobs.
-- **[`Close`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Close) does not hand jobs back.** It stops the queue object. After it, `Enqueue` and `Acknowledge` on that object return `false`, and the jobs it took stay in `:nacked` until their deadline.
+- **There is no deduplication.** redisq v1.4.0 does not implement [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). `WithJobId` is stored in the JSON and not checked, so on the first-in first-out queue adding the same ID twice stores two jobs. On the priority queue, two jobs with identical JSON, ID included, collapse into one, as [above](#a-priority-queue).
+- **[`Close`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queue.Close) does not hand jobs back.** It stops the queue object. After it, `Enqueue` and `Acknowledge` on that object return `false`, and the jobs it took stay in `:nacked` until a queue object is created after their deadline.
 - **No batch pops.** redisq v1.4.0 does not implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable), so a worker pulls one job at a time.
 
 ## Newer redisq releases

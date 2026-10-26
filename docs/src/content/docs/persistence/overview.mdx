@@ -2,6 +2,7 @@
 title: Persistence and distribution
 description: What persistent and distributed queues are, how they differ, when a job is acknowledged, and what that does and does not guarantee. Topics are in-memory only.
 sidebar:
+  label: Overview
   order: 1
 ---
 
@@ -75,7 +76,7 @@ queue := worker.WithPersistentQueue(pq)
 worker.Start()
 ```
 
-A worker that starts on creation, which is the default, signals its event loop to look for work before you have bound the queue. If the loop reads that signal first, it finds no queue. With adapters like these nothing signals it again until `Add` is called or a job finishes, so the old jobs can sit in storage until then. With [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) runs after the bind and signals the loop itself. [Lifecycle](/concepts/lifecycle/#withautorun) covers the option.
+A worker that starts on creation, which is the default, signals its event loop to look for work before you have bound the queue. If the loop reads that signal first, it finds no queue. With adapters like these nothing signals it again until something in this process does, as listed above, so the old jobs can sit in storage until then. With [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) runs after the bind and signals the loop itself. [Lifecycle](/concepts/lifecycle/#withautorun) covers the option.
 
 Adapters that implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable) signal the worker when you bind them. Neither redisq v1.4.0 nor sqliteq v0.2.3 implements it.
 
