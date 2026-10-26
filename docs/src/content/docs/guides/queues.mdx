@@ -49,7 +49,7 @@ When the queue is full, `Add` does not block. It returns a `nil` handle and `fal
 
 Capacity bounds the jobs still in the queue. On a FIFO queue a worker can take several jobs into a batch, and those are no longer in the queue, so more jobs than the capacity can be waiting overall. A batch holds at most 32 jobs. [How it works](/concepts/how-it-works/#what-batching-means-for-your-code) has the details. A priority queue is not batched.
 
-If you bind your own queue, the capacity reaches it only when it implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). Otherwise the option has no effect.
+If you bind your own queue, the capacity reaches it only when it implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter), and only then does the queue refuse jobs. Without it, `Add` keeps accepting jobs, although `IsFull()` still compares `Len()` with the number you passed.
 
 ## Len, Purge and Close
 
