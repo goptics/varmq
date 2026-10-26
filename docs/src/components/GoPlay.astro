@@ -120,6 +120,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		async run() {
 			if (this.runBtn.disabled) return;
 			this.runBtn.disabled = true;
+			this.runBtn.textContent = 'Running…';
 			this.out.hidden = false;
 			this.out.replaceChildren();
 			this.write(RUNNING, 'system');
@@ -146,6 +147,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 			} finally {
 				clearTimeout(timer);
 				this.runBtn.disabled = false;
+				this.runBtn.textContent = 'Run';
 			}
 		}
 
