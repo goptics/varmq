@@ -1,0 +1,85 @@
+---
+title: Worker types
+description: NewWorker, NewErrWorker and NewResultWorker side by side. What each function returns, what Add hands back, and which queues each worker can bind.
+sidebar:
+  order: 1
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+varmq has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
+
+| Constructor | Your function | `Add` returns | Read the outcome with |
+|---|---|---|---|
+| [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) | `func(j Job[T])` | [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob) | nothing to read |
+| [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | `func(j Job[T]) error` | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | [`Err() error`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) |
+| [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | `func(j Job[T]) (R, error)` | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | [`Result() (R, error)`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) |
+
+`R` is the type of the result. `Add` returns the handle together with a `bool`, `false` when the queue did not take the job. [Jobs](/concepts/jobs/#two-views-of-a-job) covers both.
+
+## A plain worker
+
+`NewWorker` is for work that has nothing to report back. The handle lets you [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) for the job, read its status or close it while it waits, but it carries no outcome.
+
+If the function panics, the worker recovers, counts the job as failed, and reports the panic on the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel and to the handler you set with [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler). The handle does not get it. [Errors](/guides/errors/) covers both.
+
+## An error worker
+
+`NewErrWorker` takes a function that returns an `error`. `Err()` blocks until the job is closed, then returns what the function returned: `nil` when it succeeded. A panic comes back through `Err()` as an error. The worker reports the same error on its own `Errs()` channel and to its error handler too, so one failure shows up in both places.
+
+A job that was closed before it ran also releases `Err`, with `nil`. So `nil` means the function reported no error, not that it ran. See [closing a queued job](/concepts/jobs/#closing-a-queued-job).
+
+## A result worker
+
+`NewResultWorker` takes a function that returns `(R, error)`. `Result()` blocks until the job is closed, then returns both.
+
+When the function returns a non-nil error, `Result` returns that error and the zero value of `R`, whatever value the function returned beside it. A panic does the same: the zero value, and the panic as the error. As with an error worker, the error also reaches `Errs()` and the error handler.
+
+## Try it
+
+The program below makes one worker of each kind, all with concurrency 1. After each `Add` it reads the outcome at once, which works because `Wait`, `Err` and `Result` block until the job is done.
+
+<GoPlay example="worker-types" />
+
+The output, line by line:
+
+1. `plain worker got hello` is printed by the plain worker's function, and `plain: job done` once `Wait` returns. The plain handle has no outcome to read.
+2. `err worker, job 2: <nil>` and `err worker, job 3: 3 is odd`. `Err` returned what the function returned for each job.
+3. `result worker, "42": 42, <nil>` is a result and no error.
+4. `result worker, "forty-two": 0, strconv.Atoi: parsing "forty-two": invalid syntax` is the zero value of `int` and the error.
+
+Reading each outcome right after `Add` keeps the example short. In a real program you usually add many jobs first and read the outcomes later.
+
+## What a handle has
+
+Every handle has [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status), [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed), `Wait()` and [`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close). The error and result handles add `Err()` or `Result()`, and a [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain) method.
+
+`Drain` does nothing on a single job. It exists for the group handles that [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns ([adding many jobs](/guides/adding-many/)), so `Err` and `Result` give the same answer whether or not you call it.
+
+## Which queues each worker can bind
+
+The in-memory binding methods return a queue handle whose type follows the worker.
+
+| | `NewWorker` | `NewErrWorker` | `NewResultWorker` |
+|---|---|---|---|
+| [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) return | [`Queue[T]`](https://pkg.go.dev/github.com/goptics/varmq#Queue) | [`ErrQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#ErrQueue) | [`ResultQueue[T, R]`](https://pkg.go.dev/github.com/goptics/varmq#ResultQueue) |
+| [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue) and [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) return | [`PriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue) | [`ErrPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#ErrPriorityQueue) | [`ResultPriorityQueue[T, R]`](https://pkg.go.dev/github.com/goptics/varmq#ResultPriorityQueue) |
+| [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue), [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue), [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue) | yes | no | no |
+| [`WithTopic`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithTopic) | yes | no | no |
+
+An error or result worker binds in-memory queues only. For a persistent queue, a distributed queue or a topic, use `NewWorker`.
+
+The handles in this guide are what an in-memory queue's `Add` returns. On a persistent or distributed queue, `Add` returns only a `bool`, `false` when the storage refused the job. There is no job handle, so there is nothing to `Wait` on or to read an outcome from.
+
+## What follows the function
+
+All three constructors take the same trailing arguments, `config ...any`:
+
+- An `int` sets the concurrency. The default is 1, and a value below 1 means one per CPU. [Concurrency](/guides/concurrency/) covers it.
+- A `string` names the worker, the same as [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName).
+- A [`ConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#ConfigFunc), such as [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), applies that option.
+- A value of any other type is ignored, with no error.
+
+```go
+worker := varmq.NewResultWorker(parse, 4, "parser", varmq.WithAutoRun(false))
+```

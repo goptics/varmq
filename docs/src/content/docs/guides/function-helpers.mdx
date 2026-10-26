@@ -1,0 +1,55 @@
+---
+title: Function helpers
+description: Func, ErrFunc and ResultFunc let you add closures as jobs, instead of writing a worker function for your own data type.
+sidebar:
+  order: 2
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A worker usually knows what its data means: a `string` is an email address, an `int` is a user ID, and the worker function knows what to do with it. When you only want to run pieces of code on a pool, the data can be a function instead. [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) each return a ready-made worker function that calls the job's function.
+
+| Helper | Use it with | The job's data is | [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) returns |
+|---|---|---|---|
+| `Func()` | [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) | `func()` | [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob) |
+| `ErrFunc()` | [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | `func() error` | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) |
+| `ResultFunc[R]()` | [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | `func() (R, error)` | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) |
+
+You pass what the helper returns, so you call it:
+
+```go
+worker := varmq.NewWorker(varmq.Func(), 4)
+queue := worker.BindQueue()
+queue.Add(func() { fmt.Println("hello") })
+```
+
+Go works out the data type from the helper, so there is nothing to spell out for `Func` and `ErrFunc`. `ResultFunc` returns a function for any result type, so you name it yourself: `varmq.ResultFunc[string]()`. [Worker types](/guides/worker-types/) covers what each handle gives back.
+
+## Try it
+
+The program below runs all three helpers, each on a worker with concurrency 1.
+
+<GoPlay example="function-helpers" />
+
+The output, line by line:
+
+1. `closure 1 ran`, `closure 2 ran` and `closure 3 ran`. One worker with concurrency 1 runs the queued functions in the order they were added. Each closure prints its own `i`, because from Go 1.22 on (when your `go.mod` says `go 1.22` or later) every iteration of a `for` loop has its own variable.
+2. `ErrFunc, first: <nil>` and `ErrFunc, second: disk full`. [`Err`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) returned what each function returned.
+3. `ResultFunc: "payload", <nil>`. [`Result`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) returned both values of the function.
+4. `nil func: provided function is nil`. The last job added `nil` as the function. The helper reports that as an error instead of calling it.
+
+## Details
+
+**A nil function.** Each helper handles `nil` in its own way:
+
+- `Func` panics. The worker recovers it, so the program carries on, and the panic goes to the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel, because a plain handle has no place for it.
+- `ErrFunc` returns an error, which you get from `Err()`.
+- `ResultFunc` returns the zero value and an error, which you get from `Result()`.
+
+**Panics.** A panic inside your function is handled like a panic in any worker function. [Worker types](/guides/worker-types/) says where each kind reports it.
+
+**Closures run later.** A function runs on a worker goroutine, not on the goroutine that called `Add`. Anything it captures has to be safe to share, and a variable you change after `Add` is seen changed.
+
+**No persistence.** A persistent or distributed queue stores each job as JSON, and a function cannot be encoded as JSON. Keep function jobs for in-memory queues. For jobs that must survive a restart, use plain data and put the logic in the worker function.
+
+**Naming jobs.** The job's [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) is the function, so nothing about the job says what it does. [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) gives it a name. See [job IDs](/guides/job-ids/).
