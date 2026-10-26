@@ -1,0 +1,49 @@
+// @ts-check
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+import starlightThemeRapide from 'starlight-theme-rapide';
+
+// https://astro.build/config
+export default defineConfig({
+	site: 'https://varmq.goptics.org',
+	vite: {
+		server: {
+			// The repo's assets/ folder sits outside the Astro root (docs/).
+			fs: { allow: ['..'] },
+		},
+	},
+	integrations: [
+		starlight({
+			title: 'varmq',
+			description: 'A typed worker pool and message queue for Go.',
+			logo: {
+				dark: './src/assets/logo-dark.svg',
+				light: './src/assets/logo-light.svg',
+				replacesTitle: true,
+			},
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/goptics/varmq' }],
+			sidebar: [
+				{ label: 'Start here', items: [{ autogenerate: { directory: 'start' } }] },
+				{ label: 'Core concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
+				{ label: 'Worker pool guides', items: [{ autogenerate: { directory: 'guides' } }] },
+				{ label: 'Persistence and distribution', items: [{ autogenerate: { directory: 'persistence' } }] },
+				{ label: 'Operations', items: [{ autogenerate: { directory: 'operations' } }] },
+				{
+					label: 'Reference',
+					items: [
+						{ label: 'API reference', link: 'https://pkg.go.dev/github.com/goptics/varmq' },
+						{ label: 'Benchmarks', link: 'https://github.com/goptics/benchmarks' },
+						{ label: 'Bench log', link: 'https://varmq.goptics.org/bench-log/' },
+						{ label: 'Changelog', link: 'https://github.com/goptics/varmq/blob/main/CHANGELOG.md' },
+					],
+					// Task 11 adds 'reference/comparison' here once the page exists
+				},
+			],
+			editLink: {
+				baseUrl: 'https://github.com/goptics/varmq/edit/main/docs/',
+			},
+			lastUpdated: true,
+			plugins: [starlightThemeRapide()],
+		}),
+	],
+});
