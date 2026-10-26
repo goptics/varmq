@@ -39,7 +39,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		<button type="button" data-reset hidden>Reset</button>
 		<button type="button" data-open>Open in Go Playground</button>
 	</div>
-	<pre data-output aria-live="polite" hidden></pre>
+	<pre data-output aria-live="polite"></pre>
 </go-play>
 
 <script>
@@ -48,6 +48,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 	const RUNNING = 'Running… (first run of an edited example can take ~15 s)';
 	const UNREACHABLE = "Couldn't reach the Go Playground. Try again, or open it there.";
 	const SHARE_FAILED = "Couldn't reach the Go Playground to share this code. Try again.";
+	const POPUP_BLOCKED = 'The browser blocked the new tab. Open this code in the Go Playground: ';
 	const TIMEOUT_MS = 60_000;
 
 	class GoPlay extends HTMLElement {
@@ -58,6 +59,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		editBtn!: HTMLButtonElement;
 		resetBtn!: HTMLButtonElement;
 		out!: HTMLPreElement;
+		running = false;
 
 		connectedCallback() {
 			this.pins = JSON.parse(this.dataset.pins!);
@@ -94,6 +96,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 			this.read.hidden = false;
 			this.resetBtn.hidden = true;
 			this.editBtn.hidden = false;
+			this.editBtn.focus(); // Reset just hid itself; don't leave focus on nothing.
 		}
 
 		onKey(e: KeyboardEvent) {
@@ -118,10 +121,11 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		}
 
 		async run() {
-			if (this.runBtn.disabled) return;
-			this.runBtn.disabled = true;
+			if (this.running) return;
+			// aria-disabled, not disabled: a disabled button drops keyboard focus.
+			this.running = true;
+			this.runBtn.setAttribute('aria-disabled', 'true');
 			this.runBtn.textContent = 'Running…';
-			this.out.hidden = false;
 			this.out.replaceChildren();
 			this.write(RUNNING, 'system');
 
@@ -146,7 +150,8 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 				this.out.append(link);
 			} finally {
 				clearTimeout(timer);
-				this.runBtn.disabled = false;
+				this.running = false;
+				this.runBtn.removeAttribute('aria-disabled');
 				this.runBtn.textContent = 'Run';
 			}
 		}
@@ -157,12 +162,23 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 			if (tab) tab.opener = null;
 			try {
 				const url = await share(this.body());
-				if (tab) tab.location.href = url;
-				else window.location.href = url;
+				if (tab) {
+					tab.location.href = url;
+					return;
+				}
+				// Popup blocked. Leaving this page would lose an edit, so offer a link instead.
+				if (!this.running) this.out.replaceChildren(); // don't wipe a run in progress
+				this.write(POPUP_BLOCKED, 'system');
+				const link = document.createElement('a');
+				link.className = 'link';
+				link.href = url;
+				link.target = '_blank';
+				link.rel = 'noopener';
+				link.textContent = url;
+				this.out.append(link, '\n');
 			} catch {
 				tab?.close();
-				this.out.hidden = false;
-				if (!this.runBtn.disabled) this.out.replaceChildren(); // don't wipe a run in progress
+				if (!this.running) this.out.replaceChildren(); // don't wipe a run in progress
 				this.write(SHARE_FAILED + '\n', 'error');
 			}
 		}
@@ -234,7 +250,7 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		color: var(--sl-color-black);
 	}
 
-	button:disabled {
+	button[aria-disabled='true'] {
 		cursor: progress;
 		opacity: 0.6;
 	}
@@ -253,6 +269,14 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		overflow-wrap: anywhere;
 	}
 
+	/* Empty until the first run, but still rendered, so the live region is in the
+	   accessibility tree before its first announcement. */
+	pre:empty {
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
 	/* Output lines are created at runtime, so they carry no scope attribute. */
 	pre :global(.stderr),
 	pre :global(.error) {
@@ -263,7 +287,8 @@ if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 		color: var(--sl-color-gray-3);
 	}
 
-	pre :global(button.link) {
+	pre :global(button.link),
+	pre :global(a.link) {
 		cursor: pointer;
 		padding: 0;
 		border: 0;
