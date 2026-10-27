@@ -7,9 +7,13 @@ import (
 )
 
 func main() {
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println(j.Data())
-	}, varmq.WithStrategy(varmq.RoundRobin), varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println(j.Data())
+		},
+		varmq.WithStrategy(varmq.RoundRobin),
+		varmq.WithAutoRun(false),
+	)
 
 	alerts := worker.BindQueue()
 	reports := worker.BindQueue()

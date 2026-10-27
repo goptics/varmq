@@ -8,9 +8,12 @@ import (
 
 func main() {
 	// Not started, so nothing leaves the queue to make room.
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("running", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("running", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.BindQueue(varmq.WithQueueCapacity(2))
 

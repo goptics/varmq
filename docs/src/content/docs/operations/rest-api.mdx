@@ -41,15 +41,23 @@ import (
 
 func main() {
 	// A string argument names the worker.
-	emails := varmq.NewWorker(func(j varmq.Job[string]) {
-		time.Sleep(2 * time.Second)
-	}, "email-sender", 2)
+	emails := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			time.Sleep(2 * time.Second)
+		},
+		"email-sender",
+		2,
+	)
 	emailQueue := emails.BindQueue()
 
 	// WithName does the same.
-	images := varmq.NewWorker(func(j varmq.Job[int]) {
-		time.Sleep(500 * time.Millisecond)
-	}, varmq.WithName("image-processor"), varmq.WithConcurrency(4))
+	images := varmq.NewWorker(
+		func(j varmq.Job[int]) {
+			time.Sleep(500 * time.Millisecond)
+		},
+		varmq.WithName("image-processor"),
+		varmq.WithConcurrency(4),
+	)
 	imageQueue := images.BindQueue()
 
 	// This worker has no name, so the API does not list it.

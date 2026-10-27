@@ -28,9 +28,12 @@ import (
 )
 
 func main() {
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		time.Sleep(100 * time.Millisecond)
-	}, varmq.WithConcurrency(10))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			time.Sleep(100 * time.Millisecond)
+		},
+		varmq.WithConcurrency(10),
+	)
 	queue := worker.BindQueue()
 
 	registerMetrics(worker, "foo_worker")

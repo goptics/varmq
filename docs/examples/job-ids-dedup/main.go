@@ -8,9 +8,12 @@ import (
 
 func main() {
 	// Not started, so the jobs stay in the queue.
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("running", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("running", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 	queue := worker.BindQueue()
 
 	_, ok := queue.Add("refresh 1", varmq.WithJobId("refresh"))

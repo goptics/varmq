@@ -8,9 +8,12 @@ import (
 
 func main() {
 	// Not started yet, so we can look at the group before any job runs.
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("running", j.ID(), j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("running", j.ID(), j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 	queue := worker.BindQueue()
 
 	items := []varmq.Item[string]{

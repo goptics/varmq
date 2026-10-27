@@ -8,10 +8,13 @@ import (
 )
 
 func main() {
-	worker := varmq.NewWorker(func(j varmq.Job[int]) {
-		time.Sleep(100 * time.Millisecond)
-		fmt.Println("job", j.Data(), "done")
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[int]) {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("job", j.Data(), "done")
+		},
+		varmq.WithAutoRun(false),
+	)
 	queue := worker.BindQueue()
 
 	for i := 1; i <= 3; i++ {

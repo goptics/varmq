@@ -10,9 +10,12 @@ func main() {
 	topic := varmq.NewTopic[int](varmq.WithTopicCapacity(2))
 
 	// Not started, so it reads nothing and payloads pile up unread.
-	worker := varmq.NewWorker(func(j varmq.Job[int]) {
-		fmt.Println("got", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[int]) {
+			fmt.Println("got", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 	worker.WithTopic(topic)
 
 	fmt.Println("publish 1:", topic.Publish(1))

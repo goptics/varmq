@@ -7,9 +7,12 @@ import (
 )
 
 func main() {
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("running", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("running", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.BindQueue()
 

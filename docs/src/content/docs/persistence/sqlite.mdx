@@ -56,11 +56,14 @@ func main() {
 	}
 	defer pq.Close()
 
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("processing", j.Data())
-		time.Sleep(time.Second)
-		fmt.Println("processed", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("processing", j.Data())
+			time.Sleep(time.Second)
+			fmt.Println("processed", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.WithPersistentQueue(pq)
 	fmt.Println("left in the file by an earlier run:", queue.Len())
@@ -126,9 +129,12 @@ func main() {
 	}
 	defer pq.Close()
 
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("processing", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("processing", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.WithPersistentPriorityQueue(pq)
 

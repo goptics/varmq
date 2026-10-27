@@ -11,10 +11,13 @@ import (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	worker := varmq.NewWorker(func(j varmq.Job[int]) {
-		time.Sleep(200 * time.Millisecond)
-		fmt.Println("job", j.Data(), "done")
-	}, varmq.WithContext(ctx))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[int]) {
+			time.Sleep(200 * time.Millisecond)
+			fmt.Println("job", j.Data(), "done")
+		},
+		varmq.WithContext(ctx),
+	)
 	queue := worker.BindQueue()
 
 	queue.Add(1)

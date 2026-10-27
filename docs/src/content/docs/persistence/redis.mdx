@@ -62,11 +62,14 @@ func main() {
 	pq := rdb.NewQueue("persistent_queue")
 	defer pq.Close()
 
-	worker := varmq.NewWorker(func(j varmq.Job[int]) {
-		fmt.Println("processing", j.Data())
-		time.Sleep(time.Second)
-		fmt.Println("processed", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[int]) {
+			fmt.Println("processing", j.Data())
+			time.Sleep(time.Second)
+			fmt.Println("processed", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.WithPersistentQueue(pq)
 	fmt.Println("left in Redis by an earlier run:", queue.Len())
@@ -129,9 +132,12 @@ func main() {
 	pq := rdb.NewPriorityQueue("persistent_priority_queue")
 	defer pq.Close()
 
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("processing", j.Data())
-	}, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("processing", j.Data())
+		},
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.WithPersistentPriorityQueue(pq)
 
@@ -216,11 +222,15 @@ func main() {
 	dq := rdb.NewDistributedQueue("distributed_queue")
 	defer dq.Close()
 
-	worker := varmq.NewWorker(func(j varmq.Job[string]) {
-		fmt.Println("scraping", j.Data())
-		time.Sleep(2 * time.Second)
-		fmt.Println("scraped", j.Data())
-	}, 5, varmq.WithAutoRun(false))
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			fmt.Println("scraping", j.Data())
+			time.Sleep(2 * time.Second)
+			fmt.Println("scraped", j.Data())
+		},
+		5,
+		varmq.WithAutoRun(false),
+	)
 
 	queue := worker.WithDistributedQueue(dq)
 	fmt.Println("waiting in Redis:", queue.Len())
