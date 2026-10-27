@@ -13,6 +13,10 @@
 
 - A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
 
+### 🐛 Bug Fixes
+
+- **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
+
 ### 📚 Documentation
 
 - README trimmed; errgroup and gopool added to the benchmark comparison (#119, #120, #126).

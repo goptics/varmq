@@ -248,7 +248,8 @@ func (w *worker[T, JobType]) scheduleRetentionCleanup() {
 	w.registryTimer = time.AfterFunc(w.Configs.stoppedRetention, func() {
 		w.mx.Lock()
 		if w.IsStopped() {
-			WorkerRegistry.Delete(w.Name())
+			// Delete only if the name still maps to w; a newer worker may have re-registered it.
+			WorkerRegistry.CompareAndDelete(w.Name(), w)
 		}
 		w.mx.Unlock()
 	})
