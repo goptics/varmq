@@ -9,7 +9,7 @@ import (
 func main() {
 	worker := varmq.NewErrWorker(func(j varmq.Job[int]) error {
 		return fmt.Errorf("job %d failed", j.Data())
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	for i := 1; i <= 3; i++ {

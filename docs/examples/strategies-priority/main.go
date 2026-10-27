@@ -10,7 +10,7 @@ func main() {
 	// Concurrency 1 takes one job at a time, so jobs print in the order they are taken.
 	worker := varmq.NewWorker(func(j varmq.Job[string]) {
 		fmt.Println(j.Data())
-	}, 1, varmq.WithAutoRun(false))
+	}, varmq.WithAutoRun(false))
 
 	alerts := worker.BindQueue(varmq.WithQueuePriority(1))
 	reports := worker.BindQueue(varmq.WithQueuePriority(2))

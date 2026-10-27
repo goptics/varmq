@@ -13,7 +13,7 @@ func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[int]) {
 		started <- j.Data()
 		<-release
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	queue.Add(1)

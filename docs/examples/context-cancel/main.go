@@ -14,7 +14,7 @@ func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[int]) {
 		time.Sleep(200 * time.Millisecond)
 		fmt.Println("job", j.Data(), "done")
-	}, 1, varmq.WithContext(ctx))
+	}, varmq.WithContext(ctx))
 	queue := worker.BindQueue()
 
 	queue.Add(1)

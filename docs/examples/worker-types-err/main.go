@@ -12,7 +12,7 @@ func main() {
 			return fmt.Errorf("%d is odd", j.Data())
 		}
 		return nil
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	for _, n := range []int{2, 3} {

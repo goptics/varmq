@@ -16,7 +16,7 @@ func main() {
 			panic("boom")
 		}
 		return nil
-	}, 1, "mailer", varmq.WithErrHandler(func(w varmq.Worker, err error) {
+	}, "mailer", varmq.WithErrHandler(func(w varmq.Worker, err error) {
 		fmt.Printf("handler (%s): %v\n", w.Name(), err)
 	}))
 	queue := worker.BindQueue()

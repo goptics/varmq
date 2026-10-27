@@ -9,7 +9,7 @@ import (
 func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[string]) {
 		fmt.Println("worker got", j.Data())
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	job, _ := queue.Add("hello")

@@ -12,7 +12,7 @@ func main() {
 			return fmt.Errorf("job %d failed", j.Data())
 		}
 		return nil
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	for i := 1; i <= 3; i++ {

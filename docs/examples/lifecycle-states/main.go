@@ -11,7 +11,7 @@ func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[int]) {
 		time.Sleep(100 * time.Millisecond)
 		fmt.Println("job", j.Data(), "done")
-	}, 1, varmq.WithAutoRun(false))
+	}, varmq.WithAutoRun(false))
 	queue := worker.BindQueue()
 
 	for i := 1; i <= 3; i++ {

@@ -20,7 +20,7 @@ func main() {
 		case <-worker.Context().Done():
 			fmt.Println("job", j.Data(), "ended early:", worker.Context().Err())
 		}
-	}, 1, varmq.WithContext(ctx))
+	}, varmq.WithContext(ctx))
 	queue := worker.BindQueue()
 
 	queue.Add(1)

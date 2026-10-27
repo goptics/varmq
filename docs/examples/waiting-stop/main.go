@@ -13,7 +13,7 @@ func main() {
 		fmt.Println("job", j.Data(), "done")
 	}
 
-	stop := varmq.NewWorker(work, 1)
+	stop := varmq.NewWorker(work)
 	stopQueue := stop.BindQueue()
 	for i := 1; i <= 3; i++ {
 		stopQueue.Add(i)
@@ -22,7 +22,7 @@ func main() {
 	stop.StopAndWait()
 	fmt.Println("StopAndWait:", stop.Status(), "- pending:", stop.NumPending())
 
-	drain := varmq.NewWorker(work, 1)
+	drain := varmq.NewWorker(work)
 	drainQueue := drain.BindQueue()
 	for i := 1; i <= 3; i++ {
 		drainQueue.Add(i)

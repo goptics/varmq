@@ -10,7 +10,7 @@ import (
 func main() {
 	worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
 		return strconv.Atoi(j.Data())
-	}, 1)
+	})
 	queue := worker.BindQueue()
 
 	for _, s := range []string{"42", "forty-two"} {

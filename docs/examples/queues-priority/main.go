@@ -10,7 +10,7 @@ func main() {
 	// Not started, so all three jobs wait in the queue together.
 	worker := varmq.NewWorker(func(j varmq.Job[string]) {
 		fmt.Println("running", j.Data())
-	}, 1, varmq.WithAutoRun(false))
+	}, varmq.WithAutoRun(false))
 
 	queue := worker.BindPriorityQueue()
 

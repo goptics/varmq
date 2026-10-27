@@ -10,7 +10,7 @@ import (
 func main() {
 	worker := varmq.NewWorker(func(j varmq.Job[int]) {
 		fmt.Println("job", j.Data())
-	}, 1)
+	})
 	worker.BindQueue()
 
 	err := worker.TunePool(1)

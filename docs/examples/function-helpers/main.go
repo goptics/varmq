@@ -17,14 +17,14 @@ func main() {
 	runner.WaitUntilIdle()
 
 	// ErrFunc: the data is a func() error. Err returns what it returned.
-	checks := varmq.NewErrWorker(varmq.ErrFunc(), 1).BindQueue()
+	checks := varmq.NewErrWorker(varmq.ErrFunc()).BindQueue()
 	good, _ := checks.Add(func() error { return nil })
 	bad, _ := checks.Add(func() error { return errors.New("disk full") })
 	fmt.Println("ErrFunc, first:", good.Err())
 	fmt.Println("ErrFunc, second:", bad.Err())
 
 	// ResultFunc[R]: the data is a func() (R, error). Result returns both.
-	fetches := varmq.NewResultWorker(varmq.ResultFunc[string](), 1).BindQueue()
+	fetches := varmq.NewResultWorker(varmq.ResultFunc[string]()).BindQueue()
 	fetch, _ := fetches.Add(func() (string, error) { return "payload", nil })
 	body, err := fetch.Result()
 	fmt.Printf("ResultFunc: %q, %v\n", body, err)
