@@ -126,10 +126,20 @@ describe('pool rules', () => {
 		assert.deepEqual(ev.filter(e => e.type === 'exit'), [{ at: 2500, type: 'exit', ring: 1 }, { at: 2500, type: 'exit', ring: 0 }]);
 		assert.deepEqual(endState(p, ev).idle, []);
 	});
-	it('stop lets the goroutines that finish wait in the pool, and all of them exit when the last job is done', () => {
-		// Three jobs run on rings 0, 1, 2 when the stop comes. Rings 0 and 1 go idle as they finish, ring 1 even
-		// though ring 0 already idles; ring 2 is last, and takes all three with it, itself first.
+	it('stop applies the usual stay-or-exit rule to a goroutine that finishes, and the rest leave with the last job', () => {
+		// Three jobs run on rings 0, 1, 2 when the stop comes, and nothing waits. Ring 0 finishes with none idle, so it
+		// stays. Ring 1 finishes with ring 0 idle, so it exits at its own done. Ring 2 is last: it and ring 0 leave.
 		const ev = simulatePool(plan({ jobs: burst(3), controls: [{ at: 1500, op: 'stop' }] }));
+		assert.deepEqual(ev.filter(e => e.at > 1500), [
+			{ at: 2500, type: 'done', job: 'j0', ring: 0 }, { at: 2500, type: 'idle', ring: 0 },
+			{ at: 2950, type: 'done', job: 'j1', ring: 1 }, { at: 2950, type: 'exit', ring: 1 },
+			{ at: 3400, type: 'done', job: 'j2', ring: 2 }, { at: 3400, type: 'exit', ring: 2 }, { at: 3400, type: 'exit', ring: 0 },
+		]);
+	});
+	it('stop keeps a goroutine that finishes idle while more jobs wait than goroutines sit idle', () => {
+		// The same three jobs, but j3 and j4 are still queued at the stop and never start. Two jobs wait, so ring 1
+		// stays beside ring 0, and all three leave together when the last job is done, ring 2 first.
+		const ev = simulatePool(plan({ jobs: burst(5), controls: [{ at: 1500, op: 'stop' }] }));
 		assert.deepEqual(ev.filter(e => e.at > 1500), [
 			{ at: 2500, type: 'done', job: 'j0', ring: 0 }, { at: 2500, type: 'idle', ring: 0 },
 			{ at: 2950, type: 'done', job: 'j1', ring: 1 }, { at: 2950, type: 'idle', ring: 1 },

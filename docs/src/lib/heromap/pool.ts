@@ -178,24 +178,22 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 	};
 
 	// A stop cancels the event loop, which runs `Wait` (until no job runs) and then `removeAllWorkers`: every
-	// goroutine in the pool is stopped, the last to go idle first. So they all leave together, at the last job.
+	// goroutine still in the pool is stopped, the last to go idle first. They leave together, at the last job.
 	const retire = (now: number, rings: number[]) => {
 		for (const ring of rings) emit({ at: now, type: 'exit', ring });
 	};
 
 	// `freePoolNode`: the goroutine stays idle while more jobs wait than goroutines sit idle, or while none
-	// does. After a stop it waits in the pool for the last running job. (varmq applies the same rule then, so
-	// it may stop a goroutine at its own done; here they all wait.) Then, as after every job, it wakes the
-	// event loop.
+	// does, and otherwise exits at its own done. That holds while a stop is draining the running jobs too; the
+	// one that finishes the last of them goes back in last, so `removeAllWorkers` stops it first. Then, as
+	// after every job, it wakes the event loop.
 	const finish = (now: number, job: string, ring: number) => {
 		emit({ at: now, type: 'done', job, ring });
-		if (!stopped) {
+		if (stopped && pool.busy.length === 0) {
+			retire(now, [ring, ...[...pool.idle].reverse()]);
+		} else {
 			const stays = pending() > pool.idle.length || pool.idle.length === 0;
 			emit({ at: now, type: stays ? 'idle' : 'exit', ring });
-		} else if (pool.busy.length > 0) {
-			emit({ at: now, type: 'idle', ring });
-		} else {
-			retire(now, [ring, ...[...pool.idle].reverse()]); // the last job: this goroutine went back in last
 		}
 		timer(now + plan.after, wake);
 	};
