@@ -4,28 +4,33 @@
 // a store's record waits in the tray until its ack lands; the SQLite program dies and restarts when its plan says.
 //
 // How the timeline is built:
-// - Cues. Every tween is collected first, with its start, and all are added to the timeline in time order: the
-//   tweens on one property are then siblings in order, which anime.js composes right wherever the playhead goes.
-// - Tracks. Each animated property keeps every value it is given and when, so each tween names its from-value:
-//   the value at its start, even while an earlier tween still runs (anime.js cuts that one short, and nothing
-//   jumps). So the timeline needs no composition of its own, which would render the whole timeline again for
-//   each of the thousands of tweens added.
-// - Every animated property is set to its start at 0, so each loop starts again from chapter 1 with every piece
-//   off, and a frame sought anywhere is drawn from there (`Score.build`).
+// - The score (`score.ts`) keeps a track of every animated property and the cues that change it, and makes the
+//   timeline: every tween with its from-value written out, all in time order, every property set at 0 so each
+//   loop starts again from chapter 1 with every piece off, and no property ending in a set. It says why.
 // - Lanes. The squares in a lane keep the simulation's order and stay apart: a square lands in the first slot
 //   behind the ones waiting that it can reach and sit in untouched, and those waiting move up once their way is
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
 
-import { createTimeline, eases, stagger, svg, type AnimationParams, type Timeline } from 'animejs';
+import { eases, svg, type Timeline } from 'animejs';
 import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
 import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
+import {
+	Score,
+	clamp01,
+	dist,
+	lengthOf,
+	pt,
+	solve,
+	trajectory,
+	type Ease,
+	type Pt,
+	type Stage,
+	type Values,
+} from './score.ts';
 import { queueStates } from './stores.ts';
 
-type Pt = { x: number; y: number };
-type Ease = (t: number) => number;
-type Values = Record<string, number | number[]>;
 type Worker = keyof typeof RINGS;
 type PoolPart = Extract<Part, { kind: 'pool' }>;
 type StorePart = Exclude<Part, PoolPart>;
@@ -52,7 +57,6 @@ const NEAR = 16; // a landing square this close to its slot is all but in it: fr
 const RING_R = 11; // render.ts draws goroutine rings this size
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
-const SET_EARLY = 0.5; // see Score.set
 
 const E = {
 	move: eases.inOutExpo,
@@ -67,42 +71,8 @@ const E = {
 	exit: eases.inBack(1.6),
 } satisfies Record<string, Ease>;
 
-const pt = (x: number, y: number): Pt => ({ x, y });
-const dist = (a: Pt, b: Pt) => Math.hypot(b.x - a.x, b.y - a.y);
-const lengthOf = (pts: Pt[]) => pts.slice(1).reduce((n, p, i) => n + dist(pts[i], p), 0);
-const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+const NS = 'http://www.w3.org/2000/svg';
 const centre = (b: Box) => pt(b.x + b.w / 2, b.y + b.h / 2);
-
-/** The point `d` along a polyline, as an SVG path's getPointAtLength gives it. */
-function along(pts: Pt[], d: number): Pt {
-	for (let i = 1; i < pts.length; i++) {
-		const seg = dist(pts[i - 1], pts[i]);
-		if (d <= seg || i === pts.length - 1) {
-			const f = seg === 0 ? 1 : clamp01(d / seg);
-			return pt(pts[i - 1].x + (pts[i].x - pts[i - 1].x) * f, pts[i - 1].y + (pts[i].y - pts[i - 1].y) * f);
-		}
-		d -= seg;
-	}
-	return pts[0];
-}
-
-/** The progress (0 to 1) at which `ease` reaches `value`: eases rise, so a bisection finds it. */
-function solve(ease: Ease, value: number): number {
-	let lo = 0;
-	let hi = 1;
-	for (let i = 0; i < 30; i++) {
-		const mid = (lo + hi) / 2;
-		if (ease(mid) < value) lo = mid;
-		else hi = mid;
-	}
-	return hi;
-}
-
-/** Where a square moving along `pts` from `start` over `duration` is at t: at the ends before and after. */
-function trajectory(pts: Pt[], start: number, duration: number, ease: Ease): (t: number) => Pt {
-	const length = lengthOf(pts);
-	return (t) => along(pts, ease(clamp01((t - start) / duration)) * length);
-}
 
 const PIECE = new Map(PIECES.map((p) => [p.id, p]));
 const box = (id: string): Box => {
@@ -125,236 +95,6 @@ function line(id: string): Pt[] {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The score: tracks and cues.
-
-/** One stretch of a property's change: from its start to its end, and its value in between. */
-interface Seg {
-	start: number;
-	end: number;
-	at(t: number): number[];
-}
-
-/** A property's value over time: where it starts, and the tweens that change it, in the order they start. */
-class Track {
-	readonly segs: Seg[] = [];
-	constructor(
-		readonly name: string,
-		readonly initial: number[],
-	) {}
-
-	/** The value at t: the latest tween started by then, held at its end once it is over. */
-	at(t: number): number[] {
-		let value = this.initial;
-		for (const s of this.segs) {
-			if (s.start > t) break;
-			value = s.at(Math.min(t, s.end));
-		}
-		return value;
-	}
-
-	/** When the latest tween ends. */
-	get end(): number {
-		const last = this.segs[this.segs.length - 1];
-		return last ? last.end : 0;
-	}
-
-	push(seg: Seg) {
-		const last = this.segs[this.segs.length - 1];
-		if (last && seg.start < last.start) {
-			throw new Error(`heromap: ${this.name} tweened at ${seg.start} ms, before its tween at ${last.start} ms`);
-		}
-		this.segs.push(seg);
-	}
-}
-
-interface Cue {
-	at: number;
-	targets: object;
-	params: AnimationParams;
-	set?: boolean;
-	words?: number; // a cue on a caption's words, staggered by this many ms
-}
-
-const asArray = (v: number | number[]) => (typeof v === 'number' ? [v] : v);
-const format = (prop: string, v: number[]) => (prop === 'draw' ? `${v[0]} ${v[1]}` : v[0]);
-const lerp = (a: number[], b: number[], f: number) => a.map((x, i) => x + (b[i] - x) * f);
-
-class Score {
-	readonly cues: Cue[] = [];
-	private readonly tracks = new Map<object, Map<string, Track>>();
-	private readonly drawables = new Map<Element, object>();
-	private readonly routes = new Map<string, SVGPathElement>();
-	private readonly routeLayer: SVGGElement;
-
-	constructor(readonly nodes: MapNodes) {
-		// The paths that squares and dots follow: geometry only, never painted.
-		this.routeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-		this.routeLayer.setAttribute('fill', 'none');
-		this.routeLayer.setAttribute('stroke', 'none');
-		nodes.world.append(this.routeLayer);
-	}
-
-	/** The one drawable stand-in of an outline, so all its `draw` tweens are siblings. */
-	drawable(el: Element): object {
-		let proxy = this.drawables.get(el);
-		if (!proxy) {
-			proxy = svg.createDrawable(el)[0];
-			this.drawables.set(el, proxy);
-		}
-		return proxy;
-	}
-
-	/** Declares where a property starts, each loop: set at 0. */
-	start(target: object, values: Values) {
-		let props = this.tracks.get(target);
-		if (!props) this.tracks.set(target, (props = new Map()));
-		for (const [prop, value] of Object.entries(values)) {
-			if (!props.has(prop)) props.set(prop, new Track(prop, asArray(value)));
-		}
-	}
-
-	track(target: object, prop: string): Track {
-		const track = this.tracks.get(target)?.get(prop);
-		if (!track) throw new Error(`heromap: ${prop} has no start`);
-		return track;
-	}
-
-	at(target: object, prop: string, t: number): number[] {
-		return this.track(target, prop).at(t);
-	}
-
-	/** Tweens `values` from where they are at `start` (or from `from`), over `duration`. */
-	tween(target: object, values: Values, start: number, duration: number, ease: Ease, from: Values = {}) {
-		const params: AnimationParams = { duration, ease };
-		for (const [prop, value] of Object.entries(values)) {
-			const track = this.track(target, prop);
-			const a = prop in from ? asArray(from[prop]) : track.at(start);
-			const b = asArray(value);
-			track.push({ start, end: start + duration, at: (t) => lerp(a, b, ease(clamp01((t - start) / duration))) });
-			params[prop] = [format(prop, a), format(prop, b)];
-		}
-		this.cues.push({ at: start, targets: target, params });
-	}
-
-	/**
-	 * Sets `values` at once, by `at`. A set lasts 1e-11 ms in anime.js, under float precision this far into the
-	 * timeline, so a frame at exactly its time could show it half done: it happens half a ms early.
-	 */
-	set(target: object, values: Values, at: number) {
-		const t = at - SET_EARLY;
-		const params: AnimationParams = {};
-		for (const [prop, value] of Object.entries(values)) {
-			const b = asArray(value);
-			this.track(target, prop).push({ start: t, end: t, at: () => b });
-			params[prop] = format(prop, b);
-		}
-		this.cues.push({ at: t, targets: target, params, set: true });
-	}
-
-	/** Moves `el` from where it is at `start` along `route`, over `duration`. */
-	move(el: Element, route: Pt[], start: number, duration: number, ease: Ease = E.move) {
-		const track = this.track(el, 'pos');
-		const [x, y] = track.at(start);
-		const pts = [pt(x, y), ...route].filter((p, i, all) => i === 0 || dist(all[i - 1], p) > 0.01);
-		if (pts.length < 2) return;
-		const path = trajectory(pts, start, duration, ease);
-		track.push({
-			start,
-			end: start + duration,
-			at: (t) => {
-				const p = path(t);
-				return [p.x, p.y];
-			},
-		});
-		const end = pts[pts.length - 1];
-		if (pts.length === 2) {
-			this.cues.push({
-				at: start,
-				targets: el,
-				params: { translateX: [pts[0].x, end.x], translateY: [pts[0].y, end.y], duration, ease },
-			});
-			return;
-		}
-		const motion = svg.createMotionPath(this.route(pts));
-		this.cues.push({
-			at: start,
-			targets: el,
-			params: { translateX: motion.translateX, translateY: motion.translateY, duration, ease },
-		});
-	}
-
-	/** Puts `el` at `p` at once, by `at` (see `set`). */
-	place(el: Element, p: Pt, at: number) {
-		const t = at - SET_EARLY;
-		this.track(el, 'pos').push({ start: t, end: t, at: () => [p.x, p.y] });
-		this.cues.push({ at: t, targets: el, params: { translateX: p.x, translateY: p.y }, set: true });
-	}
-
-	/** Where `el` is at t. */
-	pos(el: Element, t: number): Pt {
-		const [x, y] = this.at(el, 'pos', t);
-		return pt(x, y);
-	}
-
-	private route(pts: Pt[]): SVGPathElement {
-		const d = 'M' + pts.map((p) => `${+p.x.toFixed(3)} ${+p.y.toFixed(3)}`).join('L');
-		let path = this.routes.get(d);
-		if (!path) {
-			path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-			path.setAttribute('d', d);
-			this.routeLayer.append(path);
-			this.routes.set(d, path);
-		}
-		return path;
-	}
-
-	/** The timeline: every start set at 0, then every cue in time order. */
-	build(onRender: () => void): Timeline {
-		const timeline = createTimeline({ loop: true, autoplay: false, composition: false, onRender });
-		// One set per start value, over all the targets that share it.
-		const resets = new Map<string, { prop: string; value: string | number; targets: object[] }>();
-		for (const [target, props] of this.tracks) {
-			for (const track of props.values()) {
-				const values: [string, string | number][] =
-					track.name === 'pos'
-						? [
-								['translateX', track.initial[0]],
-								['translateY', track.initial[1]],
-							]
-						: [[track.name, format(track.name, track.initial)]];
-				for (const [prop, value] of values) {
-					const key = `${prop}=${value}`;
-					const reset = resets.get(key) ?? { prop, value, targets: [] };
-					reset.targets.push(target);
-					resets.set(key, reset);
-				}
-			}
-		}
-		for (const { prop, value, targets } of resets.values()) timeline.set(targets, { [prop]: value }, 0);
-		// A tween with its from-value written out does not take back the stretch before it, so seeking back, or
-		// over the loop's end, could leave a later value showing. Every property is set at 0: draw every frame
-		// sought from there.
-		const seek = timeline.seek.bind(timeline);
-		timeline.seek = (time, muteCallbacks, internalRender) => {
-			seek(0, muteCallbacks, internalRender);
-			return seek(time, muteCallbacks, internalRender);
-		};
-		// In time order, sets before tweens at one instant; the sort is stable, so ties keep the order written.
-		const cues = this.cues.map((cue, i) => ({ cue, i }));
-		cues.sort((a, b) => a.cue.at - b.cue.at || Number(!!b.cue.set) - Number(!!a.cue.set) || a.i - b.i);
-		for (const { cue } of cues) {
-			if (cue.at + Number(cue.params.duration ?? 0) > TOTAL + 0.5) {
-				throw new Error(`heromap: a tween at ${cue.at} ms runs past the loop's end`);
-			}
-			if (cue.words !== undefined) timeline.add(cue.targets, cue.params, stagger(cue.words, { start: cue.at }));
-			else if (cue.set) timeline.set(cue.targets, cue.params, cue.at);
-			else timeline.add(cue.targets, cue.params, cue.at);
-		}
-		return timeline;
-	}
-}
-
-// ---------------------------------------------------------------------------------------------------------------
 // Lanes: the squares waiting in a queue lane, a store's queue, or the topic.
 
 /**
@@ -372,8 +112,11 @@ const one = (_: number) => 1;
 /** Every square of a chapter that can meet another in a lane, to keep them apart. */
 class Bodies {
 	private readonly list: { el: Element; family: string }[] = [];
+	private readonly score: Score;
 
-	constructor(private readonly score: Score) {}
+	constructor(score: Score) {
+		this.score = score;
+	}
 
 	add(sq: Square) {
 		this.list.push({ el: sq.els[0], family: sq.family });
@@ -402,23 +145,28 @@ class Bodies {
 class Lane {
 	/** The squares in the lane, each with the slot it is in or headed for. */
 	readonly held = new Map<string, { sq: Square; slot: number }>();
+	readonly score: Score;
+	readonly agenda: Agenda;
+	readonly bodies: Bodies;
+	readonly id: string;
+	/** The waiting squares in the simulation's order at t, head first. */
+	readonly order: (t: number) => string[];
+	/**
+	 * How soon a square must leave not to move up first. A job flies off slowly (inOutExpo), so one moving up and
+	 * then away would stop dead in between; a taken record drops at once, from wherever it is.
+	 */
+	readonly soon: number;
 	readonly b: Box;
 	readonly y: number;
 	readonly gap: number; // the row below the lane (GAP)
 
-	constructor(
-		readonly score: Score,
-		readonly agenda: Agenda,
-		readonly bodies: Bodies,
-		readonly id: string,
-		/** The waiting squares in the simulation's order at t, head first. */
-		readonly order: (t: number) => string[],
-		/**
-		 * How soon a square must leave not to move up first. A job flies off slowly (inOutExpo), so one moving
-		 * up and then away would stop dead in between; a taken record drops at once, from wherever it is.
-		 */
-		readonly soon: number,
-	) {
+	constructor(score: Score, agenda: Agenda, bodies: Bodies, id: string, order: (t: number) => string[], soon: number) {
+		this.score = score;
+		this.agenda = agenda;
+		this.bodies = bodies;
+		this.id = id;
+		this.order = order;
+		this.soon = soon;
 		this.b = box(id);
 		this.y = slotY(this.b.y);
 		this.gap = GAP[id] ?? this.b.y + LANE.h + LANE.slot / 2;
@@ -648,6 +396,33 @@ function ackRoute(worker: Worker, i: number, tray: Pt): Pt[] {
 	return [bottom, pt(ring.x, ack[0].y), ...ack, tray];
 }
 
+/**
+ * The page as the score needs it: motion along hidden route paths in the world (anime.js measures their length,
+ * so they are drawn, with neither fill nor stroke), and anime.js's drawable outlines.
+ */
+function stage(world: SVGGElement): Stage {
+	const layer = document.createElementNS(NS, 'g');
+	layer.setAttribute('fill', 'none');
+	layer.setAttribute('stroke', 'none');
+	world.append(layer);
+	const routes = new Map<string, SVGPathElement>();
+	return {
+		path(pts) {
+			const d = 'M' + pts.map((p) => `${+p.x.toFixed(3)} ${+p.y.toFixed(3)}`).join('L');
+			let path = routes.get(d);
+			if (!path) {
+				path = document.createElementNS(NS, 'path');
+				path.setAttribute('d', d);
+				layer.append(path);
+				routes.set(d, path);
+			}
+			const { translateX, translateY } = svg.createMotionPath(path)!;
+			return { translateX, translateY };
+		},
+		drawable: (el) => svg.createDrawable(el)[0],
+	};
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The choreographer.
 
@@ -661,6 +436,7 @@ interface Topic {
 }
 
 class Choreo {
+	readonly nodes: MapNodes;
 	readonly score: Score;
 	readonly cam: Camera;
 	/** Rings shown, as `<worker>:<place>`. */
@@ -668,8 +444,9 @@ class Choreo {
 	/** The squares of the chapter being written. */
 	private bodies!: Bodies;
 
-	constructor(readonly nodes: MapNodes) {
-		this.score = new Score(nodes);
+	constructor(nodes: MapNodes) {
+		this.nodes = nodes;
+		this.score = new Score(TOTAL, stage(nodes.world));
 		this.cam = { ...frame(REGIONS[REGIONS.length - 1]) };
 		this.declare();
 	}
@@ -765,7 +542,7 @@ class Choreo {
 
 	/** A dot that runs along `route` from `start` for `duration`: a notify, an ack, a value or an error. */
 	private signal(kind: string, route: Pt[], start: number, duration: number) {
-		const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+		const dot = document.createElementNS(NS, 'circle');
 		dot.setAttribute('class', `vm-sig vm-sig-${kind}`);
 		dot.setAttribute('r', '4');
 		dot.setAttribute('opacity', '0');
@@ -881,28 +658,10 @@ class Choreo {
 		c.captions.forEach((cap, i) => {
 			const words = this.nodes.words(c.n, i);
 			const enter = Math.max(cap.at, free);
-			this.words(words, T + enter, 55, { opacity: 1, translateY: 0 }, 520, E.pop);
-			this.words(words, T + cap.until, 30, { opacity: 0, translateY: -8 }, 300, E.out);
+			this.score.stagger(words, { opacity: 1, translateY: 0 }, T + enter, 55, 520, E.pop);
+			this.score.stagger(words, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
 			free = cap.until + 300 + 30 * words.length;
 		});
-	}
-
-	/** One staggered cue for a caption's words; each word's tracks know its own start. */
-	private words(words: HTMLElement[], start: number, gap: number, values: Values, duration: number, ease: Ease) {
-		const params: AnimationParams = { duration, ease };
-		for (const [prop, value] of Object.entries(values)) {
-			const b = asArray(value);
-			const froms = words.map((word, k) => {
-				const s = start + gap * k;
-				const track = this.score.track(word, prop);
-				const a = track.at(s);
-				track.push({ start: s, end: s + duration, at: (t) => lerp(a, b, ease(clamp01((t - s) / duration))) });
-				return a[0];
-			});
-			if (froms.some((f) => f !== froms[0])) throw new Error(`heromap: a caption's words differ in ${prop}`);
-			params[prop] = [froms[0], b[0]];
-		}
-		this.score.cues.push({ at: start, targets: words, params, words: gap });
 	}
 
 	// -- Pools --------------------------------------------------------------------------------------------------
@@ -1209,7 +968,7 @@ class Choreo {
 			const rec = records.get(id)!;
 			const to = queue.slot(after.indexOf(id));
 			const p = score.pos(rec.els[0], start);
-			score.move(rec.els[0], [pt(p.x, queue.gap), pt(to.x, queue.gap), to], start, REQUEUE);
+			score.move(rec.els[0], [pt(p.x, queue.gap), pt(to.x, queue.gap), to], start, REQUEUE, E.move);
 			score.tween(this.fill(rec.els[0]), { fillOpacity: 1 }, start + 150, 350, E.fade);
 		}
 		for (const [id, held] of queue.held) {
