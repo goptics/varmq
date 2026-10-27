@@ -25,11 +25,12 @@ describe('scene', () => {
 			assert.ok(inside(REGIONS[n - 1], view(c)), `chapter ${n}`);
 			assert.ok(LABEL_PX * c.s >= 7, `chapter ${n} labels at ${LABEL_PX * c.s}px`);
 		}
+		assert.ok(frame(REGIONS[8]).s >= 0.6, `chapter 9 scale ${frame(REGIONS[8]).s}`);
 		for (const p of PIECES) assert.ok(inside(p.box, view(frame(REGIONS[9]))), p.id);
 	});
-	it('fades labels between 7 and 8.5 px on screen', () => {
-		assert.equal(labelOpacity(6.9 / LABEL_PX), 0);
-		assert.equal(labelOpacity(8.5 / LABEL_PX), 1);
+	it('fades labels between 6.5 and 7 px on screen', () => {
+		assert.equal(labelOpacity(6.4 / LABEL_PX), 0);
+		assert.equal(labelOpacity(7 / LABEL_PX), 1);
 	});
 	it('has unique ids and a chapter for every piece and line', () => {
 		const ids = [...PIECES, ...CONNS].map(p => p.id);

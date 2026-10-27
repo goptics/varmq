@@ -16,8 +16,8 @@ export const LABEL_PX = 14;
 
 const MARGIN = 20; // what `frame` leaves around a box on every side
 const MAX_ZOOM = 1.1;
-const LABEL_HIDDEN_PX = 7; // a label this small on screen is hidden...
-const LABEL_SHOWN_PX = 8.5; // ...and one this big is fully shown
+const LABEL_HIDDEN_PX = 6.5; // a label this small on screen is hidden...
+const LABEL_SHOWN_PX = 7; // ...and one this big is fully shown
 const LABEL_GAP = 6; // between a label and the piece it names
 
 /** Centre of slot `k` in the lane at `laneX`. Slot 0 is the head, on the right. */
@@ -34,8 +34,9 @@ export type PieceKind = 'program' | 'store' | 'lane' | 'tray' | 'card' | 'loop' 
 
 /**
  * Something drawn on the map. It switches on in `chapter` (1 to 9) and stays on. `parent` names the
- * piece whose box it sits inside. `label` is its text: inside a chip, 6 units below the loop, and 6
- * units above the top-left corner of anything else.
+ * piece whose box it sits inside. `label` is its text, one 14-unit line: inside a chip; below the loop,
+ * centred and 6 units clear of it; and above anything else, starting at its left edge and 6 units
+ * clear of its top.
  */
 export interface Piece {
 	id: string;
@@ -46,12 +47,16 @@ export interface Piece {
 	label?: string;
 }
 
-/** A line between two pieces, as SVG path data drawn the way its traffic goes: jobs, notifications or acks. */
+/**
+ * A line between two pieces, as SVG path data drawn the way its traffic goes: jobs, notifications or
+ * acks. `label` names the line: its text starts at `x` and the bottom of its 14-unit line is at `y`.
+ */
 export interface Conn {
 	id: string;
 	d: string;
 	chapter: number;
 	kind: 'line' | 'notify' | 'ack';
+	label?: { text: string; x: number; y: number };
 }
 
 const rect = (x: number, y: number, w: number, h: number): Box => ({ x, y, w, h });
@@ -108,11 +113,11 @@ export const PIECES: Piece[] = [
 	{ id: 'c-prog', kind: 'program', chapter: 8, box: rect(1115, 760, 165, 120), label: 'PROGRAM C' },
 	{ id: 'redis-c', kind: 'card', chapter: 8, box: rect(1130, 795, 135, 70), label: 'WORKER', parent: 'c-prog' },
 
-	// 9. Control: a row above the core's card.
-	{ id: 'ctl-pause', kind: 'chip', chapter: 9, box: chip(570, 282, 70), label: 'Pause()' },
-	{ id: 'ctl-resume', kind: 'chip', chapter: 9, box: chip(648, 282, 78), label: 'Resume()' },
-	{ id: 'ctl-tune', kind: 'chip', chapter: 9, box: chip(734, 282, 100), label: 'TunePool(5)' },
-	{ id: 'ctl-stop', kind: 'chip', chapter: 9, box: chip(842, 282, 64), label: 'Stop()' },
+	// 9. Control: two rows of two above the core's card, inside its x span (570 to 770).
+	{ id: 'ctl-pause', kind: 'chip', chapter: 9, box: chip(570, 254, 70), label: 'Pause()' },
+	{ id: 'ctl-resume', kind: 'chip', chapter: 9, box: chip(648, 254, 78), label: 'Resume()' },
+	{ id: 'ctl-tune', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'TunePool(5)' },
+	{ id: 'ctl-stop', kind: 'chip', chapter: 9, box: chip(678, 290, 64), label: 'Stop()' },
 ];
 
 // Each line stops 2 units short of the pieces it joins. Where lines split or join, the shorter one runs
@@ -138,7 +143,13 @@ export const CONNS: Conn[] = [
 	// SQLite. Add() writes to the queue, the worker takes from its head, and its ack goes to the tray.
 	{ id: 's-add-to-s-queue', kind: 'line', chapter: 7, d: 'M122 666V812H238' },
 	{ id: 's-queue-to-sqlite', kind: 'line', chapter: 7, d: 'M412 812H460V692' },
-	{ id: 'sqlite-to-s-tray', kind: 'ack', chapter: 7, d: 'M540 692V886H412' },
+	{
+		id: 'sqlite-to-s-tray',
+		kind: 'ack',
+		chapter: 7,
+		d: 'M540 692V886H412',
+		label: { text: 'ACK', x: 548, y: 802 }, // right of the line, where the mockup has it
+	},
 
 	// Redis. Program A adds, Redis notifies B and C, each takes from the queue and acks to the tray.
 	{ id: 'a-add-to-r-queue2', kind: 'line', chapter: 8, d: 'M771 730H867V702H888' },
@@ -211,7 +222,7 @@ export const REGIONS: Box[] = [
 	around('publish', 'topic', 'second', 'core'), // 6. Topics
 	around('s-prog', 's-store'), // 7. SQLite
 	around('a-prog', 'b-prog', 'c-prog', 'r-store'), // 8. Redis
-	around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop'), // 9. Control
+	around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop'), // 9. Control, with the queue where jobs wait
 	union(PIECES.map((p) => p.box)), // 10. Everything together
 ];
 
@@ -221,7 +232,7 @@ export function frame(box: Box): Camera {
 	return { x: box.x + box.w / 2, y: box.y + box.h / 2, s };
 }
 
-/** 0 while a label would be under 7 px on screen, 1 from 8.5 px, and linear between. */
+/** 0 while a label would be under 6.5 px on screen, 1 from 7 px, and linear between. */
 export function labelOpacity(s: number): number {
 	const t = (LABEL_PX * s - LABEL_HIDDEN_PX) / (LABEL_SHOWN_PX - LABEL_HIDDEN_PX);
 	return Math.min(1, Math.max(0, t));
