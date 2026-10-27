@@ -1,0 +1,421 @@
+// The hero map's story: ten chapters, each a camera stop with its captions and the simulations that play
+// there. Pure data for the renderer and the choreographer, which draw and animate exactly these events.
+// Every land, dispatch, take and ack comes out of the pool and store simulations (`pool.ts`, `stores.ts`),
+// so the map can only show what varmq does; the plans here choose when things happen and how long jobs run.
+// - Times are ms from the start of the chapter. The first 1200 ms are the camera move, and the pieces the
+//   chapter switches on draw in after it. A land is where a job's flight from Add() ends, so a chapter's
+//   first job lands at 1800 or later. Only chapter 2's TunePool(3) comes as early as 1300.
+// - Job ids are unique across the loop: the renderer makes one element per id, and a store job's record
+//   shares its job's id. Each subscriber makes its own job from a published value, `<value>-<worker>`.
+
+import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan } from './pool.ts';
+import {
+	simulateRedis,
+	simulateSqlite,
+	type RedisPlan,
+	type SqlitePlan,
+	type StoreEvent,
+	type StoreJob,
+} from './stores.ts';
+
+export type Worker = 'core' | 'result' | 'second';
+
+export type Part =
+	| {
+			kind: 'pool';
+			worker: Worker;
+			plan: PoolPlan;
+			events: PoolEvent[];
+			outcomes?: Record<string, 'value' | 'error'>; // what each job of a result worker hands back
+	  }
+	| { kind: 'sqlite'; plan: SqlitePlan; events: StoreEvent[] }
+	| { kind: 'redis'; plan: RedisPlan; events: StoreEvent[] };
+
+/** One line under the map. `*word*` is green and `!word!` red; a mark may wrap several words. */
+export interface Caption {
+	at: number;
+	until: number; // when it starts to leave
+	text: string;
+}
+
+export interface Chapter {
+	n: number;
+	title: string;
+	duration: number;
+	captions: Caption[];
+	parts: Part[];
+	published?: { id: string; at: number }[]; // values published to the topic: one square in its lane each
+	// Transient chips. `id` names the piece whose place a chip takes: chapter 2's TunePool(3) shows where the
+	// tune control switches on in chapter 9.
+	chips?: { id: string; label: string; at: number; until: number }[];
+}
+
+type PoolPart = Extract<Part, { kind: 'pool' }>;
+type Spec = [id: string, at: number, work: number];
+
+/** The event loop's pace (see `PoolPlan`), slowed down so a job is seen waiting before it leaves. */
+const PACE = { wake: 400, gap: 300, after: 250 };
+// Takes and acks travel as in the stores' own fixtures.
+const SQLITE_TRAVEL = { takeTravel: 720, ackTravel: 780 };
+const REDIS_TRAVEL = { landAfter: 700, notifyTravel: 420, takeTravel: 720, ackTravel: 730 };
+// Chapters 4 and 5 need the whole burst in the lanes before the first dispatch: there the loop looks later.
+const LATE = { ...PACE, wake: 900 };
+
+// The core's sources in bind order: the queue from chapter 1, the priority queue from 4, a third queue from 5
+// and the topic from 6. The core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip.
+// The result worker has a queue of its own, and the second worker the topic alone.
+const QUEUE = { id: 'queue' };
+const PRIO = { id: 'prio', priority: true };
+const QUEUE_C = { id: 'queue-c' };
+const TOPIC = { id: 'topic' };
+const BOUND = [QUEUE, PRIO, QUEUE_C, TOPIC];
+const R_QUEUE = { id: 'r-queue' };
+
+const queued = (source: string, specs: Spec[]): JobSpec[] =>
+	specs.map(([id, at, work]) => ({ id, source, at, work }));
+const stored = (specs: Spec[]): StoreJob[] => specs.map(([id, at, work]) => ({ id, at, work }));
+/** A subscriber's jobs from the published values: each lands as its value is published. */
+const copies = (values: { id: string; at: number }[], worker: Worker, work: number[]): JobSpec[] =>
+	values.map((v, i) => ({ id: `${v.id}-${worker}`, source: TOPIC.id, at: v.at, work: work[i] }));
+
+// Each worker is one worker for the whole loop: a plan starts with the limit and the idle goroutines (in the
+// pool's order) that its worker's last plan left. All three start as a worker with concurrency 1 and one
+// idle goroutine; the core is tuned up in chapters 2 and 9, and the other two keep their one ring.
+const carried: Record<Worker, { limit: number; idle: number[] }> = {
+	core: { limit: 1, idle: [0] },
+	result: { limit: 1, idle: [0] },
+	second: { limit: 1, idle: [0] },
+};
+
+function pool(worker: Worker, rest: Omit<PoolPlan, 'limit' | 'idle'>): PoolPart {
+	const plan = { ...carried[worker], ...rest };
+	const events = simulatePool(plan);
+	carried[worker] = endState(plan, events);
+	return { kind: 'pool', worker, plan, events };
+}
+
+const sqlite = (plan: SqlitePlan): Part => ({ kind: 'sqlite', plan, events: simulateSqlite(plan) });
+const redis = (plan: RedisPlan): Part => ({ kind: 'redis', plan, events: simulateRedis(plan) });
+
+// In order. Each is written as a function so that a plan the simulations refuse names its chapter.
+const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
+	// 1. Concurrency 1: Add() returns at once, and the jobs trickle in, so at most one waits while the goroutine
+	// is busy. A burst would be handed over as one batch.
+	() => ({
+		title: 'One worker',
+		duration: 8000,
+		captions: [{ at: 300, until: 7400, text: '*Add()* puts jobs in a queue' }],
+		parts: [
+			pool('core', {
+				...PACE,
+				sources: [QUEUE],
+				strategy: 'roundrobin',
+				jobs: queued(QUEUE.id, [
+					['j0', 1900, 1500],
+					['j1', 2800, 1500],
+					['j2', 4500, 1500],
+				]),
+			}),
+		],
+	}),
+
+	// 2. TunePool(3), then a burst: the pool grows to 3 while jobs wait, and shrinks to one idle goroutine.
+	() => ({
+		title: 'The pool',
+		duration: 9000,
+		captions: [
+			{ at: 300, until: 5100, text: 'The pool *grows* while jobs wait' },
+			{ at: 5300, until: 8400, text: 'and *shrinks* when the queue empties' },
+		],
+		chips: [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }],
+		parts: [
+			pool('core', {
+				...PACE,
+				sources: [QUEUE],
+				strategy: 'roundrobin',
+				controls: [{ at: 1300, op: 'tune', to: 3 }],
+				jobs: queued(QUEUE.id, [
+					['b0', 1900, 3000],
+					['b1', 2000, 1900],
+					['b2', 2100, 2000],
+					['b3', 2200, 1800],
+					['b4', 2300, 1800],
+				]),
+			}),
+		],
+	}),
+
+	// 3. A result worker of its own, beside the core: the core has to stay a plain worker to take a topic.
+	() => ({
+		title: 'Results and errors',
+		duration: 6000,
+		captions: [{ at: 300, until: 5400, text: 'Jobs hand back a *value* or an *error*' }],
+		parts: [
+			{
+				...pool('result', {
+					...PACE,
+					sources: [R_QUEUE],
+					jobs: queued(R_QUEUE.id, [
+						['x0', 1900, 1300],
+						['x1', 2800, 1300],
+					]),
+				}),
+				outcomes: { x0: 'value', x1: 'error' },
+			},
+		],
+	}),
+
+	// 4. All five land before the event loop looks, so it takes them lowest number first. Only this lane has
+	// jobs, so nothing is said about how the worker picks between its queues.
+	() => ({
+		title: 'Priority',
+		duration: 7000,
+		captions: [{ at: 300, until: 6400, text: 'The *lowest* number runs first' }],
+		parts: [
+			pool('core', {
+				...LATE,
+				sources: [QUEUE, PRIO],
+				strategy: 'roundrobin',
+				jobs: [5, 2, 8, 1, 3].map((priority, i) => ({
+					id: `p${priority}`,
+					source: PRIO.id,
+					at: 1800 + 150 * i,
+					work: [1700, 1400, 1350, 2400, 1450][i],
+					priority,
+				})),
+			}),
+		],
+	}),
+
+	// 5. Jobs wait in two of the three queues, and round robin takes from them in turn, skipping the empty one.
+	() => ({
+		title: 'Many queues, one worker',
+		duration: 7000,
+		captions: [{ at: 300, until: 6400, text: '*RoundRobin* picks the next queue' }],
+		parts: [
+			pool('core', {
+				...LATE,
+				sources: [QUEUE, PRIO, QUEUE_C],
+				strategy: 'roundrobin',
+				jobs: [
+					...queued(QUEUE.id, [
+						['q0', 1900, 2000],
+						['q1', 2200, 1600],
+					]),
+					...queued(QUEUE_C.id, [
+						['c0', 2050, 1400],
+						['c1', 2350, 1500],
+					]),
+				],
+			}),
+		],
+	}),
+
+	// 6. Each value is published once, and both subscribers make their own job from it. The second worker runs
+	// at concurrency 1, so the second value comes once it has taken the first.
+	() => {
+		const published = [
+			{ id: 't0', at: 1900 },
+			{ id: 't1', at: 2700 },
+		];
+		return {
+			title: 'Topics',
+			duration: 6000,
+			captions: [{ at: 300, until: 5400, text: '*Publish* once, every subscriber gets a copy' }],
+			published,
+			parts: [
+				pool('core', {
+					...PACE,
+					sources: BOUND,
+					strategy: 'roundrobin',
+					jobs: copies(published, 'core', [2200, 2100]),
+				}),
+				pool('second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1300, 1300]) }),
+			],
+		};
+	},
+
+	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
+	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end.
+	() => ({
+		title: 'SQLite',
+		duration: 16000,
+		captions: [
+			{ at: 300, until: 2300, text: 'SQLite keeps the *queue* in a file' },
+			{ at: 2400, until: 4400, text: '*Add()* writes each job to jobs.db' },
+			{ at: 4500, until: 7900, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 8000, until: 10000, text: 'The program !dies! mid-job' },
+			{ at: 10100, until: 12200, text: 'On restart they go *back* to the queue' },
+			{ at: 12300, until: 15500, text: 'and run again. Nothing is *lost*' },
+		],
+		parts: [
+			sqlite({
+				...SQLITE_TRAVEL,
+				rings: 2,
+				jobs: stored([
+					['s0', 2500, 4200],
+					['s1', 2750, 800],
+					['s2', 3000, 3000],
+					['s3', 3250, 1100],
+				]),
+				firstClaim: 4500,
+				crashAt: 8000,
+				restartAt: 9450,
+				requeueAfter: 900,
+				rework: { s0: 1600, s2: 1000, s3: 1000 },
+			}),
+		],
+	}),
+
+	// 8. The stores' Redis fixture, 1500 ms later: program A adds six jobs, B and C take them in turn, and the
+	// last two wait in the queue until a goroutine's ack lands.
+	() => ({
+		title: 'Redis',
+		duration: 12000,
+		captions: [
+			{ at: 300, until: 2300, text: 'Redis holds *one queue* for many programs' },
+			{ at: 2400, until: 4400, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 4500, until: 6500, text: 'Each job goes to *one* worker' },
+			{ at: 6600, until: 11400, text: 'and is *acked* back to Redis' },
+		],
+		parts: [
+			redis({
+				...REDIS_TRAVEL,
+				consumers: [
+					{ id: 'b', rings: 2 },
+					{ id: 'c', rings: 2 },
+				],
+				jobs: stored([
+					['r0', 1800, 2200],
+					['r1', 2040, 1900],
+					['r2', 2280, 2500],
+					['r3', 2520, 2100],
+					['r4', 2760, 1700],
+					['r5', 3000, 1900],
+				]),
+			}),
+		],
+	}),
+
+	// 9. Pause while two jobs run: they finish, and the jobs added meanwhile wait. Resume once nothing runs (a
+	// pausing worker refuses it), then TunePool(5) lets the two still waiting start beside the first three.
+	() => ({
+		title: 'Control',
+		duration: 9000,
+		captions: [{ at: 300, until: 8400, text: '*Pause*, *resume* and *resize* while it runs' }],
+		parts: [
+			pool('core', {
+				...PACE,
+				sources: BOUND,
+				strategy: 'roundrobin',
+				controls: [
+					{ at: 2900, op: 'pause' },
+					{ at: 4400, op: 'resume' },
+					{ at: 5700, op: 'tune', to: 5 },
+				],
+				jobs: queued(QUEUE.id, [
+					['k0', 1900, 1700],
+					['k1', 2100, 1300],
+					['k2', 3100, 2600],
+					['k3', 3300, 2500],
+					['k4', 3500, 2300],
+					['k5', 3700, 1600],
+					['k6', 3900, 1700],
+				]),
+			}),
+		],
+	}),
+
+	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
+	// and then its goroutines go. Nothing waits in its queue at the stop.
+	() => {
+		const published = [{ id: 'zt0', at: 2200 }];
+		return {
+			title: 'Everything together',
+			duration: 8000,
+			captions: [
+				{ at: 300, until: 4200, text: 'One worker model, from memory to *Redis*' },
+				{ at: 4300, until: 7500, text: '*Stop()* lets running jobs finish' },
+			],
+			published,
+			parts: [
+				pool('core', {
+					...PACE,
+					sources: BOUND,
+					strategy: 'roundrobin',
+					controls: [{ at: 4400, op: 'stop' }],
+					jobs: [
+						...queued(QUEUE.id, [
+							['zj0', 2000, 2200],
+							['zj1', 2400, 2600],
+						]),
+						...copies(published, 'core', [2400]),
+					],
+				}),
+				pool('second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1500]) }),
+				{
+					...pool('result', {
+						...PACE,
+						sources: [R_QUEUE],
+						jobs: queued(R_QUEUE.id, [
+							['zx0', 1900, 1400],
+							['zx1', 2900, 1400],
+						]),
+					}),
+					outcomes: { zx0: 'value', zx1: 'error' },
+				},
+				sqlite({
+					...SQLITE_TRAVEL,
+					rings: 2,
+					jobs: stored([
+						['zs0', 2000, 1800],
+						['zs1', 2200, 2400],
+					]),
+					firstClaim: 2800,
+				}),
+				redis({
+					...REDIS_TRAVEL,
+					consumers: [
+						{ id: 'b', rings: 2 },
+						{ id: 'c', rings: 2 },
+					],
+					jobs: stored([
+						['zr0', 1600, 1800],
+						['zr1', 1800, 1700],
+						['zr2', 2000, 1900],
+						['zr3', 2200, 1600],
+					]),
+				}),
+			],
+		};
+	},
+];
+
+export const CHAPTERS: Chapter[] = SCRIPT.map((write, i) => {
+	try {
+		return { n: i + 1, ...write() };
+	} catch (e) {
+		throw new Error(`chapter ${i + 1}: ${(e as Error).message}`, { cause: e });
+	}
+});
+
+/** When each chapter starts, ms from the start of the loop. */
+export function starts(): number[] {
+	const at: number[] = [];
+	let t = 0;
+	for (const c of CHAPTERS) {
+		at.push(t);
+		t += c.duration;
+	}
+	return at;
+}
+
+export const TOTAL = CHAPTERS.reduce((t, c) => t + c.duration, 0);
+
+/** The still frame for reduced motion: the finale once the camera has pulled back, before anything moves. */
+export const STATIC_AT = starts()[CHAPTERS.length - 1] + 1300;
+
+/** A caption's text without its colour marks. */
+export function plain(text: string): string {
+	return text.replace(/[*!]/g, '');
+}
