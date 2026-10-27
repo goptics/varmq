@@ -5,7 +5,8 @@
 ---
 
 <script>
-	import { CHAPTERS } from '../lib/heromap/chapters.ts';
+	import type { Timeline } from 'animejs';
+	import { CHAPTERS, STATIC_AT } from '../lib/heromap/chapters.ts';
 	import STYLES from '../lib/heromap/map.css?inline';
 	import { renderMap, type MapNodes } from '../lib/heromap/render.ts';
 	import { REGIONS, frame } from '../lib/heromap/scene.ts';
@@ -25,6 +26,7 @@
 		'<svg class="vm-play" viewBox="0 0 12 12" aria-hidden="true" focusable="false">',
 		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
 	].join('');
+	const REDUCE = '(prefers-reduced-motion: reduce)';
 
 	/** The map's styles (`map.css`): added once, by the first map to connect, so only the home page loads them. */
 	function addStyles() {
@@ -38,20 +40,45 @@
 	class VarmqMap extends HTMLElement {
 		/** The drawn map. Public, so a review can move the camera from the console. */
 		nodes?: MapNodes;
+		/** The animation, once loaded. Public, so a review can pause it and seek frames from the console. */
+		timeline?: Timeline;
 		/** Paused with the button. */
 		userPaused = false;
+		/** The visitor asked for less motion: the map holds the still frame and never plays. */
+		reducedMotion = false;
+		/** On screen, in part at least. */
+		intersecting = false;
+		/** Has played since it loaded: until then it holds the still frame, and its first play starts the loop. */
+		started = false;
+		/** The animation's code has been asked for. */
+		loading = false;
 		button!: HTMLButtonElement;
+		motion = matchMedia(REDUCE);
 		/** Tells the map its width on screen, which decides whether its labels are big enough to show. */
-		resizer = new ResizeObserver(([entry]) => this.nodes?.setWidth(entry.contentRect.width));
+		resizer = new ResizeObserver(([entry]) => this.resized(entry.contentRect.width));
+		watcher = new IntersectionObserver(([entry]) => {
+			this.intersecting = entry.isIntersecting;
+			this.update();
+		});
+		onMotion = (e: MediaQueryListEvent) => this.applyReducedMotion(e.matches);
+		onVisibility = () => this.update();
 
 		connectedCallback() {
 			addStyles();
 			if (!this.nodes) this.draw(); // once: a map moved within the page is drawn already
 			this.resizer.observe(this);
+			this.watcher.observe(this);
+			this.motion.addEventListener('change', this.onMotion);
+			document.addEventListener('visibilitychange', this.onVisibility);
+			this.applyReducedMotion(this.motion.matches);
 		}
 
 		disconnectedCallback() {
 			this.resizer.disconnect();
+			this.watcher.disconnect();
+			this.motion.removeEventListener('change', this.onMotion);
+			document.removeEventListener('visibilitychange', this.onVisibility);
+			this.timeline?.pause();
 		}
 
 		draw() {
@@ -60,7 +87,8 @@
 			this.describe(nodes);
 			this.addButton();
 
-			// The still finale frame: the whole map with every piece on, and the finale's first caption.
+			// The still frame until the animation loads: the whole map with every piece on, and the finale's first
+			// caption.
 			nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
 			for (const word of nodes.words(CHAPTERS.length, 0)) word.style.opacity = '1';
 		}
@@ -96,6 +124,46 @@
 			this.userPaused = paused;
 			this.button.dataset.state = paused ? 'paused' : 'playing';
 			this.button.setAttribute('aria-label', paused ? 'Play animation' : 'Pause animation');
+			this.update();
+		}
+
+		/** Holds the still frame and never plays while the visitor asks for less motion: no button then. */
+		applyReducedMotion(matches: boolean) {
+			this.reducedMotion = matches;
+			this.button.hidden = matches;
+			this.update();
+		}
+
+		resized(width: number) {
+			this.nodes?.setWidth(width);
+			// The square has a width only at 50rem and wider: below, it is hidden and the animation never loads.
+			if (width > 0) this.load();
+		}
+
+		async load() {
+			if (this.loading) return;
+			this.loading = true;
+			const { buildTimeline } = await import('../lib/heromap/choreo.ts');
+			if (this.nodes) this.timeline = buildTimeline(this.nodes);
+			this.update();
+		}
+
+		/** Plays only with motion allowed, not paused with the button, on screen and on a visible tab. */
+		update() {
+			const timeline = this.timeline;
+			if (!timeline) return;
+			if (this.reducedMotion) {
+				timeline.pause().seek(STATIC_AT);
+				return;
+			}
+			const play = !this.userPaused && this.intersecting && document.visibilityState === 'visible';
+			if (play && !this.started) {
+				this.started = true;
+				timeline.seek(0);
+			}
+			if (play) timeline.play();
+			else if (this.started) timeline.pause();
+			else timeline.pause().seek(STATIC_AT);
 		}
 	}
 

@@ -109,7 +109,7 @@ varmq-map .vm-svg {
 	}
 }
 
-varmq-map :is(.vm-go, .vm-job, .vm-record, .vm-chip, .vm-pulse, .vm-flash) {
+varmq-map :is(.vm-go, .vm-job, .vm-record, .vm-chip, .vm-pulse, .vm-flash, .vm-sig) {
 	transform-box: fill-box;
 	transform-origin: center;
 }
@@ -302,6 +302,23 @@ varmq-map .vm-t2 > .vm-jb {
 	opacity: 0.15;
 }
 
+/* Signals: the notify and ack dots, and a result worker's value or error on its way to the chip. */
+varmq-map .vm-sig {
+	filter: var(--vm-glow);
+}
+
+varmq-map .vm-sig-notify {
+	fill: var(--vm-pulse);
+}
+
+varmq-map :is(.vm-sig-ack, .vm-sig-value) {
+	fill: var(--vm-green);
+}
+
+varmq-map .vm-sig-error {
+	fill: var(--vm-red);
+}
+
 /* The caption band: the bottom 56 of the square's 400, below the map. The world fades into the page behind it. */
 varmq-map .vm-caption {
 	position: absolute;
@@ -361,6 +378,11 @@ varmq-map .vm-toggle {
 	background: var(--vm-button);
 	color: var(--vm-ink);
 	cursor: pointer;
+}
+
+/* Under reduced motion nothing moves, so there is nothing to pause. */
+varmq-map .vm-toggle[hidden] {
+	display: none;
 }
 
 varmq-map .vm-toggle:hover {
