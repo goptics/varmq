@@ -21,17 +21,7 @@ A queue gives each job to one worker. A [`Topic`](https://pkg.go.dev/github.com/
 
 [`NewTopic`](https://pkg.go.dev/github.com/goptics/varmq#NewTopic) creates a topic for payloads of one type. [`WithTopic`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithTopic) subscribes a worker to it:
 
-```go
-topic := varmq.NewTopic[Order]()
-
-email := varmq.NewWorker(sendEmail)
-stock := varmq.NewWorker(updateStock, 4)
-
-email.WithTopic(topic)
-stock.WithTopic(topic)
-
-topic.Publish(order) // both workers get their own job for this order
-```
+<GoPlay example="topic-subscribe" />
 
 ![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](../../../../../assets/diagrams/varmq-topic.svg)
 
