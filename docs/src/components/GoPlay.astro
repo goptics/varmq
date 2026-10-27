@@ -18,11 +18,18 @@ const { example, title = `${example}/main.go` } = Astro.props;
 const src = sources[`../../examples/${example}/main.go`];
 if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 const hintId = `go-play-hint-${example}`;
+
+// Collapse the package clause and imports, and `func main() {` when nothing else comes
+// before it, so the block opens on the code that matters. Run and Edit use the full source.
+const lines = src.split('\n');
+let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
+if (lines[head] === 'func main() {') head++;
+const meta = head > 0 ? `collapse={1-${head}}` : '';
 ---
 
 <go-play class="not-content" data-pins={JSON.stringify(pins(goMod))}>
 	<div data-read>
-		<Code code={src} lang="go" title={title} />
+		<Code code={src} lang="go" title={title} meta={meta} />
 	</div>
 	<textarea
 		data-editor
