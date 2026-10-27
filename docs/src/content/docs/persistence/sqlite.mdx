@@ -12,7 +12,7 @@ sidebar:
 Add the two modules to yours. varmq's version is the release these pages describe:
 
 ```bash
-go get github.com/goptics/varmq@v1.10.0 github.com/goptics/sqliteq@v0.2.3
+go get github.com/goptics/varmq github.com/goptics/sqliteq
 ```
 
 sqliteq uses [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3), which is built with cgo, so building needs `CGO_ENABLED=1` and a C compiler.
@@ -85,7 +85,7 @@ Three choices in it matter:
    ```bash
    mkdir sqlite-persistent && cd sqlite-persistent
    go mod init sqlite-persistent
-   go get github.com/goptics/varmq@v1.10.0 github.com/goptics/sqliteq@v0.2.3
+   go get github.com/goptics/varmq github.com/goptics/sqliteq
    ```
 
 2. Run it with `go run .`. It creates `test.db` in the current folder. The first run prints `left in the file by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.

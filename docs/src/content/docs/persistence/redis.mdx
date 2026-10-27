@@ -24,7 +24,7 @@ docker run -d --name varmq-redis -p 6375:6379 redis:7.2-alpine
 Add the two modules to yours. varmq's version is the release these pages describe:
 
 ```bash
-go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+go get github.com/goptics/varmq github.com/goptics/redisq
 ```
 
 [`redisq.New`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#New) takes a Redis URL and returns a [`Queues`](https://pkg.go.dev/github.com/goptics/redisq@v1.4.0#Queues) value. It panics when the URL does not parse. `Queues` has one constructor for each kind of queue. Each takes a key, which names the queue in Redis:
@@ -97,7 +97,7 @@ Three choices in it matter:
    ```bash
    mkdir redis-persistent && cd redis-persistent
    go mod init redis-persistent
-   go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+   go get github.com/goptics/varmq github.com/goptics/redisq
    ```
 
 3. Run it with `go run .`. The first run prints `left in Redis by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.
@@ -254,7 +254,7 @@ How it fits together in redisq v1.4.0:
    mkdir redis-distributed && cd redis-distributed
    go mod init redis-distributed
    mkdir producer consumer
-   go get github.com/goptics/varmq@v1.10.0 github.com/goptics/redisq@v1.4.0
+   go get github.com/goptics/varmq github.com/goptics/redisq
    ```
 
 3. In one terminal run `go run ./consumer`. It prints `waiting in Redis: 0` and `listening`.
