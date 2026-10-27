@@ -2,15 +2,142 @@
 title: varmq
 description: A typed worker pool and message queue for Go.
 template: splash
+editUrl: false
+lastUpdated: false
+prev: false
+next: false
+tableOfContents: false
 hero:
-  tagline: A typed worker pool and message queue for Go. Each worker is a concurrent pool that pulls jobs from any mix of in-memory, priority, persistent or distributed queues, and in-memory topics.
+  title: Worker pools and job queues for Go.
+  tagline: Each worker is a pool of goroutines. It pulls typed jobs from in-memory, priority, persistent or distributed queues, and from topics.
   actions:
-    - text: Quick start
+    - text: Get started
       link: /start/quick-start/
       variant: primary
-      icon: rocket
+      icon: right-arrow
     - text: GitHub
       link: https://github.com/goptics/varmq
       variant: minimal
-      icon: github
+      icon: external
 ---
+
+import { Card, CardGrid, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+import GoPlay from '../../components/GoPlay.astro';
+
+<Code code="go get github.com/goptics/varmq" lang="sh" title="Install" />
+
+## Try it
+
+A worker with the default concurrency of 1 runs two jobs, one after the other. Press Run to run it in the Go Playground, or edit it first.
+
+<GoPlay example="quick-start" />
+
+## How it works
+
+A worker owns your function and a concurrency limit. Each `Add` puts a job in a queue and returns at once. The worker's event loop hands waiting jobs to free goroutines, starts more while jobs wait, and lets them exit when the queue drains. [How it works](/concepts/how-it-works/) goes through it step by step.
+
+![A varmq worker pool with concurrency 4: six Add calls produce one wake-up, the event loop dispatches four jobs to four goroutines, two jobs wait, and the pool shrinks back to one idle goroutine](../../../../assets/diagrams/varmq-worker-pool.svg)
+
+## What you get
+
+<CardGrid>
+	<Card title="Typed jobs and results" icon="approve-check">
+		A job carries your type. A worker can also return an error, or a result and an error, that you
+		read from the job. See [worker types](/guides/worker-types/).
+	</Card>
+	<Card title="Priority queues" icon="list-format">
+		Add a job with a priority and the lowest number runs first. See [queues](/guides/queues/).
+	</Card>
+	<Card title="Several queues, one pool" icon="random">
+		Bind many queues to one worker and choose how it picks between them. See
+		[strategies](/guides/strategies/).
+	</Card>
+	<Card title="Topics" icon="rss">
+		Publish once and every subscribed worker gets its own job. See [topics](/guides/topics/).
+	</Card>
+	<Card title="Persistent and distributed queues" icon="puzzle">
+		Keep jobs across restarts, or share a queue between processes, with a storage adapter. See
+		[persistence](/persistence/overview/).
+	</Card>
+	<Card title="Control at runtime" icon="setting">
+		Pause, resume, restart or resize a running worker, from code or over HTTP. See
+		[lifecycle](/concepts/lifecycle/) and the [REST API](/operations/rest-api/).
+	</Card>
+</CardGrid>
+
+## A closer look
+
+Each tab is a full program you can run.
+
+<Tabs>
+	<TabItem label="Priority">
+		The worker is started after the three jobs are added, so the lowest number runs first.
+
+		<GoPlay example="queues-priority" />
+	</TabItem>
+	<TabItem label="Round robin">
+		One worker takes jobs from three queues in turn.
+
+		<GoPlay example="strategies-round-robin" />
+	</TabItem>
+	<TabItem label="Topics">
+		Two workers subscribe to one topic, and each gets every order.
+
+		<GoPlay example="topic-subscribe" />
+	</TabItem>
+	<TabItem label="Results">
+		A result worker returns a value and an error, which you read from the job.
+
+		<GoPlay example="worker-types-result" />
+	</TabItem>
+</Tabs>
+
+## Where jobs live
+
+<CardGrid>
+	<LinkCard
+		title="In memory"
+		description="Built in. Plain and priority queues, and topics."
+		href="/guides/queues/"
+	/>
+	<LinkCard
+		title="Redis"
+		description="redisq gives persistent and distributed queues."
+		href="/persistence/redis/"
+	/>
+	<LinkCard
+		title="SQLite"
+		description="sqliteq keeps persistent queues in local files."
+		href="/persistence/sqlite/"
+	/>
+</CardGrid>
+
+## Performance
+
+Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
+
+<CardGrid>
+	<Card title="4.89M tasks/s">
+		Average over 15M tasks per run, 50K workers, 1 to 1M producers. The next fastest pool, a
+		hand-rolled buffered channel pool, does 2.73M, and ants 2.22M. It uses more memory: 115 MB per 1M
+		tasks against 15 MB for ants, because `Add` never blocks.
+	</Card>
+	<Card title="59,898 jobs/s on Redis">
+		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. The median
+		time from enqueue to handler is 0.058 ms.
+	</Card>
+	<Card title="14,725 jobs/s on SQLite">
+		With sqliteq, draining 20K jobs on WAL. goqite does 2,933 and River 3,230 on the same run.
+	</Card>
+</CardGrid>
+
+The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
+
+## Next
+
+<CardGrid>
+	<LinkCard title="Start" description="Install varmq and run your first worker." href="/start/introduction/" />
+	<LinkCard title="Concepts" description="Workers, queues, jobs and the lifecycle." href="/concepts/workers-and-queues/" />
+	<LinkCard title="Guides" description="Concurrency, errors, waiting, metrics and more." href="/guides/queues/" />
+	<LinkCard title="Persistence" description="Redis and SQLite adapters, and writing your own." href="/persistence/overview/" />
+</CardGrid>
