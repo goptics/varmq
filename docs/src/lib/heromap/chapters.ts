@@ -124,7 +124,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 		title: 'The pool',
 		duration: 9000,
 		captions: [
-			{ at: 300, until: 5100, text: 'The pool *grows* while jobs wait' },
+			{ at: 300, until: 4800, text: 'The pool *grows* while jobs wait' },
 			{ at: 5300, until: 8400, text: 'and *shrinks* when the queue empties' },
 		],
 		chips: [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }],
@@ -236,33 +236,34 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	},
 
 	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
-	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end.
+	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
+	// down 2600 ms: its stage is gone 1350 ms after the crash, so the store holds the frame alone for over a second.
 	() => ({
 		title: 'SQLite',
-		duration: 16000,
+		duration: 17000,
 		captions: [
-			{ at: 300, until: 2300, text: 'SQLite keeps the *queue* in a file' },
-			{ at: 2400, until: 4400, text: '*Add()* writes each job to jobs.db' },
-			{ at: 4500, until: 7900, text: 'Taken jobs stay *in flight* until acked' },
-			{ at: 8000, until: 10000, text: 'The program !dies! mid-job' },
-			{ at: 10100, until: 12200, text: 'On restart they go *back* to the queue' },
-			{ at: 12300, until: 15500, text: 'and run again. Nothing is *lost*' },
+			{ at: 300, until: 1700, text: 'SQLite keeps the *queue* in a file' },
+			{ at: 2200, until: 3700, text: '*Add()* writes each job to jobs.db' },
+			{ at: 4200, until: 7200, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 7700, until: 9100, text: 'The program !dies! mid-job' },
+			{ at: 10200, until: 11700, text: 'On restart they go *back* to the queue' },
+			{ at: 12200, until: 16500, text: 'and run again. Nothing is *lost*' },
 		],
 		parts: [
 			sqlite({
 				...SQLITE_TRAVEL,
 				rings: 2,
 				jobs: stored([
-					['s0', 2500, 4200],
-					['s1', 2750, 800],
-					['s2', 3000, 3000],
-					['s3', 3250, 1100],
+					['s0', 2400, 4200],
+					['s1', 2600, 800],
+					['s2', 2800, 3000],
+					['s3', 3000, 1000],
 				]),
-				firstClaim: 4500,
-				crashAt: 8000,
-				restartAt: 9450,
+				firstClaim: 4200,
+				crashAt: 7700,
+				restartAt: 10300,
 				requeueAfter: 900,
-				rework: { s0: 1600, s2: 1000, s3: 1000 },
+				rework: { s0: 1600, s2: 1000 }, // s3 never ran, so it takes its work
 			}),
 		],
 	}),
@@ -273,10 +274,10 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 		title: 'Redis',
 		duration: 12000,
 		captions: [
-			{ at: 300, until: 2300, text: 'Redis holds *one queue* for many programs' },
-			{ at: 2400, until: 4400, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 4500, until: 6500, text: 'Each job goes to *one* worker' },
-			{ at: 6600, until: 11400, text: 'and is *acked* back to Redis' },
+			{ at: 300, until: 1700, text: 'Redis holds *one queue* for many programs' },
+			{ at: 2200, until: 3800, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 4300, until: 5700, text: 'Each job goes to *one* worker' },
+			{ at: 6200, until: 11400, text: 'and is *acked* back to Redis' },
 		],
 		parts: [
 			redis({
@@ -334,7 +335,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			title: 'Everything together',
 			duration: 8000,
 			captions: [
-				{ at: 300, until: 4200, text: 'One worker model, from memory to *Redis*' },
+				{ at: 300, until: 3800, text: 'One worker model, from memory to *Redis*' },
 				{ at: 4300, until: 7500, text: '*Stop()* lets running jobs finish' },
 			],
 			published,

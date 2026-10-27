@@ -81,10 +81,13 @@ describe('chapter rules', () => {
 		const ids = CHAPTERS.flatMap(c => [...c.parts.flatMap(p => p.plan.jobs.map(j => j.id)), ...(c.published ?? []).map(v => v.id)]);
 		assert.equal(new Set(ids).size, ids.length);
 	});
-	it('show one caption at a time, each for at least 2 s, gone before the chapter ends', () => {
+	it('show one caption at a time, each for at least 1.4 s and 500 ms after the last, gone before the chapter ends', () => {
+		// A caption starts to leave at `until`, and leaving takes 300 ms and 30 ms more per word.
 		for (const c of CHAPTERS) c.captions.forEach((cap, i) => {
-			assert.ok(cap.at >= 0 && cap.until - cap.at >= 2000 && cap.until <= c.duration - 500, `chapter ${c.n}: ${cap.text}`);
-			if (i > 0) assert.ok(c.captions[i - 1].until + 100 <= cap.at, `chapter ${c.n}: ${cap.text}`);
+			const words = plain(cap.text).split(' ').length;
+			assert.ok(cap.at >= 0 && cap.until - cap.at >= 1400, `chapter ${c.n}: ${cap.text}`);
+			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
+			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
 			for (const mark of ['*', '!']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
 		});
 	});
@@ -101,6 +104,22 @@ describe('chapter rules', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
 			const end = p.kind === 'pool' ? 'done' : 'ack';
 			for (const j of p.plan.jobs) assert.ok(p.events.some(e => e.type === end && e.job === j.id), `chapter ${c.n}: ${j.id}`);
+		}
+	});
+	it('keep every lane within its five slots, and hand each goroutine one job at a time', () => {
+		for (const c of CHAPTERS) for (const p of c.parts) {
+			if (p.kind !== 'pool') {
+				for (const s of queueStates(p.events)) assert.ok(s.order.length <= 5, `chapter ${c.n} ${p.kind} at ${s.at}`);
+				continue;
+			}
+			for (const s of poolStates(p.plan, p.events)) for (const [id, queue] of Object.entries(s.waiting))
+				assert.ok(queue.length <= 5, `chapter ${c.n}: ${id} at ${s.at}`);
+			// Above a limit of 1, fewer than 2 × limit jobs wait at every hand-off, so each goroutine is handed one.
+			let limit = p.plan.limit;
+			for (const e of p.events) {
+				if (e.type === 'control' && e.op === 'tune') limit = e.to;
+				if (e.type === 'dispatch' && limit > 1) assert.ok(e.waiting + 1 < 2 * limit, `chapter ${c.n} at ${e.at}`);
+			}
 		}
 	});
 	it('draw only on workers, lanes and rings the map has by then', () => {
@@ -131,16 +150,30 @@ describe('chapter rules', () => {
 		}
 		assert.equal(CHAPTERS[5].published.length, 2);
 	});
+	it('chapter 1 shows a job waiting while another runs', () => {
+		const p = part(1, 'pool', 'core');
+		assert.ok(poolStates(p.plan, p.events).some(s => s.busy.length > 0 && s.waiting.queue.length > 0));
+	});
 	it('chapter 3 hands back a value, then an error', () => {
 		const p = part(3, 'pool', 'result');
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
-	it('chapter 7 tells the store fixture\'s story, with the program down for more than 1400 ms', () => {
+	it('chapter 5 takes from its queues in turn and skips the empty priority queue', () => {
+		const p = part(5, 'pool', 'core');
+		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
+		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
+	});
+	it('chapter 7 tells the store fixture\'s story, and shows the store alone before the restart', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
 		// s0 and s2 run when the program dies, and the restart puts them back ahead of s3
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['s0', 's2']);
 		assert.deepEqual(queueStates(ev)[index('requeue')].order, ['s0', 's2', 's3']);
-		// at the crash + 1400 the choreographer shows only the store and its two records
-		assert.ok(ev[index('restart')].at - ev[index('crash')].at > 1400);
+		// The program stage has faded by the crash + 1350, and only the store and its two records hold the frame
+		// until the restart, for about 1.2 s.
+		assert.ok(ev[index('restart')].at - ev[index('crash')].at >= 2600);
+	});
+	it('chapter 9 lands jobs while the worker is paused', () => {
+		const p = part(9, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
+		assert.ok(p.events.some(e => e.type === 'land' && e.at > at('pause') && e.at < at('resume')));
 	});
 });
