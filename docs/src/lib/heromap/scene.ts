@@ -212,6 +212,9 @@ const around = (...ids: string[]): Box =>
 		}),
 	);
 
+/** `box` grown upward to `y`: room above it, to move the camera up. */
+const upTo = (box: Box, y: number): Box => rect(box.x, y, box.w, box.y + box.h - y);
+
 /** `REGIONS[n - 1]` is what the camera frames in chapter n. The last one is the whole world. */
 export const REGIONS: Box[] = [
 	around('add', 'queue', 'loop', 'core'), // 1. One worker
@@ -222,7 +225,10 @@ export const REGIONS: Box[] = [
 	around('publish', 'topic', 'second', 'core'), // 6. Topics
 	around('s-prog', 's-store'), // 7. SQLite
 	around('a-prog', 'b-prog', 'c-prog', 'r-store'), // 8. Redis
-	around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop'), // 9. Control, with the queue where jobs wait
+	// 9. Control, with the queue where jobs wait, and the topic and the second worker, which are on by then. The box
+	// reaches up to y 36, so the camera sits at y 238: the SQLite program below is out of view, its label too, which
+	// at y 282 still showed through the top of the caption band, where the band is not yet opaque.
+	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop', 'topic', 'second'), 36),
 	union(PIECES.map((p) => p.box)), // 10. Everything together
 ];
 
