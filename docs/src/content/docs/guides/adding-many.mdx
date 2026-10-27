@@ -48,19 +48,19 @@ There is no [`Close`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Cl
 
 `AddAll` does not say which items it skipped. If you need to know, call `Add` for each job: it returns a `bool` per job.
 
+The worker below is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so you can look at the group before any job runs. The third item repeats the ID `a`.
+
+<GoPlay example="adding-many-skipped" />
+
+`pending: 2 of 3` shows the repeat was skipped. After [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start), only `g:a` and `g:b` run, `Wait` returns, and `NumPending` is 0.
+
 ## Reading results
 
 `Results()` returns a channel of [`Result[R]`](https://pkg.go.dev/github.com/goptics/varmq#Result) values. It returns at once. Ranging over the channel is what waits.
 
-```go
-for r := range group.Results() {
-	if r.Err != nil {
-		fmt.Println(r.JobId, "failed:", r.Err)
-		continue
-	}
-	fmt.Println(r.JobId, "=", r.Data)
-}
-```
+<GoPlay example="adding-many-results" />
+
+The worker has concurrency 3, so the three result lines can come in a different order on each run. `g:b` fails to parse and arrives as an `Err`. `pending: 0` prints after the loop ends by itself.
 
 - A `Result` has a [`JobId`](https://pkg.go.dev/github.com/goptics/varmq#Result), a [`Data`](https://pkg.go.dev/github.com/goptics/varmq#Result) value and an [`Err`](https://pkg.go.dev/github.com/goptics/varmq#Result). A job that succeeded has `Data`. One that failed has `Err`, and `Data` is the zero value. A panic arrives as an `Err`.
 - `JobId` is the item's ID with the `g:` prefix. It is empty for an item with no ID, unless the worker has a [job ID generator](/guides/job-ids/#giving-a-job-an-id).
@@ -73,7 +73,11 @@ for r := range group.Results() {
 
 `Errs()` returns a channel of `error`. It carries failures only: a job that succeeded sends nothing, so the number of values you receive is the number of jobs that failed. A panic counts as a failure. The channel closes once every job has ended, so ranging over it finishes by itself.
 
-An error does not say which job it came from. If you need that, put the job's ID in the message, as the example below does.
+An error does not say which job it came from. If you need that, put the job's ID in the message, as the worker function below does with [`j.ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID).
+
+<GoPlay example="adding-many-errors" />
+
+Two of the four items are negative, so the loop receives two errors, `g:q` and `g:s`. The jobs that succeeded sent nothing.
 
 ## If you do not read the channel
 
@@ -82,16 +86,3 @@ An error does not say which job it came from. If you need that, put the job's ID
 :::caution
 Do not range over `Results()` or `Errs()` after calling `AddAll` with an empty slice. With no items, no job ever ends, so nothing closes the channel and the loop never finishes. `Wait()` returns at once in that case. Check `len(items) > 0` before you read.
 :::
-
-## Try it
-
-The program has two parts. First, a result worker with concurrency 3, created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) so we can look at the group before any job runs. Then an error worker, also with concurrency 3.
-
-<GoPlay example="add-all" />
-
-The output, line by line:
-
-1. `queued: 3 of 4`. The slice has four items, but the fourth has the same ID as the first, so `AddAll` skipped it. `NumPending` counts the three that were queued.
-2. After [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start), the program ranges over `Results()` and collects the values by `JobId`. It then prints them in ID order: `g:a = 10`, then `g:b failed: strconv.Atoi: parsing "x": invalid syntax`, then `g:c = 30`. The IDs carry the `g:` prefix. The jobs finish in no fixed order with concurrency 3, which is why the program sorts before printing.
-3. `pending: 0`. The loop ended because the channel closed, so every job in the group had ended.
-4. The error worker gets four items, two with negative numbers. `2 of 4 failed` is the count of values `Errs()` delivered: the two successful jobs sent nothing. The next two lines are the messages, `g:q: -1 is negative` and `g:s: -2 is negative`. The worker function put [`j.ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) in each message, which is the only reason they name a job. The program sorts them because they arrive in completion order too.

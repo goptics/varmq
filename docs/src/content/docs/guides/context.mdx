@@ -36,41 +36,25 @@ When the context is done, because you called its cancel function or its deadline
 - **Nothing is reported as an error.** The cancellation does not reach [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) or the [error handler](/guides/errors/).
 - **The queue keeps taking jobs.** [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) still returns `true` after the worker has stopped, and the job waits for a worker that will not run it. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the queue makes `Add` refuse jobs, and [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes the waiting ones. See [queues](/guides/queues/#len-purge-and-close).
 
+The program below adds job 1 to a worker with concurrency 1, then adds jobs 2 and 3 while job 1 runs, and cancels the context.
+
+<GoPlay example="context-cancel" />
+
+Right after the cancel, the worker is `Stopping` and job 1 is still running. It finishes, and the worker is `Stopped`. Jobs 2 and 3 never started. They are still in the queue, so `NumPending` and the queue's [`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) agree. The queue still accepts job 4, which nothing will run.
+
+Jobs 2 and 3 were still in the queue because the program added them after job 1 had started, so the worker held no batch. Had they been added first, the worker could have taken them into a batch with job 1. Jobs in a batch show in `NumPending` and not in `Len()`. See [batched dispatch](/concepts/how-it-works/#batched-dispatch).
+
 Cancelling is not the same as calling `Stop` in two ways. `Stop` sets the status to `Stopping` before it returns. A cancel function returns at once, and the worker changes its status on its own goroutine a moment later, so a status read right after it can still show the old one. And `Stop` can be undone with `Restart`, while a cancelled context cannot: see [starting again after a cancel](#starting-again-after-a-cancel).
 
 To wait for the shutdown, use [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped). [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait) returns as soon as no job is running, which can be while the status is still `Stopping`. [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) keeps waiting on a stopped worker. [Waiting](/guides/waiting/) compares them.
-
-## Try it
-
-The program below creates a worker with concurrency 1 and a context it can cancel. It adds a job and waits until it is running, then adds two more, which wait behind it. The first job is held until the program lets it go, so the program can look at the worker while it runs. The worker function reads `Context()` from the worker it belongs to, so the worker is declared first, as an [`IWorkerBinder`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder).
-
-<GoPlay example="context" />
-
-The output, line by line:
-
-1. `job 1 started`. The worker function printed it before it signalled the program.
-2. `before cancel: Running - NumProcessing: 1 - NumPending: 2`. Job 1 is running. Jobs 2 and 3 are waiting in the queue.
-3. `after cancel: Stopping - NumProcessing: 1`. The program cancelled the context. It had to wait for the status to change, because the cancel function does not wait for the worker. Job 1 is still running: the cancel did not touch it.
-4. `job 1 finished - context cancelled: true`. The program let job 1 go. It returned on its own, and the cancelled context was visible from inside the function.
-5. `stopped: Stopped - NumPending: 2 - queue Len: 2`. The worker is `Stopped`, after job 1 returned. Jobs 2 and 3 never started, and they are still in the queue, so `NumPending` and the queue's [`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) agree.
-6. `Add after cancel: true - queue Len: 3`. The queue accepted job 4. Nothing will run it.
-
-Jobs 2 and 3 were still in the queue because the program added them after job 1 had started, so the worker held no batch. Had they been added first, the worker could have taken them into a batch with job 1. Jobs in a batch show in `NumPending` and not in `Len()`. See [batched dispatch](/concepts/how-it-works/#batched-dispatch).
 
 ## Stopping a running job early
 
 Because varmq does not interrupt a function, a job that should end when the worker shuts down has to watch for it. The worker's `Context()` is the one to watch: it is done when your context is, and also when `Stop` or `Restart` is called. Pass it to anything that accepts a context, or select on its [`Done`](https://pkg.go.dev/context#Context) channel.
 
-```go
-var worker varmq.IWorkerBinder[string]
-worker = varmq.NewWorker(func(j varmq.Job[string]) {
-	// An HTTP request, a database call, or any call that takes a context
-	// returns early when the worker shuts down.
-	if err := fetch(worker.Context(), j.Data()); err != nil {
-		log.Println(j.Data(), err)
-	}
-}, 4, varmq.WithContext(ctx))
-```
+<GoPlay example="context-stop-early" />
+
+The job would sleep for a second, but it ends early, as soon as the program cancels the context. `Err()` reports `context canceled`. The worker function reads `Context()` from the worker it belongs to, so the worker is declared first, as an [`IWorkerBinder`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder).
 
 To varmq, a job that returns early is a finished job. For a plain worker, a normal return counts as successful. With [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker), return the context's error if you want it counted as failed. [Metrics](/guides/metrics/) has the counters.
 
@@ -82,7 +66,7 @@ To varmq, a job that returns early is a finished job. For a plain worker, a norm
 - [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) is called, including through [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop);
 - `Restart` stops the worker.
 
-Its [`Err()`](https://pkg.go.dev/context#Context) says why, so a deadline that passed shows as [`context.DeadlineExceeded`](https://pkg.go.dev/context#pkg-variables) and a cancel as [`context.Canceled`](https://pkg.go.dev/context#pkg-variables). [Waiting](/guides/waiting/#try-it) uses it in the other direction: a job that waits on `Context().Done()` ends when `Stop` is called.
+Its [`Err()`](https://pkg.go.dev/context#Context) says why, so a deadline that passed shows as [`context.DeadlineExceeded`](https://pkg.go.dev/context#pkg-variables) and a cancel as [`context.Canceled`](https://pkg.go.dev/context#pkg-variables). A job that waits on `Context().Done()` ends the same way when `Stop` is called.
 
 `Restart` gives the worker a fresh `Context()`. A `Context()` you read earlier stays done. Call the method again after a restart instead of keeping the old value.
 

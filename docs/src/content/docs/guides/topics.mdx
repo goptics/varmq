@@ -23,6 +23,8 @@ A queue gives each job to one worker. A [`Topic`](https://pkg.go.dev/github.com/
 
 <GoPlay example="topic-subscribe" />
 
+Each worker prints all four orders. The stock lines come first because its jobs are shorter, and with concurrency 2 two of them can print in either order.
+
 ![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](../../../../../assets/diagrams/varmq-topic.svg)
 
 `WithTopic` is available on the worker that [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) returns. Error and result workers cannot subscribe: see the table in [worker types](/guides/worker-types/#which-queues-each-worker-can-bind).
@@ -43,6 +45,10 @@ It returns when the payload is stored, not when the jobs finish. To wait for a s
 
 A worker receives only the payloads published after it subscribed. A payload that `Publish` refused for lack of subscribers is not kept for the next one.
 
+<GoPlay example="topic-late-subscriber" />
+
+`Publish` refuses payload 1 because nobody is subscribed, and that payload is gone. The `email` worker subscribes before payload 2 and gets 2 and 3. The `audit` worker subscribes after payload 2, so it gets only 3.
+
 ## How a topic stores payloads
 
 A topic keeps one copy of each payload in a shared in-memory log, however many workers subscribe. Each subscription reads the log at its own position, so a slow worker does not block `Publish` or the other workers. A payload is freed once every subscription has read it. In the diagram, that is why a chunk of the log stays while the slower worker's cursor is still on it.
@@ -57,15 +63,19 @@ The same rule means a subscriber that is slow, paused or stopped holds on to eve
 
 To end every subscription at once, call [`Close`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Close) on the topic. It unsubscribes all of them, and every later `Publish` returns `false`. [`NumSubscribers()`](https://pkg.go.dev/github.com/goptics/varmq#Topic.NumSubscribers) tells you how many are attached.
 
+<GoPlay example="topic-unsubscribe" />
+
+Both workers get payload 1. After the stock subscription ends, one subscriber is left, and payload 2 goes only to `email`.
+
 ## Capacity
 
-A topic has no limit unless you set one. [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity) bounds it when you create it:
-
-```go
-topic := varmq.NewTopic[Order](varmq.WithTopicCapacity(10_000))
-```
+A topic has no limit unless you set one. [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity) bounds it when you create it.
 
 The limit applies to the slowest subscription. Once it has that many payloads unread, `Publish` returns `false`, the way `Add` does on a full queue, and the refused payload reaches no subscriber. Room comes back as that subscription reads, purges or unsubscribes. A value below 1 means no limit.
+
+<GoPlay example="topic-capacity" />
+
+The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so it reads nothing until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). Two payloads fit, and the third is refused while 2 are unread. Once the worker has read both, there is room, and the same `Publish` succeeds.
 
 [`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#Topic.IsFull) on the topic tells you whether it is at its capacity right now, and the answer can change straight after. On a subscription, [`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) is true when that subscription is at the capacity, which makes it the one refusing `Publish`. Act on the result of `Publish` itself, not on `IsFull`.
 
@@ -80,22 +90,3 @@ worker.WithTopic(orders, varmq.WithTopicPriority(1)) // read orders before other
 With the default [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority) strategy, a worker with a topic subscription ranked 1 and a queue without a rank takes the payloads first. If the two have the same rank, the one bound first goes first. [Strategies](/guides/strategies/#what-priority-does-under-the-other-strategies) covers what priority does under the other three.
 
 A worker whose only source is a topic takes payloads in batches, like a worker with one in-memory FIFO queue. With more than one source it takes one job at a time. [How it works](/concepts/how-it-works/#batched-dispatch) has both.
-
-## Try it
-
-The program below subscribes two workers to a topic, publishes some orders, adds a third worker part-way through, and unsubscribes one. Each worker records what it received, and the program prints the records sorted, because the worker with concurrency 2 can finish its jobs in either order.
-
-<GoPlay example="topic" />
-
-The output, line by line:
-
-1. `publish with no subscribers: false`. Nobody is subscribed, so `Publish` refused payload 0 and it is gone.
-2. `subscribers: 3`. The `email` worker (concurrency 1) and the `stock` worker (concurrency 2) subscribed first, and the program published payloads 1 and 2. Then the `audit` worker subscribed, which makes three subscribers.
-3. `after Unsubscribe, subscribers: 2`. Payload 3 went to all three workers. Then the stock subscription ended, and payload 4 went to the other two.
-4. `email received [1 2 3 4]`. It was subscribed for every payload.
-5. `stock received [1 2 3]`. It missed payload 4, which was published after it unsubscribed.
-6. `audit received [3 4]`. It subscribed after payloads 1 and 2, so it did not see them.
-7. `publish 1: true` and `publish 2: true`. The second part uses a topic with a capacity of 2 and a worker created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), which reads nothing until it starts. Two payloads fit.
-8. `publish 3: false - IsFull: true`. The worker has 2 unread payloads, which is the capacity, so `Publish` refused the third.
-9. `publish 3 after the worker caught up: true`. The program started the worker and waited until it was idle. That freed the room, so the same `Publish` now succeeds.
-10. `slow received [1 2 3]`. The refused payload 3 was not delivered, and the second publish of 3 was.

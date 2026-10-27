@@ -23,6 +23,12 @@ A worker is always in one of seven states. [`Status()`](https://pkg.go.dev/githu
 
 `Idle` and `Running` swap on their own as jobs start and finish, so `Running` is a moment, not a mode you set. `IsActive` is true for either of them, which makes it the check for "started and not paused or stopped".
 
+The program below creates a worker with `WithAutoRun(false)`, adds three jobs, starts it, and pauses it while job 1 runs.
+
+<GoPlay example="lifecycle-states" />
+
+The worker is `Initiated` until `Start`. `Start` makes it `Idle`, and it is `Running` a moment later, because jobs were already waiting. `Pause` returns while job 1 still runs, so the worker is `Pausing`. Once job 1 is done it is `Paused`, and jobs 2 and 3 wait until `Resume`. When they are done the worker is `Idle` again.
+
 A status is a snapshot. Between reading it and acting on it the worker may have moved on. To know where a worker has landed after `Pause` or `Stop`, use the [waiting helpers](#waiting-for-a-state) below.
 
 ## Moving between states
@@ -39,6 +45,12 @@ The errors are values in the package, listed under [Variables](https://pkg.go.de
 
 - `Pause`, `Resume` and `Stop` return at once. `Restart` does not: it waits for running jobs to finish before it starts the worker again. If another goroutine restarts the worker first, it returns `ErrRunningWorker`.
 - A stopped worker cannot be resumed. `Resume` returns `ErrWorkerStopped`. Use `Restart`, or `Start`, which also accepts a stopped worker.
+
+The program below stops a worker, tries to resume it, adds a job while it is stopped, then restarts it.
+
+<GoPlay example="lifecycle-restart" />
+
+`Start` fails on a worker that is already running, which a worker is by default (see [`WithAutoRun`](#withautorun)). `Resume` refuses the stopped worker. The job added while it was stopped waits in the queue, and runs after `Restart`.
 
 ### What happens to jobs
 
@@ -58,25 +70,6 @@ A stop also cancels the worker's [`Context()`](https://pkg.go.dev/github.com/gop
 - [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) waits for `Idle` with no pending jobs, so on a paused or stopped worker it keeps waiting until `Resume`, `Restart` or `Start` brings it back to `Idle` and it drains.
 
 [`WaitAndPause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndPause) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) go the other way: they call `Wait` first, then pause or stop. [Waiting](/guides/waiting/) compares all of them.
-
-## Try it
-
-This program creates a worker with `WithAutoRun(false)`, adds three jobs, and walks it through pause, resume, stop and restart. The first job is held inside the worker function until the program releases it, so the worker is busy at the moment `Pause` is called.
-
-<GoPlay example="lifecycle" />
-
-The output, line by line:
-
-1. `created: Initiated`. The worker exists but has not started.
-2. `Start: Idle`. It is started and has nothing to do.
-3. `Pause: Pausing`. Job 1 is running, so the pause cannot complete yet. This line prints before job 1 is allowed to finish.
-4. `job 1 done`. The program released job 1.
-5. `paused: Paused - IsPaused: true - IsActive: false`. `PauseAndWait` returned, so the state is `Paused` and `IsActive` is false.
-6. `jobs still waiting: 2`. Jobs 2 and 3 did not run during the pause.
-7. `job 2 done` and `job 3 done`. After `Resume` they run, in order. `Resume, then drained: Idle - IsIdle: true` follows once the queue is empty.
-8. `StopAndWait: Stopped - IsStopped: true`.
-9. `Resume: worker is stopped`. `Resume` refuses a stopped worker.
-10. `job 4 done`. Job 4 was added while the worker was stopped. It waited in the queue, and `Restart` brought the worker back to run it. The last line is `Restart, then drained: Idle`.
 
 ## Settings
 

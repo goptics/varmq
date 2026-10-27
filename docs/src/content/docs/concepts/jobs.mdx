@@ -56,6 +56,12 @@ An in-memory queue refuses a second `Add` with an ID that a job still in the que
 
 `Finished` is short-lived. As soon as your function returns, the worker closes the job to release anyone waiting on it. By the time [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, the status is `Closed`, and [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) is `true`. So `Closed` does not tell you whether the job ran. Record that in your own worker function if it matters.
 
+The worker below runs one job at a time, and each job takes 500 ms. The program reads both statuses while job-1 runs.
+
+<GoPlay example="jobs-status" />
+
+job-1 is `Processing` and job-2 is `Queued`. After `Wait`, both read `Closed` and `IsClosed()` is `true`, though both ran.
+
 ## Closing a queued job
 
 [`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) cancels a job that has not started. It only marks the job closed; it does not take it out of the queue. When the worker reaches a closed job it skips it, and your function never sees it. Closing also releases `Wait` at once.
@@ -67,22 +73,12 @@ It succeeds while the job waits. It fails in two cases:
 
 Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. It counts as submitted, and because it never ran, it never counts as completed.
 
+Here job-1 is running and job-2 and job-3 wait behind it.
+
+<GoPlay example="jobs-close" />
+
+Closing job-1 fails with `ErrJobProcessing`. Closing job-2 works, its `Wait` returns at once while job-1 is still running, and a second `Close` fails with `ErrJobAlreadyClosed`. The worker then runs job-3 and never prints a line for job-2.
+
 ## Waiting on a job
 
 [`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) blocks until the job is closed, whether it ran or you closed it. If that has already happened, it returns at once. To wait for everything a worker has queued instead of one job, see [waiting](/guides/waiting/).
-
-## Try it
-
-The program below uses one worker with concurrency 1. It adds three named jobs while the first one is held inside the worker function, so the first is running and the other two are queued.
-
-<GoPlay example="jobs" />
-
-The output reads in this order.
-
-1. `running resize photo (id job-1)` comes from the worker function. It is the only job that has started.
-2. Three lines show each handle's ID and status: `job-1 Processing`, then `job-2 Queued` and `job-3 Queued`.
-3. `close job-1: job is processing, you can't close processing job` is `ErrJobProcessing`, and the next line prints `is ErrJobProcessing: true`.
-4. `close job-2: <nil>` means the queued job closed. `job-2 wait returned, status Closed` shows `Wait` returning at once even though job-1 is still held.
-5. `close job-2 again: job is already closed` is `ErrJobAlreadyClosed`.
-6. Then the program lets job-1 finish. The worker runs job-3, which prints `running build report (id job-3)`. No `running send email` line ever appears: job-2 was skipped.
-7. The last three lines all say `Closed`, including job-1 and job-3, which did run.

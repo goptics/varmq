@@ -48,45 +48,32 @@ go func() {
 
 A reader like this one drains the channel as errors arrive. If you need every error, set a handler as well: the channel can still drop an error when two arrive faster than the reader takes them.
 
+In the program below every job fails and nothing reads `Errs()` while the jobs run.
+
+<GoPlay example="errors-errs-channel" />
+
+Three jobs failed, but one error waits on the channel: `job 1 failed`, the first. The other two found the channel full and were dropped, so the `select` takes its `default`. The message names the job because the program put the number in it.
+
 ## The error handler
 
-[`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler) sets a function that the worker calls for every error it reports. The function receives the [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) and the error, so one handler can serve several workers and log the worker's [`Name()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Name):
+[`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler) sets a function that the worker calls for every error it reports. The function receives the [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) and the error, so one handler can serve several workers and log the worker's [`Name()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Name). The program below names its error worker `mailer` with a string after the function and sets a handler. Job 2 returns an error and job 3 panics.
 
-```go
-worker := varmq.NewErrWorker(send, 4, varmq.WithErrHandler(func(w varmq.Worker, err error) {
-	log.Printf("%s: %v", w.Name(), err)
-}))
-```
+<GoPlay example="errors-handler" />
+
+The handler runs once for each failure and prints `mailer`. Its lines come first, because the program waits for the worker to go idle before it reads the handles. Each handle then has its own outcome: `nil`, the returned error, and the panic as `panic recovered inside err-worker: boom`.
 
 - **The handler runs for every error,** including those the full `Errs()` channel dropped.
 - **It runs synchronously on the goroutine that reports the error,** and it must not block. For an error from a job, or from a failed acknowledgement, that is the goroutine that ran the job, so a slow handler delays that goroutine's next job. For an error from pulling a job off its storage, it is the worker's event loop, which hands out every job, so a slow handler holds them all back.
 - **Passing `nil` is ignored.** The worker keeps the handler it had.
 - **The default handler does nothing.** [`DefaultErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#DefaultErrHandler) changes it for the workers you create after the call. [Configuration](/guides/configuration/#the-default-functions) says how the defaults work.
 
-## Try it
-
-The program below creates an error worker with concurrency 1, named `mailer` with a string after the function, and with an error handler. It adds five jobs. Job 2 returns an error and job 4 panics. Nothing reads `Errs()` while the jobs run.
-
-<GoPlay example="errors" />
-
-The output, line by line:
-
-1. `handler (mailer): bad input` and `handler (mailer): panic recovered inside err-worker: boom`. The handler ran twice, once for each failure, and received the worker, so `Name()` printed `mailer`. They print before the program looks at the handles, because the program waits for the worker to go idle first.
-2. `job 1: <nil>` to `job 5: <nil>`, with `bad input` for job 2 and the `panic recovered inside err-worker: boom` text for job 4. Each handle has its own outcome. The panic came back through `Err()` as an error.
-3. `handler calls: 2`. Both failures reached the handler.
-4. `errors waiting on Errs(): 1`. The channel holds one error. Two failures happened, and the channel had room for the first.
-5. `first on Errs(): bad input`, then `no second error on Errs()`. The panic's error was never put on the channel, because the channel was full. The handler and job 4's handle still have it.
-6. `Resume: worker is stopped` and `is ErrWorkerStopped: true`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns a sentinel error, and `errors.Is` matches it.
-
 ## Matching an error
 
 The package exports its sentinel errors as variables, so match them with `errors.Is`, not by comparing text:
 
-```go
-if err := worker.TunePool(8); errors.Is(err, varmq.ErrSameConcurrency) {
-	// already at 8
-}
-```
+<GoPlay example="errors-sentinel" />
+
+[`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) with the limit the worker already has returns `ErrSameConcurrency`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns `ErrWorkerStopped`. `errors.Is` matches both.
 
 The next two sections list all thirteen, grouped by how you meet them. The messages are the text each one carries. Four of them are not returned from a call: the worker reports them on `Errs()` and to the handler.
 

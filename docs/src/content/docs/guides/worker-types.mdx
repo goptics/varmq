@@ -21,6 +21,10 @@ varmq has three worker constructors. In each, your worker function receives a [`
 
 `NewWorker` is for work that has nothing to report back. The handle lets you [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) for the job, read its status or close it while it waits, but it carries no outcome.
 
+<GoPlay example="worker-types-plain" />
+
+The worker's function prints `worker got hello`. `Wait` returns once the job is done, and there is nothing else to read from the handle.
+
 If the function panics, the worker recovers, counts the job as failed, and reports the panic on the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel and to the handler you set with [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler). The handle does not get it. [Errors](/guides/errors/) covers both.
 
 ## An error worker
@@ -29,26 +33,19 @@ If the function panics, the worker recovers, counts the job as failed, and repor
 
 A job that was closed before it ran also releases `Err`, with `nil`. So `nil` means the function reported no error, not that it ran. See [closing a queued job](/concepts/jobs/#closing-a-queued-job).
 
+<GoPlay example="worker-types-err" />
+
+`Err` returned what the function returned for each job: `<nil>` for 2 and `3 is odd` for 3. The program reads each outcome right after `Add` to stay short. In a real program you usually add many jobs first and read the outcomes later.
+
 ## A result worker
 
 `NewResultWorker` takes a function that returns `(R, error)`. `Result()` blocks until the job is closed, then returns both.
 
 When the function returns a non-nil error, `Result` returns that error and the zero value of `R`, whatever value the function returned beside it. A panic does the same: the zero value, and the panic as the error. As with an error worker, the error also reaches `Errs()` and the error handler.
 
-## Try it
+<GoPlay example="worker-types-result" />
 
-The program below makes one worker of each kind, all with concurrency 1. After each `Add` it reads the outcome at once, which works because `Wait`, `Err` and `Result` block until the job is done.
-
-<GoPlay example="worker-types" />
-
-The output, line by line:
-
-1. `plain worker got hello` is printed by the plain worker's function, and `plain: job done` once `Wait` returns. The plain handle has no outcome to read.
-2. `err worker, job 2: <nil>` and `err worker, job 3: 3 is odd`. `Err` returned what the function returned for each job.
-3. `result worker, "42": 42, <nil>` is a result and no error.
-4. `result worker, "forty-two": 0, strconv.Atoi: parsing "forty-two": invalid syntax` is the zero value of `int` and the error.
-
-Reading each outcome right after `Add` keeps the example short. In a real program you usually add many jobs first and read the outcomes later.
+`"42"` gives the result 42 and no error. `"forty-two"` gives the zero value of `int` and the error from `strconv.Atoi`.
 
 ## What a handle has
 

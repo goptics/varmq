@@ -43,6 +43,12 @@ Four methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) r
 
 `NumProcessing` stays at or below the limit, except for a while after `TunePool` lowers the limit. All four are snapshots: they can change right after you read them.
 
+The program below creates a worker with a limit of 100 and holds every job inside the worker function until the program lets go. It adds three jobs, one at a time, and waits for each to start before it adds the next.
+
+<GoPlay example="concurrency-limit" />
+
+Before any job, the pool has one idle goroutine. With three jobs running, `NumProcessing` is 3, not 100. The idle goroutine took a job, so `NumIdleWorkers` is 0, and nothing is pending.
+
 ## Changing the limit with TunePool
 
 `TunePool` changes the limit of an active worker, one that is `Idle` or `Running`. It returns at once, and the new limit applies to the next job the worker hands out. A value below 1 means one per CPU, as above.
@@ -62,26 +68,17 @@ It returns an error in two cases:
 
 The worker starts jobs on new goroutines as soon as it can. That covers the jobs still in a queue and the jobs you add later.
 
-A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1, where one goroutine can take up to 32 jobs at once from an in-memory FIFO queue: raising the limit does not spread out jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches. The example below adds its jobs after the change for this reason.
+A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1, where one goroutine can take up to 32 jobs at once from an in-memory FIFO queue: raising the limit does not spread out jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches.
+
+The program below starts a worker with a limit of 1 and holds every job until the program lets go. With job 1 running, it raises the limit to 3, then adds jobs 2 to 6. It adds them after the change for the reason above.
+
+<GoPlay example="concurrency-tunepool" />
+
+Jobs 2 and 3 start beside job 1, which is three at once, the new limit. Jobs 4 to 6 wait. The second `TunePool(3)` returns `ErrSameConcurrency`, because the worker already has a limit of 3.
 
 ### Lowering the limit
 
 Nothing running is interrupted. The worker hands out no new batch until fewer goroutines are busy than the new limit, so `NumProcessing` can stay above `NumConcurrency` until those goroutines finish their batches. A goroutine that already holds a batch keeps running it one job after another, so jobs from batches already handed out still start after the change. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
-
-## Try it
-
-The program below starts a worker with a limit of 1 and holds every job inside the worker function until the program lets go, so the counts it prints do not depend on timing. It adds one job, raises the limit to 3, adds five more, and prints the counts before and after.
-
-<GoPlay example="concurrency" />
-
-The output, line by line:
-
-1. `start: NumConcurrency 1, NumProcessing 0, NumPending 0, NumIdleWorkers 1`. A new worker has a limit of 1, no job running, and one idle goroutine waiting in the pool.
-2. `limit 1: ... NumProcessing 1 ... NumIdleWorkers 0`. Job 1 is running. The idle goroutine took it, so none is idle.
-3. `TunePool(3): <nil>`. The limit went up while job 1 was still running.
-4. `limit 3: NumConcurrency 3, NumProcessing 3, NumPending 3, NumIdleWorkers 0`. The program added jobs 2 to 6 after the change. Jobs 2 and 3 started beside job 1, which is three at once, the limit. Jobs 4 to 6 wait, and every goroutine is busy.
-5. `TunePool(3) again: worker already has the same concurrency`, then `is ErrSameConcurrency: true`. The worker already has a limit of 3.
-6. `all six jobs done`, once the program let every job go and [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) returned.
 
 ## Idle goroutines
 

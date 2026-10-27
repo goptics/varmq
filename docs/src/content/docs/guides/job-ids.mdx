@@ -27,6 +27,12 @@ A few details:
 - A generated ID on an `AddAll` item gets the `g:` prefix too.
 - `Add` calls the generator on the goroutine that calls `Add`. If several goroutines add jobs, the generator has to be safe for concurrent use.
 
+The worker below has a counting generator. It gets one job with no ID, one with `WithJobId`, and two `AddAll` items, one with an ID and one without.
+
+<GoPlay example="job-ids-generator" />
+
+`report` gets `auto-1` from the generator, and `invoice` keeps its own ID. `item a` shows up as `g:a`. `item b` gets `g:auto-3`: the prefix applies to a generated ID too, and `auto-2` went to the `invoice` call and was thrown away.
+
 ## Where you see the ID
 
 - In the worker function, as `j.ID()` on the [`Job`](https://pkg.go.dev/github.com/goptics/varmq#Job) it receives.
@@ -39,10 +45,11 @@ It is the empty string when the job has no ID.
 
 An in-memory queue keeps at most one job per given ID in the queue. While a job with an ID is in the queue, a second `Add` with the same ID is refused: it returns a `nil` handle and `false`.
 
-```go
-queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued
-queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already in the queue
-```
+The worker below is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so the jobs wait in the queue until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). On a worker that is running, the first `Add` would be taken at once and its ID released.
+
+<GoPlay example="job-ids-dedup" />
+
+The second `Add` with the ID `refresh` is refused and returns no handle, so `refresh 2` never runs. The `AddAll` item is accepted, because its ID is `g:refresh`. Once the jobs have left the queue, `refresh` can be used again.
 
 That suits work where many callers ask for the same thing, and one waiting job is enough.
 
@@ -68,18 +75,3 @@ Closing a job with its handle's [`Close`](https://pkg.go.dev/github.com/goptics/
 ### Persistent and distributed queues
 
 Persistent and distributed queues do not work this way. Storage that implements `IDedupQueue` keeps an ID for a window of its own, and `Add` returns `true` for a repeat while the job is stored once. IDs there must be unique across everything you add, so use something like a UUID, and not a counter that restarts. The `IDedupQueue` documentation has the details.
-
-## Try it
-
-The program below creates a worker with concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), plus an ID generator. Nothing is started, so the jobs wait in the queue. That keeps the output the same on every run. On a worker that is running, the first `Add` would be taken at once and its ID released.
-
-<GoPlay example="job-ids" />
-
-The output, line by line:
-
-1. `generated: auto-1`. The first job has no `WithJobId`, so the generator named it.
-2. `first refresh: true refresh`. The job got the ID `refresh`.
-3. `second refresh: false - handle is nil: true`. A job with the ID `refresh` is in the queue, so `Add` refused the second one and returned no handle.
-4. `group queued: 1 - Len: 3`. The `AddAll` item with ID `refresh` was accepted: it is `g:refresh`, a different ID. The queue holds three jobs: `report`, `refresh 1` and `refresh 3`.
-5. After [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start), the worker prints `running report with id "auto-1"`, then `refresh 1` with ID `refresh`, then `refresh 3` with ID `"g:refresh"`, in the order they were added. `refresh 2` never runs, because it was refused. The worker sees the prefix on the `AddAll` item.
-6. `running refresh 4 with id "refresh"` and then `refresh after it ran: true`. Those jobs had left the queue, so the ID `refresh` was free to use again.

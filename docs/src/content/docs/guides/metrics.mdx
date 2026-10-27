@@ -30,10 +30,11 @@ A [topic](/guides/topics/) counts too: each [`Publish`](https://pkg.go.dev/githu
 
 ## Reading them
 
-```go
-m := worker.Metrics()
-fmt.Println(m.Submitted(), m.Completed(), m.Successful(), m.Failed())
-```
+The program below adds three jobs to an error worker. Job 2 returns an error. It waits until the worker is idle and reads the four counters.
+
+<GoPlay example="metrics-counters" />
+
+All three jobs were submitted and completed. Two succeeded, and job 2 is the one failed job, so `Completed` equals `Successful` plus `Failed`.
 
 - **The counters are cumulative.** They start at zero when the worker is created, and nothing but `Reset` clears them. Pausing, stopping, restarting and purging leave them alone.
 - **They are safe to read from any goroutine.** Each method is one atomic read.
@@ -56,7 +57,13 @@ Submitted == NumPending + NumProcessing + Completed
 - **Storage shared between workers breaks it.** `Add` counts in `Submitted` on the worker whose handle you call. The worker that takes the job counts it in `Completed`. A queue you wrote and bound to two workers with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) splits the counters between them, so the equation holds for neither.
 - **`Reset` breaks it.** It zeroes `Submitted` and `Completed`. The jobs still waiting or running count on the right side of the equation, and no longer on the left.
 
-So use the equation on a worker with nothing running, where none of these cases applies. The example below checks it on an idle worker and on a paused one with jobs waiting. On an idle worker, `NumPending` and `NumProcessing` are 0 and the equation reduces to `Submitted == Completed`. If it does not hold, look at the cases above first. Do not use the equation as a live check while jobs run.
+So use the equation on a worker with nothing running, where none of these cases applies. On an idle worker, `NumPending` and `NumProcessing` are 0 and the equation reduces to `Submitted == Completed`. If it does not hold, look at the cases above first. Do not use the equation as a live check while jobs run.
+
+The program below checks the equation on an idle worker, then on a worker paused with [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) with two jobs waiting, then after `Purge`.
+
+<GoPlay example="metrics-equation" />
+
+The equation holds on the idle worker, 1 = 0 + 0 + 1, and on the paused one, 3 = 2 + 0 + 1, since a paused worker starts nothing and its two jobs wait in the queue. After `Purge` the right side is 1 and `Submitted` is still 3: the two purged jobs never ran, so they never reach `Completed`.
 
 ## Reset
 
@@ -65,20 +72,11 @@ So use the equation on a worker with nothing running, where none of these cases 
 - The four counters are cleared one after another, not in one step.
 - A job that was waiting or running when you call it is counted in `Completed` when it finishes, though its `Submitted` is gone. After a `Reset` in the middle of a run, `Completed` can be higher than `Submitted`.
 
-Call `Reset` when the worker is idle, as the example below does.
+Call `Reset` when the worker is idle, as the program below does.
 
-## Try it
+<GoPlay example="metrics-reset" />
 
-The program below creates an error worker with concurrency 1 and adds three jobs, one of which fails. It waits until the worker is idle and prints the four counters and the equation. It then pauses the worker, adds three more jobs, and prints again. After a `Purge` it prints once more. Last, it resumes the worker, waits for idle and calls `Reset`.
-
-<GoPlay example="metrics" />
-
-The output, line by line:
-
-1. `after the run: submitted 3, completed 3, successful 2, failed 1`. Job 2 returned an error, so it is the one failed job. All three completed. The next line, `pending 0 + processing 0 + completed 3 = 3`, equals `Submitted`.
-2. `paused, three jobs queued: submitted 6, completed 3, successful 2, failed 1`. A paused worker starts nothing, so the three jobs added after [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) wait in the queue. `Submitted` went up when `Add` took them. The equation holds again: `pending 3 + processing 0 + completed 3 = 6`.
-3. `after Purge: submitted 6, completed 3, successful 2, failed 1`. `Purge` closed the three waiting jobs. They stay in `Submitted` and never reach `Completed`. The equation now reads `pending 0 + processing 0 + completed 3 = 3`, which is three short of `Submitted`: the three jobs that never ran.
-4. `after Reset: submitted 0, completed 0, successful 0, failed 0`. The program resumed the worker and waited for idle. Nothing ran, because the queue was empty. Then `Reset` zeroed the counters.
+Both jobs ran before the `Reset`, so the counters read 2 before it and 0 after.
 
 ## Where else the counters appear
 

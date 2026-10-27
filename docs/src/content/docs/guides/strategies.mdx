@@ -35,13 +35,11 @@ A few rules hold for all four:
 
 ## Priority: the default
 
-[`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) ranks a queue when you bind it. It works on [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue):
+[`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) ranks a queue when you bind it. It works on [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue). The programs on this page use a worker with concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is filled, and the worker takes one job at a time, so the order the jobs print in is the order the worker took them.
 
-```go
-alerts := worker.BindQueue(varmq.WithQueuePriority(1))
-reports := worker.BindQueue(varmq.WithQueuePriority(2))
-emails := worker.BindQueue() // no priority: it ranks last
-```
+<GoPlay example="strategies-priority" />
+
+The emails were added first but run last. Both alerts go before the report, and the report before the emails.
 
 **A lower number goes first.** The worker takes from the first queue in the list that has a job waiting. A queue without `WithQueuePriority` gets the lowest possible rank, so it comes after every queue that has one. Queues with the same rank go in the order they were bound.
 
@@ -57,6 +55,10 @@ This is the rank of a whole queue. It is not the priority you pass to [`Add`](ht
 
 The worker goes through the list one queue per job, then starts over. It skips a queue that is empty when its turn comes, so once a queue runs out the others share the turns.
 
+<GoPlay example="strategies-round-robin" />
+
+One job from each queue in turn. `reports` runs out after its first job, so the later turns go to `alerts` and `emails`.
+
 ## MaxLen and MinLen
 
 Both compare how many jobs are waiting in each queue, read again for every job.
@@ -66,26 +68,12 @@ Both compare how many jobs are waiting in each queue, read again for every job.
 
 On a tie, both take the queue that comes first in the list.
 
+<GoPlay example="strategies-length" />
+
+The queues start with 2 alerts, 1 report and 3 emails. `MaxLen` takes an email from the longest queue, then breaks the 2-2 tie with `alerts`, which comes first in the list. When `reports` and `emails` tie at 1 each, `reports` goes first, so an email runs last. `MinLen` empties `reports`, then `alerts`, and leaves the long `emails` queue for last.
+
+"In order" here means the order the jobs leave the queues. With a concurrency above 1 several of them run at once, and their output can interleave.
+
 ## What priority does under the other strategies
 
 `RoundRobin`, `MaxLen` and `MinLen` do not choose by priority. They still walk the list in priority order, so a priority sets the order of the `RoundRobin` turns and which queue wins a tie in `MaxLen` and `MinLen`. If you give no priorities, the list is the bind order.
-
-## Try it
-
-The program binds three queues to one worker and runs the same jobs under each strategy. The worker has concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is filled, and the worker takes one job at a time, so the order in which jobs are taken is the order they run. The queues are `alerts` (priority 1, 2 jobs), `reports` (priority 2, 1 job) and `emails` (no priority, 3 jobs). Each line is the order in which the worker took the jobs.
-
-<GoPlay example="strategies" />
-
-The output, line by line, with the lengths of `alerts`, `reports` and `emails` at each pick:
-
-1. `Priority:   alerts alerts reports emails emails emails`. At every pick the worker takes from the highest-ranked queue that still has jobs: both alerts, then the report, then the emails.
-2. `RoundRobin: alerts reports emails alerts emails emails`. One job from each queue in turn. `reports` runs out after its first job, so the later turns go to `alerts` and `emails`.
-3. `MaxLen:     emails alerts emails alerts reports emails`. The picks go like this:
-   - Lengths 2, 1, 3: `emails` is longest.
-   - Then 2, 1, 2: a tie, and `alerts` is first in the list.
-   - Then 1, 1, 2: `emails`.
-   - Then 1, 1, 1: a three-way tie, so `alerts`.
-   - Then 0, 1, 1: a tie between `reports` and `emails`. `reports` is first in the list, so `emails` goes last.
-4. `MinLen:     reports alerts alerts emails emails emails`. Lengths 2, 1, 3: `reports` is shortest and not empty. Then `alerts` at 2 is shorter than `emails` at 3, so it goes twice. `emails` goes last.
-
-"In order" here means the order the jobs leave the queues. With a concurrency above 1 several of them run at once, and their output can interleave.
