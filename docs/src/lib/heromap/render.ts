@@ -16,9 +16,10 @@
 // - `piece('s-prog')`, the SQLite program, also holds its crash, hidden: `.vm-flash`, a red outline over its
 //   box, and the labels `.vm-died` (PROGRAM · DIED) and `.vm-restarted` (PROGRAM · RESTARTED) after its own
 //   `.vm-label`.
-// - `ring(worker, i)`: for each place in `RINGS[worker]`, the ring (a group, shown at scale 1), its progress arc
-//   (r 15, drawing clockwise from 12 o'clock) and its check, both hidden, and the dashed ghost under the ring,
-//   shown. The arc and the check sit beside the ring's group, so a pulse of the ring leaves them be.
+// - `ring(worker, i)`: for each place in `RINGS[worker]`, the ring (a group at scale 1, shown if the finale starts
+//   with it and hidden otherwise, as the still frame has them), its progress arc (r 15, drawing clockwise from 12
+//   o'clock) and its check, both hidden, and the dashed ghost under the ring, shown. The arc and the check sit
+//   beside the ring's group, so a pulse of the ring leaves them be.
 // - `job(id)`: [main, trail 1, trail 2] for every job and published value in the chapters, hidden at the world's
 //   origin. Each is a lane slot's square centred on its own origin, so `x` and `y` place it. The trails' faintness
 //   (.35 and .15) is on their square: show all three at opacity 1. A priority job's main square shows its number.
@@ -51,6 +52,7 @@ import {
 	type Piece,
 	type PieceKind,
 } from './scene.ts';
+import { workers } from './stores.ts';
 
 export interface MapNodes {
 	svg: SVGSVGElement;
@@ -248,6 +250,20 @@ function played() {
 	return { jobs, records };
 }
 
+/**
+ * The rings the finale starts with, as `<worker>:<place>`: each worker's idle goroutines, as its last chapter left
+ * them. The still frame shows these, with a ghost at every other place.
+ */
+function finaleRings(): Set<string> {
+	const finale = CHAPTERS[CHAPTERS.length - 1];
+	return new Set(
+		finale.parts.flatMap((part) => {
+			if (part.kind === 'pool') return part.plan.idle.map((i) => `${part.worker}:${i}`);
+			return workers(part.plan).flatMap((w) => w.idle.map((i) => `${w.id === 'sqlite' ? w.id : `redis-${w.id}`}:${i}`));
+		}),
+	);
+}
+
 function lookup<T>(map: Map<string, T>, what: string) {
 	return (key: string): T => {
 		const found = map.get(key);
@@ -286,11 +302,12 @@ export function renderMap(host: HTMLElement): MapNodes {
 	}
 
 	const rings = new Map<string, Ring>();
+	const still = finaleRings();
 	for (const [worker, places] of Object.entries(RINGS)) {
 		places.forEach(({ x, y }, i) => {
 			const data = { 'data-ring': `${worker}:${i}` };
 			const ghost = add(world, 'circle', { class: 'vm-ghost', cx: x, cy: y, r: RING_R, ...data });
-			const ring = add(world, 'g', { class: 'vm-go', ...data });
+			const ring = add(world, 'g', { class: 'vm-go', ...data, ...(still.has(`${worker}:${i}`) ? {} : HIDDEN) });
 			add(ring, 'circle', { class: 'vm-ring', cx: x, cy: y, r: RING_R });
 			const progress = add(world, 'circle', {
 				class: 'vm-progress',

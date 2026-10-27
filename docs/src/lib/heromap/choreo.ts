@@ -29,7 +29,7 @@ import {
 	type Stage,
 	type Values,
 } from './score.ts';
-import { queueStates } from './stores.ts';
+import { queueStates, workers } from './stores.ts';
 
 type Worker = keyof typeof RINGS;
 type PoolPart = Extract<Part, { kind: 'pool' }>;
@@ -614,7 +614,7 @@ class Choreo {
 		agenda.run();
 	}
 
-	/** The chapter's new pieces switch on once the camera is there, with the rings its workers start with. */
+	/** The chapter's new pieces switch on once the camera is there, with the idle rings its workers start with. */
 	private open(c: Chapter, t0: number) {
 		const { score, nodes } = this;
 		PIECES.filter((p) => p.chapter === c.n).forEach((p, i) => {
@@ -644,15 +644,11 @@ class Choreo {
 			else score.tween(g, { opacity: 1 }, t + 80, FADE, E.fade);
 		});
 		for (const part of c.parts) {
-			if (part.kind === 'pool') {
-				for (const i of part.plan.idle) this.spawn(part.worker, i, t0 + 300);
-				this.ghosts(part.worker, part.plan.limit, t0 + 300);
-				continue;
-			}
-			const cards: Worker[] = part.kind === 'sqlite' ? ['sqlite'] : part.plan.consumers.map((w) => card(w.id));
-			for (const name of cards) {
-				RINGS[name].forEach((_, i) => this.spawn(name, i, t0 + 300 + 60 * i));
-				this.ghosts(name, RINGS[name].length, t0 + 300);
+			const crews = part.kind === 'pool' ? [{ ...part.plan, id: part.worker }] : workers(part.plan);
+			for (const w of crews) {
+				const name = part.kind === 'pool' ? part.worker : consumer(w.id);
+				for (const i of w.idle) this.spawn(name, i, t0 + 300);
+				this.ghosts(name, w.limit, t0 + 300);
 			}
 		}
 	}
@@ -897,7 +893,6 @@ class Choreo {
 		const queue = lane(sqlite ? 's-queue' : 'r-queue2', order);
 		const trayBox = box(sqlite ? 's-tray' : 'r-tray');
 		const tray = (k: number) => pt(slotX(trayBox.x, k), slotY(trayBox.y));
-		const consumer = (id: string): Worker => (sqlite ? 'sqlite' : card(id));
 		const records = new Map<string, Square>();
 		const copies = new Map<string, Square>();
 		const crash = part.events.find((e) => e.type === 'crash');
@@ -921,6 +916,14 @@ class Choreo {
 						const travel = part.plan.notifyTravel;
 						this.signal('notify', line(`r-store-to-redis-${e.consumer}`), at - travel, travel);
 					});
+					return;
+				// A store's worker is a pool: a goroutine pops in for a take with none idle, or as its program restarts
+				// (its stage fades back in over it), and one leaves after its ack, or with its program.
+				case 'spawn':
+					agenda.add(at, () => this.spawn(consumer(e.consumer), e.ring, at));
+					return;
+				case 'exit':
+					agenda.add(at, () => this.exit(consumer(e.consumer), e.ring, at));
 					return;
 				case 'take': {
 					const end = part.events.find((d, j) => j > k && d.type === 'done' && d.job === e.job);
@@ -1073,7 +1076,8 @@ class Choreo {
 	}
 }
 
-const card = (consumer: string): Worker => `redis-${consumer}` as Worker;
+/** The card a store's consumer runs its rings in: the SQLite worker's, or Redis's B or C. */
+const consumer = (id: string): Worker => (id === 'sqlite' ? 'sqlite' : (`redis-${id}` as Worker));
 
 /** A published value's id from one of its copies' (`<value>-<worker>`). */
 const valueOf = (copy: string) => copy.slice(0, copy.lastIndexOf('-'));

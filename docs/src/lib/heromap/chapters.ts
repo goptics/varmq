@@ -12,6 +12,8 @@ import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan } f
 import {
 	simulateRedis,
 	simulateSqlite,
+	storeEnd,
+	type Consumer,
 	type RedisPlan,
 	type SqlitePlan,
 	type StoreEvent,
@@ -94,8 +96,22 @@ function pool(worker: Worker, rest: Omit<PoolPlan, 'limit' | 'idle'>): PoolPart 
 	return { kind: 'pool', worker, plan, events };
 }
 
-const sqlite = (plan: SqlitePlan): Part => ({ kind: 'sqlite', plan, events: simulateSqlite(plan) });
-const redis = (plan: RedisPlan): Part => ({ kind: 'redis', plan, events: simulateRedis(plan) });
+// A store's workers carry their idle rings the same way: one after `Start()`, and then what their last chapter left.
+const crews: Record<string, number[]> = { sqlite: [0], b: [0], c: [0] };
+
+function sqlite(rest: Omit<SqlitePlan, 'idle'>): Part {
+	const plan = { ...rest, idle: crews.sqlite };
+	const events = simulateSqlite(plan);
+	Object.assign(crews, storeEnd(plan, events));
+	return { kind: 'sqlite', plan, events };
+}
+
+function redis(rest: Omit<RedisPlan, 'consumers'> & { consumers: Omit<Consumer, 'idle'>[] }): Part {
+	const plan = { ...rest, consumers: rest.consumers.map((c) => ({ ...c, idle: crews[c.id] })) };
+	const events = simulateRedis(plan);
+	Object.assign(crews, storeEnd(plan, events));
+	return { kind: 'redis', plan, events };
+}
 
 // In order. Each is written as a function so that a plan the simulations refuse names its chapter.
 const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
@@ -252,7 +268,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 		parts: [
 			sqlite({
 				...SQLITE_TRAVEL,
-				rings: 2,
+				limit: 2,
 				jobs: stored([
 					['s0', 2400, 4200],
 					['s1', 2600, 800],
@@ -283,8 +299,8 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			redis({
 				...REDIS_TRAVEL,
 				consumers: [
-					{ id: 'b', rings: 2 },
-					{ id: 'c', rings: 2 },
+					{ id: 'b', limit: 2 },
+					{ id: 'c', limit: 2 },
 				],
 				jobs: stored([
 					['r0', 1800, 2200],
@@ -367,7 +383,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 				},
 				sqlite({
 					...SQLITE_TRAVEL,
-					rings: 2,
+					limit: 2,
 					jobs: stored([
 						['zs0', 2000, 1800],
 						['zs1', 2200, 2400],
@@ -377,8 +393,8 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 				redis({
 					...REDIS_TRAVEL,
 					consumers: [
-						{ id: 'b', rings: 2 },
-						{ id: 'c', rings: 2 },
+						{ id: 'b', limit: 2 },
+						{ id: 'c', limit: 2 },
 					],
 					jobs: stored([
 						['zr0', 1600, 1800],

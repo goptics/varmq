@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { CHAPTERS, STATIC_AT, TOTAL, plain, starts } from './chapters.ts';
 import { endState, poolStates } from './pool.ts';
 import { PIECES, RINGS } from './scene.ts';
-import { queueStates, trayStates } from './stores.ts';
+import { queueStates, ringStates, trayStates, workers } from './stores.ts';
 
 const part = (n, kind, worker?) => CHAPTERS[n - 1].parts.find(p => p.kind === kind && (!worker || p.worker === worker));
 const dispatches = p => p.events.filter(e => e.type === 'dispatch');
@@ -126,16 +126,18 @@ describe('chapter rules', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
 			if (p.kind === 'pool') for (const s of p.plan.sources)
 				assert.ok(piece[s.id]?.kind === 'lane' && piece[s.id].chapter <= c.n, `chapter ${c.n}: ${s.id}`);
-			for (const e of p.events) if (e.type === 'dispatch' || e.type === 'take') {
+			for (const e of p.events) if (['dispatch', 'take', 'spawn', 'exit'].includes(e.type)) {
 				const id = card(p, e);
 				assert.ok(piece[id].chapter <= c.n && e.ring < RINGS[id].length, `chapter ${c.n}: ${id} ring ${e.ring}`);
 			}
-			// A pool is never tuned past the rings of its card, and a store's worker has exactly the rings drawn for it.
+			// A worker is never given more goroutines than the rings of its card, and it starts on rings that are drawn.
 			if (p.kind === 'pool') {
 				const limits = [p.plan.limit, ...(p.plan.controls ?? []).filter(k => k.op === 'tune').map(k => k.to)];
 				assert.ok(Math.max(...limits) <= RINGS[p.worker].length, `chapter ${c.n}: ${p.worker}`);
-			} else if (p.kind === 'sqlite') assert.equal(p.plan.rings, RINGS.sqlite.length, `chapter ${c.n}`);
-			else for (const w of p.plan.consumers) assert.equal(w.rings, RINGS[`redis-${w.id}`].length, `chapter ${c.n}: ${w.id}`);
+			} else for (const w of workers(p.plan)) {
+				const places = RINGS[card(p, { consumer: w.id })].length;
+				assert.ok(w.limit <= places && w.idle.every(i => i < places), `chapter ${c.n}: ${w.id}`);
+			}
 		}
 		// The TunePool(3) chip takes the place of the tune control that chapter 9 switches on.
 		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }]);
@@ -171,6 +173,41 @@ describe('chapter rules', () => {
 		// The program stage has faded by the crash + 1350, and only the store and its two records hold the frame
 		// until the restart, for about 1.2 s.
 		assert.ok(ev[index('restart')].at - ev[index('crash')].at >= 2600);
+	});
+	it('run each store worker as a pool, ending every chapter with one idle goroutine', () => {
+		for (const c of CHAPTERS) for (const p of c.parts) {
+			if (p.kind === 'pool') continue;
+			for (const [id, r] of Object.entries(ringStates(p.plan, p.events).at(-1).rings))
+				assert.deepEqual([r.busy.length, r.idle.length], [0, 1], `chapter ${c.n}: ${id}`);
+		}
+	});
+	it('start and stop store goroutines when varmq would', () => {
+		const changes = (n, kind) => part(n, kind).events.filter(e => e.type === 'spawn' || e.type === 'exit')
+			.map(e => `${e.at} ${e.type} ${e.consumer} ${e.ring}`);
+		assert.deepEqual(changes(7, 'sqlite'), [
+			'4200 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
+			'7700 exit sqlite 0', '7700 exit sqlite 1', // the program dies with both
+			'10300 spawn sqlite 0', // and restarts with one
+			'11200 spawn sqlite 1', // the requeue's claim takes two again
+			'16200 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
+		]);
+		assert.deepEqual(changes(8, 'redis'), ['3160 spawn b 1', '3400 spawn c 1', '9420 exit c 0', '9920 exit b 0']);
+		// The finale's store workers start with one ring each, the one their last chapter left idle.
+		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);
+		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[1], [1]]);
+	});
+	it('hold no more records in flight than busy rings, but for a dead program\'s, until the requeue', () => {
+		for (const c of CHAPTERS) for (const p of c.parts) {
+			if (p.kind === 'pool') continue;
+			const rings = ringStates(p.plan, p.events), tray = trayStates(p.events);
+			let down = false; // from the crash to the requeue, the records of the jobs it ran stay in flight, with no ring
+			p.events.forEach((e, i) => {
+				if (e.type === 'crash') down = true;
+				if (e.type === 'requeue') down = false;
+				const busy = Object.values(rings[i].rings).reduce((n, r) => n + r.busy.length, 0);
+				if (!down) assert.ok(tray[i].tray.filter(Boolean).length <= busy, `chapter ${c.n} at ${e.at}`);
+			});
+		}
 	});
 	it('chapter 9 lands jobs while the worker is paused', () => {
 		const p = part(9, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
