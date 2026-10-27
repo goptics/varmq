@@ -399,11 +399,17 @@ function ackRoute(worker: Worker, i: number, tray: Pt): Pt[] {
 	return [bottom, pt(ring.x, ack[0].y), ...ack, tray];
 }
 
+/** What the choreographer makes on the page as it goes: the score's motion paths and outlines, and signal dots. */
+export interface Page extends Stage {
+	/** A new signal dot of `kind` (notify, ack, value or error) in the world, hidden. */
+	dot(kind: string): Element;
+}
+
 /**
- * The page as the score needs it: motion along hidden route paths in the world (anime.js measures their length,
- * so they are drawn, with neither fill nor stroke), and anime.js's drawable outlines.
+ * The page in the browser: motion along hidden route paths in the world (anime.js measures their length, so they
+ * are drawn, with neither fill nor stroke), anime.js's drawable outlines, and dots appended to the world.
  */
-function stage(world: SVGGElement): Stage {
+function browserPage(world: SVGGElement): Page {
 	const layer = document.createElementNS(NS, 'g');
 	layer.setAttribute('fill', 'none');
 	layer.setAttribute('stroke', 'none');
@@ -428,6 +434,14 @@ function stage(world: SVGGElement): Stage {
 			el.setAttribute('pathLength', '1000');
 			return svg.createDrawable(el)[0];
 		},
+		dot(kind) {
+			const dot = document.createElementNS(NS, 'circle');
+			dot.setAttribute('class', `vm-sig vm-sig-${kind}`);
+			dot.setAttribute('r', '4');
+			dot.setAttribute('opacity', '0');
+			world.append(dot);
+			return dot;
+		},
 	};
 }
 
@@ -445,6 +459,7 @@ interface Topic {
 
 class Choreo {
 	readonly nodes: MapNodes;
+	readonly page: Page;
 	readonly score: Score;
 	readonly cam: Camera;
 	/** Rings shown, as `<worker>:<place>`. */
@@ -454,15 +469,16 @@ class Choreo {
 	/** The squares of the chapter being written. */
 	private bodies!: Bodies;
 
-	constructor(nodes: MapNodes) {
+	constructor(nodes: MapNodes, page: Page) {
 		this.nodes = nodes;
-		this.score = new Score(TOTAL, stage(nodes.world));
+		this.page = page;
+		this.score = new Score(TOTAL, page);
 		this.cam = { ...frame(REGIONS[REGIONS.length - 1]) };
-		this.declare();
+		this.declareStarts();
 	}
 
 	/** Every animated property and where it starts: the world empty, every piece off, every job hidden. */
-	private declare() {
+	private declareStarts() {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
 		score.start(nodes.world, { opacity: 0 });
@@ -552,11 +568,7 @@ class Choreo {
 
 	/** A dot that runs along `route` from `start` for `duration`: a notify, an ack, a value or an error. */
 	private signal(kind: string, route: Pt[], start: number, duration: number) {
-		const dot = document.createElementNS(NS, 'circle');
-		dot.setAttribute('class', `vm-sig vm-sig-${kind}`);
-		dot.setAttribute('r', '4');
-		dot.setAttribute('opacity', '0');
-		this.nodes.world.append(dot);
+		const dot = this.page.dot(kind);
 		const { score } = this;
 		score.start(dot, { pos: [route[0].x, route[0].y], opacity: 0 });
 		score.place(dot, route[0], start);
@@ -1070,8 +1082,9 @@ const isTopicDispatch = (e: PoolEvent): e is Dispatch => e.type === 'dispatch' &
 
 /**
  * The whole loop as one anime.js timeline: `loop: true`, `TOTAL` long, and paused until played
- * (`autoplay: false`). Each frame puts the camera where its tweens have it.
+ * (`autoplay: false`). Each frame puts the camera where its tweens have it. `page` is the browser's unless a test
+ * gives its own.
  */
-export function buildTimeline(nodes: MapNodes): Timeline {
-	return new Choreo(nodes).build();
+export function buildTimeline(nodes: MapNodes, page: Page = browserPage(nodes.world)): Timeline {
+	return new Choreo(nodes, page).build();
 }
