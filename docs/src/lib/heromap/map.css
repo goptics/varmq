@@ -370,6 +370,20 @@ varmq-map .vm-caption b {
 	color: var(--vm-red);
 }
 
+/* Forced colours paint a backplate behind each line's text, and the lines share one cell, so the hidden lines'
+   backplates would cover the one shown. The band keeps its own colours instead, the system's: text on Canvas, the marks too. */
+@media (forced-colors: active) {
+	varmq-map .vm-caption {
+		forced-color-adjust: none;
+		background: linear-gradient(to bottom, transparent, Canvas 60%);
+		color: CanvasText;
+	}
+
+	varmq-map .vm-caption :is(em, b) {
+		color: CanvasText;
+	}
+}
+
 varmq-map .vm-toggle {
 	position: absolute;
 	top: 8px;
