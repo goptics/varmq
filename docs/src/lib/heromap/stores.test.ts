@@ -153,6 +153,30 @@ describe('sqlite rules', () => {
 		// the tray has five slots, and a ring can hold a record
 		assert.throws(() => simulateSqlite(sq({ rings: 6 })), /^Error: rings:/);
 	});
+	it('runs a plan with no crash as plain add, claim, ack', () => {
+		// none of crashAt, restartAt, requeueAfter and rework: the one-statement scenario above, without its crash
+		const plan = { rings: 2, jobs: burst(['a', 'b', 'c', 'd'], 100), firstClaim: 1000, takeTravel: 100, ackTravel: 50 };
+		const ev = simulateSqlite(plan);
+		assert.deepEqual(ev.filter(e => e.type === 'ack').map(e => e.job), ['a', 'b', 'c', 'd']);
+		assert.deepEqual(ev.filter(e => ['crash', 'restart', 'requeue'].includes(e.type)), []);
+		assert.deepEqual(show(ev), [
+			'100 land a', '110 land b', '120 land c', '130 land d',
+			'1000 take a sqlite ring 0 tray 0', '1000 take b sqlite ring 1 tray 1',
+			'1600 done a sqlite ring 0', '1600 done b sqlite ring 1',
+			'1650 ack a tray 0', '1650 ack b tray 1', '1650 take c sqlite ring 0 tray 0', '1650 take d sqlite ring 1 tray 1',
+			'2250 done c sqlite ring 0', '2250 done d sqlite ring 1', '2300 ack c tray 0', '2300 ack d tray 1',
+		]);
+	});
+	it('refuses a crash that is only partly given', () => {
+		const spec = { crashAt: 1300, restartAt: 2000, requeueAfter: 500, rework: {} };
+		const plan = { rings: 2, jobs: burst(['a', 'b']), firstClaim: 1000, takeTravel: 100, ackTravel: 50 };
+		for (const key of Object.keys(spec)) {
+			const only = { [key]: spec[key] }, rest = Object.fromEntries(Object.entries(spec).filter(([k]) => k !== key));
+			assert.throws(() => simulateSqlite({ ...plan, ...only }), /^Error: plan: .* only 1 of them/);
+			assert.throws(() => simulateSqlite({ ...plan, ...rest }), /^Error: plan: .* only 3 of them/);
+		}
+		assert.doesNotThrow(() => simulateSqlite({ ...plan, ...spec })); // all four is a crash
+	});
 });
 
 describe('redis rules', () => {

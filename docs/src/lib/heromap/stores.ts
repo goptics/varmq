@@ -7,9 +7,9 @@
 //   the pool (`j.Close()` in `worker_pool.go`), so a ring takes its next job only after its ack, and holds
 //   one record at a time.
 // - sqliteq: a worker with this queue alone claims one job per free ring in one statement
-//   (`dispatchCredit`). Rows come out by id. Opening the queue sets every `processing` row that was never
-//   acked back to `pending` (`requeueNoAck`); claims take the lowest ids, so those rows sort ahead of
-//   every row still waiting, in the order they were written.
+//   (`dispatchCredit`). Rows come out by their integer id, which is write order. Opening the queue sets
+//   every `processing` row that was never acked back to `pending` (`requeueNoAck`); claims take the lowest
+//   ids, so those rows sort ahead of every row still waiting, and among themselves in write order.
 // - redisq v1.4.0: an add pushes the job on a list and publishes a notification that every consumer gets.
 //   A woken worker pulls one job per free ring, and a job one consumer has taken is not in the list for
 //   another. Which consumer wins a job is a race on the Redis server; here the woken consumers take in
@@ -18,9 +18,9 @@
 // A job runs `takeTravel` after its take (the copy's flight to the ring) and is done `work` ms later; the
 // animation runs the ring's progress from arrival to done. Its ack lands `ackTravel` after that. The tray
 // has five slots, and a record holds the lowest free one from its take until its ack, so a store's rings
-// (five at most) bound it. Events at one instant come in the order they were set: SQLite sets the crash
-// before the lands, so a land at the instant of the crash comes after it, and a claim or a pull is set by
-// whatever wakes it, so it follows everything already due at that instant.
+// (five at most) bound it. Events at one instant come in the order they were set: SQLite sets the crash,
+// when it has one, before the lands, so a land at the instant of the crash comes after it, and a claim or a
+// pull is set by whatever wakes it, so it follows everything already due at that instant.
 
 export interface StoreJob {
 	id: string;
@@ -33,11 +33,13 @@ export interface SqlitePlan {
 	rings: number;
 	jobs: StoreJob[];
 	firstClaim: number; // when the worker first looks at the queue, after the burst has landed
-	crashAt: number;
-	restartAt: number;
-	requeueAfter: number; // ms from the restart to the queue being opened: the requeue, and a claim at once
+	// The crash is all or none of crashAt, restartAt, requeueAfter and rework. With none of them the run is
+	// add, claim, ack, with no crash, restart or requeue. With only some of them, simulateSqlite throws.
+	crashAt?: number;
+	restartAt?: number;
+	requeueAfter?: number; // ms from the restart to the queue being opened: the requeue, and a claim at once
 	// The work of a run after the restart. A job with no entry takes its `work` again.
-	rework: Record<string, number>;
+	rework?: Record<string, number>;
 	takeTravel: number;
 	ackTravel: number;
 }
@@ -61,7 +63,7 @@ export type StoreEvent =
 	| { at: number; type: 'ack'; job: string; tray: number } // the record is gone and the ring is free
 	| { at: number; type: 'crash' }
 	| { at: number; type: 'restart' }
-	| { at: number; type: 'requeue'; jobs: string[] }; // the records in flight, back at the queue head
+	| { at: number; type: 'requeue'; jobs: string[] }; // the records in flight, in write order, to the head
 
 const SLOTS = 5;
 
@@ -171,25 +173,38 @@ function engine(plan: { takeTravel: number; ackTravel: number }) {
 	return { store, events, emit, timer, take, run };
 }
 
+/** The crash part of a plan: all four fields, or none of them and no crash. */
+function crashOf({ crashAt, restartAt, requeueAfter, rework }: SqlitePlan) {
+	const given = [crashAt, restartAt, requeueAfter, rework].filter((x) => x !== undefined).length;
+	if (given === 0) return undefined;
+	if (crashAt === undefined || restartAt === undefined || requeueAfter === undefined || rework === undefined) {
+		const names = 'crashAt, restartAt, requeueAfter and rework';
+		throw new Error(`plan: ${names} go together, and only ${given} of them are given`);
+	}
+	return { crashAt, restartAt, requeueAfter, rework };
+}
+
 /**
- * One program with a worker and a jobs.db: Add() lands each job, the worker claims, a crash leaves its
- * running jobs in flight, and the restart puts them back at the head. The worker is the consumer
- * 'sqlite'. It refuses what the story cannot show: more rings than the tray has slots, a crash while an
- * ack is on its way, and a job that lands while the program is down.
+ * One program with a worker and a jobs.db: Add() lands each job and the worker claims. With a crash in the
+ * plan, the program dies with its jobs running, their records stay in flight, and the restart puts them back
+ * at the head of the queue in write order; without one the run is plain add, claim, ack. The worker is the
+ * consumer 'sqlite'. It refuses what the story cannot show: more rings than the tray has slots, a crash
+ * while an ack is on its way, a job that lands while the program is down, and a crash given only in part.
  */
 export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 	if (plan.rings > SLOTS) throw tooManyRings(plan.rings);
+	const crash = crashOf(plan);
 
 	const { store, events, emit, timer, take, run } = engine(plan);
 	const work = new Map(plan.jobs.map((j) => [j.id, j.work]));
-	const row = new Map<string, number>(); // a job's id in the file: the order its row was written
+	const row = new Map<string, number>(); // a job's row id in the file: its place in write order
 	const program = worker('sqlite', plan.rings);
 	let open = true; // the program has the queue open: not from the crash to the requeue
 	let looking = false; // the worker has started: from the first claim on, a land wakes it, as an Add() does
 	let restarted = false;
 
 	// A job takes its `work`; after the restart, its `rework`, or its `work` again when it has none.
-	const duration = (job: string) => (restarted ? plan.rework[job] : undefined) ?? work.get(job)!;
+	const duration = (job: string) => (restarted ? crash?.rework[job] : undefined) ?? work.get(job)!;
 
 	// One statement: a job for every free ring, from the head of the queue.
 	const claim = (now: number) => {
@@ -199,29 +214,31 @@ export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 	};
 	const wake = (now: number) => timer(now, claim);
 
-	timer(plan.crashAt, (now) => {
-		// A job whose function has returned and whose ack is still on its way: the story cannot say if it landed.
-		const acking = store.tray.find((job) => job && events.some((e) => e.type === 'done' && e.job === job));
-		if (acking) {
-			throw new Error(`crash: the ack of ${acking} is on its way at ${now} ms, so it is unclear if it landed`);
-		}
-		program.deaths++;
-		program.rings.fill(null);
-		open = false;
-		emit({ at: now, type: 'crash' });
-	});
-	timer(plan.restartAt, (now) => {
-		emit({ at: now, type: 'restart' });
-		timer(now + plan.requeueAfter, (at) => {
-			// Every record in flight goes back to the head of the queue, in the order the rows were written.
-			const jobs = store.tray.filter((job): job is string => job !== null);
-			jobs.sort((a, b) => row.get(a)! - row.get(b)!);
-			emit({ at, type: 'requeue', jobs });
-			open = true;
-			restarted = true;
-			wake(at);
+	if (crash) {
+		timer(crash.crashAt, (now) => {
+			// A job whose function has returned and whose ack is still on its way: the story cannot say if it landed.
+			const acking = store.tray.find((job) => job && events.some((e) => e.type === 'done' && e.job === job));
+			if (acking) {
+				throw new Error(`crash: the ack of ${acking} is on its way at ${now} ms, unclear if it landed`);
+			}
+			program.deaths++;
+			program.rings.fill(null);
+			open = false;
+			emit({ at: now, type: 'crash' });
 		});
-	});
+		timer(crash.restartAt, (now) => {
+			emit({ at: now, type: 'restart' });
+			timer(now + crash.requeueAfter, (at) => {
+				// Every record in flight goes back to the head of the queue, in write order (the order of the row ids).
+				const jobs = store.tray.filter((job): job is string => job !== null);
+				jobs.sort((a, b) => row.get(a)! - row.get(b)!);
+				emit({ at, type: 'requeue', jobs });
+				open = true;
+				restarted = true;
+				wake(at);
+			});
+		});
+	}
 	for (const j of plan.jobs) {
 		timer(j.at, (now) => {
 			if (!open) throw new Error(`land: ${j.id} lands at ${now} ms, while the program is down`);
