@@ -10,6 +10,8 @@ tableOfContents: false
 hero:
   title: Worker pools and job queues for Go.
   tagline: Each worker is a pool of goroutines. It pulls typed jobs from in-memory, priority, persistent or distributed queues, and from topics.
+  image:
+    html: '<varmq-map></varmq-map>'
   actions:
     - text: Get started
       link: /start/quick-start/
@@ -23,6 +25,9 @@ hero:
 
 import { Card, CardGrid, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 import GoPlay from '../../components/GoPlay.astro';
+import HeroMap from '../../components/HeroMap.astro';
+
+<HeroMap />
 
 <Code code="go get github.com/goptics/varmq" lang="sh" title="Install" />
 
