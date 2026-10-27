@@ -422,7 +422,12 @@ function stage(world: SVGGElement): Stage {
 			const { translateX, translateY } = svg.createMotionPath(path)!;
 			return { translateX, translateY };
 		},
-		drawable: (el) => svg.createDrawable(el)[0],
+		// anime.js draws an outline blank as it makes its stand-in, unless its pathLength is already anime's 1000:
+		// so set, building the timeline leaves the still frame whole.
+		drawable: (el) => {
+			el.setAttribute('pathLength', '1000');
+			return svg.createDrawable(el)[0];
+		},
 	};
 }
 

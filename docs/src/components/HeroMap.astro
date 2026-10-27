@@ -27,6 +27,8 @@
 		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
 	].join('');
 	const REDUCE = '(prefers-reduced-motion: reduce)';
+	/** The loop's end fades the map out over 450 ms, anime.js's inQuad (choreo.ts): the first play fades the still frame so. */
+	const END_FADE: KeyframeAnimationOptions = { duration: 450, easing: 'cubic-bezier(0.11, 0, 0.5, 0)', fill: 'forwards' };
 
 	/** The map's styles (`map.css`): added once, by the first map to connect, so only the home page loads them. */
 	function addStyles() {
@@ -48,16 +50,18 @@
 		reducedMotion = false;
 		/** On screen, in part at least. */
 		intersecting = false;
-		/** Has played since it loaded: until then it holds the still frame, and its first play starts the loop. */
+		/** Has played since it loaded: until then it holds the still frame, which its first play fades out. */
 		started = false;
-		/** The animation's code has been asked for. */
+		/** The animation's code has been asked for: once, as a failed load is not tried again. */
 		loading = false;
+		/** The still frame fading out, on the first play. */
+		fades?: Animation[];
 		button!: HTMLButtonElement;
 		motion = matchMedia(REDUCE);
 		/** Tells the map its width on screen, which decides whether its labels are big enough to show. */
 		resizer = new ResizeObserver(([entry]) => this.resized(entry.contentRect.width));
-		watcher = new IntersectionObserver(([entry]) => {
-			this.intersecting = entry.isIntersecting;
+		watcher = new IntersectionObserver((entries) => {
+			this.intersecting = entries[entries.length - 1].isIntersecting; // the latest, of a batch
 			this.update();
 		});
 		onMotion = (e: MediaQueryListEvent) => this.applyReducedMotion(e.matches);
@@ -78,7 +82,8 @@
 			this.watcher.disconnect();
 			this.motion.removeEventListener('change', this.onMotion);
 			document.removeEventListener('visibilitychange', this.onVisibility);
-			this.timeline?.pause();
+			this.intersecting = false; // until the observer reports again, on a reconnect
+			this.update();
 		}
 
 		draw() {
@@ -127,43 +132,83 @@
 			this.update();
 		}
 
-		/** Holds the still frame and never plays while the visitor asks for less motion: no button then. */
+		/**
+		 * Never plays while the visitor asks for less motion: the still frame stays, and the animation is not even
+		 * loaded until motion is allowed. Asked for mid-play, the map pauses on the finale's frame.
+		 */
 		applyReducedMotion(matches: boolean) {
 			this.reducedMotion = matches;
-			this.button.hidden = matches;
+			this.load();
 			this.update();
 		}
 
 		resized(width: number) {
 			this.nodes?.setWidth(width);
-			// The square has a width only at 50rem and wider: below, it is hidden and the animation never loads.
-			if (width > 0) this.load();
-		}
-
-		async load() {
-			if (this.loading) return;
-			this.loading = true;
-			const { buildTimeline } = await import('../lib/heromap/choreo.ts');
-			if (this.nodes) this.timeline = buildTimeline(this.nodes);
+			this.load();
 			this.update();
 		}
 
-		/** Plays only with motion allowed, not paused with the button, on screen and on a visible tab. */
-		update() {
-			const timeline = this.timeline;
-			if (!timeline) return;
-			if (this.reducedMotion) {
-				timeline.pause().seek(STATIC_AT);
+		/** Connected, and with a width: the square is hidden below 50rem. */
+		shown() {
+			return this.isConnected && this.clientWidth > 0;
+		}
+
+		/** Loads the animation once the square is shown with motion allowed. On a failure the still frame stays. */
+		async load() {
+			if (this.loading || this.reducedMotion || !this.shown()) return;
+			this.loading = true;
+			try {
+				const { buildTimeline } = await import('../lib/heromap/choreo.ts');
+				this.timeline = buildTimeline(this.nodes!);
+			} catch (error) {
+				console.error('varmq-map: the animation failed to load; the map stays still.', error);
 				return;
 			}
-			const play = !this.userPaused && this.intersecting && document.visibilityState === 'visible';
-			if (play && !this.started) {
+			this.update();
+		}
+
+		/** Motion allowed, not paused with the button, shown, on screen and on a visible tab. */
+		playable() {
+			const visible = document.visibilityState === 'visible';
+			return !this.reducedMotion && !this.userPaused && this.shown() && this.intersecting && visible;
+		}
+
+		/** Plays when it can; the button shows once the animation could play. */
+		update() {
+			const timeline = this.timeline;
+			this.button.hidden = !timeline || this.reducedMotion;
+			if (!timeline) return;
+			if (!this.started) {
+				if (this.playable()) this.firstPlay(timeline);
+				else this.stopFade();
+			} else if (this.playable()) timeline.play();
+			else if (this.reducedMotion) timeline.pause().seek(STATIC_AT);
+			else timeline.pause();
+		}
+
+		/** The first play: the still frame fades out as the loop's end fades the map, then chapter 1 starts. */
+		firstPlay(timeline: Timeline) {
+			if (this.fades) return;
+			const { world, caption } = this.nodes!;
+			const fades = [world, caption].map((el) => el.animate({ opacity: 0 }, END_FADE));
+			this.fades = fades;
+			fades[0].onfinish = () => {
+				this.fades = undefined;
+				if (!this.playable()) {
+					for (const fade of fades) fade.cancel();
+					return;
+				}
 				this.started = true;
 				timeline.seek(0);
-			}
-			if (play) timeline.play();
-			else if (this.started) timeline.pause();
-			else timeline.pause().seek(STATIC_AT);
+				for (const fade of fades) fade.cancel();
+				timeline.play();
+			};
+		}
+
+		/** Brings the still frame back, if it was fading out. */
+		stopFade() {
+			for (const fade of this.fades ?? []) fade.cancel();
+			this.fades = undefined;
 		}
 	}
 
