@@ -27,7 +27,7 @@ You can also pass the handler to `ListenAndServe` itself, as `examples/api-contr
 
 The program below starts two named workers and an unnamed one, adds jobs to them, and serves the API under `/varmq`.
 
-```go
+```go collapse={1-12}
 package main
 
 import (

@@ -13,7 +13,7 @@ This page follows `examples/prometheus`, which is its own Go module and uses cli
 
 The program below runs a worker with concurrency 10, registers eight collectors for it, and serves them at `/metrics`. It adds 1000 jobs that each take 100 milliseconds.
 
-```go
+```go collapse={1-14}
 package main
 
 import (

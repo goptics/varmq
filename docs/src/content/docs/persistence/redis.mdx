@@ -44,7 +44,7 @@ Redis keeps these in memory. Whether they survive a restart of Redis itself is u
 
 The program below binds a persistent queue to a worker with concurrency 1, adds ten jobs, and waits for them.
 
-```go
+```go collapse={1-11}
 package main
 
 import (
@@ -115,7 +115,7 @@ You can also run the repository's `examples/redis-persistent`, which does the sa
 
 `NewPriorityQueue` gives a queue that hands out the lowest number first. [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) binds it, and [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentPriorityQueue.Add) on the handle takes the priority after the data.
 
-```go
+```go collapse={1-10}
 package main
 
 import (
@@ -168,7 +168,7 @@ redisq stores a priority job as a member of a Redis sorted set, and a sorted set
 
 A distributed queue is shared by any number of processes. The producer below has no worker. It wraps the Redis queue with [`varmq.NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) and adds jobs.
 
-```go
+```go collapse={1-10}
 package main
 
 import (
@@ -200,7 +200,7 @@ func main() {
 
 The consumer binds the same Redis queue to a worker with concurrency 5, and runs until you stop it.
 
-```go
+```go collapse={1-15}
 package main
 
 import (
