@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/goptics/varmq"
 )
@@ -10,10 +11,12 @@ func main() {
 	topic := varmq.NewTopic[int]()
 
 	email := varmq.NewWorker(func(j varmq.Job[int]) {
+		time.Sleep(500 * time.Millisecond)
 		fmt.Println("email for order", j.Data())
 	})
 
 	stock := varmq.NewWorker(func(j varmq.Job[int]) {
+		time.Sleep(10 * time.Millisecond)
 		fmt.Println("stock for order", j.Data())
 	}, 2)
 
