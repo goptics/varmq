@@ -109,14 +109,33 @@ describe('pool rules', () => {
 		assert.deepEqual(dispatches(ev).map(e => [e.at, e.job]), [[500, 'j0'], [950, 'j1'], [1400, 'j2'], [1850, 'j3']]);
 		assert.deepEqual(ev.filter(e => e.type === 'control'), [{ at: 1000, type: 'control', op: 'tune', to: 4 }]);
 	});
-	it('stop sends the idle goroutines away at once, the last to go idle first, and starts nothing after', () => {
+	it('stop with nothing running sends the idle goroutines away at once, the last to go idle first', () => {
 		const p = plan({ idle: [0, 1], jobs: burst(1), controls: [{ at: 50, op: 'stop' }] });
 		const ev = simulatePool(p);
 		assert.deepEqual(ev, [
 			{ at: 50, type: 'control', op: 'stop' }, { at: 50, type: 'exit', ring: 1 }, { at: 50, type: 'exit', ring: 0 },
 			{ at: 100, type: 'land', job: 'j0', source: 'q' },
-		]);
+		]); // and the job that lands afterwards is never dispatched
 		assert.deepEqual(endState(p, ev).idle, []);
+	});
+	it('stop keeps an idle goroutine until the last running job is done', () => {
+		// j0 runs on ring 1, the last to go idle. Ring 0 sits idle through the stop at 1000 and leaves with it at 2500.
+		const jobs = [{ id: 'j0', source: 'q', at: 100, work: 2000 }];
+		const p = plan({ idle: [0, 1], jobs, controls: [{ at: 1000, op: 'stop' }] });
+		const ev = simulatePool(p);
+		assert.deepEqual(ev.filter(e => e.type === 'exit'), [{ at: 2500, type: 'exit', ring: 1 }, { at: 2500, type: 'exit', ring: 0 }]);
+		assert.deepEqual(endState(p, ev).idle, []);
+	});
+	it('stop lets the goroutines that finish wait in the pool, and all of them exit when the last job is done', () => {
+		// Three jobs run on rings 0, 1, 2 when the stop comes. Rings 0 and 1 go idle as they finish, ring 1 even
+		// though ring 0 already idles; ring 2 is last, and takes all three with it, itself first.
+		const ev = simulatePool(plan({ jobs: burst(3), controls: [{ at: 1500, op: 'stop' }] }));
+		assert.deepEqual(ev.filter(e => e.at > 1500), [
+			{ at: 2500, type: 'done', job: 'j0', ring: 0 }, { at: 2500, type: 'idle', ring: 0 },
+			{ at: 2950, type: 'done', job: 'j1', ring: 1 }, { at: 2950, type: 'idle', ring: 1 },
+			{ at: 3400, type: 'done', job: 'j2', ring: 2 },
+			{ at: 3400, type: 'exit', ring: 2 }, { at: 3400, type: 'exit', ring: 1 }, { at: 3400, type: 'exit', ring: 0 },
+		]);
 	});
 	it('refuses the calls varmq refuses', () => {
 		// j0 runs from 500 to 2500, so the worker is still pausing at 1500 and Resume returns ErrWorkerPausing.
@@ -124,6 +143,10 @@ describe('pool rules', () => {
 		assert.throws(() => simulatePool(plan({ jobs: burst(1), controls: pausing })), /resume/);
 		assert.throws(() => simulatePool(plan({ controls: [{ at: 1000, op: 'pause' }, { at: 1500, op: 'tune', to: 5 }] })), /tune/);
 		for (const to of [3, 2]) assert.throws(() => simulatePool(plan({ controls: [{ at: 50, op: 'tune', to }] })), /tune/);
+	});
+	it('refuses several sources without a strategy, which varmq would read by priority', () => {
+		assert.throws(() => simulatePool(plan({ sources: [{ id: 'a' }, { id: 'b' }] })), /strategy/);
+		assert.deepEqual(simulatePool(plan({ strategy: 'roundrobin' })), []); // one source needs none, but may name one
 	});
 });
 

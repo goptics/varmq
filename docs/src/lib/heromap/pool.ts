@@ -27,7 +27,7 @@ export interface PoolPlan {
 	limit: number;
 	idle: number[]; // goroutine rings idle at t = 0, in the order they went idle: the last gets the next job
 	sources: SourceSpec[]; // in bind order
-	strategy?: 'roundrobin';
+	strategy?: 'roundrobin'; // needed with several sources: varmq defaults to Priority, which is not modelled
 	jobs: JobSpec[];
 	controls?: ControlSpec[];
 	wake: number; // ms from a land, resume or tune to the dispatch wake-up
@@ -126,6 +126,13 @@ function track(plan: PoolPlan) {
 }
 
 export function simulatePool(plan: PoolPlan): PoolEvent[] {
+	// Several sources are read by the worker's strategy, and the default one, Priority, is not modelled.
+	if (plan.sources.length > 1 && plan.strategy !== 'roundrobin') {
+		throw new Error(
+			`strategy: several sources need 'roundrobin', as varmq's default, Priority, is not modelled`,
+		);
+	}
+
 	const { jobs, pool, apply } = track(plan);
 	const events: PoolEvent[] = [];
 	const timers: { at: number; seq: number; fire: (now: number) => void }[] = [];
@@ -170,12 +177,26 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 		timer(now + jobs.get(job)!.work, (at) => finish(at, job, ring));
 	};
 
+	// A stop cancels the event loop, which runs `Wait` (until no job runs) and then `removeAllWorkers`: every
+	// goroutine in the pool is stopped, the last to go idle first. So they all leave together, at the last job.
+	const retire = (now: number, rings: number[]) => {
+		for (const ring of rings) emit({ at: now, type: 'exit', ring });
+	};
+
 	// `freePoolNode`: the goroutine stays idle while more jobs wait than goroutines sit idle, or while none
-	// does. Then, as after every job, it wakes the event loop.
+	// does. After a stop it waits in the pool for the last running job. (varmq applies the same rule then, so
+	// it may stop a goroutine at its own done; here they all wait.) Then, as after every job, it wakes the
+	// event loop.
 	const finish = (now: number, job: string, ring: number) => {
 		emit({ at: now, type: 'done', job, ring });
-		const stays = !stopped && (pending() > pool.idle.length || pool.idle.length === 0);
-		emit({ at: now, type: stays ? 'idle' : 'exit', ring });
+		if (!stopped) {
+			const stays = pending() > pool.idle.length || pool.idle.length === 0;
+			emit({ at: now, type: stays ? 'idle' : 'exit', ring });
+		} else if (pool.busy.length > 0) {
+			emit({ at: now, type: 'idle', ring });
+		} else {
+			retire(now, [ring, ...[...pool.idle].reverse()]); // the last job: this goroutine went back in last
+		}
 		timer(now + plan.after, wake);
 	};
 
@@ -226,10 +247,9 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 		if (c.op === 'resume' || c.op === 'tune') timer(now + plan.wake, wake);
 		if (c.op === 'stop') {
 			stopped = true;
-			// Idle goroutines go at once, the last to go idle first (`removeAllWorkers` pops from the back).
-			// varmq removes them only after the last running job is done; the map shows each leave as early
-			// as it can.
-			for (const ring of [...pool.idle].reverse()) emit({ at: now, type: 'exit', ring });
+			// With no job running, `Wait` returns at once and the idle goroutines go now. Otherwise they wait
+			// for the last running job to finish (see `finish`).
+			if (pool.busy.length === 0) retire(now, [...pool.idle].reverse());
 		}
 	};
 
