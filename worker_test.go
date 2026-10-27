@@ -556,12 +556,13 @@ func TestWorkers(t *testing.T) {
 					ratio       uint8
 					expected    int
 				}{
-					{concurrency: 10, ratio: 10, expected: 1},   // 10% of 10 = 1
-					{concurrency: 10, ratio: 20, expected: 2},   // 20% of 10 = 2
-					{concurrency: 5, ratio: 30, expected: 1},    // 30% of 5 = 1.5, rounded to 1
-					{concurrency: 100, ratio: 15, expected: 15}, // 15% of 100 = 15
-					{concurrency: 3, ratio: 50, expected: 1},    // 50% of 3 = 1.5, rounded to 1
-					{concurrency: 1, ratio: 100, expected: 1},   // 100% of 1 = 1
+					{concurrency: 10, ratio: 10, expected: 1},            // 10% of 10 = 1
+					{concurrency: 10, ratio: 20, expected: 2},            // 20% of 10 = 2
+					{concurrency: 5, ratio: 30, expected: 1},             // 30% of 5 = 1.5, rounded to 1
+					{concurrency: 100, ratio: 15, expected: 15},          // 15% of 100 = 15
+					{concurrency: 3, ratio: 50, expected: 1},             // 50% of 3 = 1.5, rounded to 1
+					{concurrency: 1, ratio: 100, expected: 1},            // 100% of 1 = 1
+					{concurrency: 1 << 30, ratio: 50, expected: 1 << 29}, // product passes MaxUint32
 				}
 
 				for _, tc := range testCases {

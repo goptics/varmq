@@ -5,6 +5,7 @@
 ### 🐛 Bug Fixes
 
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
+- **Wrong minimum idle-worker count at very high concurrency** (#142): `numMinIdleWorkers` multiplied concurrency by `WithMinIdleWorkerRatio` in `uint32`, which wraps once the product passes `math.MaxUint32` (concurrency `1<<30` at 50% gave 21474836, not 536870912). It now multiplies in `uint64`.
 
 ## [v1.10.0] (2026-10-25)
 
