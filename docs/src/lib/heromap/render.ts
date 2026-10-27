@@ -1,7 +1,9 @@
 // The hero map, drawn: the world of `scene.ts` as SVG with every piece and line on, a goroutine ring at each
-// place in RINGS, and an element for every job and store record the chapters play (`chapters.ts`). It draws once
-// and keeps no time: the choreographer (`choreo.ts`) shows, hides and moves what is here. Colours, type and the
-// glow come from custom properties on `varmq-map` (HeroMap.astro), so a theme change restyles these same nodes.
+// place in RINGS, an element for every job and store record the chapters play (`chapters.ts`), and every caption
+// as a line of words. It draws once and keeps no time: the choreographer (`choreo.ts`) shows, hides and moves what
+// is here. Colours, type and the glow come from custom properties on `varmq-map` (`map.css`), so a theme change
+// restyles these same nodes. The square has no background of its own: the page shows through, under a dot grid
+// that moves with the camera and fades out toward the square's edges.
 //
 // Hooks for the choreographer:
 // - `piece(id)`: a `<g id="vm-<id>">` for each piece and line, shown. Its outline is `.vm-shape` (a rect, the
@@ -27,10 +29,12 @@
 // - `--vm-label` holds `labelOpacity` at the scale on screen: the camera's zoom times the map's width on screen
 //   over 400, kept by `setCamera` and `setWidth`. The stylesheet applies it to text as `fill-opacity`, so a
 //   label's `opacity` stays free to animate. Move the view only through `setCamera`: it owns the world's
-//   transform.
+//   transform and the dot grid's.
 // - Rings, jobs, records, chips, the pulse and the flash scale about their own centre (`transform-box: fill-box`).
 //   Nothing here is placed with a transform, which an animated CSS transform would replace, except the progress
 //   arcs' rotate(-90): leave their transform alone.
+// - `words(n, i)`: chapter n's caption i (`Chapter.captions`) as its words, hidden (an inline `opacity: 0`). Each
+//   is the inner element of a word's clipping box, to rise in. The lines are stacked in the caption band.
 
 import { CHAPTERS } from './chapters.ts';
 import {
@@ -62,6 +66,8 @@ export interface MapNodes {
 	job(id: string): SVGGElement[];
 	/** A store record (SQLite and Redis chapters). */
 	record(id: string): SVGGElement;
+	/** Chapter n's caption i, as its words. */
+	words(n: number, i: number): HTMLElement[];
 	/** Transforms the world and sets `--vm-label` from `labelOpacity` at the scale on screen. */
 	setCamera(c: Camera): void;
 	/** The map's width on screen, in CSS px (400 until set): the zoom times it over 400 is the scale there. */
@@ -102,11 +108,26 @@ function add<K extends keyof SVGElementTagNameMap>(
 	return node;
 }
 
-/** The dot grid, the glow and the lanes' edge, which brightens toward the head. */
-function defs(svg: SVGSVGElement) {
+/**
+ * The dot grid, its fade toward the square's edges, the glow and the lanes' edge, which brightens toward the
+ * head. Returns the grid's pattern, which `setCamera` moves with the world.
+ */
+function defs(svg: SVGSVGElement): SVGPatternElement {
 	const defs = add(svg, 'defs');
 	const dots = add(defs, 'pattern', { id: 'vm-dots', width: 14, height: 14, patternUnits: 'userSpaceOnUse' });
 	add(dots, 'circle', { class: 'vm-dot', cx: 1, cy: 1, r: 0.8 });
+	// Full in the middle of the square and gone at its edges, so no edge shows against the page.
+	const fade = add(defs, 'radialGradient', {
+		id: 'vm-fade',
+		cx: VIEW.w / 2,
+		cy: VIEW.h / 2,
+		r: VIEW.w / 2,
+		gradientUnits: 'userSpaceOnUse',
+	});
+	add(fade, 'stop', { offset: 0.35, 'stop-color': '#fff' });
+	add(fade, 'stop', { offset: 1, 'stop-color': '#fff', 'stop-opacity': 0 });
+	const mask = add(defs, 'mask', { id: 'vm-grid-fade' });
+	add(mask, 'rect', { width: VIEW.w, height: VIEW.h, fill: 'url(#vm-fade)' });
 	const glow = add(defs, 'filter', { id: 'vm-glow', x: '-80%', y: '-80%', width: '260%', height: '260%' });
 	add(glow, 'feGaussianBlur', { stdDeviation: 2.6, result: 'blur' });
 	const merge = add(glow, 'feMerge');
@@ -115,6 +136,7 @@ function defs(svg: SVGSVGElement) {
 	const edge = add(defs, 'linearGradient', { id: 'vm-lane-edge', x1: 0, x2: 1 });
 	add(edge, 'stop', { class: 'vm-edge-tail', offset: 0 });
 	add(edge, 'stop', { class: 'vm-edge-head', offset: 1 });
+	return dots;
 }
 
 /** A piece's group: its outline, a lane's slots, and its label (above it, below the loop, inside a chip). */
@@ -163,6 +185,40 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 	return g;
 }
 
+/**
+ * A caption line, one clipping box (`.vm-w`) per word. `*marked*` text is green (`em`) and `!marked!` text red
+ * (`b`), as `Caption` in chapters.ts marks it; a mark may wrap several words. Returns the line and each word's
+ * inner element, hidden, which is what rises in.
+ */
+function captionLine(text: string): { line: HTMLElement; words: HTMLElement[] } {
+	const line = document.createElement('span');
+	line.className = 'vm-line';
+	const words: HTMLElement[] = [];
+	let mark = ''; // the open mark, `*` or `!`, carried from word to word
+	for (const token of text.split(' ')) {
+		const word = document.createElement('span');
+		word.style.opacity = '0';
+		for (const part of token.split(/([*!])/)) {
+			if (part === '*' || part === '!') {
+				mark = mark === part ? '' : mark || part;
+			} else if (part && mark) {
+				const run = document.createElement(mark === '*' ? 'em' : 'b');
+				run.textContent = part;
+				word.append(run);
+			} else if (part) {
+				word.append(part);
+			}
+		}
+		const box = document.createElement('span');
+		box.className = 'vm-w';
+		box.append(word);
+		if (words.length > 0) line.append(' ');
+		line.append(box);
+		words.push(word);
+	}
+	return { line, words };
+}
+
 /** A job or record: a lane slot's square centred on the group's origin, which the choreographer moves. */
 function square(world: SVGGElement, attrs: Attrs): SVGGElement {
 	const g = add(world, 'g', { ...attrs, ...HIDDEN });
@@ -203,10 +259,12 @@ export function renderMap(host: HTMLElement): MapNodes {
 	const svg = document.createElementNS(NS, 'svg');
 	svg.setAttribute('class', 'vm-svg');
 	svg.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
-	defs(svg);
+	const dots = defs(svg);
+	// The grid covers the square and stays put, under the world. Its pattern moves with the camera, and so its
+	// dots move with the world.
+	const grid = { class: 'vm-grid', width: VIEW.w, height: VIEW.h, mask: 'url(#vm-grid-fade)' };
+	add(svg, 'rect', { ...grid, fill: 'url(#vm-dots)' });
 	const world = add(svg, 'g', { class: 'vm-world' });
-	// Wide enough to fill the square at the finale's zoom, wherever the camera stops.
-	add(world, 'rect', { class: 'vm-grid', x: -1000, y: -1000, width: 3400, height: 3000, fill: 'url(#vm-dots)' });
 
 	const pieces = new Map<string, SVGGraphicsElement>();
 	for (const c of CONNS) {
@@ -267,9 +325,18 @@ export function renderMap(host: HTMLElement): MapNodes {
 	const caption = document.createElement('div');
 	caption.className = 'vm-caption';
 	caption.setAttribute('aria-hidden', 'true');
+	const lines = new Map<string, HTMLElement[]>();
+	for (const chapter of CHAPTERS) {
+		chapter.captions.forEach(({ text }, i) => {
+			const { line, words } = captionLine(text);
+			caption.append(line);
+			lines.set(`${chapter.n}:${i}`, words);
+		});
+	}
 	host.append(svg, caption);
 
 	const findRing = lookup(rings, 'ring');
+	const findLine = lookup(lines, 'caption');
 	let zoom = Number.NaN; // the camera's, until the first setCamera
 	let width: number = VIEW.w; // the map's on screen
 	let shown = Number.NaN; // what --vm-label holds: most camera moves leave it as it is
@@ -288,11 +355,14 @@ export function renderMap(host: HTMLElement): MapNodes {
 		ring: (worker, i) => findRing(`${worker}:${i}`),
 		job: lookup(jobs, 'job'),
 		record: lookup(records, 'record'),
+		words: (n, i) => findLine(`${n}:${i}`),
 		setCamera({ x, y, s }) {
 			// (x, y) goes to the middle of the map area, the square above the caption band.
 			const dx = VIEW.w / 2 - x * s;
 			const dy = VIEW.mapH / 2 - y * s;
-			world.setAttribute('transform', `translate(${dx} ${dy}) scale(${s})`);
+			const transform = `translate(${dx} ${dy}) scale(${s})`;
+			world.setAttribute('transform', transform);
+			dots.setAttribute('patternTransform', transform);
 			zoom = s;
 			legible();
 		},
