@@ -1,8 +1,8 @@
 """Emit varmq-lifecycle.svg: the seven worker states beside a worker that walks through them.
 
 One scenario, matching the lifecycle page: WithAutoRun(false), three jobs added, Start, Pause while
-job 1 runs, Resume, Stop while job 2 runs, Restart, job 3 runs. Concurrency 1. Waiting jobs are drawn
-as "waiting", which covers both the queue and a batch parked in the worker.
+job 1 runs, Resume, Stop while job 2 runs, Restart, job 3 runs. Concurrency 1. The queue is drawn as in
+the other diagrams: the head sits next to the worker, and the jobs behind it move up when it leaves.
 """
 import sys
 
@@ -58,7 +58,7 @@ FLASHES = {"start": [3.0], "run": [3.45, 9.0, 14.4], "pause-run": [4.8], "paused
            "resume": [8.6], "stop": [10.3], "stopped": [12.1], "restart": [14.0], "done": [16.5]}
 # job: (appear, dispatch, done)
 JOBS = {1: (1.8, 3.15, 6.6), 2: (2.1, 8.75, 12.1), 3: (2.4, 14.15, 16.5)}
-SLOT_X, SLOT_Y, WORKER_X, LIFT_Y = 660, 257, 857, 222
+SLOTS, STEP, ENTRY, SLOT_Y, WORKER_X = [658, 692, 726], 34, 620, 260, 860  # SLOTS[-1] is the head
 
 
 def segments(timeline, key):
@@ -113,12 +113,20 @@ for i, text in enumerate(dict.fromkeys(POOL.values())):
     kfu.kf(f"w-{i}", segments(pool_tl, text))
 
 jobs = []
+gos = [go for _, go, _ in JOBS.values()]
 for n, (appear, go, done) in JOBS.items():
-    x = SLOT_X + 44 * (n - 1)
-    jobs.append(f'<g id="j{n}" class="a lin"><rect class="item" width="36" height="36" rx="6"/>'
-                f'<text class="n" x="18" y="18">{n}</text></g>')
-    p = kfu.Path(appear, x - 30, SLOT_Y, 800).to(x, SLOT_Y, op=1)
-    p.wait(go - p.t).to(x, LIFT_Y).to(WORKER_X, LIFT_Y).to(WORKER_X, SLOT_Y)
+    x = SLOTS[3 - n]  # job 1 at the head, the others behind it
+    jobs.append(f'<g id="j{n}" class="a lin"><rect class="item" width="30" height="30" rx="5"/>'
+                f'<text class="n" x="15" y="15">{n}</text></g>')
+    p = kfu.Path(appear, ENTRY, SLOT_Y, 800).to(x, SLOT_Y, op=1)
+    for ahead in gos[:n - 1]:  # move up one slot as each job ahead leaves
+        p.wait(ahead + .1 - p.t)
+        x += STEP
+        p.wait(.3)
+        p.pts[-1] = kfu.at(p.t, x, SLOT_Y, 1)
+        p.x = x
+    assert x == SLOTS[-1], n
+    p.wait(go - p.t).to(WORKER_X, SLOT_Y)
     p.wait(done - p.t).wait(.25, op=0)
     assert p.pts[-1][0] < D
     kfu.kf(f"j{n}", p.pts)

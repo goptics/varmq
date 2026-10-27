@@ -92,12 +92,12 @@
   <!--STATUS-->
   <!--EXPLAIN-->
 
-  <rect class="lane" x="650" y="250" width="140" height="50" rx="8"/>
-  <rect class="slot" x="660" y="257" width="36" height="36" rx="6"/>
-  <rect class="slot" x="704" y="257" width="36" height="36" rx="6"/>
-  <rect class="slot" x="748" y="257" width="36" height="36" rx="6"/>
-  <text class="m" x="720" y="322">waiting jobs</text>
-  <path class="edge" d="M792 275H808" marker-end="url(#a)"/>
+  <text class="h" x="650" y="236">Queue</text>
+  <rect class="lane" x="650" y="252" width="116" height="46" rx="8"/>
+  <rect class="slot" x="658" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="692" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="726" y="260" width="30" height="30" rx="5"/>
+  <path class="edge" d="M766 275H808" marker-end="url(#a)"/>
   <rect class="box" x="810" y="250" width="130" height="50" rx="8" style="stroke: var(--worker)"/>
   <!--POOL-->
   <rect class="track" x="820" y="306" width="110" height="4" rx="2"/>

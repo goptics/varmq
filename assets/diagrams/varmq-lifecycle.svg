@@ -146,9 +146,9 @@
     @keyframes w-0 { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
     @keyframes w-1 { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
     @keyframes w-2 { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
-    @keyframes j1 { 0% { opacity: 0; transform: translate(630px, 257px); } 9% { opacity: 0; transform: translate(630px, 257px); } 9.19% { opacity: 1; transform: translate(660px, 257px); } 15.75% { opacity: 1; transform: translate(660px, 257px); } 15.97% { opacity: 1; transform: translate(660px, 222px); } 17.2% { opacity: 1; transform: translate(857px, 222px); } 17.42% { opacity: 1; transform: translate(857px, 257px); } 33% { opacity: 1; transform: translate(857px, 257px); } 34.25% { opacity: 0; transform: translate(857px, 257px); } 100% { opacity: 0; transform: translate(857px, 257px); } }
-    @keyframes j2 { 0% { opacity: 0; transform: translate(674px, 257px); } 10.5% { opacity: 0; transform: translate(674px, 257px); } 10.69% { opacity: 1; transform: translate(704px, 257px); } 43.75% { opacity: 1; transform: translate(704px, 257px); } 43.97% { opacity: 1; transform: translate(704px, 222px); } 44.92% { opacity: 1; transform: translate(857px, 222px); } 45.15% { opacity: 1; transform: translate(857px, 257px); } 60.5% { opacity: 1; transform: translate(857px, 257px); } 61.75% { opacity: 0; transform: translate(857px, 257px); } 100% { opacity: 0; transform: translate(857px, 257px); } }
-    @keyframes j3 { 0% { opacity: 0; transform: translate(718px, 257px); } 12% { opacity: 0; transform: translate(718px, 257px); } 12.19% { opacity: 1; transform: translate(748px, 257px); } 70.75% { opacity: 1; transform: translate(748px, 257px); } 70.97% { opacity: 1; transform: translate(748px, 222px); } 71.65% { opacity: 1; transform: translate(857px, 222px); } 71.87% { opacity: 1; transform: translate(857px, 257px); } 82.5% { opacity: 1; transform: translate(857px, 257px); } 83.75% { opacity: 0; transform: translate(857px, 257px); } 100% { opacity: 0; transform: translate(857px, 257px); } }
+    @keyframes j1 { 0% { opacity: 0; transform: translate(620px, 260px); } 9% { opacity: 0; transform: translate(620px, 260px); } 9.66% { opacity: 1; transform: translate(726px, 260px); } 15.75% { opacity: 1; transform: translate(726px, 260px); } 16.59% { opacity: 1; transform: translate(860px, 260px); } 33% { opacity: 1; transform: translate(860px, 260px); } 34.25% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
+    @keyframes j2 { 0% { opacity: 0; transform: translate(620px, 260px); } 10.5% { opacity: 0; transform: translate(620px, 260px); } 10.95% { opacity: 1; transform: translate(692px, 260px); } 16.25% { opacity: 1; transform: translate(692px, 260px); } 17.75% { opacity: 1; transform: translate(726px, 260px); } 43.75% { opacity: 1; transform: translate(726px, 260px); } 44.59% { opacity: 1; transform: translate(860px, 260px); } 60.5% { opacity: 1; transform: translate(860px, 260px); } 61.75% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
+    @keyframes j3 { 0% { opacity: 0; transform: translate(620px, 260px); } 12% { opacity: 0; transform: translate(620px, 260px); } 12.23% { opacity: 1; transform: translate(658px, 260px); } 16.25% { opacity: 1; transform: translate(658px, 260px); } 17.75% { opacity: 1; transform: translate(692px, 260px); } 44.25% { opacity: 1; transform: translate(692px, 260px); } 45.75% { opacity: 1; transform: translate(726px, 260px); } 70.75% { opacity: 1; transform: translate(726px, 260px); } 71.59% { opacity: 1; transform: translate(860px, 260px); } 82.5% { opacity: 1; transform: translate(860px, 260px); } 83.75% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
     @keyframes bar { 0% { opacity: 1; transform: scaleX(0); } 17.5% { opacity: 1; transform: scaleX(0); } 33% { opacity: 1; transform: scaleX(1); } 34.5% { opacity: 0; transform: scaleX(1); } 34.55% { opacity: 1; transform: scaleX(0); } 45.5% { opacity: 1; transform: scaleX(0); } 60.5% { opacity: 1; transform: scaleX(1); } 62% { opacity: 0; transform: scaleX(1); } 62.05% { opacity: 1; transform: scaleX(0); } 72.5% { opacity: 1; transform: scaleX(0); } 82.5% { opacity: 1; transform: scaleX(1); } 84% { opacity: 0; transform: scaleX(1); } 84.05% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
     @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -5.6s; } }
   </style>
@@ -255,12 +255,12 @@
   <text id="x-Stopped" class="a ex" x="795" y="186">loop ended; waiting jobs stay queued</text>
   <text id="x-Stopping" class="a ex" x="795" y="186">the running job finishes, then goroutines exit</text>
 
-  <rect class="lane" x="650" y="250" width="140" height="50" rx="8"/>
-  <rect class="slot" x="660" y="257" width="36" height="36" rx="6"/>
-  <rect class="slot" x="704" y="257" width="36" height="36" rx="6"/>
-  <rect class="slot" x="748" y="257" width="36" height="36" rx="6"/>
-  <text class="m" x="720" y="322">waiting jobs</text>
-  <path class="edge" d="M792 275H808" marker-end="url(#a)"/>
+  <text class="h" x="650" y="236">Queue</text>
+  <rect class="lane" x="650" y="252" width="116" height="46" rx="8"/>
+  <rect class="slot" x="658" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="692" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="726" y="260" width="30" height="30" rx="5"/>
+  <path class="edge" d="M766 275H808" marker-end="url(#a)"/>
   <rect class="box" x="810" y="250" width="130" height="50" rx="8" style="stroke: var(--worker)"/>
   <text id="w-0" class="a m" x="875" y="275">not started</text>
   <text id="w-1" class="a m" x="875" y="275">no job running</text>
@@ -270,7 +270,7 @@
   <text class="m" x="875" y="322">running job</text>
   <text class="note" x="650" y="372">Pause and Stop never interrupt a running job.</text>
 
-  <g id="j1" class="a lin"><rect class="item" width="36" height="36" rx="6"/><text class="n" x="18" y="18">1</text></g>
-  <g id="j2" class="a lin"><rect class="item" width="36" height="36" rx="6"/><text class="n" x="18" y="18">2</text></g>
-  <g id="j3" class="a lin"><rect class="item" width="36" height="36" rx="6"/><text class="n" x="18" y="18">3</text></g>
+  <g id="j1" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">1</text></g>
+  <g id="j2" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">2</text></g>
+  <g id="j3" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">3</text></g>
 </svg>
