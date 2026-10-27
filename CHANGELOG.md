@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
+
+## [v1.10.0] (2026-10-25)
+
 ### ✨ New Features
 
 - Persistent and distributed queues add a job with an id through the storage's `EnqueueOnce` (`IDedupQueue`, `IDedupPriorityQueue`), so a retried `Add` stores it once (#123).
@@ -12,10 +18,6 @@
 ### ⚡ Performance
 
 - A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
-
-### 🐛 Bug Fixes
-
-- **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
 
 ### 📚 Documentation
 
