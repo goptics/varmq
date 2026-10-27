@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
+
+## [v1.10.0] (2026-10-25)
+
 ### ✨ New Features
 
 - Persistent and distributed queues add a job with an id through the storage's `EnqueueOnce` (`IDedupQueue`, `IDedupPriorityQueue`), so a retried `Add` stores it once (#123).
@@ -12,10 +18,6 @@
 ### ⚡ Performance
 
 - A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
-
-### 🐛 Bug Fixes
-
-- **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
 
 ### 📚 Documentation
 
