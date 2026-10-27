@@ -5,6 +5,7 @@
 ### 🐛 Bug Fixes
 
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
+- **Data race on `Restart`** (#133): `Restart` wrote the worker's configs while `Add` copied them, and replaced the context while `Context()` read it, without a lock. `Restart` no longer writes the configs, and the context is now loaded atomically, so `Context()` still takes no lock.
 
 ## [v1.10.0] (2026-10-25)
 

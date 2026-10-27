@@ -926,6 +926,40 @@ func TestWorkers(t *testing.T) {
 				w := newResultWorker(func(j iResultJob[string, int]) {}, WithContext(ctx))
 				assert.NotNil(t, w.Context(), "ResultWorker context should not be nil when configured")
 			})
+
+			// #133: Restart replaces the context while Add copies Configs and
+			// Context reads it; run with -race.
+			t.Run("Restart does not race with Add or Context", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {}, 2)
+				q := newQueue(w, queues.NewQueue[any]())
+
+				stop := make(chan struct{})
+				var wg sync.WaitGroup
+				for _, read := range []func(){
+					func() { q.Add("job") },
+					func() { _ = w.Context() },
+				} {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						for {
+							select {
+							case <-stop:
+								return
+							default:
+								read()
+							}
+						}
+					}()
+				}
+
+				for range 20 {
+					require.NoError(t, w.Restart())
+				}
+				close(stop)
+				wg.Wait()
+				require.NoError(t, w.StopAndWait())
+			})
 		})
 	})
 
