@@ -13,6 +13,10 @@
 
 - A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
 
+### 🐛 Bug Fixes
+
+- **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
+
 ### 📚 Documentation
 
 - README trimmed; errgroup and gopool added to the benchmark comparison (#119, #120, #126).
