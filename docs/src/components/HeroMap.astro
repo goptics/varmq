@@ -1,7 +1,7 @@
 ---
 // The <varmq-map> element in the home page hero (frontmatter `hero.image.html`). This component draws nothing
-// itself: it brings the element's script and its styles to the page. The styles size the element, so its square
-// is reserved before the script runs.
+// itself: it brings the element's script and styles to the page. Its global style only sizes the element, so the
+// square is reserved before the script runs; the script adds the map's own styles, so other pages never load them.
 ---
 
 <script>
@@ -25,79 +25,9 @@
 		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
 	].join('');
 
-	/** A caption line: `*word*` green and `!word!` red, as `Caption` in chapters.ts marks them. */
-	function line(text: string): HTMLElement {
-		const span = document.createElement('span');
-		// The marked parts are the split's odd entries.
-		text.split(/(\*[^*]+\*|![^!]+!)/).forEach((part, i) => {
-			if (i % 2 === 0) {
-				span.append(part);
-				return;
-			}
-			const word = document.createElement(part[0] === '*' ? 'em' : 'b');
-			word.textContent = part.slice(1, -1);
-			span.append(word);
-		});
-		return span;
-	}
-
-	class VarmqMap extends HTMLElement {
-		/** The drawn map. Public, so a review can move the camera from the console. */
-		nodes?: MapNodes;
-		/** Paused with the button. */
-		userPaused = false;
-		button!: HTMLButtonElement;
-
-		connectedCallback() {
-			if (this.nodes) return; // moved within the page: it is drawn already
-			const nodes = renderMap(this);
-			this.nodes = nodes;
-			this.describe(nodes);
-			this.addButton();
-
-			// The still finale frame: the whole map with every piece on, and the finale's first caption.
-			nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
-			nodes.caption.replaceChildren(line(CHAPTERS[CHAPTERS.length - 1].captions[0].text));
-		}
-
-		/** One image to assistive technology, with a name and a description, and none of the map's own text. */
-		describe({ svg, world }: MapNodes) {
-			const title = document.createElementNS(NS, 'title');
-			title.id = 'vm-title';
-			title.textContent = TITLE;
-			const desc = document.createElementNS(NS, 'desc');
-			desc.id = 'vm-desc';
-			desc.textContent = DESCRIPTION;
-			svg.prepend(title, desc);
-			svg.setAttribute('role', 'img');
-			svg.setAttribute('aria-labelledby', title.id);
-			svg.setAttribute('aria-describedby', desc.id);
-			// Chrome keeps an SVG image's text in the accessibility tree, so the labels would be read one by one.
-			world.setAttribute('aria-hidden', 'true');
-		}
-
-		addButton() {
-			const button = document.createElement('button');
-			button.type = 'button';
-			button.className = 'vm-toggle';
-			button.innerHTML = ICONS;
-			button.addEventListener('click', () => this.setUserPaused(!this.userPaused));
-			this.button = button;
-			this.setUserPaused(false);
-			this.append(button);
-		}
-
-		setUserPaused(paused: boolean) {
-			this.userPaused = paused;
-			this.button.dataset.state = paused ? 'paused' : 'playing';
-			this.button.setAttribute('aria-label', paused ? 'Play animation' : 'Pause animation');
-		}
-	}
-
-	if (!customElements.get('varmq-map')) customElements.define('varmq-map', VarmqMap);
-</script>
-
-<style is:global>
+	// Everything but the reserved square (the global style below): the palettes, the map, the caption band and the
+	// button. Added once, by the first map to connect, so only the home page loads it.
+	const STYLES = `
 	/* Style A · Glow. Dark is the default; the light palette keeps the hues in darker ink, with no glow. */
 	varmq-map {
 		--vm-bg-1: #101a26;
@@ -146,9 +76,6 @@
 		--vm-button-edge: rgba(150, 175, 200, 0.3);
 
 		position: relative;
-		display: block;
-		width: 100%;
-		aspect-ratio: 1;
 		overflow: hidden;
 		border: 1px solid var(--vm-frame);
 		border-radius: 14px;
@@ -468,6 +395,107 @@
 	varmq-map .vm-toggle[data-state='playing'] .vm-play,
 	varmq-map .vm-toggle[data-state='paused'] .vm-pause {
 		display: none;
+	}
+	`;
+
+	function addStyles() {
+		if (document.getElementById('vm-styles')) return;
+		const style = document.createElement('style');
+		style.id = 'vm-styles';
+		style.textContent = STYLES;
+		document.head.append(style);
+	}
+
+	/** A caption line: `*word*` green and `!word!` red, as `Caption` in chapters.ts marks them. */
+	function line(text: string): HTMLElement {
+		const span = document.createElement('span');
+		// The marked parts are the split's odd entries.
+		text.split(/(\*[^*]+\*|![^!]+!)/).forEach((part, i) => {
+			if (i % 2 === 0) {
+				span.append(part);
+				return;
+			}
+			const word = document.createElement(part[0] === '*' ? 'em' : 'b');
+			word.textContent = part.slice(1, -1);
+			span.append(word);
+		});
+		return span;
+	}
+
+	class VarmqMap extends HTMLElement {
+		/** The drawn map. Public, so a review can move the camera from the console. */
+		nodes?: MapNodes;
+		/** Paused with the button. */
+		userPaused = false;
+		button!: HTMLButtonElement;
+		/** Tells the map its width on screen, which decides whether its labels are big enough to show. */
+		resizer = new ResizeObserver(([entry]) => this.nodes?.setWidth(entry.contentRect.width));
+
+		connectedCallback() {
+			addStyles();
+			if (!this.nodes) this.draw(); // once: a map moved within the page is drawn already
+			this.resizer.observe(this);
+		}
+
+		disconnectedCallback() {
+			this.resizer.disconnect();
+		}
+
+		draw() {
+			const nodes = renderMap(this);
+			this.nodes = nodes;
+			this.describe(nodes);
+			this.addButton();
+
+			// The still finale frame: the whole map with every piece on, and the finale's first caption.
+			nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
+			nodes.caption.replaceChildren(line(CHAPTERS[CHAPTERS.length - 1].captions[0].text));
+		}
+
+		/** One image to assistive technology, with a name and a description, and none of the map's own text. */
+		describe({ svg, world }: MapNodes) {
+			const title = document.createElementNS(NS, 'title');
+			title.id = 'vm-title';
+			title.textContent = TITLE;
+			const desc = document.createElementNS(NS, 'desc');
+			desc.id = 'vm-desc';
+			desc.textContent = DESCRIPTION;
+			svg.prepend(title, desc);
+			svg.setAttribute('role', 'img');
+			svg.setAttribute('aria-labelledby', title.id);
+			svg.setAttribute('aria-describedby', desc.id);
+			// Chrome keeps an SVG image's text in the accessibility tree, so the labels would be read one by one.
+			world.setAttribute('aria-hidden', 'true');
+		}
+
+		addButton() {
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.className = 'vm-toggle';
+			button.innerHTML = ICONS;
+			button.addEventListener('click', () => this.setUserPaused(!this.userPaused));
+			this.button = button;
+			this.setUserPaused(false);
+			this.append(button);
+		}
+
+		setUserPaused(paused: boolean) {
+			this.userPaused = paused;
+			this.button.dataset.state = paused ? 'paused' : 'playing';
+			this.button.setAttribute('aria-label', paused ? 'Play animation' : 'Pause animation');
+		}
+	}
+
+	if (!customElements.get('varmq-map')) customElements.define('varmq-map', VarmqMap);
+</script>
+
+<style is:global>
+	/* Only what holds the square in place before the script runs. The script adds the rest of the map's styles, so
+	   no other page loads them. */
+	varmq-map {
+		display: block;
+		width: 100%;
+		aspect-ratio: 1;
 	}
 
 	/* On a phone the square would push the title and Get started down: leave it out. */

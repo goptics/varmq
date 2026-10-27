@@ -24,7 +24,8 @@
 //   `fill-opacity` to 0, and the stroke stays.
 // - Hidden is the presentation attribute `opacity="0"`, which an inline `opacity` (what anime.js writes)
 //   overrides. Nothing is `display: none`, which would break the lengths that drawing and motion paths need.
-// - `setCamera` puts `labelOpacity` in `--vm-label`, which the stylesheet applies to text as `fill-opacity`, so a
+// - `--vm-label` holds `labelOpacity` at the scale on screen: the camera's zoom times the map's width on screen
+//   over 400, kept by `setCamera` and `setWidth`. The stylesheet applies it to text as `fill-opacity`, so a
 //   label's `opacity` stays free to animate. Move the view only through `setCamera`: it owns the world's
 //   transform.
 // - Rings, jobs, records, chips, the pulse and the flash scale about their own centre (`transform-box: fill-box`).
@@ -61,8 +62,10 @@ export interface MapNodes {
 	job(id: string): SVGGElement[];
 	/** A store record (SQLite and Redis chapters). */
 	record(id: string): SVGGElement;
-	/** Transforms the world and sets `--vm-label` from `labelOpacity`. */
+	/** Transforms the world and sets `--vm-label` from `labelOpacity` at the scale on screen. */
 	setCamera(c: Camera): void;
+	/** The map's width on screen, in CSS px (400 until set): the zoom times it over 400 is the scale there. */
+	setWidth(px: number): void;
 }
 
 type Ring = ReturnType<MapNodes['ring']>;
@@ -267,7 +270,16 @@ export function renderMap(host: HTMLElement): MapNodes {
 	host.append(svg, caption);
 
 	const findRing = lookup(rings, 'ring');
+	let zoom = Number.NaN; // the camera's, until the first setCamera
+	let width: number = VIEW.w; // the map's on screen
 	let shown = Number.NaN; // what --vm-label holds: most camera moves leave it as it is
+	// Labels show by their size on screen, so a smaller square hides them sooner.
+	const legible = () => {
+		const label = labelOpacity((zoom * width) / VIEW.w);
+		if (Number.isNaN(label) || label === shown) return;
+		world.style.setProperty('--vm-label', String(label));
+		shown = label;
+	};
 	return {
 		svg,
 		world,
@@ -281,10 +293,12 @@ export function renderMap(host: HTMLElement): MapNodes {
 			const dx = VIEW.w / 2 - x * s;
 			const dy = VIEW.mapH / 2 - y * s;
 			world.setAttribute('transform', `translate(${dx} ${dy}) scale(${s})`);
-			const label = labelOpacity(s);
-			if (label === shown) return;
-			world.style.setProperty('--vm-label', String(label));
-			shown = label;
+			zoom = s;
+			legible();
+		},
+		setWidth(px) {
+			width = px;
+			legible();
 		},
 	};
 }
