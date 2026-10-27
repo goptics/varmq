@@ -914,6 +914,131 @@ func TestQueueCapacity(t *testing.T) {
 	})
 }
 
+// A job added while Purge runs is either closed by it or left in the queue,
+// never removed unclosed: a final Purge must leave every job closed (#130).
+func TestPurgeClosesJobsAddedDuringPurge(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
+
+	for name, q := range map[string]struct {
+		add   func() (EnqueuedJob, bool)
+		purge func()
+	}{
+		"queue":    {func() (EnqueuedJob, bool) { return fifo.Add(1) }, fifo.Purge},
+		"priority": {func() (EnqueuedJob, bool) { return prio.Add(1, 0) }, prio.Purge},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var mu sync.Mutex
+			var jobs []EnqueuedJob
+			stop := make(chan struct{})
+			var wg sync.WaitGroup
+			for range 4 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+						}
+						if j, ok := q.add(); ok {
+							mu.Lock()
+							jobs = append(jobs, j)
+							mu.Unlock()
+						}
+					}
+				}()
+			}
+			for end := time.Now().Add(100 * time.Millisecond); time.Now().Before(end); {
+				q.purge()
+			}
+			close(stop)
+			wg.Wait()
+			q.purge()
+
+			open := 0
+			for _, j := range jobs {
+				if !j.IsClosed() {
+					open++
+				}
+			}
+			require.Zero(t, open, "%d of %d jobs were removed by Purge without being closed", open, len(jobs))
+		})
+	}
+}
+
+// With a worker dequeuing while Purge removes, each job either runs once or
+// is closed unrun, and every Wait returns; with ids too, as Purge frees them.
+func TestPurgeWithRunningWorkerRunsOrClosesEachJob(t *testing.T) {
+	for _, withID := range []bool{false, true} {
+		t.Run("withID="+strconv.FormatBool(withID), func(t *testing.T) {
+			var mu sync.Mutex
+			runs := map[int]int{}
+			w := NewWorker(func(j Job[int]) {
+				mu.Lock()
+				runs[j.Data()]++
+				mu.Unlock()
+			}, 4)
+			defer w.Stop()
+			q := w.BindQueue()
+
+			var jobsMu sync.Mutex
+			var jobs []EnqueuedJob
+			stop := make(chan struct{})
+			var wg sync.WaitGroup
+			for p := range 4 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for i := 0; ; i++ {
+						select {
+						case <-stop:
+							return
+						default:
+						}
+						var cfg []JobConfigFunc
+						if withID {
+							cfg = append(cfg, WithJobId(strconv.Itoa(p)+":"+strconv.Itoa(i%64)))
+						}
+						if j, ok := q.Add(p*1_000_000_000+i, cfg...); ok {
+							jobsMu.Lock()
+							jobs = append(jobs, j)
+							jobsMu.Unlock()
+						}
+					}
+				}()
+			}
+			for end := time.Now().Add(150 * time.Millisecond); time.Now().Before(end); {
+				q.Purge()
+			}
+			close(stop)
+			wg.Wait()
+			q.Purge()
+
+			done := make(chan struct{})
+			go func() {
+				for _, j := range jobs {
+					j.Wait()
+				}
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("a job's Wait did not return after Purge")
+			}
+
+			w.Wait()
+			mu.Lock()
+			defer mu.Unlock()
+			for data, n := range runs {
+				require.Equal(t, 1, n, "job %d ran %d times", data, n)
+			}
+		})
+	}
+}
+
 // Purge must also reach jobs a worker already took into its batch but has not
 // started: with concurrency 1 and 40 jobs, one runs, 31 wait in the batch
 // buffer and 8 stay in storage. A worker only batches once its jobs have

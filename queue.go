@@ -245,7 +245,9 @@ type IExternalBaseQueue interface {
 	// jobs in storage: jobs a worker took in a batch, or parked on Stop or
 	// Pause, are outside it, at most 32 per worker.
 	IsFull() bool
-	// Purge removes all pending Jobs from the queue.
+	// Purge removes all pending Jobs from the queue and closes them. Custom
+	// storage needs IPurgeValuesQueue for a Purge that races an Add to close
+	// every job it removes.
 	Purge()
 	// Close closes the queue, no more jobs can be added to the queue after closing the queue.
 	Close() error
@@ -285,11 +287,19 @@ func (eq *externalBaseQueue) Worker() Worker {
 // close those, as it reaches each one.
 func (eq *externalBaseQueue) Purge() {
 	eq.bumpPurges()
-	prevValues := eq.q.Values()
-	eq.q.Purge()
+
+	var removed []any
+	if p, ok := eq.q.(IPurgeValuesQueue); ok {
+		removed = p.PurgeValues()
+	} else {
+		// shortcut: an Add between Values and Purge is removed but never
+		// closed; storage implements IPurgeValuesQueue to avoid it.
+		removed = eq.q.Values()
+		eq.q.Purge()
+	}
 
 	// close all pending channels to avoid routine leaks
-	for _, val := range prevValues {
+	for _, val := range removed {
 		if j, ok := val.(io.Closer); ok {
 			j.Close()
 		}

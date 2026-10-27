@@ -13,6 +13,10 @@
 
 - A worker bound to one batch-acknowledgeable storage (`IBatchAcknowledgeable`) pops up to 64 jobs per call, one per free slot, with no length probe between jobs (#121, #122).
 
+### 🐛 Bug Fixes
+
+- **Purge left jobs added during it open** (#130): `Purge` read the queue with `Values`, then purged it, so a job added in between was removed but never closed and its `Wait` never returned. In-memory queues now remove and return their items in one step, and `Purge` closes exactly those. Custom storage gets the same by implementing the new optional `IPurgeValuesQueue`.
+
 ### 📚 Documentation
 
 - README trimmed; errgroup and gopool added to the benchmark comparison (#119, #120, #126).

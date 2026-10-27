@@ -133,3 +133,13 @@ type IDistributedPriorityQueue interface {
 type CapacitySetter interface {
 	SetCapacity(cap int)
 }
+
+// IPurgeValuesQueue is optional for any storage. A queue's Purge closes the
+// jobs PurgeValues returns, so PurgeValues must remove every stored item and
+// return them in one atomic step: an item added meanwhile is either returned
+// or stays stored. Without it, Purge calls Values and then Purge, and an item
+// added between the two is removed without being closed, so its Wait never
+// returns. In-memory storage (BindQueue, BindPriorityQueue) implements it.
+type IPurgeValuesQueue interface {
+	PurgeValues() []any
+}

@@ -309,26 +309,33 @@ func (c *Cursor[T]) Values() []T {
 	return out
 }
 
-// Purge skips every item claimed before the call. A consumer clears the
-// slots it skips, so they are freed at once; it waits for any still being
-// written, or the item would land after the purge and stay pinned.
-func (c *Cursor[T]) Purge() {
+// Purge skips every item claimed before the call. A consumer returns the
+// items it skipped, front first, and clears their slots, so the log does not
+// pin them; it waits for any still being written, or the item would land
+// after the purge and stay pinned. Other cursors return nil.
+func (c *Cursor[T]) Purge() []T {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
 	if c.chunk == nil {
-		return
+		return nil
 	}
 
 	if !c.consume {
 		c.seekHead()
-		return
+		return nil
 	}
 
 	var zero T
 	end := c.log.head.Load()
-	c.chunk, c.idx = c.each(end, func(ch *chunk[T], i int) { ch.data[i] = zero })
+	out := make([]T, 0, end-c.offset.Load())
+	c.chunk, c.idx = c.each(end, func(ch *chunk[T], i int) {
+		out = append(out, ch.data[i])
+		ch.data[i] = zero
+	})
 	c.offset.Store(end)
+
+	return out
 }
 
 // each calls fn on every slot from the cursor up to offset end, waiting for

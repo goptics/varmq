@@ -42,6 +42,11 @@ func (q *PriorityQueue[T]) Len() int {
 func (q *PriorityQueue[T]) Values() []any {
 	q.mx.RLock()
 	defer q.mx.RUnlock()
+	return q.values()
+}
+
+// values copies the stored values. Callers hold mx.
+func (q *PriorityQueue[T]) values() []any {
 	values := make([]any, 0, len(q.internal.items))
 	for i := range q.internal.items {
 		values = append(values, q.internal.items[i].Value)
@@ -135,13 +140,25 @@ func (q *PriorityQueue[T]) Dequeue() (any, bool) {
 	return v, true
 }
 
+// Purge removes every item and frees their ids. It exists for IBaseQueue,
+// whose Purge returns nothing; varmq purges through PurgeValues
+// (IPurgeValuesQueue).
 func (q *PriorityQueue[T]) Purge() {
+	q.PurgeValues()
+}
+
+// PurgeValues removes every item, frees their ids and returns the removed
+// items, in heap order. It is one step under mx, so an Enqueue racing it is
+// either returned or stays queued, never removed unseen.
+func (q *PriorityQueue[T]) PurgeValues() []any {
 	q.mx.Lock()
 	defer q.mx.Unlock()
+	values := q.values()
 	// Drop the backing array rather than reslicing to 0: it holds the purged
 	// values and, at 32 B a slot, would pin the queue's high-water memory.
 	q.internal.items = nil
 	q.ids, q.idsPeak = nil, 0
+	return values
 }
 
 // to satisfy the IQueue interface
