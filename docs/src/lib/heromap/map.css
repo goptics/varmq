@@ -338,8 +338,8 @@ varmq-map .vm-caption {
 	pointer-events: none;
 }
 
-/* Every line sits in the same place; the choreographer shows one at a time. */
-varmq-map .vm-line {
+/* Every caption line sits in the same place; the choreographer shows one at a time. */
+varmq-map .vm-cap {
 	grid-area: 1 / 1;
 }
 

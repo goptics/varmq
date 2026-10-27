@@ -192,7 +192,7 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
  */
 function captionLine(text: string): { line: HTMLElement; words: HTMLElement[] } {
 	const line = document.createElement('span');
-	line.className = 'vm-line';
+	line.className = 'vm-cap';
 	const words: HTMLElement[] = [];
 	let mark = ''; // the open mark, `*` or `!`, carried from word to word
 	for (const token of text.split(' ')) {
