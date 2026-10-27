@@ -8,7 +8,7 @@
 	import type { Timeline } from 'animejs';
 	import { CHAPTERS, STATIC_AT } from '../lib/heromap/chapters.ts';
 	import STYLES from '../lib/heromap/map.css?inline';
-	import { renderMap, type MapNodes } from '../lib/heromap/render.ts';
+	import { END_FADE, renderMap, type MapNodes } from '../lib/heromap/render.ts';
 	import { REGIONS, frame } from '../lib/heromap/scene.ts';
 
 	const NS = 'http://www.w3.org/2000/svg';
@@ -27,8 +27,6 @@
 		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
 	].join('');
 	const REDUCE = '(prefers-reduced-motion: reduce)';
-	/** The loop's end fades the map out over 450 ms, anime.js's inQuad (choreo.ts): the first play fades the still frame so. */
-	const END_FADE: KeyframeAnimationOptions = { duration: 450, easing: 'cubic-bezier(0.11, 0, 0.5, 0)', fill: 'forwards' };
 
 	/** The map's styles (`map.css`): added once, by the first map to connect, so only the home page loads them. */
 	function addStyles() {
@@ -69,7 +67,8 @@
 
 		connectedCallback() {
 			addStyles();
-			if (!this.nodes) this.draw(); // once: a map moved within the page is drawn already
+			// Once, and only where the square is shown: a phone builds nothing. A map moved within the page is drawn.
+			if (!this.nodes && this.shown()) this.draw();
 			this.resizer.observe(this);
 			this.watcher.observe(this);
 			this.motion.addEventListener('change', this.onMotion);
@@ -143,6 +142,7 @@
 		}
 
 		resized(width: number) {
+			if (!this.nodes && width > 0) this.draw(); // the square is shown now, after a resize past 50rem
 			this.nodes?.setWidth(width);
 			this.load();
 			this.update();
@@ -155,11 +155,12 @@
 
 		/** Loads the animation once the square is shown with motion allowed. On a failure the still frame stays. */
 		async load() {
-			if (this.loading || this.reducedMotion || !this.shown()) return;
+			const nodes = this.nodes;
+			if (this.loading || this.reducedMotion || !nodes || !this.shown()) return;
 			this.loading = true;
 			try {
 				const { buildTimeline } = await import('../lib/heromap/choreo.ts');
-				this.timeline = buildTimeline(this.nodes!);
+				this.timeline = buildTimeline(nodes);
 			} catch (error) {
 				console.error('varmq-map: the animation failed to load; the map stays still.', error);
 				return;
@@ -175,6 +176,7 @@
 
 		/** Plays when it can; the button shows once the animation could play. */
 		update() {
+			if (!this.nodes) return; // not drawn: nothing to show yet
 			const timeline = this.timeline;
 			this.button.hidden = !timeline || this.reducedMotion;
 			if (!timeline) return;
@@ -190,7 +192,7 @@
 		firstPlay(timeline: Timeline) {
 			if (this.fades) return;
 			const { world, caption } = this.nodes!;
-			const fades = [world, caption].map((el) => el.animate({ opacity: 0 }, END_FADE));
+			const fades = [world, caption].map((el) => el.animate({ opacity: 0 }, { ...END_FADE, fill: 'forwards' }));
 			this.fades = fades;
 			fades[0].onfinish = () => {
 				this.fades = undefined;
@@ -224,8 +226,10 @@
 		aspect-ratio: 1;
 	}
 
-	/* On a phone the square would push the title and Get started down: leave it out. */
-	@media (width < 50rem) {
+	/* On a phone the square would push the title and Get started down: leave it out, below Starlight's own 50rem.
+	   max-width rather than range syntax, and the map itself hidden as well, for browsers without either or :has(). */
+	@media (max-width: 49.99rem) {
+		varmq-map,
 		.hero > .hero-html:has(> varmq-map) {
 			display: none;
 		}

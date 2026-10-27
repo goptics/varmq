@@ -40,10 +40,13 @@
 import { CHAPTERS } from './chapters.ts';
 import {
 	CONNS,
+	LABEL_GAP,
 	LABEL_PX,
 	LANE,
 	PIECES,
 	RINGS,
+	RING_R,
+	SLOTS,
 	VIEW,
 	labelOpacity,
 	slotX,
@@ -53,6 +56,12 @@ import {
 	type PieceKind,
 } from './scene.ts';
 import { workers } from './stores.ts';
+
+/**
+ * How the map fades out at the loop's end (choreo.ts), and the still frame on the first play (HeroMap.astro): 450 ms,
+ * anime.js's inQuad, here as the CSS easing that matches it.
+ */
+export const END_FADE = { duration: 450, easing: 'cubic-bezier(0.11, 0, 0.5, 0)' } as const;
 
 export interface MapNodes {
 	svg: SVGSVGElement;
@@ -81,11 +90,8 @@ type Attrs = Record<string, string | number>;
 
 const NS = 'http://www.w3.org/2000/svg';
 const FEATHER = 16; // world units, within the 20 that `frame` (scene.ts) leaves around a chapter
-const SLOTS = 5; // a lane's slots (LANE in scene.ts)
-const LABEL_GAP = 6; // between a label and the piece it names (`Piece` in scene.ts)
 const DESCENT = 3; // from the bottom of a 14-unit line up to its baseline
-const RING_R = 11; // goroutine rings are 32 apart in the core's card,
-const ARC_R = 15; // so a ring and its progress arc stay this small
+const ARC_R = 15; // a ring's progress arc, around RING_R
 const RADIUS: Record<Exclude<PieceKind, 'loop'>, number> = {
 	program: 16,
 	store: 14,

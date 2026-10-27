@@ -13,12 +13,17 @@ export const VIEW = { w: 400, h: 400, mapH: 344 } as const;
 export const LANE = { w: 170, h: 44, slot: 22, step: 32, pad: 10 } as const;
 /** How tall a label is, in world units. */
 export const LABEL_PX = 14;
+/** Between a label and the piece it names. */
+export const LABEL_GAP = 6;
+/** A lane's or a tray's slots. */
+export const SLOTS = 5;
+/** A goroutine ring's radius: the core's rings are 32 apart. */
+export const RING_R = 11;
 
 const MARGIN = 20; // what `frame` leaves around a box on every side
 const MAX_ZOOM = 1.1;
 const LABEL_HIDDEN_PX = 6.5; // a label this small on screen is hidden...
 const LABEL_SHOWN_PX = 7; // ...and one this big is fully shown
-const LABEL_GAP = 6; // between a label and the piece it names
 
 /** Centre of slot `k` in the lane at `laneX`. Slot 0 is the head, on the right. */
 export function slotX(laneX: number, k: number): number {

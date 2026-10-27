@@ -1,7 +1,7 @@
 // The SQLite and Redis stores as discrete-event simulations: a queue lane and an in-flight tray in the
 // store, and the workers that take jobs from it. Plans in, events out, for the chapter scripts to play
-// back; nothing here knows about drawing. The rules come from persistence/overview, sqlite and redis in
-// these docs:
+// back; nothing here draws, though the tray has the five slots the scene gives it. The rules come from
+// persistence/overview, sqlite and redis in these docs:
 // - A taken job stays in the store as a record in flight (a `processing` row, an entry in `<key>:nacked`)
 //   until its ack lands. varmq acks when the job's function returns, before the goroutine goes back to
 //   the pool (`j.Close()` in `worker_pool.go`), so a ring takes its next job only after its ack, and holds
@@ -26,6 +26,8 @@
 // limits (five at most together) bound it. Events at one instant come in the order they were set: SQLite sets the crash,
 // when it has one, before the lands, so a land at the instant of the crash comes after it, and a claim or a
 // pull is set by whatever wakes it, so it follows everything already due at that instant.
+
+import { SLOTS } from './scene.ts';
 
 export interface StoreJob {
 	id: string;
@@ -82,8 +84,6 @@ export type StoreEvent =
 	| { at: number; type: 'crash' }
 	| { at: number; type: 'restart' }
 	| { at: number; type: 'requeue'; jobs: string[] }; // the records in flight, in write order, to the head
-
-const SLOTS = 5;
 
 /** A worker's goroutines: the busy rings, each with the job it holds from its take until its ack, and the idle ones. */
 interface Rings {

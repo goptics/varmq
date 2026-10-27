@@ -136,7 +136,7 @@ varmq-map .vm-edge-head {
 
 /* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. */
 varmq-map :is(.vm-label, .vm-text, .vm-num) {
-	font-family: var(--__sl-font-mono);
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
 	font-weight: 600;
 	fill-opacity: var(--vm-label, 1);
 }
@@ -334,7 +334,8 @@ varmq-map .vm-caption {
 	place-items: center;
 	background: linear-gradient(to bottom, transparent, var(--sl-color-bg) 60%);
 	color: var(--vm-caption);
-	font-family: var(--__sl-font-mono);
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 10.5px;
 	font-size: min(10.5px, 3cqw);
 	font-weight: 600;
 	letter-spacing: 0.12em;
@@ -400,7 +401,7 @@ varmq-map .vm-toggle {
 	cursor: pointer;
 }
 
-/* Under reduced motion nothing moves, so there is nothing to pause. */
+/* Hidden until the animation can play: before it has loaded, if it failed to load, and under reduced motion. */
 varmq-map .vm-toggle[hidden] {
 	display: none;
 }

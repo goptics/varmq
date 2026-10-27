@@ -128,6 +128,22 @@ describe('chapter rules', () => {
 			}
 		}
 	});
+	it('hand a worker at limit 1 one job at a time, never a batch', () => {
+		// varmq hands a lone worker every job waiting at once, which the map has no way to draw. Chapter 1's core, chapter
+		// 3's result worker, chapter 6's second worker and chapter 10's two lone workers run at limit 1.
+		let lone = 0;
+		for (const c of CHAPTERS) for (const p of c.parts) {
+			if (p.kind !== 'pool') continue;
+			let limit = p.plan.limit;
+			for (const e of p.events) {
+				if (e.type === 'control' && e.op === 'tune') limit = e.to;
+				if (e.type !== 'dispatch' || limit !== 1) continue;
+				assert.equal(e.waiting, 0, `chapter ${c.n}: ${p.worker} at ${e.at}`);
+				lone++;
+			}
+		}
+		assert.ok(lone >= 5, String(lone));
+	});
 	it('draw only on workers, lanes and rings the map has by then', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
 			if (p.kind === 'pool') for (const s of p.plan.sources)

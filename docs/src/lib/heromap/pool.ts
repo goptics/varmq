@@ -221,9 +221,11 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 	};
 
 	const control = (c: ControlSpec, now: number) => {
-		// varmq answers these calls with an error (ErrWorkerPausing, ErrWorkerPaused, ErrWorkerStopped), and a
-		// story must not show what it refuses. Lowering the limit is not modelled: TunePool would also stop
-		// idle goroutines.
+		// A story must not show a call varmq refuses, so three of them throw here: Resume while the worker is still
+		// pausing (ErrWorkerPausing), TunePool unless it is active, and TunePool to a limit that is not higher, as the
+		// same one is refused (ErrSameConcurrency) and lowering it is not modelled (it would also stop idle
+		// goroutines). The others varmq refuses or ignores (Pause or Resume after Stop, a second Stop, Resume while
+		// not paused) are not checked: a plan must not make them.
 		if (c.op === 'resume' && paused && pool.busy.length > 0) {
 			throw new Error(
 				`resume: ${pool.busy.length} job(s) still run at ${now} ms, and a pausing worker cannot resume`,

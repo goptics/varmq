@@ -14,8 +14,8 @@
 import { eases, svg, type Timeline } from 'animejs';
 import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
-import type { MapNodes } from './render.ts';
-import { CONNS, LANE, PIECES, REGIONS, RINGS, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
+import { END_FADE, type MapNodes } from './render.ts';
+import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
 import {
 	Score,
 	clamp01,
@@ -54,7 +54,6 @@ const LAGS = [0, 45, 90]; // a job and its two trails
 const IN_RING = 0.5; // a job's size in its ring
 const CLEAR = 44; // a copy has left the store's mouth, for the next one, once it is two squares away
 const NEAR = 16; // a landing square this close to its slot is all but in it: from then on it must not touch
-const RING_R = 11; // render.ts draws goroutine rings this size
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
 
@@ -581,7 +580,7 @@ class Choreo {
 		const at = starts();
 		this.score.tween(this.nodes.world, { opacity: 1 }, 0, 450, E.linear);
 		for (const c of CHAPTERS) this.chapter(c, at[c.n - 1]);
-		this.score.tween(this.nodes.world, { opacity: 0 }, TOTAL - 450, 450, E.out);
+		this.score.tween(this.nodes.world, { opacity: 0 }, TOTAL - END_FADE.duration, END_FADE.duration, E.out);
 		return this.score.build(() => this.nodes.setCamera(this.cam));
 	}
 
