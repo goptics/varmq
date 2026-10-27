@@ -9,8 +9,13 @@ import (
 func main() {
 	topic := varmq.NewTopic[int]()
 
-	email := varmq.NewWorker(func(j varmq.Job[int]) { fmt.Println("email for order", j.Data()) })
-	stock := varmq.NewWorker(func(j varmq.Job[int]) { fmt.Println("stock for order", j.Data()) }, 4)
+	email := varmq.NewWorker(func(j varmq.Job[int]) {
+		fmt.Println("email for order", j.Data())
+	})
+
+	stock := varmq.NewWorker(func(j varmq.Job[int]) {
+		fmt.Println("stock for order", j.Data())
+	}, 4)
 
 	email.WithTopic(topic)
 	stock.WithTopic(topic)
