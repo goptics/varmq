@@ -94,12 +94,18 @@ varmq-map {
 	--vm-button-edge: rgba(71, 85, 105, 0.3);
 }
 
+/* The map, world and grid, fades into the page at the square's edges, so a piece the edge cuts has no hard edge.
+   --vm-feather is 16 world units at the camera's zoom (render.ts). The caption band and the button are not masked. */
 varmq-map .vm-svg {
 	position: absolute;
 	inset: 0;
 	display: block;
 	width: 100%;
 	height: 100%;
+	mask-image:
+		linear-gradient(to right, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent),
+		linear-gradient(to bottom, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent);
+	mask-composite: intersect;
 }
 
 /* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */

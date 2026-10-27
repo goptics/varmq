@@ -78,6 +78,7 @@ type Ring = ReturnType<MapNodes['ring']>;
 type Attrs = Record<string, string | number>;
 
 const NS = 'http://www.w3.org/2000/svg';
+const FEATHER = 16; // world units, within the 20 that `frame` (scene.ts) leaves around a chapter
 const SLOTS = 5; // a lane's slots (LANE in scene.ts)
 const LABEL_GAP = 6; // between a label and the piece it names (`Piece` in scene.ts)
 const DESCENT = 3; // from the bottom of a 14-unit line up to its baseline
@@ -363,6 +364,9 @@ export function renderMap(host: HTMLElement): MapNodes {
 			const transform = `translate(${dx} ${dy}) scale(${s})`;
 			world.setAttribute('transform', transform);
 			dots.setAttribute('patternTransform', transform);
+			// The map fades into the page FEATHER world units deep at the square's edges (map.css): inside the margin
+			// every chapter's frame leaves, so only what the edge cuts fades.
+			if (s !== zoom) svg.style.setProperty('--vm-feather', `${(FEATHER * s * 100) / VIEW.w}%`);
 			zoom = s;
 			legible();
 		},
