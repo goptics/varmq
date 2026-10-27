@@ -1,6 +1,6 @@
 ---
 title: How it works
-description: The event loop, the goroutine pool and batched dispatch behind a varmq worker, with animated diagrams.
+description: The event loop, the goroutine pool, topic fan-out and batched dispatch behind a varmq worker, with animated diagrams.
 sidebar:
   order: 4
 ---
@@ -24,6 +24,16 @@ The concurrency limit is an upper bound, not a pool size. The pool starts with o
 Below, six jobs are added to a worker with concurrency 4. Four go out back to back, the other two wait in the queue, and the pool shrinks as it drains.
 
 ![A varmq worker pool with concurrency 4: six Add calls produce one wake-up, the event loop dispatches four jobs to four goroutines, two jobs wait, and the pool shrinks back to one idle goroutine](../../../../../assets/diagrams/varmq-worker-pool.svg)
+
+## Topics
+
+A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) feeds the same event loop as a queue, but from a shared log instead of a queue of jobs. [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) appends the payload to the log once, then signals the event loop of every subscribed worker, the same one-slot signal `Add` sends. Each subscription reads the log through its own cursor, so each worker's loop makes its own job from the payload and hands it to its own pool. The workers run independently: a slow or paused one does not hold up `Publish` or the others.
+
+A payload stays in the log until every subscription has read it. Below, two workers subscribe to one topic, and the slower one keeps a chunk of the log alive until its cursor moves past it.
+
+![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](../../../../../assets/diagrams/varmq-topic.svg)
+
+[Topics](/guides/topics/) covers subscribing, capacity and priority.
 
 ## Batched dispatch
 
