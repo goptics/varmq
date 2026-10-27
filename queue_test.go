@@ -968,6 +968,30 @@ func TestPurgeClosesJobsAddedDuringPurge(t *testing.T) {
 	}
 }
 
+// Storage without IPurgeValuesQueue takes the Values-then-Purge path, which
+// still closes every job it removes.
+func TestPurgeWithoutPurgeValuesClosesJobs(t *testing.T) {
+	// struct{ IQueue } hides PurgeValues, as custom storage would.
+	storage := struct{ IQueue }{queues.NewQueue[any]()}
+	_, ok := any(storage).(IPurgeValuesQueue)
+	require.False(t, ok, "storage must not implement IPurgeValuesQueue")
+
+	q := NewWorker(func(Job[int]) {}, WithAutoRun(false)).WithQueue(storage)
+	jobs := make([]EnqueuedJob, 3)
+	for i := range jobs {
+		j, ok := q.Add(i)
+		require.True(t, ok)
+		jobs[i] = j
+	}
+
+	q.Purge()
+
+	require.Zero(t, q.Len())
+	for i, j := range jobs {
+		require.True(t, j.IsClosed(), "job %d was not closed by Purge", i)
+	}
+}
+
 // With a worker dequeuing while Purge removes, each job either runs once or
 // is closed unrun, and every Wait returns; with ids too, as Purge frees them.
 func TestPurgeWithRunningWorkerRunsOrClosesEachJob(t *testing.T) {
