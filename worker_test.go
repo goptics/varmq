@@ -1491,6 +1491,23 @@ func TestWorkerRegistration(t *testing.T) {
 		assert.False(t, loaded, "worker should be removed from registry after retention")
 	})
 
+	// #132: the stopped worker's timer must not evict a newer one with its name.
+	t.Run("Retention timer keeps a newer worker with the same name", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		old := newWorker(func(j iJob[string]) {}, WithName("taken"), WithStoppedRetention(10*time.Millisecond))
+		old.StopAndWait()
+
+		newer := newWorker(func(j iJob[string]) {}, WithName("taken"))
+		defer newer.Stop()
+
+		time.Sleep(50 * time.Millisecond)
+		v, loaded := WorkerRegistry.Load("taken")
+		require.True(t, loaded, "newer worker should stay registered after the old worker's retention")
+		assert.Same(t, newer, v, "registry should hold the newer worker")
+	})
+
 	t.Run("Zero retention keeps worker in registry", func(t *testing.T) {
 		WorkerRegistry.Clear()
 		defer WorkerRegistry.Clear()
