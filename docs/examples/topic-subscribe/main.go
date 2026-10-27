@@ -15,7 +15,7 @@ func main() {
 
 	stock := varmq.NewWorker(func(j varmq.Job[int]) {
 		fmt.Println("stock for order", j.Data())
-	}, 4)
+	}, 2)
 
 	email.WithTopic(topic)
 	stock.WithTopic(topic)
