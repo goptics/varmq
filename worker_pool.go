@@ -50,7 +50,8 @@ func (w *worker[T, JobType]) numMinIdleWorkers() int {
 	percentage := w.Configs.minIdleWorkerRatio
 	concurrency := w.concurrency.Load()
 
-	return int(max((concurrency*uint32(percentage))/100, 1))
+	// In uint64: the product passes MaxUint32 once concurrency is in the tens of millions.
+	return int(max(uint64(concurrency)*uint64(percentage)/100, 1))
 }
 
 func (w *worker[T, JobType]) goRemoveIdleWorkers() {
