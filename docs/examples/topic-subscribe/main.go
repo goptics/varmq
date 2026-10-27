@@ -20,8 +20,9 @@ func main() {
 	email.WithTopic(topic)
 	stock.WithTopic(topic)
 
-	topic.Publish(1) // both workers get their own job for this order
-	topic.Publish(2)
+	for i := range 4 {
+		topic.Publish(i) // both workers get their own job for this order
+	}
 
 	email.WaitUntilIdle()
 	stock.WaitUntilIdle()
