@@ -5,6 +5,9 @@ import { CONNS, LABEL_PX, PIECES, REGIONS, VIEW, frame, labelOpacity, slotX, slo
 const inside = (a, b) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const view = c => ({ x: c.x - VIEW.w / 2 / c.s, y: c.y - VIEW.mapH / 2 / c.s, w: VIEW.w / c.s, h: VIEW.mapH / c.s });
+// The narrowest the square is shown, in CSS px: at 67rem, where the hero goes from halves (HeroMap.astro) to Starlight's
+// 7fr 4fr. It is 372 px at 50rem and 381 px from 72rem on.
+const MIN_SQUARE = 366;
 
 describe('scene', () => {
 	it('pads every lane 10 on both sides', () => {
@@ -23,7 +26,8 @@ describe('scene', () => {
 		for (let n = 1; n <= 9; n++) {
 			const c = frame(REGIONS[n - 1]);
 			assert.ok(inside(REGIONS[n - 1], view(c)), `chapter ${n}`);
-			assert.ok(LABEL_PX * c.s >= 7, `chapter ${n} labels at ${LABEL_PX * c.s}px`);
+			const px = (LABEL_PX * c.s * MIN_SQUARE) / VIEW.w;
+		assert.equal(labelOpacity((c.s * MIN_SQUARE) / VIEW.w), 1, `chapter ${n} labels at ${px}px`);
 		}
 		assert.ok(frame(REGIONS[8]).s >= 0.6, `chapter 9 scale ${frame(REGIONS[8]).s}`);
 		for (const p of PIECES) assert.ok(inside(p.box, view(frame(REGIONS[9]))), p.id);
