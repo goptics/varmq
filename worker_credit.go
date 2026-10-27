@@ -37,11 +37,7 @@ func (w *worker[T, JobType]) dispatchCredit(cm *creditManager[JobType]) {
 	credit := min(free, maxCredit)
 
 	cm.unspent.Store(int64(credit)) // first: NumPending subtracts it from the reserve below
-	w.curProcessing.Add(uint32(credit))
-	if w.status.Load() == idle {
-		w.status.CompareAndSwap(idle, running)
-	}
-	if !w.IsActive() {
+	if !w.reserve(uint32(credit)) {
 		cm.unspent.Store(0)
 		w.finishJobs(uint32(credit))
 		return
