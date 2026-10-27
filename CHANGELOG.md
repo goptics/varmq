@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Purge left jobs added during it open** (#130): `Purge` read the queue with `Values`, then purged it, so a job added in between was removed but never closed and its `Wait` never returned. In-memory queues now remove and return their items in one step, and `Purge` closes exactly those. Custom storage gets the same by implementing the new optional `IPurgeValuesQueue`.
+
+## [v1.10.0] (2026-10-25)
+
 ### ✨ New Features
 
 - Persistent and distributed queues add a job with an id through the storage's `EnqueueOnce` (`IDedupQueue`, `IDedupPriorityQueue`), so a retried `Add` stores it once (#123).

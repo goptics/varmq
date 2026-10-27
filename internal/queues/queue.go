@@ -151,25 +151,40 @@ func (q *Queue[T]) release(v T) {
 
 // Values returns a copy of the items in the queue, front first.
 func (q *Queue[T]) Values() []any {
-	vals := q.cur.Values()
+	return anys(q.cur.Values())
+}
+
+// Purge removes every item and frees their ids. It exists for IBaseQueue,
+// whose Purge returns nothing; varmq purges through PurgeValues
+// (IPurgeValuesQueue).
+func (q *Queue[T]) Purge() {
+	q.PurgeValues()
+}
+
+// PurgeValues removes every item, frees their ids and returns the removed
+// items, front first. It is one step, so an Enqueue racing it is either
+// returned or stays queued, never removed unseen. Holding idMu keeps an
+// EnqueueOnce from landing between the purge and the id reset.
+// ponytail: a Dequeue that took an item before Purge and frees its id after a
+// re-add of that id frees the new one, letting one repeat in; no id leaks.
+func (q *Queue[T]) PurgeValues() []any {
+	q.idMu.Lock()
+	defer q.idMu.Unlock()
+
+	vals := q.cur.Purge()
+	q.ids, q.idsPeak = nil, 0
+
+	return anys(vals)
+}
+
+// anys copies vals into the []any that IBaseQueue hands out.
+func anys[T any](vals []T) []any {
 	out := make([]any, len(vals))
 	for i, v := range vals {
 		out[i] = v
 	}
 
 	return out
-}
-
-// Purge removes every item and frees their ids. Holding idMu keeps an
-// EnqueueOnce from landing between the two.
-// ponytail: a Dequeue that took an item before Purge and frees its id after a
-// re-add of that id frees the new one, letting one repeat in; no id leaks.
-func (q *Queue[T]) Purge() {
-	q.idMu.Lock()
-	defer q.idMu.Unlock()
-
-	q.cur.Purge()
-	q.ids, q.idsPeak = nil, 0
 }
 
 // Close makes every later Enqueue return false. Stored items can still be
