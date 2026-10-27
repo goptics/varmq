@@ -5,6 +5,7 @@
 ### 🐛 Bug Fixes
 
 - **Data race in `AddAll` on result and error workers** (#134): every job of a group stored its result in one shared field as well as sending it, from as many goroutines as the worker runs. Nothing read that field outside tests, so it is gone; results still arrive on `Results()` and `Errs()`.
+- **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
 
 ## [v1.10.0] (2026-10-25)
 
