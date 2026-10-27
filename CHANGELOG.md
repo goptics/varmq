@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Data race in `AddAll` on result and error workers** (#134): every job of a group stored its result in one shared field as well as sending it, from as many goroutines as the worker runs. Nothing read that field outside tests, so it is gone; results still arrive on `Results()` and `Errs()`.
+
+## [v1.10.0] (2026-10-25)
+
 ### ✨ New Features
 
 - Persistent and distributed queues add a job with an id through the storage's `EnqueueOnce` (`IDedupQueue`, `IDedupPriorityQueue`), so a retried `Add` stores it once (#123).
