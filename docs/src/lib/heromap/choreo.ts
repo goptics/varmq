@@ -342,15 +342,18 @@ const GAP: Record<string, number> = {
 /** A rail inside a card, halfway between its rings and its bottom edge. */
 const rail = (worker: Worker) => (RINGS[worker][0].y + RING_R + box(worker).y + box(worker).h) / 2;
 
+/** Whether a worker's ring i is shown. */
+type Shown = (i: number) => boolean;
+
 /**
- * Into a card to one of its rings, from where its line meets the card's edge. A job never crosses another ring on
- * its way: one that would goes along a rail below the rings, and up into its own.
+ * Into a card to one of its rings, from where its line meets the card's edge. A job never crosses another ring
+ * shown on its way: one that would goes along a rail below the rings, and up into its own.
  */
-function intoCard(worker: Worker, i: number, edge: Pt): Pt[] {
+function intoCard(worker: Worker, i: number, edge: Pt, shown: Shown): Pt[] {
 	const ring = RINGS[worker][i];
 	const card = box(worker);
 	if (edge.y > card.y + card.h - 4) return [pt(edge.x, ring.y), ring]; // up from below, between the rings
-	const between = RINGS[worker].some((r) => r.x < ring.x - 1 && r.x > edge.x);
+	const between = RINGS[worker].some((r, j) => shown(j) && r.x < ring.x - 1 && r.x > edge.x);
 	if (!between) return [ring];
 	const side = (card.x + Math.min(...RINGS[worker].map((r) => r.x)) - RING_R) / 2;
 	return [pt(side, edge.y), pt(side, rail(worker)), pt(ring.x, rail(worker)), ring];
@@ -359,25 +362,25 @@ function intoCard(worker: Worker, i: number, edge: Pt): Pt[] {
 const last = (pts: Pt[]) => pts[pts.length - 1];
 
 /** A pool job from its lane to its ring: through the event loop for the core. */
-function toRing(worker: Worker, source: string, i: number): Pt[] {
+function toRing(worker: Worker, source: string, i: number, shown: Shown): Pt[] {
 	if (worker === 'core') {
 		const lead = line(`${source}-to-loop`);
 		const out = line('loop-to-core');
-		return [...lead, LOOP, ...out, ...intoCard('core', i, last(out))];
+		return [...lead, LOOP, ...out, ...intoCard('core', i, last(out), shown)];
 	}
 	const lead = line(worker === 'second' ? 'topic-to-second' : 'r-queue-to-result');
-	return [...lead, ...intoCard(worker, i, last(lead))];
+	return [...lead, ...intoCard(worker, i, last(lead), shown)];
 }
 
 /**
  * A store job's copy from where its queue's line leaves the store to its consumer's ring. The line to each Redis
  * consumer turns up or down at a bend: a copy for the far ring leaves it there, for the rail below the rings.
  */
-function toStoreRing(worker: Worker, i: number): Pt[] {
+function toStoreRing(worker: Worker, i: number, shown: Shown): Pt[] {
 	const toB = line('r-queue2-to-redis-b');
 	const toC = [toB[0], ...line('r-queue2-to-redis-c')]; // C's line branches off B's
 	const lead = worker === 'sqlite' ? line('s-queue-to-sqlite') : worker === 'redis-b' ? toB : toC;
-	const into = intoCard(worker, i, last(lead));
+	const into = intoCard(worker, i, last(lead), shown);
 	if (worker === 'sqlite' || into.length === 1) return [...lead, ...into];
 	const [mouth, bend] = lead;
 	const ring = RINGS[worker][i];
@@ -441,6 +444,8 @@ class Choreo {
 	readonly cam: Camera;
 	/** Rings shown, as `<worker>:<place>`. */
 	private readonly shown = new Set<string>();
+	/** Rings on their way out, by when they are gone. */
+	private readonly leaving = new Map<string, number>();
 	/** The squares of the chapter being written. */
 	private bodies!: Bodies;
 
@@ -635,6 +640,11 @@ class Choreo {
 		}
 	}
 
+	/** Which of a worker's rings are on screen at `at`: shown, or not yet gone. */
+	private showing(worker: string, at: number): Shown {
+		return (i) => this.shown.has(`${worker}:${i}`) || (this.leaving.get(`${worker}:${i}`) ?? 0) > at;
+	}
+
 	/** Pops a goroutine's ring in, unless it is shown already. */
 	private spawn(worker: string, i: number, at: number) {
 		const key = `${worker}:${i}`;
@@ -693,7 +703,7 @@ class Choreo {
 		const durations = (pts: Pt[]) => {
 			if (exact) return [flight];
 			const d = Math.min(flight, Math.max(QUICK, lengthOf(pts) / SPEED));
-			return [d, d - 100, d - 200, d - 300].filter((x) => x >= QUICK);
+			return [...new Set([d, d - 100, d - 200, d - 300, QUICK].filter((x) => x >= QUICK))];
 		};
 		const { k, pts, d } = l.landing(sq, at, route, durations);
 		const start = at - d;
@@ -783,7 +793,7 @@ class Choreo {
 	private dispatch(worker: Worker, e: Dispatch, at: number, end: number, sq: Square, from: Lane) {
 		const { score } = this;
 		const here = score.pos(sq.els[0], at);
-		const [exit, ...rest] = toRing(worker, e.source, e.ring);
+		const [exit, ...rest] = toRing(worker, e.source, e.ring, this.showing(worker, at));
 		const route = [...from.out(here, exit, at), ...rest];
 		const length = lengthOf([here, ...route]);
 		const flight = Math.min(FLIGHT, end - at - 300, Math.max(350, length / SPEED));
@@ -831,6 +841,7 @@ class Choreo {
 
 	private exit(worker: string, i: number, at: number) {
 		this.shown.delete(`${worker}:${i}`);
+		this.leaving.set(`${worker}:${i}`, at + 450);
 		this.score.tween(this.nodes.ring(worker, i).ring, { scale: 0 }, at, 450, E.exit);
 	}
 
@@ -907,7 +918,7 @@ class Choreo {
 						score.tween(this.fill(rec), { fillOpacity: 0 }, at + 150, 350, E.fade);
 						// A copy comes out where the queue's line leaves the store, one copy at a time, and flies to its ring.
 						const copy = copies.get(e.job)!.els;
-						const route = toStoreRing(consumer(e.consumer), e.ring);
+						const route = toStoreRing(consumer(e.consumer), e.ring, this.showing(consumer(e.consumer), at));
 						const out = Math.max(at, mouth);
 						for (const el of copy) {
 							score.place(el, route[0], out);
