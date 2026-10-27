@@ -39,9 +39,15 @@ describe('chapters', () => {
 	it('the core worker starts each chapter where the last one left it', () => {
 		let last;
 		for (const c of CHAPTERS) for (const p of c.parts) if (p.kind === 'pool' && p.worker === 'core') {
-			if (last) assert.deepEqual({ limit: p.plan.limit, idle: p.plan.idle }, last, `chapter ${c.n}`);
+			if (last) assert.deepEqual({ limit: p.plan.limit, idle: p.plan.idle, turn: p.plan.turn }, last, `chapter ${c.n}`);
 			last = endState(p.plan, p.events);
 		}
+		// Round robin goes on from the source after the last one served, as varmq keeps its index for the worker's life.
+		// It starts at the queue in chapter 4, where a second source first binds; chapter 9 takes only from the queue,
+		// so chapter 10 looks at the priority queue first and finds the topic's copy before the queue's jobs.
+		assert.equal(part(4, 'pool', 'core').plan.turn, 0);
+		assert.equal(part(10, 'pool', 'core').plan.turn, 1);
+		assert.deepEqual(dispatches(part(10, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
 	});
 	it('chapter 4 runs the lowest number first', () => {
 		assert.deepEqual(dispatches(part(4, 'pool', 'core')).map(e => e.job), ['p1', 'p2', 'p3', 'p5', 'p8']);

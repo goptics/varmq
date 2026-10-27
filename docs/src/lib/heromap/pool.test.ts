@@ -5,7 +5,7 @@ import { endState, poolStates, simulatePool, type PoolPlan } from './pool.ts';
 const pace = { wake: 400, gap: 450, after: 300 };
 const burst = (n: number, work = 2000, source = 'q') =>
 	Array.from({ length: n }, (_, i) => ({ id: `j${i}`, source, at: 100 + 100 * i, work }));
-const plan = (p: Partial<PoolPlan>): PoolPlan => ({ ...pace, limit: 3, idle: [0], sources: [{ id: 'q' }], jobs: [], ...p });
+const plan = (p: Partial<PoolPlan>): PoolPlan => ({ ...pace, limit: 3, idle: [0], turn: 0, sources: [{ id: 'q' }], jobs: [], ...p });
 const dispatches = ev => ev.filter(e => e.type === 'dispatch');
 
 describe('simulatePool', () => {
@@ -179,6 +179,6 @@ describe('poolStates and endState', () => {
 		const tuned = plan({ controls: [{ at: 50, op: 'tune', to: 5 }], jobs: burst(5, 4000) });
 		assert.equal(endState(tuned, simulatePool(tuned)).limit, 5);
 		const quiet = plan({ limit: 2, idle: [1, 0] });
-		assert.deepEqual(endState(quiet, simulatePool(quiet)), { limit: 2, idle: [1, 0] });
+		assert.deepEqual(endState(quiet, simulatePool(quiet)), { limit: 2, idle: [1, 0], turn: 0 });
 	});
 });

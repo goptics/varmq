@@ -26,6 +26,9 @@ export type ControlSpec =
 export interface PoolPlan {
 	limit: number;
 	idle: number[]; // goroutine rings idle at t = 0, in the order they went idle: the last gets the next job
+	// Round robin: the index of the source to look at first, the one after the last served. varmq keeps it on the
+	// worker for its whole life (`roundRobinIndex`), and binding a source never resets it.
+	turn: number;
 	sources: SourceSpec[]; // in bind order
 	strategy?: 'roundrobin'; // needed with several sources: varmq defaults to Priority, which is not modelled
 	jobs: JobSpec[];
@@ -67,6 +70,7 @@ interface Pool {
 	limit: number;
 	busy: number[];
 	idle: number[];
+	turn: number;
 	waiting: Record<string, string[]>;
 }
 
@@ -89,6 +93,7 @@ function track(plan: PoolPlan) {
 		limit: plan.limit,
 		busy: [],
 		idle: [...plan.idle],
+		turn: plan.turn,
 		waiting: Object.fromEntries(plan.sources.map((s) => [s.id, []])),
 	};
 
@@ -106,6 +111,8 @@ function track(plan: PoolPlan) {
 				pool.waiting[e.source] = pool.waiting[e.source].filter((id) => id !== e.job);
 				pool.idle = pool.idle.filter((r) => r !== e.ring);
 				pool.busy = [...pool.busy, e.ring].sort((a, b) => a - b);
+				// The turn moves past the source served (`GetRoundRobinItem`).
+				pool.turn = (plan.sources.findIndex((s) => s.id === e.source) + 1) % plan.sources.length;
 				break;
 			case 'done':
 				pool.busy = pool.busy.filter((r) => r !== e.ring);
@@ -140,7 +147,6 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 	let paused = false;
 	let stopped = false;
 	let stepping = false; // a dispatch run is under way, with its next hand-out already timed
-	let turn = 0; // round robin: the index of the source after the one served last
 
 	const emit = (e: PoolEvent) => {
 		events.push(e);
@@ -157,11 +163,10 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 
 	// Hands the next source's head to the goroutine that went idle last, or to a new one on the lowest ring.
 	const dispatch = (now: number) => {
-		// One source is read as it is. Several are read round robin in bind order, skipping the empty ones,
-		// and the turn moves past the one served (`GetRoundRobinItem`).
-		const from = [...plan.sources.slice(turn), ...plan.sources.slice(0, turn)];
+		// One source is read as it is. Several are read round robin in bind order from the turn, skipping the
+		// empty ones; the dispatch moves the turn past the one served (see `apply`).
+		const from = [...plan.sources.slice(pool.turn), ...plan.sources.slice(0, pool.turn)];
 		const source = from.find((s) => pool.waiting[s.id].length > 0)!;
-		turn = (plan.sources.indexOf(source) + 1) % plan.sources.length;
 		const [job] = pool.waiting[source.id];
 		const waiting = pending() - 1;
 		// varmq hands a lone worker every waiting job at once. Only a single plain queue or a topic does, but
@@ -278,9 +283,10 @@ export function poolStates(plan: PoolPlan, events: PoolEvent[]): PoolState[] {
 	});
 }
 
-export function endState(plan: PoolPlan, events: PoolEvent[]): { limit: number; idle: number[] } {
+/** What the worker's next plan starts with: its limit, its idle goroutines and its round-robin turn. */
+export function endState(plan: PoolPlan, events: PoolEvent[]): Pick<PoolPlan, 'limit' | 'idle' | 'turn'> {
 	const { pool, apply } = track(plan);
 	for (const e of events) apply(e);
 
-	return { limit: pool.limit, idle: [...pool.idle] };
+	return { limit: pool.limit, idle: [...pool.idle], turn: pool.turn };
 }

@@ -80,49 +80,58 @@ const stored = (specs: Spec[]): StoreJob[] => specs.map(([id, at, work]) => ({ i
 const copies = (values: { id: string; at: number }[], worker: Worker, work: number[]): JobSpec[] =>
 	values.map((v, i) => ({ id: `${v.id}-${worker}`, source: TOPIC.id, at: v.at, work: work[i] }));
 
-// Each worker is one worker for the whole loop: a plan starts with the limit and the idle goroutines (in the
-// pool's order) that its worker's last plan left. All three start as a worker with concurrency 1 and one
-// idle goroutine; the core is tuned up in chapters 2 and 9, and the other two keep their one ring.
-const carried: Record<Worker, { limit: number; idle: number[] }> = {
-	core: { limit: 1, idle: [0] },
-	result: { limit: 1, idle: [0] },
-	second: { limit: 1, idle: [0] },
-};
+/**
+ * What each worker's last plan left, for its next: each is one worker for the whole loop. A pool carries its limit,
+ * its idle goroutines (in the pool's order) and its round-robin turn; the three start as workers with concurrency 1
+ * and one idle goroutine, the core is tuned up in chapters 2 and 9, and the other two keep their one ring. A store's
+ * worker carries its idle goroutines, one after `Start()` at first.
+ */
+interface Carry {
+	pools: Record<Worker, Pick<PoolPlan, 'limit' | 'idle' | 'turn'>>;
+	stores: Record<string, number[]>;
+}
 
-function pool(worker: Worker, rest: Omit<PoolPlan, 'limit' | 'idle'>): PoolPart {
-	const plan = { ...carried[worker], ...rest };
+const start = (): Carry => ({
+	pools: {
+		core: { limit: 1, idle: [0], turn: 0 },
+		result: { limit: 1, idle: [0], turn: 0 },
+		second: { limit: 1, idle: [0], turn: 0 },
+	},
+	stores: { sqlite: [0], b: [0], c: [0] },
+});
+
+// A part's plan starts where its worker's last one ended, and the part leaves in `carry` where this one ends.
+function pool(carry: Carry, worker: Worker, rest: Omit<PoolPlan, 'limit' | 'idle' | 'turn'>): PoolPart {
+	const plan = { ...carry.pools[worker], ...rest };
 	const events = simulatePool(plan);
-	carried[worker] = endState(plan, events);
+	carry.pools[worker] = endState(plan, events);
 	return { kind: 'pool', worker, plan, events };
 }
 
-// A store's workers carry their idle rings the same way: one after `Start()`, and then what their last chapter left.
-const crews: Record<string, number[]> = { sqlite: [0], b: [0], c: [0] };
-
-function sqlite(rest: Omit<SqlitePlan, 'idle'>): Part {
-	const plan = { ...rest, idle: crews.sqlite };
+function sqlite(carry: Carry, rest: Omit<SqlitePlan, 'idle'>): Part {
+	const plan = { ...rest, idle: carry.stores.sqlite };
 	const events = simulateSqlite(plan);
-	Object.assign(crews, storeEnd(plan, events));
+	Object.assign(carry.stores, storeEnd(plan, events));
 	return { kind: 'sqlite', plan, events };
 }
 
-function redis(rest: Omit<RedisPlan, 'consumers'> & { consumers: Omit<Consumer, 'idle'>[] }): Part {
-	const plan = { ...rest, consumers: rest.consumers.map((c) => ({ ...c, idle: crews[c.id] })) };
+function redis(carry: Carry, rest: Omit<RedisPlan, 'consumers'> & { consumers: Omit<Consumer, 'idle'>[] }): Part {
+	const plan = { ...rest, consumers: rest.consumers.map((c) => ({ ...c, idle: carry.stores[c.id] })) };
 	const events = simulateRedis(plan);
-	Object.assign(crews, storeEnd(plan, events));
+	Object.assign(carry.stores, storeEnd(plan, events));
 	return { kind: 'redis', plan, events };
 }
 
-// In order. Each is written as a function so that a plan the simulations refuse names its chapter.
-const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
+// In order, from one carry. Each is written as a function so that a plan the simulations refuse names its chapter.
+const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 1. Concurrency 1: Add() returns at once, and the jobs trickle in, so at most one waits while the goroutine
 	// is busy. A burst would be handed over as one batch.
-	() => ({
+	(carry) => ({
 		title: 'One worker',
 		duration: 8000,
 		captions: [{ at: 300, until: 7400, text: '*Add()* puts jobs in a queue' }],
 		parts: [
-			pool('core', {
+			pool(carry, 'core', {
 				...PACE,
 				sources: [QUEUE],
 				strategy: 'roundrobin',
@@ -136,7 +145,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 2. TunePool(3), then a burst: the pool grows to 3 while jobs wait, and shrinks to one idle goroutine.
-	() => ({
+	(carry) => ({
 		title: 'The pool',
 		duration: 9000,
 		captions: [
@@ -145,7 +154,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 		],
 		chips: [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }],
 		parts: [
-			pool('core', {
+			pool(carry, 'core', {
 				...PACE,
 				sources: [QUEUE],
 				strategy: 'roundrobin',
@@ -162,13 +171,13 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 3. A result worker of its own, beside the core: the core has to stay a plain worker to take a topic.
-	() => ({
+	(carry) => ({
 		title: 'Results and errors',
 		duration: 6000,
 		captions: [{ at: 300, until: 5400, text: 'Jobs hand back a *value* or an *error*' }],
 		parts: [
 			{
-				...pool('result', {
+				...pool(carry, 'result', {
 					...PACE,
 					sources: [R_QUEUE],
 					jobs: queued(R_QUEUE.id, [
@@ -183,12 +192,12 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 
 	// 4. All five land before the event loop looks, so it takes them lowest number first. Only this lane has
 	// jobs, so nothing is said about how the worker picks between its queues.
-	() => ({
+	(carry) => ({
 		title: 'Priority',
 		duration: 7000,
 		captions: [{ at: 300, until: 6400, text: 'The *lowest* number runs first' }],
 		parts: [
-			pool('core', {
+			pool(carry, 'core', {
 				...LATE,
 				sources: [QUEUE, PRIO],
 				strategy: 'roundrobin',
@@ -204,12 +213,12 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 5. Jobs wait in two of the three queues, and round robin takes from them in turn, skipping the empty one.
-	() => ({
+	(carry) => ({
 		title: 'Many queues, one worker',
 		duration: 7000,
 		captions: [{ at: 300, until: 6400, text: '*RoundRobin* picks the next queue' }],
 		parts: [
-			pool('core', {
+			pool(carry, 'core', {
 				...LATE,
 				sources: [QUEUE, PRIO, QUEUE_C],
 				strategy: 'roundrobin',
@@ -229,7 +238,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 
 	// 6. Each value is published once, and both subscribers make their own job from it. The second worker runs
 	// at concurrency 1, so the second value comes once it has taken the first.
-	() => {
+	(carry) => {
 		const published = [
 			{ id: 't0', at: 1900 },
 			{ id: 't1', at: 2700 },
@@ -240,13 +249,13 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			captions: [{ at: 300, until: 5400, text: '*Publish* once, every subscriber gets a copy' }],
 			published,
 			parts: [
-				pool('core', {
+				pool(carry, 'core', {
 					...PACE,
 					sources: BOUND,
 					strategy: 'roundrobin',
 					jobs: copies(published, 'core', [2200, 2100]),
 				}),
-				pool('second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1300, 1300]) }),
+				pool(carry, 'second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1300, 1300]) }),
 			],
 		};
 	},
@@ -254,7 +263,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
 	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
 	// down 2600 ms: its stage is gone 1350 ms after the crash, so the store holds the frame alone for over a second.
-	() => ({
+	(carry) => ({
 		title: 'SQLite',
 		duration: 17000,
 		captions: [
@@ -266,7 +275,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			{ at: 12200, until: 16500, text: 'and run again. Nothing is *lost*' },
 		],
 		parts: [
-			sqlite({
+			sqlite(carry, {
 				...SQLITE_TRAVEL,
 				limit: 2,
 				jobs: stored([
@@ -286,7 +295,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 
 	// 8. The stores' Redis fixture, 1500 ms later: program A adds six jobs, B and C take them in turn, and the
 	// last two wait in the queue until a goroutine's ack lands.
-	() => ({
+	(carry) => ({
 		title: 'Redis',
 		duration: 12000,
 		captions: [
@@ -296,7 +305,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			{ at: 6200, until: 11400, text: 'and is *acked* back to Redis' },
 		],
 		parts: [
-			redis({
+			redis(carry, {
 				...REDIS_TRAVEL,
 				consumers: [
 					{ id: 'b', limit: 2 },
@@ -316,12 +325,12 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 
 	// 9. Pause while two jobs run: they finish, and the jobs added meanwhile wait. Resume once nothing runs (a
 	// pausing worker refuses it), then TunePool(5) lets the two still waiting start beside the first three.
-	() => ({
+	(carry) => ({
 		title: 'Control',
 		duration: 9000,
 		captions: [{ at: 300, until: 8400, text: '*Pause*, *resume* and *resize* while it runs' }],
 		parts: [
-			pool('core', {
+			pool(carry, 'core', {
 				...PACE,
 				sources: BOUND,
 				strategy: 'roundrobin',
@@ -345,7 +354,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
 	// and then its goroutines go. Nothing waits in its queue at the stop.
-	() => {
+	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
@@ -356,7 +365,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 			],
 			published,
 			parts: [
-				pool('core', {
+				pool(carry, 'core', {
 					...PACE,
 					sources: BOUND,
 					strategy: 'roundrobin',
@@ -369,9 +378,9 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 						...copies(published, 'core', [2400]),
 					],
 				}),
-				pool('second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1500]) }),
+				pool(carry, 'second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1500]) }),
 				{
-					...pool('result', {
+					...pool(carry, 'result', {
 						...PACE,
 						sources: [R_QUEUE],
 						jobs: queued(R_QUEUE.id, [
@@ -381,7 +390,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 					}),
 					outcomes: { zx0: 'value', zx1: 'error' },
 				},
-				sqlite({
+				sqlite(carry, {
 					...SQLITE_TRAVEL,
 					limit: 2,
 					jobs: stored([
@@ -390,7 +399,7 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 					]),
 					firstClaim: 2800,
 				}),
-				redis({
+				redis(carry, {
 					...REDIS_TRAVEL,
 					consumers: [
 						{ id: 'b', limit: 2 },
@@ -408,13 +417,19 @@ const SCRIPT: (() => Omit<Chapter, 'n'>)[] = [
 	},
 ];
 
-export const CHAPTERS: Chapter[] = SCRIPT.map((write, i) => {
-	try {
-		return { n: i + 1, ...write() };
-	} catch (e) {
-		throw new Error(`chapter ${i + 1}: ${(e as Error).message}`, { cause: e });
-	}
-});
+/** The chapters the script writes, each from the carry the ones before it leave. */
+function write(script: typeof SCRIPT): Chapter[] {
+	const carry = start();
+	return script.map((chapter, i) => {
+		try {
+			return { n: i + 1, ...chapter(carry) };
+		} catch (e) {
+			throw new Error(`chapter ${i + 1}: ${(e as Error).message}`, { cause: e });
+		}
+	});
+}
+
+export const CHAPTERS: Chapter[] = write(SCRIPT);
 
 /** When each chapter starts, ms from the start of the loop. */
 export function starts(): number[] {
