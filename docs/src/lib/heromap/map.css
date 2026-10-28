@@ -9,6 +9,8 @@ varmq-map {
 	--vm-caption: #cfd8e3;
 	--vm-green: #44bf9e;
 	--vm-red: #ff6b6b;
+	--vm-sqlite: #4aa8e8;
+	--vm-redis: #ff4438;
 	--vm-glow: url(#vm-glow);
 	--vm-job: #f2b33d;
 	--vm-job-edge: #f2b33d;
@@ -56,6 +58,8 @@ varmq-map {
 	--vm-caption: #1f2937;
 	--vm-green: #0f7a5c;
 	--vm-red: #c62828;
+	--vm-sqlite: #0f80cc;
+	--vm-redis: #dc382d;
 	--vm-glow: none;
 	--vm-job: #e09b0c;
 	--vm-job-edge: #b7791f;
@@ -132,7 +136,20 @@ varmq-map .vm-edge-head {
 	stop-opacity: var(--vm-lane-head);
 }
 
-/* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. */
+/* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. A store's
+   logo, before its label, hides and shows with it. */
+varmq-map .vm-logo {
+	fill-opacity: var(--vm-label, 1);
+}
+
+varmq-map .vm-logo-sqlite {
+	fill: var(--vm-sqlite);
+}
+
+varmq-map .vm-logo-redis {
+	fill: var(--vm-redis);
+}
+
 varmq-map :is(.vm-label, .vm-text, .vm-num) {
 	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
 	font-weight: 600;

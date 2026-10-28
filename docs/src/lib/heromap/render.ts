@@ -12,7 +12,7 @@
 //   `.vm-slot`s. Text is `.vm-label` (the ACK line has one too), or `.vm-text` inside a chip. The loop also holds
 //   `.vm-pulse`, a ring over its circle, hidden.
 // - `piece('<id>@<n>')`: chapter n's transient chip in piece `<id>`'s place (`Chapter.chips`), its own element,
-//   hidden. Chapter 2's TunePool(3) is `piece('ctl-tune@2')`.
+//   hidden. Chapter 2's TunePool(5) is `piece('ctl-restart@2')`.
 // - `piece('s-prog')`, the SQLite program, also holds its crash, hidden: `.vm-flash`, a red outline over its
 //   box, and the labels `.vm-died` (PROGRAM · DIED) and `.vm-restarted` (PROGRAM · RESTARTED) after its own
 //   `.vm-label`.
@@ -95,6 +95,19 @@ const RADIUS: Record<Exclude<PieceKind, 'loop'>, number> = {
 	chip: 14,
 };
 const TONE: Record<string, string> = { 'r-value': 'vm-value', 'r-error': 'vm-error' }; // the result worker's chips
+// The stores' logos, which lead their labels: Simple Icons' glyphs (CC0), on a 24-unit grid.
+const LOGOS: Record<string, { name: string; d: string }> = {
+	's-store': {
+		name: 'sqlite',
+		d: 'M21.678.521c-1.032-.92-2.28-.55-3.513.544a8.71 8.71 0 0 0-.547.535c-2.109 2.237-4.066 6.38-4.674 9.544.237.48.422 1.093.544 1.561a13.044 13.044 0 0 1 .164.703s-.019-.071-.096-.296l-.05-.146a1.689 1.689 0 0 0-.033-.08c-.138-.32-.518-.995-.686-1.289-.143.423-.27.818-.376 1.176.484.884.778 2.4.778 2.4s-.025-.099-.147-.442c-.107-.303-.644-1.244-.772-1.464-.217.804-.304 1.346-.226 1.478.152.256.296.698.422 1.186.286 1.1.485 2.44.485 2.44l.017.224a22.41 22.41 0 0 0 .056 2.748c.095 1.146.273 2.13.5 2.657l.155-.084c-.334-1.038-.47-2.399-.41-3.967.09-2.398.642-5.29 1.661-8.304 1.723-4.55 4.113-8.201 6.3-9.945-1.993 1.8-4.692 7.63-5.5 9.788-.904 2.416-1.545 4.684-1.931 6.857.666-2.037 2.821-2.912 2.821-2.912s1.057-1.304 2.292-3.166c-.74.169-1.955.458-2.362.629-.6.251-.762.337-.762.337s1.945-1.184 3.613-1.72C21.695 7.9 24.195 2.767 21.678.521m-18.573.543A1.842 1.842 0 0 0 1.27 2.9v16.608a1.84 1.84 0 0 0 1.835 1.834h9.418a22.953 22.953 0 0 1-.052-2.707c-.006-.062-.011-.141-.016-.2a27.01 27.01 0 0 0-.473-2.378c-.121-.47-.275-.898-.369-1.057-.116-.197-.098-.31-.097-.432 0-.12.015-.245.037-.386a9.98 9.98 0 0 1 .234-1.045l.217-.028c-.017-.035-.014-.065-.031-.097l-.041-.381a32.8 32.8 0 0 1 .382-1.194l.2-.019c-.008-.016-.01-.038-.018-.053l-.043-.316c.63-3.28 2.587-7.443 4.8-9.791.066-.069.133-.128.198-.194Z',
+	},
+	'r-store': {
+		name: 'redis',
+		d: 'M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z',
+	},
+};
+const LOGO = 12; // a logo's size: the height of the label's capitals, and a little more
+const LOGO_GAP = 5; // between a logo and its label's text
 const CRASHES = 's-prog'; // the SQLite program, which dies and restarts in chapter 7
 const HIDDEN = { opacity: 0 };
 
@@ -179,7 +192,12 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 		const baseline = y + h + LABEL_GAP + LABEL_PX - DESCENT;
 		add(g, 'text', { class: 'vm-label', x: x + w / 2, y: baseline, 'text-anchor': 'middle' }, label);
 	} else {
-		add(g, 'text', { class: 'vm-label', x, y: top }, label);
+		const logo = LOGOS[p.id];
+		if (logo) {
+			const at = `translate(${x} ${top - LOGO + 1}) scale(${LOGO / 24})`;
+			add(g, 'path', { class: `vm-logo vm-logo-${logo.name}`, d: logo.d, transform: at });
+		}
+		add(g, 'text', { class: 'vm-label', x: logo ? x + LOGO + LOGO_GAP : x, y: top }, label);
 	}
 	if (p.id === CRASHES) {
 		add(g, 'text', { class: 'vm-label vm-died', x, y: top, ...HIDDEN }, 'PROGRAM · DIED');

@@ -106,7 +106,7 @@ export const PIECES: Piece[] = [
 	{ id: 's-prog', kind: 'program', chapter: 7, box: rect(60, 580, 520, 140), label: 'PROGRAM' },
 	{ id: 's-add', kind: 'chip', chapter: 7, box: chip(88, 650, 68), label: 'Add()', parent: 's-prog' },
 	{ id: 'sqlite', kind: 'card', chapter: 7, box: rect(360, 610, 200, 80), label: 'WORKER', parent: 's-prog' },
-	{ id: 's-store', kind: 'store', chapter: 7, box: rect(220, 762, 210, 162), label: 'JOBS.DB · SQLITE' },
+	{ id: 's-store', kind: 'store', chapter: 7, box: rect(220, 762, 210, 162), label: 'SQLITE · JOBS.DB' },
 	{ id: 's-queue', kind: 'lane', chapter: 7, box: lane(240, 790), label: 'QUEUE', parent: 's-store' },
 	{ id: 's-tray', kind: 'tray', chapter: 7, box: lane(240, 864), label: 'IN FLIGHT', parent: 's-store' },
 
@@ -125,7 +125,7 @@ export const PIECES: Piece[] = [
 	// 9. Control: two rows of two above the core's card, inside its x span (570 to 770).
 	{ id: 'ctl-pause', kind: 'chip', chapter: 9, box: chip(570, 254, 70), label: 'Pause()' },
 	{ id: 'ctl-resume', kind: 'chip', chapter: 9, box: chip(648, 254, 78), label: 'Resume()' },
-	{ id: 'ctl-tune', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'TunePool(5)' },
+	{ id: 'ctl-restart', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'Restart()' },
 	{ id: 'ctl-stop', kind: 'chip', chapter: 9, box: chip(678, 290, 64), label: 'Stop()' },
 ];
 
@@ -226,7 +226,7 @@ const upTo = (box: Box, y: number): Box => rect(box.x, y, box.w, box.y + box.h -
 /** `REGIONS[n - 1]` is what the camera frames in chapter n. The last one is the whole world. */
 export const REGIONS: Box[] = [
 	around('add', 'queue', 'loop', 'core'), // 1. One worker
-	around('queue', 'loop', 'core', 'ctl-tune'), // 2. The pool, with room for the TunePool(3) chip above the card
+	around('queue', 'loop', 'core', 'ctl-restart'), // 2. The pool, with room for the TunePool(5) chip above the card
 	around('r-add', 'r-queue', 'result', 'r-value', 'r-error'), // 3. Results and errors
 	around('p-add', 'prio', 'loop', 'core'), // 4. Priority
 	around('p-add', 'c-add', 'prio', 'queue-c', 'strategy', 'loop', 'core'), // 5. Many queues, one worker
@@ -236,7 +236,7 @@ export const REGIONS: Box[] = [
 	// 9. Control, with the queue where jobs wait, and the topic and the second worker, which are on by then. The box
 	// reaches up to y 36, so the camera sits at y 238: the SQLite program below is out of view, its label too, which
 	// at y 282 still showed through the top of the caption band, where the band is not yet opaque.
-	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop', 'topic', 'second'), 36),
+	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-restart', 'ctl-stop', 'topic', 'second'), 36),
 	union(PIECES.map((p) => p.box)), // 10. Everything together
 ];
 

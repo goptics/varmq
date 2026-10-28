@@ -536,9 +536,14 @@ export class Choreo {
 		for (const p of [...PIECES, ...CONNS]) for (const text of this.texts(nodes.piece(p.id))) score.start(text, { opacity: 1 });
 	}
 
-	/** A piece's or a line's text: its label, a chip's text, the SQLite program's crash labels. */
+	/** A piece's or a line's text: its label, a chip's text, the SQLite program's crash labels, a store's logo. */
 	private texts(g: Element): Element[] {
-		return [...g.querySelectorAll(':scope > .vm-label, :scope > .vm-text')];
+		return [...g.querySelectorAll(':scope > .vm-label, :scope > .vm-text, :scope > .vm-logo')];
+	}
+
+	/** What names a piece above it, to fade in with it: its label, and a store's logo before it. */
+	private labels(g: Element): Element[] {
+		return [g.querySelector(':scope > .vm-label'), g.querySelector(':scope > .vm-logo')].filter((el) => el !== null);
 	}
 
 	private declarePiece(key: string, kind: string, on: boolean) {
@@ -554,8 +559,7 @@ export class Choreo {
 		// Off, a piece shows nothing: its outline undrawn and its fill clear.
 		score.start(this.outline(g), { draw: [0, v] });
 		score.start(g.querySelector('.vm-shape')!, { fillOpacity: v });
-		const label = g.querySelector(':scope > .vm-label');
-		if (label) score.start(label, { opacity: v });
+		for (const label of this.labels(g)) score.start(label, { opacity: v });
 		for (const slot of g.querySelectorAll('.vm-slot')) score.start(slot, { opacity: v });
 	}
 
@@ -693,8 +697,7 @@ export class Choreo {
 			}
 			score.tween(this.outline(g), { draw: [0, 1] }, t, DRAW, E.draw);
 			score.tween(g.querySelector('.vm-shape')!, { fillOpacity: 1 }, t, DRAW, E.draw);
-			const label = g.querySelector(':scope > .vm-label');
-			if (label) score.tween(label, { opacity: 1 }, t + 250, LABEL, E.fade);
+			for (const label of this.labels(g)) score.tween(label, { opacity: 1 }, t + 250, LABEL, E.fade);
 			// A lane's slots appear from its head.
 			g.querySelectorAll('.vm-slot').forEach((slot, k) => {
 				score.tween(slot, { opacity: 1 }, t + 200 + 40 * k, 300, E.fade);
@@ -843,14 +846,15 @@ export class Choreo {
 					agenda.add(at, () => this.done(part.worker, e.ring, at, squares.get(e.job)!, part.outcomes?.[e.job]));
 					return;
 				case 'exit': {
-					// A goroutine that exits as its job is done leaves once its ring's pulse has settled.
-					const ends = (d: PoolEvent) => d.type === 'done' && d.ring === e.ring && d.at === e.at;
-					const asDone = part.events.slice(0, k).some(ends);
-					agenda.add(at, () => this.exit(part.worker, e.ring, asDone ? at + EXIT_AFTER : at));
+					// A goroutine leaves once the pulse of its last job's done has settled: at its done, or soon after, as
+					// a stop retires the whole pool at its last job.
+					const done = part.events.slice(0, k).findLast((d) => d.type === 'done' && d.ring === e.ring);
+					const settled = done ? T + done.at + EXIT_AFTER : at;
+					agenda.add(at, () => this.exit(part.worker, e.ring, Math.max(at, settled)));
 					return;
 				}
 				case 'control':
-					agenda.add(at, () => this.control(c, part, e, at));
+					agenda.add(at, () => this.control(part, e, at));
 					return;
 			}
 		});
@@ -960,16 +964,18 @@ export class Choreo {
 		this.score.tween(chip, { scale: 1 }, at + 150, 350, E.pop);
 	}
 
-	private control(c: Chapter, part: PoolPart, e: Extract<PoolEvent, { type: 'control' }>, at: number) {
+	private control(part: PoolPart, e: Extract<PoolEvent, { type: 'control' }>, at: number) {
 		if (e.op === 'tune') {
-			// The tune control is on the map from chapter 9; chapter 2's TunePool(3) is a chip of its own (`chips`).
-			if (PIECE.get('ctl-tune')!.chapter <= c.n) this.press(this.nodes.piece('ctl-tune'), at);
+			// Chapter 2's TunePool(5) is a chip of its own (`chips`), in Restart()'s place.
 			this.ghosts(part.worker, e.to!, at + 200);
 			return;
 		}
 		this.press(this.nodes.piece(`ctl-${e.op}`), at);
-		// The event loop hands out nothing while the worker is paused, and nothing more once it is stopped.
-		this.score.tween(this.loop(), { opacity: e.op === 'resume' ? 1 : 0.35 }, at, 300, E.fade);
+		// The event loop hands out nothing while the worker is paused or stopped. A restart brings it back, with the
+		// one idle goroutine `Start` leaves.
+		const on = e.op === 'resume' || e.op === 'restart';
+		this.score.tween(this.loop(), { opacity: on ? 1 : 0.35 }, at, 300, E.fade);
+		if (e.op === 'restart') this.spawn(part.worker, e.ring!, at + 300);
 	}
 
 	// -- Stores -------------------------------------------------------------------------------------------------

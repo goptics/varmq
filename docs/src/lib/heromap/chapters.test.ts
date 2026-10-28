@@ -17,7 +17,7 @@ describe('chapters', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to Redis']);
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 19);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 21);
 	});
 	it('run about 85 seconds', () => {
 		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
@@ -30,10 +30,10 @@ describe('chapters', () => {
 	it('chapter 1 never has more than one job waiting at a dispatch', () => {
 		for (const d of dispatches(part(1, 'pool', 'core'))) assert.ok(d.waiting <= 0, String(d.at));
 	});
-	it('chapter 2 opens with TunePool(3), stays under 2 × 3 waiting, and ends with one idle goroutine', () => {
+	it('chapter 2 opens with TunePool(5), grows to 5 goroutines, and ends with one idle', () => {
 		const p = part(2, 'pool', 'core');
-		assert.deepEqual(p.plan.controls[0], { at: 1300, op: 'tune', to: 3 });
-		for (const d of dispatches(p)) assert.ok(d.waiting + 1 < 6, String(d.at));
+		assert.deepEqual(p.plan.controls[0], { at: 1300, op: 'tune', to: 5 });
+		assert.equal(Math.max(...poolStates(p.plan, p.events).map(s => s.busy.length)), 5);
 		assert.equal(endState(p.plan, p.events).idle.length, 1);
 	});
 	it('the core worker starts each chapter where the last one left it', () => {
@@ -61,11 +61,16 @@ describe('chapters', () => {
 	it('chapter 8 never holds more than 4 in flight', () => {
 		for (const s of trayStates(part(8, 'redis').events)) assert.ok(s.tray.filter(Boolean).length <= 4);
 	});
-	it('chapter 9 starts nothing while paused and reaches 5 busy after TunePool(5)', () => {
+	it('chapter 9 starts nothing while paused or stopped, empties the pool at the stop, and runs what waited after Restart', () => {
 		const p = part(9, 'pool', 'core');
-		const pause = p.plan.controls.find(c => c.op === 'pause').at, resume = p.plan.controls.find(c => c.op === 'resume').at;
-		assert.ok(dispatches(p).every(d => d.at < pause || d.at >= resume));
-		assert.equal(Math.max(...poolStates(p.plan, p.events).map(s => s.busy.length)), 5);
+		const at = op => p.plan.controls.find(c => c.op === op).at;
+		const [pause, resume, stop, restart] = ['pause', 'resume', 'stop', 'restart'].map(at);
+		assert.ok(dispatches(p).every(d => d.at < pause || (d.at >= resume && d.at < stop) || d.at >= restart));
+		// The stop lets the running jobs finish, then every goroutine goes before the restart.
+		const states = poolStates(p.plan, p.events);
+		assert.ok(states.some(s => s.at > stop && s.at < restart && s.busy.length === 0 && s.idle.length === 0));
+		// The job due at the stop and the two added while stopped run after the restart.
+		assert.deepEqual(dispatches(p).filter(d => d.at >= restart).map(d => d.job), ['k4', 'k5', 'k6']);
 	});
 	it('chapter 10 ends with Stop and no goroutine left on the core worker', () => {
 		const p = part(10, 'pool', 'core');
@@ -161,8 +166,8 @@ describe('chapter rules', () => {
 				assert.ok(w.limit <= places && w.idle.every(i => i < places), `chapter ${c.n}: ${w.id}`);
 			}
 		}
-		// The TunePool(3) chip takes the place of the tune control that chapter 9 switches on.
-		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }]);
+		// The TunePool(5) chip takes the place of the Restart() control that chapter 9 switches on.
+		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-restart', label: 'TunePool(5)', at: 1300, until: 2500 }]);
 		assert.ok(CHAPTERS.flatMap(c => c.chips ?? []).every(chip => piece[chip.id]?.kind === 'chip'));
 	});
 	it('give the core and the second worker a copy of every published value, as it is published', () => {
