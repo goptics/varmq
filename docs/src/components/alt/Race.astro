@@ -241,7 +241,7 @@ const sqlite = lanes(
 					</li>
 					<li><strong>One worker.</strong> On the 15 one-worker <code>Loop10</code> rows, a plain buffered channel is fastest in all 15.</li>
 					<li><strong>4 CPUs.</strong> The buffered channel wins 21 of 55 rows and VarMQ wins 19. At 24 CPUs VarMQ wins 39 and the channel 12.</li>
-					<li><strong>Redis, one producer.</strong> rmq leads every single-producer row. VarMQ leads when 100 producers enqueue, at 100 and 1,000 workers.</li>
+					<li><strong>Redis, one producer.</strong> rmq leads 12 of the 13 single-producer rows. VarMQ leads the enqueue-only row, and leads the 100-producer rows with one instance at 100 and 1,000 workers.</li>
 				</ul>
 			</div>
 

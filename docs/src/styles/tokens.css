@@ -1,0 +1,77 @@
+/* VarMQ docs design tokens. Shared by every page: the alternative landing page, the Starlight docs theme,
+   and any page that follows docs/DESIGN.md. Change a value here, not in a page stylesheet. */
+
+:root {
+	color-scheme: light dark;
+
+	--paper: #f5faf7;
+	--bar: #ebf5f0;
+	--bar-2: #dcede4;
+	--hole: #cfe2d8;
+	--ink: #0e2019;
+	--ink-2: #3b5248;
+	--ink-3: #51695e;
+	--rule: #b9d3c7;
+	--accent-text: #1b7358;
+
+	--brand: #44bf9e;
+	--brand-ink: #062116;
+	--amber: #f0b24a;
+	--cobalt: #8fb0ff;
+	--danger: #ff8d7a;
+
+	--panel: #0a1511;
+	--panel-2: #101f19;
+	--panel-ink: #e4f2ec;
+	--panel-ink-2: #9db9ac;
+	--panel-rule: #27413a;
+	--panel-accent: #5fd4b2;
+
+	--display: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+	--gutter: clamp(16px, 4vw, 40px);
+	--max: 1180px;
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #0f1713;
+		--bar: #121d18;
+		--bar-2: #182720;
+		--hole: #070c09;
+		--ink: #e5f1eb;
+		--ink-2: #b0c7bb;
+		--ink-3: #8fa89c;
+		--rule: #2a4137;
+		--accent-text: #5fd4b2;
+		--panel: #0a1410;
+		--panel-2: #0f1c16;
+	}
+}
+
+
+/* ---- Go tokens ---- */
+
+:root {
+	--tk-k: #9d2f6b;
+	--tk-s: #8a5300;
+	--tk-c: #52695e;
+	--tk-n: #8a5300;
+	--tk-f: #1b6d56;
+	--tk-t: #3a4fb5;
+	--tk-b: #3a4fb5;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--tk-k: #ff8fb8;
+		--tk-s: #f0b24a;
+		--tk-c: #8fa89c;
+		--tk-n: #f0b24a;
+		--tk-f: #5fd4b2;
+		--tk-t: #8fb0ff;
+		--tk-b: #8fb0ff;
+	}
+}
