@@ -1,0 +1,97 @@
+---
+title: Configuration
+description: Every With and Default function in one table, with its default, what it does and the guide that covers it. How positional arguments, options and the Default functions combine.
+sidebar:
+  order: 13
+---
+
+varmq is configured with functions you pass when you create something: a worker, a job, a queue or a topic. This page lists all of them in one table, then explains how they combine. Each row links to the guide that covers the option in full.
+
+## Where each option goes
+
+| Kind | Passed to |
+|---|---|
+| Worker options, which return a [`ConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#ConfigFunc) | [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker), [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) or [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker), after the function |
+| [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId), which returns a [`JobConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#JobConfigFunc) | [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add), after the data (and after the priority, on a priority queue) |
+| Queue options, which return a [`QueueConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#QueueConfigFunc): [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) and [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) | [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue), [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue) and the other binding methods, such as [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) |
+| [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity), which returns a [`TopicConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#TopicConfigFunc) | [`NewTopic`](https://pkg.go.dev/github.com/goptics/varmq#NewTopic) |
+| [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority), which also returns a [`TopicConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#TopicConfigFunc) | [`WithTopic`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithTopic), when you subscribe a worker |
+
+## Every option
+
+A `Default*` function sets the default of the matching worker option for workers created after the call. Its default is the same as the option's. [How the `Default*` functions work](#the-default-functions) is below the table.
+
+| Function | Default | What it does | Guide |
+|---|---|---|---|
+| [`WithConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#WithConcurrency) | 1 | The most jobs the worker runs at once. A value below 1 means one per CPU. | [Concurrency](/guides/concurrency/#setting-the-limit) |
+| [`DefaultConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#DefaultConcurrency) | 1 | Sets the default concurrency. Below 1 means one per CPU. | [Concurrency](/guides/concurrency/#setting-the-limit) |
+| [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) | `true` | Whether the worker starts when it is created. With `false` it stays `Initiated` until you call [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). | [Lifecycle](/concepts/lifecycle/#withautorun) |
+| [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) | none | Names the worker. A named worker is added to [`WorkerRegistry`](https://pkg.go.dev/github.com/goptics/varmq#WorkerRegistry) when it starts, and the REST handler finds it there. A worker with no name is not registered. | [Worker types](/guides/worker-types/#what-follows-the-function), [REST API](/operations/rest-api/) |
+| [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) | [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority) | Which bound queue or topic gives the worker its next job: [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), [`RoundRobin`](https://pkg.go.dev/github.com/goptics/varmq#RoundRobin), [`MaxLen`](https://pkg.go.dev/github.com/goptics/varmq#MaxLen) or [`MinLen`](https://pkg.go.dev/github.com/goptics/varmq#MinLen). | [Strategies](/guides/strategies/#choosing-a-strategy) |
+| [`DefaultStrategy`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStrategy) | `Priority` | Sets the default strategy. | [Strategies](/guides/strategies/#choosing-a-strategy) |
+| [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) | not set: one idle goroutine | The share of the concurrency limit to keep idle, as a percentage from 1 to 100. A value outside the range is clamped: 0 becomes 1 and anything above 100 becomes 100. | [Concurrency](/guides/concurrency/#idle-goroutines) |
+| [`DefaultMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#DefaultMinIdleWorkerRatio) | not set: one idle goroutine | Sets the default idle ratio. | [Concurrency](/guides/concurrency/#idle-goroutines) |
+| [`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) | not set: no timer | Once per duration, removes the goroutines that have been idle longer than the duration, down to the idle minimum. A negative duration panics when the worker starts, which is at `NewWorker` unless auto-run is off. | [Concurrency](/guides/concurrency/#idle-goroutines) |
+| [`DefaultIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#DefaultIdleWorkerExpiryDuration) | not set: no timer | Sets the default expiry duration. | [Concurrency](/guides/concurrency/#idle-goroutines) |
+| [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) | none: jobs have no ID | A `func() string`. `Add` calls it, on the caller's goroutine, for every job; its value is used when the job has no ID of its own. `nil` is ignored. | [Job IDs](/guides/job-ids/#giving-a-job-an-id) |
+| [`DefaultJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#DefaultJobIdGenerator) | none: jobs have no ID | Sets the default generator. `nil` is ignored. | [Job IDs](/guides/job-ids/#giving-a-job-an-id) |
+| [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler) | does nothing | A function that receives the [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) and the error, which the worker calls for every error it reports. `nil` is ignored. | [Errors](/guides/errors/#the-error-handler) |
+| [`DefaultErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#DefaultErrHandler) | does nothing | Sets the default error handler. `nil` is ignored. | [Errors](/guides/errors/#the-error-handler) |
+| [`WithContext`](https://pkg.go.dev/github.com/goptics/varmq#WithContext) | none: acts as [`context.Background()`](https://pkg.go.dev/context#Background) | The worker shuts down when this context is done. | [Context](/guides/context/) |
+| [`DefaultCtx`](https://pkg.go.dev/github.com/goptics/varmq#DefaultCtx) | none: acts as `context.Background()` | Sets the default context. | [Context](/guides/context/) |
+| [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) | 1 minute | How long a stopped, named worker stays in `WorkerRegistry` before it is removed. `0` keeps it there for good. | [Lifecycle](/concepts/lifecycle/#withstoppedretention) |
+| [`DefaultStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStoppedRetention) | 1 minute | Sets the default retention. | [Lifecycle](/concepts/lifecycle/#withstoppedretention) |
+| [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) | none: the job has no ID, or the generator's | Gives one job an ID. An empty string is ignored. | [Job IDs](/guides/job-ids/#giving-a-job-an-id) |
+| [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) | unlimited | The most jobs the queue holds. `Add` returns `false` when it is full. A value below 1 means no limit. | [Queues](/guides/queues/#capacity) |
+| [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) | [`math.MaxInt`](https://pkg.go.dev/math#MaxInt), the lowest rank | The rank of a queue among the queues bound to one worker. A lower number goes first under the `Priority` strategy. | [Strategies](/guides/strategies/#priority-the-default) |
+| [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity) | unlimited | The most unread payloads the slowest subscription may hold. [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) returns `false` once it does. A value below 1 means no limit. | [Topics](/guides/topics/#capacity) |
+| [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority) | `math.MaxInt`, the lowest rank | The rank of a topic subscription among a worker's sources, like `WithQueuePriority`. | [Topics](/guides/topics/#priority-and-strategy) |
+
+That is every exported `With` and `Default` function in the package. The methods that bind a source to a worker, such as `WithQueue` and `WithTopic`, are not options and are not in the table. A few details it leaves out:
+
+- **Not setting the idle ratio is not the same as setting it to 1.** Without it, the worker keeps one idle goroutine. `WithMinIdleWorkerRatio(1)` keeps 1% of the limit, rounded down, and never fewer than one, so with a limit of 200 it keeps two.
+- **`WithName` and a string argument do the same thing.** See below.
+- **A queue option reaches only a queue that can use it.** `WithQueueCapacity` takes effect only on a queue that implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter), which the built-in queues do. See [queues](/guides/queues/#capacity).
+
+## Options and positional arguments
+
+[`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker), `NewErrWorker` and `NewResultWorker` take `config ...any` after the worker function. They read each argument by its type:
+
+| Argument | What it does |
+|---|---|
+| a `ConfigFunc`, such as the value `WithAutoRun(false)` returns | applies that option |
+| an `int` | sets the concurrency, like [`WithConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#WithConcurrency). A value below 1 means one per CPU. |
+| a `string` | names the worker, like [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) |
+| any other type | is ignored, with no error |
+
+Only a value of type `int` sets the concurrency. A value of another integer type, such as `int64` or `uint`, falls into the last row and is ignored.
+
+```go
+// 4 is the concurrency and "mailer" is the name.
+worker := varmq.NewErrWorker(send, 4, "mailer", varmq.WithAutoRun(false))
+```
+
+The arguments are applied from left to right on top of the defaults, so the last one that sets a value wins. `varmq.NewWorker(f, 2, varmq.WithConcurrency(8))` runs 8 at once. A string and `WithName` set the same name, so with both, the later one decides. [Worker types](/guides/worker-types/#what-follows-the-function) lists the same arguments next to the three constructors.
+
+A value below 1 for the concurrency means one per CPU wherever it is given: as an `int`, in `WithConcurrency`, in [`DefaultConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#DefaultConcurrency) and in [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool). The number is the logical CPU count of the machine, so it differs between machines.
+
+## The `Default*` functions
+
+Each `Default*` function sets the default of one worker option. A worker copies the defaults when you create it, so a call changes the workers created after it and leaves the ones that exist alone. An option or a positional argument for a worker still overrides the default.
+
+```go
+func main() {
+	// Defaults for the workers created below.
+	varmq.DefaultConcurrency(8)
+	varmq.DefaultErrHandler(func(w varmq.Worker, err error) {
+		log.Printf("%s: %v", w.Name(), err)
+	})
+
+	emails := varmq.NewErrWorker(send, "emails")                                  // 8 at once, the handler above
+	reports := varmq.NewResultWorker(build, 2, "reports", varmq.WithAutoRun(false)) // 2 at once, the handler above
+}
+```
+
+- **They write a package-level value with no locking.** Call them once at start-up, before any goroutine creates a worker. Calling one while another goroutine creates a worker is a data race.
+- **`DefaultJobIdGenerator(nil)` and `DefaultErrHandler(nil)` do nothing,** like their `With` twins. The other `Default*` functions have no such check. `DefaultCtx(nil)` goes back to no context.
+- **Some options have no `Default*` function:** `WithAutoRun`, `WithName`, and the job, queue and topic options.

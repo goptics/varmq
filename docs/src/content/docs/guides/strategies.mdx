@@ -1,0 +1,79 @@
+---
+title: Strategies
+description: How a worker with several queues picks the next job. The Priority, RoundRobin, MaxLen and MinLen strategies, WithStrategy and WithQueuePriority.
+sidebar:
+  order: 7
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A worker can have several sources bound to it: queues, priority queues and [topics](/guides/topics/). When a slot frees up, it needs a rule for which source gives the next job. That rule is the **strategy**. [Workers and queues](/concepts/workers-and-queues/#one-worker-several-queues) introduced it; this page covers all four.
+
+## Choosing a strategy
+
+[`Strategy`](https://pkg.go.dev/github.com/goptics/varmq#Strategy) has four values. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) sets one when you create the worker, and [`DefaultStrategy`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStrategy) changes the default for workers created after the call.
+
+| Strategy | Takes the next job from | Ties |
+|---|---|---|
+| [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), the default | the queue with the lowest priority number that has a waiting job | the queue bound first |
+| [`RoundRobin`](https://pkg.go.dev/github.com/goptics/varmq#RoundRobin) | the next queue in turn that has a waiting job | not applicable: it takes turns |
+| [`MaxLen`](https://pkg.go.dev/github.com/goptics/varmq#MaxLen) | the queue with the most waiting jobs | the queue that comes first in the list below |
+| [`MinLen`](https://pkg.go.dev/github.com/goptics/varmq#MinLen) | the queue with the fewest waiting jobs, ignoring empty queues | the queue that comes first in the list below |
+
+```go
+worker := varmq.NewWorker(process, 2, varmq.WithStrategy(varmq.RoundRobin))
+```
+
+A few rules hold for all four:
+
+- **Empty queues are skipped.** A strategy only chooses among sources that have a job waiting.
+- **The strategy is fixed when the worker is created.** There is no call to change it later.
+- **It decides every job.** With two or more sources bound, the worker hands out one job at a time and picks the source again each time, reading the queue lengths as they are then. [How it works](/concepts/how-it-works/#batched-dispatch) explains why it does not batch in this case. With a single source there is nothing to choose.
+- **The zero value of `Strategy` is `RoundRobin`, not the default.** A worker created without `WithStrategy` uses `Priority`.
+
+"The list" is every source ordered by priority number, lowest first, and by bind order among equal numbers. Every strategy walks it in that order.
+
+## Priority: the default
+
+[`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) ranks a queue when you bind it. It works on [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue). The programs on this page use a worker with concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is filled, and the worker takes one job at a time, so the order the jobs print in is the order the worker took them.
+
+<GoPlay example="strategies-priority" />
+
+The emails were added first but run last. Both alerts go before the report, and the report before the emails.
+
+**A lower number goes first.** The worker takes from the first queue in the list that has a job waiting. A queue without `WithQueuePriority` gets the lowest possible rank, so it comes after every queue that has one. Queues with the same rank go in the order they were bound.
+
+Priority does not share. While a higher-ranked queue has jobs waiting, a lower-ranked one gets none. A busy `alerts` queue can keep `emails` waiting.
+
+A topic subscription takes part in the same list. [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority) sets its rank like `WithQueuePriority` does. See [topics](/guides/topics/#priority-and-strategy).
+
+:::note
+This is the rank of a whole queue. It is not the priority you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue.Add) on a priority queue, which orders the jobs inside that one queue. See [queues](/guides/queues/#fifo-and-priority-queues).
+:::
+
+## RoundRobin
+
+The worker goes through the list one queue per job, then starts over. It skips a queue that is empty when its turn comes, so once a queue runs out the others share the turns.
+
+<GoPlay example="strategies-round-robin" />
+
+One job from each queue in turn. `reports` runs out after its first job, so the later turns go to `alerts` and `emails`.
+
+## MaxLen and MinLen
+
+Both compare how many jobs are waiting in each queue, read again for every job.
+
+- **`MaxLen`** takes from the longest queue. Each job it takes makes that queue shorter, so while nothing new arrives the turns pass to the next-longest queue, and the longest queues are worked down together.
+- **`MinLen`** takes from the shortest queue that is not empty. It runs a short queue to empty, then moves to the next shortest. A long queue waits while any shorter queue still has jobs.
+
+On a tie, both take the queue that comes first in the list.
+
+<GoPlay example="strategies-length" />
+
+The queues start with 2 alerts, 1 report and 3 emails. `MaxLen` takes an email from the longest queue, then breaks the 2-2 tie with `alerts`, which comes first in the list. When `reports` and `emails` tie at 1 each, `reports` goes first, so an email runs last. `MinLen` empties `reports`, then `alerts`, and leaves the long `emails` queue for last.
+
+"In order" here means the order the jobs leave the queues. With a concurrency above 1 several of them run at once, and their output can interleave.
+
+## What priority does under the other strategies
+
+`RoundRobin`, `MaxLen` and `MinLen` do not choose by priority. They still walk the list in priority order, so a priority sets the order of the `RoundRobin` turns and which queue wins a tie in `MaxLen` and `MinLen`. If you give no priorities, the list is the bind order.

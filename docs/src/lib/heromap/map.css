@@ -1,0 +1,428 @@
+/* The hero map's styles, added to the home page by HeroMap.astro (as one injected stylesheet), so no other page
+   loads them. Everything but the reserved square, which the component keeps global so it holds before any script.
+
+   Style A · Glow. Dark is the default; the light palette keeps the hues in darker ink, with no glow. The square
+   has no background of its own: the page's shows through, under a dot grid that fades toward the edges. */
+varmq-map {
+	--vm-dot: #1e2a38;
+	--vm-ink: #8592a3;
+	--vm-caption: #cfd8e3;
+	--vm-green: #44bf9e;
+	--vm-red: #ff6b6b;
+	--vm-glow: url(#vm-glow);
+	--vm-job: #f2b33d;
+	--vm-job-edge: #f2b33d;
+	--vm-job-ink: #3a2a00;
+	--vm-chip: #1e201f;
+	--vm-chip-edge: rgba(242, 179, 61, 0.65);
+	--vm-chip-ink: #f2b33d;
+	--vm-value: #102126;
+	--vm-value-edge: rgba(68, 191, 158, 0.65);
+	--vm-error: #1f1a22;
+	--vm-error-edge: rgba(255, 107, 107, 0.65);
+	--vm-lane: rgba(242, 179, 61, 0.05);
+	--vm-lane-edge: #f2b33d;
+	--vm-lane-tail: 0.12;
+	--vm-lane-head: 0.9;
+	--vm-tray: rgba(242, 179, 61, 0.02);
+	--vm-tray-edge: rgba(242, 179, 61, 0.35);
+	--vm-slot: rgba(242, 179, 61, 0.18);
+	--vm-go: #44bf9e;
+	--vm-go-fill: rgba(68, 191, 158, 0.1);
+	--vm-ghost: rgba(68, 191, 158, 0.3);
+	--vm-check: #d6fff0;
+	--vm-card: rgba(68, 191, 158, 0.04);
+	--vm-card-edge: rgba(68, 191, 158, 0.45);
+	--vm-loop: #8b5cf6;
+	--vm-loop-fill: rgba(139, 92, 246, 0.1);
+	--vm-pulse: #a78bfa;
+	--vm-store: rgba(139, 92, 246, 0.05);
+	--vm-store-edge: rgba(139, 92, 246, 0.6);
+	--vm-program: rgba(150, 175, 200, 0.03);
+	--vm-program-edge: rgba(150, 175, 200, 0.4);
+	--vm-line: rgba(150, 175, 200, 0.35);
+	--vm-notify: rgba(167, 139, 250, 0.35);
+	--vm-ack: rgba(68, 191, 158, 0.3);
+	--vm-button: rgba(6, 8, 12, 0.6);
+	--vm-button-edge: rgba(150, 175, 200, 0.3);
+
+	position: relative;
+	overflow: hidden;
+	container-type: inline-size;
+}
+
+:root[data-theme='light'] varmq-map {
+	--vm-dot: #cfd8e3;
+	--vm-ink: #4b5563;
+	--vm-caption: #1f2937;
+	--vm-green: #0f7a5c;
+	--vm-red: #c62828;
+	--vm-glow: none;
+	--vm-job: #e09b0c;
+	--vm-job-edge: #b7791f;
+	--vm-chip: #fcf5e7;
+	--vm-chip-edge: rgba(183, 121, 31, 0.7);
+	--vm-chip-ink: #8f5a0b;
+	--vm-value: #eaf5f2;
+	--vm-value-edge: rgba(46, 156, 127, 0.7);
+	--vm-error: #faeeee;
+	--vm-error-edge: rgba(198, 40, 40, 0.6);
+	--vm-lane: rgba(224, 155, 12, 0.07);
+	--vm-lane-edge: #b7791f;
+	--vm-lane-tail: 0.3;
+	--vm-lane-head: 1;
+	--vm-tray: rgba(224, 155, 12, 0.03);
+	--vm-tray-edge: rgba(183, 121, 31, 0.6);
+	--vm-slot: rgba(183, 121, 31, 0.35);
+	--vm-go: #2e9c7f;
+	--vm-go-fill: rgba(46, 156, 127, 0.12);
+	--vm-ghost: rgba(46, 156, 127, 0.45);
+	--vm-check: #0f7a5c;
+	--vm-card: rgba(46, 156, 127, 0.06);
+	--vm-card-edge: rgba(46, 156, 127, 0.6);
+	--vm-loop: #7c3aed;
+	--vm-loop-fill: rgba(124, 58, 237, 0.08);
+	--vm-pulse: #7c3aed;
+	--vm-store: rgba(124, 58, 237, 0.05);
+	--vm-store-edge: rgba(124, 58, 237, 0.6);
+	--vm-program: rgba(71, 85, 105, 0.03);
+	--vm-program-edge: rgba(71, 85, 105, 0.45);
+	--vm-line: rgba(71, 85, 105, 0.45);
+	--vm-notify: rgba(124, 58, 237, 0.45);
+	--vm-ack: rgba(46, 156, 127, 0.55);
+	--vm-button: rgba(255, 255, 255, 0.75);
+	--vm-button-edge: rgba(71, 85, 105, 0.3);
+}
+
+/* The map, world and grid, fades into the page at the square's edges, so a piece the edge cuts has no hard edge.
+   --vm-feather is 16 world units at the camera's zoom (render.ts). The caption band and the button are not masked. */
+varmq-map .vm-svg {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	mask-image:
+		linear-gradient(to right, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent),
+		linear-gradient(to bottom, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent);
+	mask-composite: intersect;
+}
+
+/* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */
+@media (forced-colors: active) {
+	varmq-map .vm-svg {
+		forced-color-adjust: none;
+	}
+}
+
+varmq-map :is(.vm-go, .vm-job, .vm-record, .vm-chip, .vm-pulse, .vm-flash, .vm-sig) {
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+varmq-map .vm-dot {
+	fill: var(--vm-dot);
+}
+
+varmq-map .vm-edge-tail {
+	stop-color: var(--vm-lane-edge);
+	stop-opacity: var(--vm-lane-tail);
+}
+
+varmq-map .vm-edge-head {
+	stop-color: var(--vm-lane-edge);
+	stop-opacity: var(--vm-lane-head);
+}
+
+/* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. */
+varmq-map :is(.vm-label, .vm-text, .vm-num) {
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-weight: 600;
+	fill-opacity: var(--vm-label, 1);
+}
+
+varmq-map .vm-label {
+	font-size: 14px;
+	letter-spacing: 0.14em;
+	fill: var(--vm-ink);
+}
+
+varmq-map .vm-label.vm-died {
+	fill: var(--vm-red);
+}
+
+varmq-map .vm-text {
+	font-size: 13px;
+	fill: var(--vm-chip-ink);
+}
+
+varmq-map .vm-num {
+	font-size: 13px;
+	font-weight: 700;
+	fill: var(--vm-job-ink);
+}
+
+varmq-map .vm-program > .vm-shape {
+	fill: var(--vm-program);
+	stroke: var(--vm-program-edge);
+	stroke-width: 1;
+}
+
+varmq-map .vm-store > .vm-shape {
+	fill: var(--vm-store);
+	stroke: var(--vm-store-edge);
+	stroke-width: 1.2;
+}
+
+varmq-map .vm-lane > .vm-shape {
+	fill: var(--vm-lane);
+	stroke: url(#vm-lane-edge);
+	stroke-width: 1.2;
+}
+
+varmq-map .vm-tray > .vm-shape {
+	fill: var(--vm-tray);
+	stroke: var(--vm-tray-edge);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+varmq-map .vm-slot {
+	fill: none;
+	stroke: var(--vm-slot);
+	stroke-width: 1;
+	stroke-dasharray: 2 3;
+}
+
+varmq-map .vm-card > .vm-shape {
+	fill: var(--vm-card);
+	stroke: var(--vm-card-edge);
+	stroke-width: 1;
+}
+
+varmq-map .vm-loop > .vm-shape {
+	fill: var(--vm-loop-fill);
+	stroke: var(--vm-loop);
+	stroke-width: 1.4;
+	filter: var(--vm-glow);
+}
+
+varmq-map .vm-pulse {
+	fill: none;
+	stroke: var(--vm-pulse);
+	stroke-width: 1.4;
+}
+
+/* Chips are opaque: the RoundRobin chip sits on the line into the loop. */
+varmq-map .vm-chip > .vm-shape {
+	fill: var(--vm-chip);
+	stroke: var(--vm-chip-edge);
+	stroke-width: 1;
+}
+
+varmq-map .vm-value > .vm-shape {
+	fill: var(--vm-value);
+	stroke: var(--vm-value-edge);
+}
+
+varmq-map .vm-value > .vm-text {
+	fill: var(--vm-green);
+}
+
+varmq-map .vm-error > .vm-shape {
+	fill: var(--vm-error);
+	stroke: var(--vm-error-edge);
+}
+
+varmq-map .vm-error > .vm-text {
+	fill: var(--vm-red);
+}
+
+varmq-map .vm-flash {
+	fill: none;
+	stroke: var(--vm-red);
+	stroke-width: 2;
+}
+
+varmq-map .vm-conn > .vm-shape {
+	fill: none;
+	stroke: var(--vm-line);
+	stroke-width: 1;
+}
+
+varmq-map .vm-notify > .vm-shape {
+	stroke: var(--vm-notify);
+	stroke-dasharray: 2 3;
+}
+
+varmq-map .vm-ack > .vm-shape {
+	stroke: var(--vm-ack);
+	stroke-dasharray: 2 3;
+}
+
+varmq-map .vm-ghost {
+	fill: none;
+	stroke: var(--vm-ghost);
+	stroke-width: 1;
+	stroke-dasharray: 2 3;
+}
+
+varmq-map .vm-ring {
+	fill: var(--vm-go-fill);
+	stroke: var(--vm-go);
+	stroke-width: 1.4;
+	filter: var(--vm-glow);
+}
+
+varmq-map .vm-progress {
+	fill: none;
+	stroke: var(--vm-go);
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+varmq-map .vm-check {
+	fill: none;
+	stroke: var(--vm-check);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* A job's edge matches its fill in the dark, so an in-flight record is its fill-opacity alone. */
+varmq-map .vm-jb {
+	fill: var(--vm-job);
+	stroke: var(--vm-job-edge);
+	stroke-width: 1.4;
+}
+
+varmq-map :is(.vm-main, .vm-record) > .vm-jb {
+	filter: var(--vm-glow);
+}
+
+varmq-map .vm-t1 > .vm-jb {
+	opacity: 0.35;
+}
+
+varmq-map .vm-t2 > .vm-jb {
+	opacity: 0.15;
+}
+
+/* Signals: the notify and ack dots, and a result worker's value or error on its way to the chip. */
+varmq-map .vm-sig {
+	filter: var(--vm-glow);
+}
+
+varmq-map .vm-sig-notify {
+	fill: var(--vm-pulse);
+}
+
+varmq-map :is(.vm-sig-ack, .vm-sig-value) {
+	fill: var(--vm-green);
+}
+
+varmq-map .vm-sig-error {
+	fill: var(--vm-red);
+}
+
+/* The caption band: the bottom 56 of the square's 400, below the map. The world fades into the page behind it. */
+varmq-map .vm-caption {
+	position: absolute;
+	inset: auto 0 0;
+	height: 14%;
+	display: grid;
+	place-items: center;
+	background: linear-gradient(to bottom, transparent, var(--sl-color-bg) 60%);
+	color: var(--vm-caption);
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 14px;
+	font-size: min(14px, 2.75cqw);
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	line-height: 1.4;
+	text-transform: uppercase;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* Every caption line sits in the same place; the choreographer shows one at a time. */
+varmq-map .vm-cap {
+	grid-area: 1 / 1;
+}
+
+/* A word rises into its box from below, and leaves it upward. */
+varmq-map .vm-w {
+	display: inline-block;
+	overflow: hidden;
+	vertical-align: bottom;
+}
+
+varmq-map .vm-w > span {
+	display: inline-block;
+}
+
+varmq-map .vm-caption em {
+	font-style: normal;
+	color: var(--vm-green);
+}
+
+varmq-map .vm-caption b {
+	font-weight: inherit;
+	color: var(--vm-red);
+}
+
+/* Forced colours paint a backplate behind each line's text, and the lines share one cell, so the hidden lines'
+   backplates would cover the one shown. The band keeps its own colours instead, the system's: text on Canvas, the marks too. */
+@media (forced-colors: active) {
+	varmq-map .vm-caption {
+		forced-color-adjust: none;
+		background: linear-gradient(to bottom, transparent, Canvas 60%);
+		color: CanvasText;
+	}
+
+	varmq-map .vm-caption :is(em, b) {
+		color: CanvasText;
+	}
+}
+
+varmq-map .vm-toggle {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid var(--vm-button-edge);
+	border-radius: 50%;
+	background: var(--vm-button);
+	color: var(--vm-ink);
+	cursor: pointer;
+}
+
+/* Hidden until the animation can play: before it has loaded, if it failed to load, and under reduced motion. */
+varmq-map .vm-toggle[hidden] {
+	display: none;
+}
+
+varmq-map .vm-toggle:hover {
+	border-color: var(--vm-ink);
+	color: var(--vm-caption);
+}
+
+varmq-map .vm-toggle:focus-visible {
+	outline: 2px solid var(--sl-color-text-accent);
+	outline-offset: 2px;
+}
+
+varmq-map .vm-toggle svg {
+	width: 12px;
+	height: 12px;
+	fill: currentColor;
+}
+
+varmq-map .vm-toggle[data-state='playing'] .vm-play,
+varmq-map .vm-toggle[data-state='paused'] .vm-pause {
+	display: none;
+}

@@ -1,0 +1,225 @@
+---
+// The <varmq-map> element in the home page hero (frontmatter `hero.image.html`). This component draws nothing
+// itself: it brings the element's script and styles to the page. Its global style only sizes the element, so the
+// square is reserved before the script runs; the script adds the map's own styles, so other pages never load them.
+---
+
+<script>
+	import type { Timeline } from 'animejs';
+	import { CHAPTERS, STATIC_AT } from '../lib/heromap/chapters.ts';
+	import STYLES from '../lib/heromap/map.css?inline';
+	import { renderMap, type MapNodes } from '../lib/heromap/render.ts';
+	import { REGIONS, frame } from '../lib/heromap/scene.ts';
+
+	const NS = 'http://www.w3.org/2000/svg';
+	const TITLE = 'varmq, from one worker to Redis';
+	const DESCRIPTION = [
+		'An animated map of varmq. A worker takes jobs from a queue, and its pool of goroutines grows while',
+		'jobs wait and shrinks after. A result worker hands back values and errors. A priority queue, several',
+		'queues with round robin, and a topic feed the worker. A SQLite queue keeps its jobs through a crash,',
+		'and a Redis queue is shared by three programs. The worker is paused, resumed, resized and stopped.',
+	].join(' ');
+	const ICONS = [
+		'<svg class="vm-pause" viewBox="0 0 12 12" aria-hidden="true" focusable="false">',
+		'<rect x="2.25" y="1.5" width="2.5" height="9" rx=".75"/>',
+		'<rect x="7.25" y="1.5" width="2.5" height="9" rx=".75"/></svg>',
+		'<svg class="vm-play" viewBox="0 0 12 12" aria-hidden="true" focusable="false">',
+		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
+	].join('');
+	const REDUCE = '(prefers-reduced-motion: reduce)';
+
+	/** The map's styles (`map.css`): added once, by the first map to connect, so only the home page loads them. */
+	function addStyles() {
+		if (document.getElementById('vm-styles')) return;
+		const style = document.createElement('style');
+		style.id = 'vm-styles';
+		style.textContent = STYLES;
+		document.head.append(style);
+	}
+
+	class VarmqMap extends HTMLElement {
+		/** The drawn map. Public, so a review can move the camera from the console. */
+		nodes?: MapNodes;
+		/** The animation, once loaded. Public, so a review can pause it and seek frames from the console. */
+		timeline?: Timeline;
+		/** Paused with the button. */
+		userPaused = false;
+		/** The visitor asked for less motion: the map holds the still frame and never plays. */
+		reducedMotion = false;
+		/** On screen, in part at least. */
+		intersecting = false;
+		/** Has played since it loaded: until then it holds the still frame, where its first play starts. */
+		started = false;
+		/** The animation's code has been asked for: once, as a failed load is not tried again. */
+		loading = false;
+		button!: HTMLButtonElement;
+		motion = matchMedia(REDUCE);
+		/** Tells the map its width on screen, which decides whether its labels are big enough to show. */
+		resizer = new ResizeObserver(([entry]) => this.resized(entry.contentRect.width));
+		watcher = new IntersectionObserver((entries) => {
+			this.intersecting = entries[entries.length - 1].isIntersecting; // the latest, of a batch
+			this.update();
+		});
+		onMotion = (e: MediaQueryListEvent) => this.applyReducedMotion(e.matches);
+		onVisibility = () => this.update();
+
+		connectedCallback() {
+			addStyles();
+			// Once, and only where the square is shown: a phone builds nothing. A map moved within the page is drawn.
+			if (!this.nodes && this.shown()) this.draw();
+			this.resizer.observe(this);
+			this.watcher.observe(this);
+			this.motion.addEventListener('change', this.onMotion);
+			document.addEventListener('visibilitychange', this.onVisibility);
+			this.applyReducedMotion(this.motion.matches);
+		}
+
+		disconnectedCallback() {
+			this.resizer.disconnect();
+			this.watcher.disconnect();
+			this.motion.removeEventListener('change', this.onMotion);
+			document.removeEventListener('visibilitychange', this.onVisibility);
+			this.intersecting = false; // until the observer reports again, on a reconnect
+			this.update();
+		}
+
+		draw() {
+			const nodes = renderMap(this);
+			this.nodes = nodes;
+			this.describe(nodes);
+			this.addButton();
+
+			// The still frame until the animation loads: the whole map with every piece on, and the finale's first
+			// caption. It is the timeline's frame at STATIC_AT, where the first play starts.
+			nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
+			for (const word of nodes.words(CHAPTERS.length, 0)) word.style.opacity = '1';
+		}
+
+		/** One image to assistive technology, with a name and a description, and none of the map's own text. */
+		describe({ svg, world }: MapNodes) {
+			const title = document.createElementNS(NS, 'title');
+			title.id = 'vm-title';
+			title.textContent = TITLE;
+			const desc = document.createElementNS(NS, 'desc');
+			desc.id = 'vm-desc';
+			desc.textContent = DESCRIPTION;
+			svg.prepend(title, desc);
+			svg.setAttribute('role', 'img');
+			svg.setAttribute('aria-labelledby', title.id);
+			svg.setAttribute('aria-describedby', desc.id);
+			// Chrome keeps an SVG image's text in the accessibility tree, so the labels would be read one by one.
+			world.setAttribute('aria-hidden', 'true');
+		}
+
+		addButton() {
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.className = 'vm-toggle';
+			button.innerHTML = ICONS;
+			button.addEventListener('click', () => this.setUserPaused(!this.userPaused));
+			this.button = button;
+			this.setUserPaused(false);
+			this.append(button);
+		}
+
+		setUserPaused(paused: boolean) {
+			this.userPaused = paused;
+			this.button.dataset.state = paused ? 'paused' : 'playing';
+			this.button.setAttribute('aria-label', paused ? 'Play animation' : 'Pause animation');
+			this.update();
+		}
+
+		/**
+		 * Never plays while the visitor asks for less motion: the still frame stays, and the animation is not even
+		 * loaded until motion is allowed. Asked for mid-play, the map pauses on the finale's frame.
+		 */
+		applyReducedMotion(matches: boolean) {
+			this.reducedMotion = matches;
+			this.load();
+			this.update();
+		}
+
+		resized(width: number) {
+			if (!this.nodes && width > 0) this.draw(); // the square is shown now, after a resize past 1090 px
+			this.nodes?.setWidth(width);
+			this.load();
+			this.update();
+		}
+
+		/** Connected, and with a width: the square is hidden below 1090 px. */
+		shown() {
+			return this.isConnected && this.clientWidth > 0;
+		}
+
+		/** Loads the animation once the square is shown with motion allowed. On a failure the still frame stays. */
+		async load() {
+			const nodes = this.nodes;
+			if (this.loading || this.reducedMotion || !nodes || !this.shown()) return;
+			this.loading = true;
+			try {
+				const { buildTimeline } = await import('../lib/heromap/choreo.ts');
+				this.timeline = buildTimeline(nodes);
+			} catch (error) {
+				console.error('varmq-map: the animation failed to load; the map stays still.', error);
+				return;
+			}
+			this.update();
+		}
+
+		/** Motion allowed, not paused with the button, shown, on screen and on a visible tab. */
+		playable() {
+			const visible = document.visibilityState === 'visible';
+			return !this.reducedMotion && !this.userPaused && this.shown() && this.intersecting && visible;
+		}
+
+		/** Plays when it can; the button shows once the animation could play. */
+		update() {
+			if (!this.nodes) return; // not drawn: nothing to show yet
+			const timeline = this.timeline;
+			this.button.hidden = !timeline || this.reducedMotion;
+			if (!timeline) return;
+			if (this.playable()) {
+				// The first play goes on from the still frame: the whole map runs in the finale, and then the loop
+				// starts over at chapter 1.
+				if (!this.started) timeline.seek(STATIC_AT);
+				this.started = true;
+				timeline.play();
+			} else if (this.reducedMotion) timeline.pause().seek(STATIC_AT);
+			else timeline.pause();
+		}
+	}
+
+	if (!customElements.get('varmq-map')) customElements.define('varmq-map', VarmqMap);
+</script>
+
+<style is:global>
+	/* Only what holds the square in place before the script runs. The script adds the rest of the map's styles, so
+	   no other page loads them. */
+	varmq-map {
+		display: block;
+		width: 100%;
+		aspect-ratio: 1;
+	}
+
+	/* Below 1090 px (68.125rem) the map is left out and the hero is Starlight's own. The map itself is hidden as well,
+	   for browsers without :has(). */
+	@media (max-width: 68.12rem) {
+		varmq-map,
+		.hero > .hero-html:has(> varmq-map) {
+			display: none;
+		}
+	}
+
+	/* From there the hero splits in halves and the square takes its half, instead of Starlight's 7fr 4fr with the image
+	   capped at 25rem: up to 524 px rather than 381. It stays short enough for the hero to fit the screen: the hero
+	   starts 5rem down, and Starlight pads it by 1rem + 10vmin above and below. It never goes under 23rem, where
+	   chapter 6's text would start to fade (scene.test.ts). */
+	@media (min-width: 68.125rem) {
+		.hero:has(> .hero-html > varmq-map) {
+			grid-template-columns: 1fr 1fr;
+		}
+		.hero > .hero-html:has(> varmq-map) {
+			width: clamp(23rem, 100vh - 7rem - 20vmin, 100%);
+		}
+	}
+</style>

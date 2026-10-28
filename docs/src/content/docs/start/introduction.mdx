@@ -1,0 +1,35 @@
+---
+title: Introduction
+description: What varmq is, when to use it, and its worker and queue model.
+sidebar:
+  order: 1
+---
+
+varmq is a typed worker pool and message queue for Go. You give a worker a function and a concurrency limit, bind one or more queues to it, and add jobs to those queues. The worker runs each job through your function, never more at once than the limit allows.
+
+## When to use it
+
+Reach for varmq when a program has work to run in the background and you want a say in how much of it runs at once:
+
+- **Bounded concurrency with typed jobs.** A [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job) carries your data type, and a job can hand back an error ([`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker)) or a result and an error ([`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker)).
+- **Several sources, one pool.** One worker can take jobs from plain queues, priority queues and topics at the same time.
+- **Control at runtime.** Pause, resume, restart or resize a running worker.
+- **Jobs that outlive the process.** Plug in a storage adapter, such as [redisq](https://github.com/goptics/redisq) or [sqliteq](https://github.com/goptics/sqliteq), to keep jobs across restarts or share a queue between instances.
+- **Fan-out.** Publish to a [topic](https://pkg.go.dev/github.com/goptics/varmq#Topic) once and every subscribed worker gets its own job. Topics are in-memory only.
+- **Inspection over HTTP.** A [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) lists workers and pauses, resumes or resizes them.
+
+If all you need is to run a fixed set of functions and wait for them, [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup) or a `sync.WaitGroup` is enough.
+
+## The model: a worker is a pool, a queue is a source
+
+varmq splits the work between two things.
+
+**A worker is the pool.** It owns your function and the concurrency limit. The limit is an upper bound, not a fixed number of goroutines: the worker starts goroutines while jobs are waiting and lets them exit once the queue drains.
+
+**A queue is a source of jobs.** Each queue is bound to one worker. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns at once; the worker's event loop then hands waiting jobs to free goroutines.
+
+Below, six jobs are added to a worker with concurrency 4. Four start right away, two wait in the queue, and the pool shrinks back to one idle goroutine once the queue is empty.
+
+![A varmq worker with concurrency 4: six jobs are added, four run at once, two wait in the queue, and the pool shrinks back to one idle goroutine when the queue drains](../../../../../assets/diagrams/varmq-worker-pool.svg)
+
+Next: [install varmq](/start/installation/), then run the [quick start](/start/quick-start/) in your browser.

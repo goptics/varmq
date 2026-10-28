@@ -1,0 +1,155 @@
+---
+title: Prometheus
+description: Export a worker's gauges and counters to Prometheus with GaugeFunc and CounterFunc. Which varmq method backs each metric, a program to run, and what to watch for when you scrape.
+sidebar:
+  order: 2
+---
+
+varmq imports no metrics library. A worker exposes what Prometheus needs as plain methods: how many jobs are running and waiting, and four counters of what has happened. You wrap those methods in collectors from the [Prometheus Go client](https://github.com/prometheus/client_golang). Its [`GaugeFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeFunc) and [`CounterFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#CounterFunc) call a function each time Prometheus scrapes, so nothing of yours has to poll the worker.
+
+This page follows `examples/prometheus`, which is its own Go module and uses client_golang v1.23.2.
+
+## A worker with metrics
+
+The program below runs a worker with concurrency 10, registers eight collectors for it, and serves them at `/metrics`. It adds 1000 jobs that each take 100 milliseconds.
+
+```go collapse={1-14}
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/goptics/varmq"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+func main() {
+	worker := varmq.NewWorker(
+		func(j varmq.Job[string]) {
+			time.Sleep(100 * time.Millisecond)
+		},
+		varmq.WithConcurrency(10),
+	)
+	queue := worker.BindQueue()
+
+	registerMetrics(worker, "foo_worker")
+	http.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		for i := range 1000 {
+			queue.Add(fmt.Sprintf("task-%d", i))
+		}
+	}()
+
+	log.Println("metrics on http://localhost:8080/metrics")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// Each collector calls its function on every scrape, so a value is read when
+// Prometheus asks for it.
+func registerMetrics(w varmq.Worker, namespace string) {
+	gauge := func(name, help string, read func() int) {
+		prometheus.MustRegister(prometheus.NewGaugeFunc(
+			prometheus.GaugeOpts{Namespace: namespace, Name: name, Help: help},
+			func() float64 { return float64(read()) },
+		))
+	}
+	counter := func(name, help string, read func() uint64) {
+		prometheus.MustRegister(prometheus.NewCounterFunc(
+			prometheus.CounterOpts{Namespace: namespace, Name: name, Help: help},
+			func() float64 { return float64(read()) },
+		))
+	}
+
+	m := w.Metrics()
+
+	gauge("workers_processing", "Jobs being processed right now", w.NumProcessing)
+	gauge("workers_concurrency", "Maximum number of jobs processed at once", w.NumConcurrency)
+	gauge("workers_idle", "Idle goroutines in the pool", w.NumIdleWorkers)
+	gauge("waiting_total", "Jobs not started yet; can read high while batches run", w.NumPending)
+
+	counter("submitted_total", "Jobs the queue accepted", m.Submitted)
+	counter("completed_total", "Jobs whose function has returned", m.Completed)
+	counter("successful_total", "Jobs that returned without an error or a panic", m.Successful)
+	counter("failed_total", "Jobs that returned an error or panicked", m.Failed)
+}
+```
+
+The repository's example registers collectors with the same eight names, one [`MustRegister`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#MustRegister) call each, on a worker with the same concurrency. The helpers above shorten that, and their help texts are shorter.
+
+### Run locally
+
+1. Make a module, save the program as `main.go` and add the dependencies:
+
+   ```bash
+   mkdir prometheus-demo && cd prometheus-demo
+   go mod init prometheus-demo
+   go get github.com/goptics/varmq github.com/prometheus/client_golang
+   ```
+
+2. Run it with `go run .`.
+3. In another terminal, read the metrics while the jobs run:
+
+   ```bash
+   curl -s localhost:8080/metrics | grep "^foo_worker"
+   ```
+
+   The output looks like this a moment after the start. The numbers depend on when you ask:
+
+   ```
+   foo_worker_completed_total 190
+   foo_worker_failed_total 0
+   foo_worker_submitted_total 1000
+   foo_worker_successful_total 190
+   foo_worker_waiting_total 800
+   foo_worker_workers_concurrency 10
+   foo_worker_workers_idle 0
+   foo_worker_workers_processing 10
+   ```
+
+4. Ask again after about fifteen seconds. All 1000 jobs have completed, `waiting_total` and `workers_processing` read 0, and `workers_idle` reads 1.
+
+Leave out `grep` to see the `# HELP` and `# TYPE` lines too, and the Go runtime and process metrics. [`promhttp.Handler()`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus/promhttp#Handler) serves the default registry, which has those as well.
+
+## The metrics
+
+With the namespace `foo_worker`, each name starts with `foo_worker_`.
+
+| Name | Type | From | What it is |
+|---|---|---|---|
+| `workers_processing` | gauge | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | jobs being processed right now |
+| `workers_concurrency` | gauge | [`NumConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) | the concurrency limit |
+| `workers_idle` | gauge | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | idle goroutines in the pool |
+| `waiting_total` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
+| `submitted_total` | counter | [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) | jobs the queue accepted |
+| `completed_total` | counter | [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) | jobs whose function has returned |
+| `successful_total` | counter | [`Successful`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Successful) | jobs that returned without an error or a panic |
+| `failed_total` | counter | [`Failed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Failed) | jobs that returned an error or panicked |
+
+The four counters are the four of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics). [Metrics](/guides/metrics/) explains what each counts. [Waiting](/guides/waiting/) explains what `NumPending` and `NumProcessing` count.
+
+## What to watch for
+
+- **`waiting_total` is a gauge.** It goes up and down. The `_total` suffix is the Prometheus convention for counters, so you may want another name for it in your own code.
+- **The reads are not one snapshot.** A scrape reads eight values at slightly different moments, and a job can finish between two of them. A set read while jobs run can be off by a few. [Metrics](/guides/metrics/#reading-them) says more.
+- **The counters start at zero when the worker is created.** They are totals. Use `rate()` or `increase()` in Prometheus to see how many jobs ran in a period. A restart of the process zeroes them, and Prometheus functions such as `rate()` read a drop as a counter reset.
+- **[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) makes a counter fall.** It zeroes the four counters, and Prometheus reads that as a reset, like a restart. Do not call it on a worker you export unless you want that.
+- **One namespace for each worker.** `MustRegister` panics when a collector with the same metric name is registered twice, with `duplicate metrics collector registration attempted`. Register each worker under its own namespace.
+- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite, so every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics). The `Submitted` count of a distributed queue may differ from what you expect, and these docs do not cover how a distributed queue's counters count yet.
+
+## Scraping it
+
+Point Prometheus at the address the program listens on. A minimal scrape configuration is:
+
+```yaml
+scrape_configs:
+  - job_name: varmq
+    static_configs:
+      - targets: ["localhost:8080"]
+```
+
+Prometheus scrapes `/metrics` by default, which is where the program serves them. If you serve varmq's [REST API](/operations/rest-api/) as well, it can sit on the same server: mount it with `http.Handle("/varmq/", varmq.Handler("/varmq"))` next to the metrics route. The REST API lists only named workers, so give the worker a name. The REST API returns the same worker numbers as JSON, which suits a dashboard, and Prometheus suits history and alerts.

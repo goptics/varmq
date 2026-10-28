@@ -1,0 +1,83 @@
+---
+title: Metrics
+description: The four counters behind a worker's Metrics(), what each one counts, how to read them, and when Submitted differs from NumPending + NumProcessing + Completed. Covers in-memory queues.
+sidebar:
+  order: 12
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+Every worker keeps four counters over its lifetime. [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) returns them. They tell you how much work the worker has taken in and how it went, without tracking jobs yourself.
+
+This page covers workers bound to in-memory queues. For persistent and distributed queues, see [persistence](/persistence/overview/).
+
+## The four counters
+
+[`Metrics`](https://pkg.go.dev/github.com/goptics/varmq#Metrics) has four read methods, each returning a `uint64`:
+
+| Method | Counts |
+|---|---|
+| [`Submitted()`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) | jobs the queue accepted. One for each [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) that returns `true`, and one for each item of [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) the queue took. An `Add` that returns `false` adds nothing. |
+| [`Completed()`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) | jobs whose function has returned, whether it succeeded or failed. |
+| [`Successful()`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Successful) | jobs whose function returned without an error and without a panic. A plain worker's function has no error to return, so for it this means it returned normally. |
+| [`Failed()`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Failed) | jobs whose function returned an error, or panicked. |
+
+A job that runs counts once in `Completed` and once in `Successful` or `Failed`. After a worker has gone idle, `Completed` equals `Successful` plus `Failed`, unless you called [`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) partway.
+
+A job that never runs counts in `Submitted` and in none of the others. That happens to a job that is closed before it starts: [closed through its handle](/concepts/jobs/#closing-a-queued-job), or removed by [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge). It also happens to a topic payload that is dropped unread, as below. Only a job that ran increments `Completed`.
+
+A [topic](/guides/topics/) counts too: each [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) adds one to `Submitted` of every worker subscribed to it at that moment. The subscriber's worker turns a payload into a job only when it takes the payload, so a payload that is still unread has been counted as submitted but is not a job yet. [Unsubscribing](/guides/topics/#unsubscribing) drops such payloads.
+
+## Reading them
+
+The program below adds three jobs to an error worker. Job 2 returns an error. It waits until the worker is idle and reads the four counters.
+
+<GoPlay example="metrics-counters" />
+
+All three jobs were submitted and completed. Two succeeded, and job 2 is the one failed job, so `Completed` equals `Successful` plus `Failed`.
+
+- **The counters are cumulative.** They start at zero when the worker is created, and nothing but `Reset` clears them. Pausing, stopping, restarting and purging leave them alone.
+- **They are safe to read from any goroutine.** Each method is one atomic read.
+- **Four reads are not one snapshot.** A job can finish between two of them, so a set of four read while jobs run can be off by a few.
+- **A job's own [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) can return a moment before `Completed` counts it.** The worker closes a finished job, which releases `Wait`, and counts it as completed just after. `Successful` and `Failed` are already counted by then. To read settled values, wait for the worker with [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) or [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait) first. [Waiting](/guides/waiting/) compares them.
+
+## Submitted, NumPending, NumProcessing and Completed
+
+A job is waiting, running or done, so for a worker with nothing running you might expect:
+
+```
+Submitted == NumPending + NumProcessing + Completed
+```
+
+[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the jobs that have not started, and [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) is the jobs running right now, counted as busy goroutines. The equation does not hold in these cases:
+
+- **A job closed before it ran breaks it.** `Purge`, and closing a queued job through its handle, leave `Submitted` higher than the sum. Such a job was counted when it was added, and it never reaches `Completed`, because only a job that ran does. Once the worker has dropped it, it is not pending either, so nothing on the right counts it. A job closed through its handle still counts in `NumPending` until the worker reaches it, so the gap opens then.
+- **While jobs run, the sum can be too high.** A goroutine can take several jobs from an in-memory FIFO queue or a topic into a batch ([batched dispatch](/concepts/how-it-works/#batched-dispatch)). `NumProcessing` counts that goroutine as one, and `NumPending` keeps counting the jobs of the batch that have already finished until the whole batch has ended, while `Completed` counts each as it finishes. For that time the sum can run above `Submitted`.
+- **Unsubscribing with unread payloads breaks it.** [`Unsubscribe`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Unsubscribe), [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the subscription, and [`Close`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Close) on the topic all end a subscription and drop the payloads it has not read. `Publish` counted them in `Submitted`. They never run, so they never reach `Completed`, and the worker no longer counts them as pending, because the subscription it read them from is gone. `Purge` on a subscription drops the unread payloads the same way.
+- **Storage shared between workers breaks it.** `Add` counts in `Submitted` on the worker whose handle you call. The worker that takes the job counts it in `Completed`. A queue you wrote and bound to two workers with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) splits the counters between them, so the equation holds for neither.
+- **`Reset` breaks it.** It zeroes `Submitted` and `Completed`. The jobs still waiting or running count on the right side of the equation, and no longer on the left.
+
+So use the equation on a worker with nothing running, where none of these cases applies. On an idle worker, `NumPending` and `NumProcessing` are 0 and the equation reduces to `Submitted == Completed`. If it does not hold, look at the cases above first. Do not use the equation as a live check while jobs run.
+
+The program below checks the equation on an idle worker, then on a worker paused with [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) with two jobs waiting, then after `Purge`.
+
+<GoPlay example="metrics-equation" />
+
+The equation holds on the idle worker, 1 = 0 + 0 + 1, and on the paused one, 3 = 2 + 0 + 1, since a paused worker starts nothing and its two jobs wait in the queue. After `Purge` the right side is 1 and `Submitted` is still 3: the two purged jobs never ran, so they never reach `Completed`.
+
+## Reset
+
+[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) sets all four counters to zero. It does not touch the queue or the jobs that are running.
+
+- The four counters are cleared one after another, not in one step.
+- A job that was waiting or running when you call it is counted in `Completed` when it finishes, though its `Submitted` is gone. After a `Reset` in the middle of a run, `Completed` can be higher than `Submitted`.
+
+Call `Reset` when the worker is idle, as the program below does.
+
+<GoPlay example="metrics-reset" />
+
+Both jobs ran before the `Reset`, so the counters read 2 before it and 0 after.
+
+## Where else the counters appear
+
+A named worker's counters are also what the REST handler reports, and the Prometheus example exports the same four. See [REST API](/operations/rest-api/) and [Prometheus](/operations/prometheus/).

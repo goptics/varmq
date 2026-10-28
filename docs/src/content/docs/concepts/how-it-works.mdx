@@ -1,0 +1,75 @@
+---
+title: How it works
+description: The event loop, the goroutine pool, topic fan-out and batched dispatch behind a varmq worker, with animated diagrams.
+sidebar:
+  order: 4
+---
+
+Each worker has two moving parts: one **event loop** that decides what runs next, and a **pool** of goroutines that run your function. A job travels from `Add`, through the queue and the event loop, to a pool goroutine. The diagrams below loop, and each one steps through a single case.
+
+## The event loop
+
+Every worker runs one event loop, a single goroutine. It sleeps until something signals it: `Add` putting a job in the queue, or a pool goroutine finishing work. On each signal it hands jobs to the pool while the queue has work and a slot is free, then goes back to sleep.
+
+A slot is free while the number of busy pool goroutines is below the worker's concurrency. If no slot is free, the loop waits for a goroutine to come back.
+
+![The varmq event loop with one worker: Add enqueues a job and signals the loop, the loop sends it to Worker 1, a second job waits in the queue until Worker 1 finishes and signals the loop](../../../../../assets/diagrams/varmq-single-worker.svg)
+
+## The worker pool
+
+Every [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add), and every job in an [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll), tries to wake the event loop. The signal channel holds only one pending signal, so the extra signals are dropped. That is enough: one wake-up lets the loop keep dispatching back to back while the queue has work and a slot is free. A signal that arrives while another is pending costs nothing.
+
+The concurrency limit is an upper bound, not a pool size. The pool starts with one idle goroutine and spawns more while another one would drain the backlog faster than it costs. When a goroutine finishes, it stays in the pool if more jobs are waiting than idle goroutines are ready to run them. Otherwise it exits, and the pool shrinks back to one idle goroutine. The diagrams label the goroutines Worker 1, Worker 2 and so on. [`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) and [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) change how many idle goroutines stay around. [Concurrency](/guides/concurrency/) covers both.
+
+Below, six jobs are added to a worker with concurrency 4. Four go out back to back, the other two wait in the queue, and the pool shrinks as it drains.
+
+![A varmq worker pool with concurrency 4: six Add calls produce one wake-up, the event loop dispatches four jobs to four goroutines, two jobs wait, and the pool shrinks back to one idle goroutine](../../../../../assets/diagrams/varmq-worker-pool.svg)
+
+## Topics
+
+A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) feeds the same event loop as a queue, but from a shared log instead of a queue of jobs. [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) appends the payload to the log once, then signals the event loop of every subscribed worker, the same one-slot signal `Add` sends. Each subscription reads the log through its own cursor, so each worker's loop makes its own job from the payload and hands it to its own pool. The workers run independently: a slow or paused one does not hold up `Publish` or the others.
+
+A payload stays in the log until every subscription has read it. Below, two workers subscribe to one topic, and the slower one keeps a chunk of the log alive until its cursor moves past it.
+
+![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](../../../../../assets/diagrams/varmq-topic.svg)
+
+[Topics](/guides/topics/) covers subscribing, capacity and priority.
+
+## Batched dispatch
+
+A hand-off costs the event loop the same whether a job takes a nanosecond or a minute. With many short jobs, the loop, not the goroutines, becomes the bottleneck. To avoid that, a goroutine can take several jobs at once, a batch, and run them one after another.
+
+The batch size is the smallest of three numbers:
+
+- an even split of the waiting jobs across the workers the limit allows;
+- enough jobs to keep hand-offs about 32 microseconds apart, sized from the last batch that finished (one job until a job has been timed, unless concurrency is 1);
+- 32.
+
+With enough jobs waiting, that works out like this:
+
+| Setup | Jobs per hand-off |
+|---|---|
+| 10 goroutines, 3 s jobs | 1, so jobs start in queue order |
+| 24 goroutines, 1 ms jobs | 1 |
+| 3,000 goroutines, 10 ms jobs | 10 |
+| 10,000 or more goroutines, 10 ms jobs | 32 |
+| Concurrency 1, any jobs | up to 32, because one goroutine runs jobs in order anyway |
+
+The diagram shows a worker that has already timed its jobs, with 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. A fresh worker hands out one job at a time until its first batch finishes.
+
+![Batched dispatch with concurrency 2: eight Add calls, the first worker takes four jobs in one hand-off, a second worker is spawned for two, and the last two jobs go out one at a time](../../../../../assets/diagrams/varmq-batch.svg)
+
+### What batching means for your code
+
+- **Jobs waiting in a batch are still `Queued`.** The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them and `NumProcessing` does not. You can still [close them](/concepts/jobs/#closing-a-queued-job).
+- **On `Stop` or `Pause`,** each goroutine finishes its running job and parks the rest of its batch. `NumPending` counts the parked jobs, but the queue's `Len()` does not. They run first, in order, after `Resume` or `Restart`, and `Purge` closes them. See the [lifecycle](/concepts/lifecycle/#what-happens-to-jobs).
+- **Capacity counts only jobs still in the queue.** A bounded queue can have up to 32 more jobs per goroutine pending, held in batches.
+
+Not every source batches:
+
+| Source | Batches? | Why |
+|---|---|---|
+| In-memory queue, topic | Yes | |
+| Priority queue | No | A higher-priority job added later must not wait behind a batch. |
+| Persistent or distributed queue | No | A worker must not hold unacknowledged messages that other consumers could take. |
+| Worker bound to several queues | No | The strategy picks a queue for every single job. |

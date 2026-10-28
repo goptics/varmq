@@ -1,0 +1,84 @@
+---
+title: Jobs
+description: What a job is, the handle Add returns, job IDs and statuses, closing a queued job, and waiting on a job.
+sidebar:
+  order: 2
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A job is one unit of work: your data, an optional ID, and a status that changes as the worker deals with it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and, on an in-memory queue, hands you a handle.
+
+## Two views of a job
+
+The worker function and the code that called `Add` see different things.
+
+**The worker function gets a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job).** It has two methods: [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) returns what you passed to `Add`, and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) returns the job's ID. The interface has nothing else: no status and no `Close`.
+
+**The caller gets a handle.** `Add` returns the handle and a `bool`:
+
+```go
+job, ok := queue.Add("resize photo")
+```
+
+`ok` is `false` when the queue did not take the job: it is full or closed, or a job with the same ID is still in the queue (a job a worker has already taken into a batch, or parked, has released its ID). In that case `job` is `nil`, so check `ok` before you use it.
+
+With a plain worker the handle is an [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob). The other two worker types add one method that returns the outcome:
+
+| Worker | `Add` returns | Extra method |
+|---|---|---|
+| [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) | `EnqueuedJob` | none |
+| [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | `Err() error` |
+| [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | `Result() (R, error)` |
+
+Every handle has `ID()`, `Status()`, `IsClosed()`, `Wait()` and `Close()`. `Err` and `Result` block until the job is closed, then return what the worker function sent. For a job that was closed before it ran, `Err` returns `nil` and `Result` returns the zero value and a `nil` error. See [worker types](/guides/worker-types/) for the three workers side by side.
+
+## Job IDs
+
+A job has no ID unless you give it one. `ID()` returns an empty string by default.
+
+- [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) sets the ID of one job: `queue.Add(data, varmq.WithJobId("job-1"))`. An empty string is ignored.
+- [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) sets a function that makes IDs. `Add` calls it, on the caller's goroutine, for every job; its value is used when the job has no ID of its own.
+
+An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds: it returns `ok == false`. A job a worker has already taken into a batch, or parked, has released its ID, so a duplicate `Add` is accepted even though that job's status still reads `Queued`. IDs from a generator are not checked. Items added with [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) get a `g:` prefix, so an item with ID `a` shows up in the worker function as `g:a`. [Job IDs](/guides/job-ids/) covers the details.
+
+## Job status
+
+[`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) on a handle returns one of five strings:
+
+| Status | Meaning |
+|---|---|
+| `Created` | The job exists but `Add` has not stored it yet. A handle you get back from `Add` is past this. |
+| `Queued` | The job is waiting. It may be in the queue, in a batch a worker took but has not started, or parked by a [pause or stop](/concepts/lifecycle/). |
+| `Processing` | The worker function is running it. |
+| `Finished` | The worker function returned. |
+| `Closed` | The job is done with: it ran, or it was closed before it could. |
+
+`Finished` is short-lived. As soon as your function returns, the worker closes the job to release anyone waiting on it. By the time [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, the status is `Closed`, and [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) is `true`. So `Closed` does not tell you whether the job ran. Record that in your own worker function if it matters.
+
+The worker below runs one job at a time, and each job takes 500 ms. The program reads both statuses while job-1 runs.
+
+<GoPlay example="jobs-status" />
+
+job-1 is `Processing` and job-2 is `Queued`. After `Wait`, both read `Closed` and `IsClosed()` is `true`, though both ran.
+
+## Closing a queued job
+
+[`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) cancels a job that has not started. It only marks the job closed; it does not take it out of the queue. When the worker reaches a closed job it skips it, and your function never sees it. Closing also releases `Wait` at once.
+
+It succeeds while the job waits. It fails in two cases:
+
+- A running job returns [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing). You cannot stop it from the outside.
+- A closed job returns [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed). That includes a job that already ran, since the worker closes those too.
+
+Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. It counts as submitted, and because it never ran, it never counts as completed.
+
+Here job-1 is running and job-2 and job-3 wait behind it.
+
+<GoPlay example="jobs-close" />
+
+Closing job-1 fails with `ErrJobProcessing`. Closing job-2 works, its `Wait` returns at once while job-1 is still running, and a second `Close` fails with `ErrJobAlreadyClosed`. The worker then runs job-3 and never prints a line for job-2.
+
+## Waiting on a job
+
+[`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) blocks until the job is closed, whether it ran or you closed it. If that has already happened, it returns at once. To wait for everything a worker has queued instead of one job, see [waiting](/guides/waiting/).
