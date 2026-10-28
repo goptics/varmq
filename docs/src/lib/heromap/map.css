@@ -112,7 +112,7 @@ varmq-map .vm-svg {
 
 /* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */
 @media (forced-colors: active) {
-	varmq-map .vm-svg {
+	varmq-map :is(.vm-svg, .vm-ring) {
 		forced-color-adjust: none;
 	}
 }
@@ -447,6 +447,19 @@ varmq-map .vm-toggle svg {
 	width: 12px;
 	height: 12px;
 	fill: currentColor;
+}
+
+/* How much of the loop has played, over the button's edge: from the top, clockwise. */
+varmq-map .vm-toggle .vm-ring {
+	position: absolute;
+	top: -1px;
+	left: -1px;
+	width: 28px;
+	height: 28px;
+	rotate: -90deg;
+	fill: none;
+	stroke: var(--vm-go);
+	stroke-width: 1.5;
 }
 
 varmq-map .vm-toggle[data-state='playing'] .vm-play,
