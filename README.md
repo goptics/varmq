@@ -1,4 +1,5 @@
 <div align="center">
+<p>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/text-logo-dark.svg">
   
@@ -6,6 +7,7 @@
   
   <img alt="VarMQ" width="400px" src="./assets/text-logo.svg">
 </picture>
+</p>
 
 
   <p>
