@@ -235,10 +235,11 @@
 		}
 	}
 
-	/* Below 67rem Starlight's 7fr 4fr hero leaves the square too narrow for the chapters' text (chapter 6's needs a
-	   366 px square to stay at 7 px), so there the hero splits in halves. The square is then 372 px at 50rem, and
-	   366 px at 67rem is the narrowest it is shown (scene.test.ts). */
-	@media (min-width: 50rem) and (max-width: 66.99rem) {
+	/* Below 69rem Starlight's 7fr 4fr hero leaves the square too narrow for the chapters' text (chapter 6's needs a
+	   366 px square to stay at 7 px), so there the hero splits in halves. The square is then 372 px at 50rem and 378 px
+	   at 69rem (scene.test.ts). 7fr 4fr reaches 366 px at 67rem, but a classic scrollbar narrows the page by 15 px
+	   without narrowing the width media queries see: 69rem leaves room for it. */
+	@media (min-width: 50rem) and (max-width: 68.99rem) {
 		.hero:has(> .hero-html > varmq-map) {
 			grid-template-columns: 1fr 1fr;
 		}
