@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import TopicFanout from '../../../components/guides-a/TopicFanout.astro';
 
 A queue gives each job to one worker. A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) gives each payload to every worker subscribed to it. Use one when several workers must each act on the same event, such as sending an email and updating stock for the same order.
 
@@ -16,6 +17,10 @@ A queue gives each job to one worker. A [`Topic`](https://pkg.go.dev/github.com/
 | You get back | a job handle and a `bool` | a `bool` |
 
 **Topics are in-memory only.** A topic lives in your process. Nothing is written to disk, and a payload is lost when the process exits.
+
+Publish an order below. Then pause one worker, subscribe and unsubscribe, and set a capacity, to see the rules on this page.
+
+<TopicFanout />
 
 ## Creating a topic and subscribing
 

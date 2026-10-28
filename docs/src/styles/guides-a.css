@@ -1,0 +1,786 @@
+/* Scenes for the guides queues, strategies, topics, worker-types, job-ids, adding-many and function-helpers.
+   The scenes are dark panels in both themes (docs/DESIGN.md), so they read only the panel and signal tokens.
+   Class names follow the reference page (/alt/) and sit under `.ga`, so a shared stylesheet can replace them later. */
+
+@import './tokens.css';
+
+/* tokens.css sets color-scheme for the whole page. Hand it back to the docs theme. */
+:root {
+	color-scheme: revert-layer;
+}
+
+.ga {
+	--local-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
+	--local-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
+	--local-hole: color-mix(in srgb, var(--panel-ink) 26%, transparent);
+	--local-tk-k: color-mix(in srgb, var(--danger) 62%, var(--cobalt));
+}
+
+/* ---- Scene frame ---- */
+
+.ga-frame {
+	container-type: inline-size;
+	margin: 1.75rem 0;
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	font-family: var(--mono);
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	overflow: hidden;
+}
+
+.ga-frame *,
+.ga-frame *::before,
+.ga-frame *::after {
+	box-sizing: border-box;
+}
+
+.ga-frame :where(p, ul, ol, dl, dd, figure, h3) {
+	margin: 0;
+	padding: 0;
+}
+
+.ga-frame :where(ul, ol) {
+	list-style: none;
+}
+
+.ga-cap {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--panel-rule);
+	background: var(--panel-2);
+	color: var(--panel-ink-2);
+	font-size: 0.75rem;
+	min-width: 0;
+}
+
+.ga-cap__tag {
+	flex: none;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	font-size: 0.6875rem;
+}
+
+.ga-cap code {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	background: none;
+	border: 0;
+	padding: 0;
+	color: var(--panel-ink);
+	font: inherit;
+}
+
+.ga-stage {
+	display: grid;
+	gap: 18px;
+	padding: 16px 14px 18px;
+}
+
+.ga-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 10px;
+	padding: 12px 14px;
+	border-top: 1px solid var(--panel-rule);
+	background: var(--panel-2);
+}
+
+.ga-frame:not([data-ready]) .ga-controls {
+	display: none;
+}
+
+.ga-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+.ga-grow {
+	flex: 1 1 auto;
+}
+
+/* ---- Focus, buttons, tabs, stepper ---- */
+
+.ga :focus-visible {
+	outline: 2px solid var(--panel-accent);
+	outline-offset: 3px;
+	border-radius: 4px;
+}
+
+.ga .pbtn {
+	min-height: 40px;
+	padding: 8px 14px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--local-fill);
+	color: var(--panel-ink);
+	font: 500 0.8125rem/1 var(--mono);
+	cursor: pointer;
+	transition: background-color 0.15s;
+}
+
+.ga .pbtn:hover:not([disabled]) {
+	background: var(--local-fill-2);
+}
+
+.ga .pbtn--primary {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+	font-weight: 600;
+}
+
+.ga .pbtn--primary:hover:not([disabled]) {
+	background: color-mix(in srgb, var(--brand) 84%, var(--panel-ink));
+}
+
+.ga .pbtn[disabled] {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.ga .pbtn[aria-pressed='true'],
+.ga .pbtn[aria-pressed='true']:hover:not([disabled]) {
+	background: var(--panel-ink);
+	border-color: var(--panel-ink);
+	color: var(--panel);
+}
+
+.ga .seg {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 4px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
+	background: transparent;
+}
+
+.ga .seg [role='tab'],
+.ga .seg [role='radio'] {
+	min-height: 40px;
+	padding: 8px 14px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--panel-ink-2);
+	font: 600 0.8125rem/1 var(--mono);
+	cursor: pointer;
+}
+
+.ga .seg [role='tab']:hover,
+.ga .seg [role='radio']:hover {
+	background: var(--local-fill-2);
+}
+
+.ga .seg [aria-selected='true'],
+.ga .seg [aria-checked='true'] {
+	background: var(--panel-ink);
+	color: var(--panel);
+}
+
+.ga-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--panel-ink-2);
+}
+
+.ga-field > span {
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	font-size: 0.6875rem;
+}
+
+.ga-step {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.ga-step .pbtn {
+	min-width: 40px;
+	padding-inline: 0;
+	border: 0;
+	border-radius: 0;
+}
+
+.ga-step output {
+	min-width: 4.5ch;
+	padding: 0 8px;
+	text-align: center;
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Jobs, rails, workers ---- */
+
+.ga .chip {
+	position: relative;
+	display: inline-grid;
+	place-items: center;
+	min-width: 56px;
+	height: 30px;
+	padding: 0 10px;
+	border-radius: 6px;
+	background: var(--brand);
+	color: var(--brand-ink);
+	font: 600 0.6875rem/1 var(--mono);
+	white-space: nowrap;
+	flex: none;
+}
+
+.ga .chip--amber {
+	background: var(--amber);
+}
+
+.ga .chip--cobalt {
+	background: var(--cobalt);
+}
+
+.ga .chip--danger {
+	background: var(--danger);
+}
+
+.ga .chip.is-next {
+	outline: 2px solid var(--panel-ink);
+	outline-offset: 2px;
+}
+
+.ga .chip.is-run {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--panel-accent) 55%, transparent);
+}
+
+.ga .chip.is-dim {
+	background: var(--local-fill-2);
+	color: var(--panel-ink-2);
+	text-decoration: line-through;
+	text-decoration-thickness: 1px;
+}
+
+.ga .chip[data-n]::after {
+	content: attr(data-n);
+	position: absolute;
+	top: -7px;
+	right: -7px;
+	display: grid;
+	place-items: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 3px;
+	border-radius: 8px;
+	background: var(--panel-ink);
+	color: var(--panel);
+	font-size: 0.625rem;
+}
+
+.ga-rail {
+	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	align-items: center;
+	gap: 8px;
+	min-height: 60px;
+	padding: 16px 12px;
+	border-radius: 8px;
+	background: var(--local-fill);
+}
+
+/* The sprocket holes of continuous-feed paper. */
+.ga-rail::before,
+.ga-rail::after {
+	content: '';
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	height: 4px;
+	background: radial-gradient(circle, var(--local-hole) 1.4px, transparent 2px) 0 50% / 12px 4px repeat-x;
+	pointer-events: none;
+}
+
+.ga-rail::before {
+	top: 3px;
+}
+
+.ga-rail::after {
+	bottom: 3px;
+}
+
+.ga-rail--ghost {
+	background: transparent;
+	border: 1px dashed var(--panel-rule);
+}
+
+.ga-rail--ghost::before,
+.ga-rail--ghost::after {
+	display: none;
+}
+
+.ga-hint {
+	color: var(--panel-ink-2);
+	font-size: 0.75rem;
+}
+
+.ga-rail:has(.chip, .ga-tag) > .ga-hint {
+	display: none;
+}
+
+.ga-label {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px 10px;
+	margin-bottom: 8px;
+	color: var(--panel-ink-2);
+	font-size: 0.75rem;
+}
+
+.ga-label strong {
+	color: var(--panel-ink);
+	font-weight: 600;
+}
+
+.ga-label > :not(.ga-tag) + .ga-tag {
+	margin-left: auto;
+}
+
+.ga-tag {
+	padding: 2px 6px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 4px;
+	color: var(--panel-ink-2);
+	font-size: 0.6875rem;
+	white-space: nowrap;
+}
+
+.ga-tag--on {
+	border-color: var(--panel-accent);
+	color: var(--panel-accent);
+}
+
+.ga-tag--warn {
+	border-color: var(--amber);
+	color: var(--amber);
+}
+
+.ga-tag--bad {
+	border-color: var(--danger);
+	color: var(--danger);
+}
+
+.ga .lane {
+	display: grid;
+	grid-template-columns: 72px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+}
+
+.ga .lane__id {
+	color: var(--panel-ink-2);
+	font-size: 0.6875rem;
+}
+
+.ga .lane__track {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 4px;
+	border-radius: 7px;
+	background: var(--local-fill);
+}
+
+.ga .lane[data-off] .lane__track {
+	background: transparent;
+	border: 1px dashed var(--panel-rule);
+}
+
+.ga .lane[data-off] .lane__id {
+	opacity: 0.55;
+}
+
+.ga-arrow {
+	color: var(--panel-ink-2);
+	text-align: center;
+	line-height: 1;
+}
+
+/* ---- Layout inside a frame ---- */
+
+.ga-cols {
+	display: grid;
+	gap: 18px;
+	grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 640px) {
+	.ga-cols--2 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.ga-cols--3 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.ga-span {
+		grid-column: 1 / -1;
+	}
+}
+
+.ga-panel {
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--panel-2);
+}
+
+.ga-panel[data-on] {
+	border-color: var(--panel-accent);
+}
+
+/* Blocks inside a panel: a label sits tight on the block it names, and a new block gets room above. */
+.ga-panel > * + * {
+	margin-top: 12px;
+}
+
+.ga-panel > .ga-label + * {
+	margin-top: 0;
+}
+
+.ga-panel > h3 + .ga-label {
+	margin-top: 0;
+}
+
+.ga .chip--id {
+	height: auto;
+	min-height: 30px;
+	padding: 5px 10px;
+	grid-auto-flow: row;
+	gap: 2px;
+}
+
+.ga .chip--id small {
+	font-size: 0.625rem;
+	font-weight: 500;
+	opacity: 0.85;
+}
+
+.ga .chip--free {
+	border: 1px dashed var(--panel-rule);
+	background: transparent;
+	color: var(--panel-ink-2);
+	font-weight: 500;
+}
+
+.ga-panel > h3,
+.ga-title {
+	margin: 0 0 8px;
+	color: var(--panel-ink);
+	font: 600 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.04em;
+}
+
+.ga-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.ga-head h3 {
+	margin: 0;
+	font: 600 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.04em;
+	color: var(--panel-ink);
+}
+
+.ga-head h3 .ga-note {
+	margin-left: 6px;
+	font-weight: 400;
+}
+
+.ga-head__btns {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.ga-head .pbtn {
+	min-height: 32px;
+	padding: 6px 10px;
+	font-size: 0.75rem;
+}
+
+.ga .chip--log {
+	height: auto;
+	min-height: 30px;
+	padding: 5px 10px 6px;
+	grid-auto-flow: row;
+	gap: 4px;
+}
+
+.ga .pips {
+	display: flex;
+	justify-content: center;
+	gap: 3px;
+}
+
+.ga .pip {
+	width: 12px;
+	height: 4px;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--brand-ink) 28%, transparent);
+}
+
+.ga .pip[data-s='on'] {
+	background: var(--brand-ink);
+}
+
+.ga .pip[data-s='na'] {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 45%, transparent);
+}
+
+.ga-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 14px;
+	align-items: center;
+}
+
+.ga-methods {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+.ga-step-panel {
+	transition: border-color 0.3s var(--ease);
+}
+
+.ga-panel .ga-code {
+	margin-bottom: 10px;
+	font-size: 0.6875rem;
+}
+
+.ga-rows {
+	display: grid;
+	gap: 6px;
+}
+
+.ga-rows li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 10px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--local-fill);
+	overflow-wrap: anywhere;
+}
+
+.ga-rows li > span:last-child:not(.ga-tag) {
+	margin-left: auto;
+	color: var(--panel-accent);
+}
+
+.ga-rows li[data-tone='bad'] .ga-tag {
+	border-color: var(--danger);
+	color: var(--danger);
+}
+
+.ga-rows li[data-tone='dim'] {
+	color: var(--panel-ink-2);
+}
+
+.ga-stack {
+	display: grid;
+	gap: 18px;
+}
+
+.ga-queues {
+	display: grid;
+	gap: 14px;
+}
+
+.ga-why {
+	min-height: 3em;
+	color: var(--panel-ink);
+}
+
+/* Key and value lines, like a debugger watch list. */
+.ga-read {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 4px 12px;
+}
+
+.ga-read dt {
+	min-width: 0;
+	color: var(--panel-ink-2);
+	overflow-wrap: break-word;
+}
+
+/* One column: a label above its value, for a narrow panel. */
+.ga-read--stack {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 2px;
+}
+
+.ga-read--stack dd + dt {
+	margin-top: 8px;
+}
+
+.ga-read dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: break-word;
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.ga-read dd[data-tone='bad'] {
+	color: var(--danger);
+}
+
+.ga-read dd[data-tone='warn'] {
+	color: var(--amber);
+}
+
+.ga-read dd[data-tone='ok'] {
+	color: var(--panel-accent);
+}
+
+.ga-read dd[data-tone='dim'] {
+	color: var(--panel-ink-2);
+}
+
+.ga-note {
+	color: var(--panel-ink-2);
+	font-size: 0.75rem;
+	text-wrap: pretty;
+}
+
+.ga-log {
+	display: grid;
+	gap: 4px;
+}
+
+.ga-log li {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px 12px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--local-fill);
+	overflow-wrap: anywhere;
+}
+
+.ga-log li > span:last-child {
+	color: var(--panel-accent);
+	text-align: right;
+}
+
+.ga-log li[data-tone='bad'] > span:last-child {
+	color: var(--danger);
+}
+
+.ga-log li[data-tone='warn'] > span:last-child {
+	color: var(--amber);
+}
+
+/* ---- Go code inside a scene ---- */
+
+.ga-code {
+	margin: 0;
+	padding: 10px 0;
+	overflow-x: auto;
+	border-radius: 8px;
+	background: var(--panel-2);
+	border: 1px solid var(--panel-rule);
+	font: 400 0.75rem/1.7 var(--mono);
+	tab-size: 4;
+}
+
+.ga-code code {
+	display: block;
+	min-width: max-content;
+	background: none;
+	border: 0;
+	padding: 0;
+	color: var(--panel-ink);
+	font: inherit;
+}
+
+.ga-line {
+	display: block;
+	padding: 0 14px 0 12px;
+	border-left: 2px solid transparent;
+	white-space: pre;
+	transition: background-color 0.2s var(--ease);
+}
+
+.ga-line.is-on {
+	background: color-mix(in srgb, var(--panel-accent) 18%, transparent);
+	border-left-color: var(--panel-accent);
+}
+
+.ga-line.is-skip {
+	opacity: 0.4;
+}
+
+.ga .tk-k { color: var(--local-tk-k); }
+.ga .tk-s { color: var(--amber); }
+.ga .tk-n { color: var(--amber); }
+.ga .tk-c { color: var(--panel-ink-2); font-style: italic; }
+.ga .tk-f { color: var(--panel-accent); }
+.ga .tk-t { color: var(--cobalt); }
+.ga .tk-b { color: var(--cobalt); }
+
+/* ---- Phones ---- */
+
+@container (max-width: 480px) {
+	.ga-stage {
+		padding-inline: 10px;
+	}
+	.ga-controls {
+		padding-inline: 10px;
+	}
+	.ga .lane {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 4px;
+	}
+}
+
+@media (pointer: coarse) {
+	.ga .pbtn,
+	.ga .seg [role='tab'],
+	.ga .seg [role='radio'] {
+		min-height: 44px;
+	}
+}
+
+/* ---- Motion ---- */
+
+@media (prefers-reduced-motion: reduce) {
+	.ga *,
+	.ga *::before,
+	.ga *::after {
+		animation-duration: 0.001ms !important;
+		transition-duration: 0.001ms !important;
+	}
+}
