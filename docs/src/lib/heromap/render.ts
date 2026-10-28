@@ -15,7 +15,8 @@
 //   hidden. Chapter 2's TunePool(5) is `piece('ctl-restart@2')`.
 // - `piece('s-prog')`, the SQLite program, also holds its crash, hidden: `.vm-flash`, a red outline over its
 //   box, and the labels `.vm-died` (PROGRAM · DIED) and `.vm-restarted` (PROGRAM · RESTARTED) after its own
-//   `.vm-label`.
+//   `.vm-label`. Redis's program B (`b-prog`) holds its `.vm-flash` and `.vm-died` (PROGRAM B · DIED), and comes
+//   back as itself.
 // - `ring(worker, i)`: for each place in `RINGS[worker]`, the ring (a group at scale 1, shown if the finale starts
 //   with it and hidden otherwise, as the still frame has them), its progress arc (r 15, drawing clockwise from 12
 //   o'clock) and its check, both hidden, and the dashed ghost under the ring, shown. The arc and the check sit
@@ -112,7 +113,12 @@ const LOGOS: Record<string, { name: string; d: string }> = {
 };
 const LOGO = 12; // a logo's size: the height of the label's capitals, and a little more
 const LOGO_GAP = 5; // between a logo and its label's text
-const CRASHES = 's-prog'; // the SQLite program, which dies and restarts in chapter 7
+// The programs that die mid-job, and whether one comes back labelled RESTARTED: SQLite's in chapter 7 does, and
+// Redis's program B in chapter 8 comes back as itself.
+const CRASHES = new Map([
+	['s-prog', true],
+	['b-prog', false],
+]);
 const HIDDEN = { opacity: 0 };
 
 function add<K extends keyof SVGElementTagNameMap>(
@@ -172,7 +178,7 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 	} else {
 		const outline = { x, y, width: w, height: h, rx: RADIUS[p.kind] };
 		add(g, 'rect', { class: 'vm-shape', ...outline });
-		if (p.id === CRASHES) add(g, 'rect', { class: 'vm-flash', ...outline, ...HIDDEN });
+		if (CRASHES.has(p.id)) add(g, 'rect', { class: 'vm-flash', ...outline, ...HIDDEN });
 	}
 	if (p.kind === 'lane' || p.kind === 'tray') {
 		for (let k = 0; k < SLOTS; k++) {
@@ -203,9 +209,9 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 		}
 		add(g, 'text', { class: 'vm-label', x: logo ? x + LOGO + LOGO_GAP : x, y: top }, label);
 	}
-	if (p.id === CRASHES) {
-		add(g, 'text', { class: 'vm-label vm-died', x, y: top, ...HIDDEN }, 'PROGRAM · DIED');
-		add(g, 'text', { class: 'vm-label vm-restarted', x, y: top, ...HIDDEN }, 'PROGRAM · RESTARTED');
+	if (CRASHES.has(p.id)) {
+		add(g, 'text', { class: 'vm-label vm-died', x, y: top, ...HIDDEN }, `${label} · DIED`);
+		if (CRASHES.get(p.id)) add(g, 'text', { class: 'vm-label vm-restarted', x, y: top, ...HIDDEN }, `${label} · RESTARTED`);
 	}
 	return g;
 }

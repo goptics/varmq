@@ -510,9 +510,11 @@ export class Choreo {
 			score.start(g, { opacity: c.kind === 'line' || on ? 1 : 0 });
 			if (c.kind === 'line') score.start(this.outline(g), { draw: [0, on ? 1 : 0] });
 		}
-		const prog = nodes.piece('s-prog');
-		for (const crash of ['.vm-flash', '.vm-died', '.vm-restarted']) {
-			score.start(prog.querySelector(crash)!, { opacity: 0 });
+		for (const { box } of Object.values(PROGRAMS)) {
+			for (const crash of ['.vm-flash', '.vm-died', '.vm-restarted']) {
+				const el = nodes.piece(box).querySelector(crash);
+				if (el) score.start(el, { opacity: 0 });
+			}
 		}
 		score.start(this.loop(), { opacity: 1 });
 		score.start(this.pulse(), { scale: 1, opacity: 0 });
@@ -1009,6 +1011,7 @@ export class Choreo {
 		const records = new Map<string, Square>();
 		const copies = new Map<string, Square>();
 		const crash = part.events.find((e) => e.type === 'crash');
+		const owners = new Map<string, Worker>(); // the worker a job's copy last went to
 		let mouth = 0; // when the store's mouth is clear for the next copy
 
 		part.events.forEach((e, k) => {
@@ -1039,7 +1042,10 @@ export class Choreo {
 					agenda.add(at, () => this.exit(consumer(e.consumer), e.ring, at));
 					return;
 				case 'take': {
-					const end = part.events.find((d, j) => j > k && d.type === 'done' && d.job === e.job);
+					// This run's done: none, for a run its program's crash cuts short, before the job is taken again.
+					const later = part.events.slice(k + 1);
+					const again = later.findIndex((d) => d.type === 'take' && d.job === e.job);
+					const end = (again < 0 ? later : later.slice(0, again)).find((d) => d.type === 'done' && d.job === e.job);
 					const work = part.plan.jobs.find((j) => j.id === e.job)!.work;
 					agenda.add(at, () => {
 						// The record drops into the tray and is an outline while it is in flight.
@@ -1051,6 +1057,7 @@ export class Choreo {
 						score.tween(this.fill(rec), { fillOpacity: 0 }, at + 150, 350, E.fade);
 						// A copy comes out where the queue's line leaves the store, one copy at a time, and flies to its ring.
 						const copy = copies.get(e.job)!.els;
+						owners.set(e.job, consumer(e.consumer));
 						const route = toStoreRing(consumer(e.consumer), e.ring, this.showing(consumer(e.consumer), at));
 						const out = Math.max(at, mouth);
 						for (const el of copy) {
@@ -1086,11 +1093,14 @@ export class Choreo {
 					});
 					return;
 				}
-				case 'crash':
-					agenda.add(at, () => this.crash(at, copies));
+				case 'crash': {
+					const worker = consumer(e.consumer ?? 'sqlite');
+					const running = () => [...copies].filter(([job]) => owners.get(job) === worker).map(([, copy]) => copy);
+					agenda.add(at, () => this.crash(at, worker, running()));
 					return;
+				}
 				case 'restart':
-					agenda.add(at, () => this.restart(at));
+					agenda.add(at, () => this.restart(at, consumer(e.consumer ?? 'sqlite')));
 					return;
 				case 'requeue': {
 					const after = states[k].order;
@@ -1123,24 +1133,26 @@ export class Choreo {
 		for (const id of jobs) queue.held.set(id, { sq: records.get(id)!, slot: after.indexOf(id) });
 	}
 
-	/** The SQLite program's stage: its box and labels, Add(), the worker with its rings, and its lines. */
-	private stage(): { box: Element; inside: Element[]; lines: Element[] } {
+	/** A program's stage: its box and labels, what is in it (Add(), the worker with its rings), and its own lines. */
+	private stage(worker: Worker): { box: Element; inside: Element[]; lines: Element[] } {
 		const { nodes } = this;
-		const rings = RINGS.sqlite.flatMap((_, i) => {
-			const r = nodes.ring('sqlite', i);
+		const { box, lines } = PROGRAMS[worker]!;
+		const rings = RINGS[worker].flatMap((_, i) => {
+			const r = nodes.ring(worker, i);
 			return [r.ring, r.ghost];
 		});
 		return {
-			box: nodes.piece('s-prog'),
-			inside: [nodes.piece('s-add'), nodes.piece('sqlite'), ...rings],
-			lines: ['s-add-to-s-queue', 's-queue-to-sqlite', 'sqlite-to-s-tray'].map((id) => nodes.piece(id)),
+			box: nodes.piece(box),
+			inside: [...PIECES.filter((p) => p.parent === box).map((p) => nodes.piece(p.id)), ...rings],
+			lines: lines.map((id) => nodes.piece(id)),
 		};
 	}
 
-	/** The program dies mid-job: the view shakes, its jobs vanish, and its stage goes, leaving the file alone. */
-	private crash(at: number, copies: Map<string, Square>) {
+	/** The program dies mid-job: the view shakes, the jobs it ran vanish, and its stage goes; their records stay. */
+	private crash(at: number, worker: Worker, running: Square[]) {
 		const { score, nodes, cam } = this;
-		const prog = nodes.piece('s-prog');
+		const stage = this.stage(worker);
+		const prog = stage.box;
 		const x = score.at(cam, 'x', at)[0];
 		[4, -4, 2, 0].forEach((dx, i) => score.tween(cam, { x: x + dx }, at + 60 * i, i === 3 ? 80 : 60, E.fade));
 		const flash = prog.querySelector('.vm-flash')!;
@@ -1148,25 +1160,27 @@ export class Choreo {
 		score.tween(flash, { opacity: 0 }, at + 80, 600, E.fade);
 		score.set(prog.querySelector(':scope > .vm-label')!, { opacity: 0 }, at);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 1 }, at);
-		// The jobs it was running vanish; their records stay in flight in the file.
-		for (const copy of copies.values()) {
+		// The jobs it was running vanish; their records stay in flight in the store.
+		for (const copy of running) {
 			if (score.at(copy.els[0], 'opacity', at)[0] > 0) each(score, copy.els, { opacity: 0 }, at + 60, 380, E.out);
 		}
-		RINGS.sqlite.forEach((_, i) => {
-			const r = nodes.ring('sqlite', i);
+		RINGS[worker].forEach((_, i) => {
+			const r = nodes.ring(worker, i);
 			score.tween(r.progress, { opacity: 0 }, at + 60, 380, E.out);
 			score.tween(r.check, { opacity: 0 }, at + 60, 380, E.out);
 		});
-		const stage = this.stage();
 		for (const el of [stage.box, ...stage.inside, ...stage.lines]) {
 			score.tween(el, { opacity: 0 }, at + 700, 650, E.out);
 		}
 	}
 
-	/** The program boots: its box draws in as PROGRAM · RESTARTED, then what is in it and its lines come back. */
-	private restart(at: number) {
+	/**
+	 * The program boots: its box draws in, as PROGRAM · RESTARTED for SQLite and as itself for Redis's B, then what
+	 * is in it and its lines come back.
+	 */
+	private restart(at: number, worker: Worker) {
 		const { score, nodes } = this;
-		const stage = this.stage();
+		const stage = this.stage(worker);
 		const prog = stage.box;
 		const outline = this.outline(prog);
 		const shape = prog.querySelector('.vm-shape')!;
@@ -1176,9 +1190,10 @@ export class Choreo {
 		score.tween(outline, { draw: [0, 1] }, at, 700, E.draw);
 		score.tween(shape, { fillOpacity: 1 }, at, 700, E.draw);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 0 }, at);
-		score.tween(prog.querySelector('.vm-restarted')!, { opacity: 1 }, at, 300, E.fade);
-		RINGS.sqlite.forEach((_, i) => {
-			const r = nodes.ring('sqlite', i);
+		const label = prog.querySelector(worker === 'sqlite' ? '.vm-restarted' : ':scope > .vm-label')!;
+		score.tween(label, { opacity: 1 }, at, 300, E.fade);
+		RINGS[worker].forEach((_, i) => {
+			const r = nodes.ring(worker, i);
 			score.set(score.drawable(r.progress), { draw: [0, 0] }, at);
 			score.set(score.drawable(r.check), { draw: [0, 0] }, at);
 			score.set(r.progress, { opacity: 1 }, at + 250);
@@ -1188,6 +1203,15 @@ export class Choreo {
 		for (const el of stage.lines) score.tween(el, { opacity: 1 }, at + 400, 400, E.fade);
 	}
 }
+
+/**
+ * The programs that die and come back, by their worker: their box and the lines that go with it. Redis's lines stay
+ * when B dies: C's runs through B's.
+ */
+const PROGRAMS: Partial<Record<Worker, { box: string; lines: string[] }>> = {
+	sqlite: { box: 's-prog', lines: ['s-add-to-s-queue', 's-queue-to-sqlite', 'sqlite-to-s-tray'] },
+	'redis-b': { box: 'b-prog', lines: [] },
+};
 
 /** The card a store's consumer runs its rings in: the SQLite worker's, or Redis's B or C. */
 const consumer = (id: string): Worker => (id === 'sqlite' ? 'sqlite' : (`redis-${id}` as Worker));

@@ -230,6 +230,24 @@ describe('redis rules', () => {
 		assert.deepEqual(show(ev.filter(e => e.type === 'notify' || e.type === 'take')), [
 			'200 notify b', '200 take j0 b ring 0 tray 0', '800 take j1 b ring 0 tray 0']);
 	});
+	it('puts a dead consumer\'s jobs back at the front, and wakes an idle one for them', () => {
+		// b dies running j0; c is idle by then, and takes j0 when the sweep puts it back. b restarts with nothing to take.
+		const jobs = [{ id: 'j0', at: 0, work: 5000 }, { id: 'j1', at: 10, work: 300 }];
+		const crash = { consumer: 'b', at: 1000, backAfter: 500, restartAt: 3000, rework: { j0: 400 } };
+		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }, { id: 'c', limit: 1, idle: [0] }], jobs, crash }));
+		assert.deepEqual(show(ev), [
+			'100 land j0', '110 land j1', '200 notify b', '200 take j0 b ring 0 tray 0', '210 notify c', '210 take j1 c ring 0 tray 1',
+			'560 done j1 c ring 0', '610 ack j1 tray 1',
+			'1000 crash b', '1000 exit b ring 0', // its record stays in flight
+			'1500 requeue j0', '1600 notify c', '1600 take j0 c ring 0 tray 0', '2050 done j0 c ring 0', '2100 ack j0 tray 0',
+			'3000 restart b', '3000 spawn b ring 0',
+		]);
+	});
+	it('refuses a consumer crash while one of its acks is on its way', () => {
+		const crash = { consumer: 'b', at: 600, backAfter: 500, restartAt: 3000, rework: {} };
+		const ev = () => simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }], jobs: [{ id: 'j0', at: 0, work: 300 }], crash }));
+		assert.throws(ev, /^Error: crash: the ack of j0/);
+	});
 	it('takes again on a ring only after its ack has landed', () => {
 		const ev = simulateRedis(redis);
 		for (const t of takes(ev)) {

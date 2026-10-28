@@ -297,17 +297,19 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 8. Program A adds six jobs. Redis wakes B and C, the two idle workers, once each, and each pulls a job for
-	// every goroutine it may run. The last two land after C's pull, and wait in the queue until an ack frees a
-	// goroutine and its worker pulls again, with no wake.
+	// 8. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
+	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
+	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
+	// about six seconds after the crash; here 2.7 s.) B comes back at the end, with nothing left to take.
 	(carry) => ({
 		title: 'Redis',
 		duration: 12000,
 		captions: [
 			{ at: 300, until: 1700, text: 'Redis holds *one queue* for many programs' },
 			{ at: 2200, until: 3800, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 4300, until: 5700, text: 'Each job goes to *one* worker' },
-			{ at: 6200, until: 11400, text: 'and is *acked* back to Redis' },
+			{ at: 4300, until: 5900, text: 'Program B !dies! mid-job' },
+			{ at: 6400, until: 8300, text: 'Its jobs go *back*, and Redis wakes C' },
+			{ at: 8800, until: 11400, text: 'C runs them. Nothing is *lost*' },
 		],
 		parts: [
 			redis(carry, {
@@ -321,9 +323,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					['r1', 2000, 1900],
 					['r2', 2200, 2500],
 					['r3', 2400, 1900],
-					['r4', 2800, 1700],
-					['r5', 3000, 1900],
 				]),
+				crash: { consumer: 'b', at: 4600, backAfter: 2700, restartAt: 9800, rework: { r0: 1600, r1: 1300 } },
 			}),
 		],
 	}),
