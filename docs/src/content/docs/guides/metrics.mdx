@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import MetricsScene from '../../../components/guides-b/MetricsScene.astro';
 
 Every worker keeps four counters over its lifetime. [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) returns them. They tell you how much work the worker has taken in and how it went, without tracking jobs yourself.
 
@@ -56,6 +57,10 @@ Submitted == NumPending + NumProcessing + Completed
 - **Unsubscribing with unread payloads breaks it.** [`Unsubscribe`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Unsubscribe), [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the subscription, and [`Close`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Close) on the topic all end a subscription and drop the payloads it has not read. `Publish` counted them in `Submitted`. They never run, so they never reach `Completed`, and the worker no longer counts them as pending, because the subscription it read them from is gone. `Purge` on a subscription drops the unread payloads the same way.
 - **Storage shared between workers breaks it.** `Add` counts in `Submitted` on the worker whose handle you call. The worker that takes the job counts it in `Completed`. A queue you wrote and bound to two workers with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) splits the counters between them, so the equation holds for neither.
 - **`Reset` breaks it.** It zeroes `Submitted` and `Completed`. The jobs still waiting or running count on the right side of the equation, and no longer on the left.
+
+Break the equation in the scene below. Add jobs, purge the queue, reset the counters, or set the limit to 1 and add a few jobs while one runs. The scene says which case you hit.
+
+<MetricsScene />
 
 So use the equation on a worker with nothing running, where none of these cases applies. On an idle worker, `NumPending` and `NumProcessing` are 0 and the equation reduces to `Submitted == Completed`. If it does not hold, look at the cases above first. Do not use the equation as a live check while jobs run.
 

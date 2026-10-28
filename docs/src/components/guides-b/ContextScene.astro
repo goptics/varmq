@@ -1,0 +1,55 @@
+---
+import SceneFrame from './SceneFrame.astro';
+
+const code = `ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+worker := varmq.NewWorker(process, 2, varmq.WithContext(ctx))`;
+---
+
+<SceneFrame scene="context" title="Cancel a worker" code={code} hint="// press cancel(): the worker follows, and the call it makes shows here">
+	<Fragment slot="stats">
+		<div><dt>Status</dt><dd data-stat="status">Running</dd></div>
+		<div><dt>NumProcessing</dt><dd data-stat="processing">0</dd></div>
+		<div><dt>NumPending</dt><dd data-stat="pending">0</dd></div>
+		<div><dt>queue.Len()</dt><dd data-stat="len">0</dd></div>
+	</Fragment>
+
+	<div aria-hidden="true">
+		<div data-pool></div>
+	</div>
+	<dl class="gb-kv">
+		<div><dt>Context().Err()</dt><dd data-kv="err">nil</dd></div>
+		<div><dt>Errs()</dt><dd data-kv="errs">empty</dd></div>
+		<div><dt>last queue.Add</dt><dd data-kv="add">true</dd></div>
+		<div data-deadline hidden><dt>deadline</dt><dd data-kv="deadline">in 6.0 s</dd></div>
+	</dl>
+
+	<Fragment slot="controls">
+		<div class="gb-seg" role="radiogroup" aria-label="How the context is made" data-made>
+			<button type="button" class="gb-btn" role="radio" aria-checked="true" tabindex="0" data-value="cancel">WithCancel</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="timeout">WithTimeout(6s)</button>
+		</div>
+		<button type="button" class="gb-btn" data-act="watch" aria-pressed="false">Function watches Done(): off</button>
+		<span class="gb-break"></span>
+		<button type="button" class="gb-btn gb-btn--primary" data-act="cancel">cancel()</button>
+		<button type="button" class="gb-btn" data-act="stop">worker.Stop()</button>
+		<button type="button" class="gb-btn" data-act="start">worker.Start()</button>
+		<button type="button" class="gb-btn" data-act="restart">worker.Restart()</button>
+		<button type="button" class="gb-btn" data-act="add">queue.Add()</button>
+		<button type="button" class="gb-btn" data-act="reset">Reset</button>
+	</Fragment>
+
+	<Fragment slot="alt">
+		A simulation of a worker with a limit of 2 and jobs that run for 4 seconds. Five jobs start in the queue.
+		When the context is done, by <code>cancel()</code> or by the deadline, the worker becomes Stopping. The jobs that
+		run keep running until their function returns, unless the function watches the worker's <code>Context().Done()</code>
+		and returns early. The jobs that wait never start. They stay queued, counted by <code>NumPending</code>, and
+		<code>Add</code> still returns true. Nothing reaches <code>Errs()</code>. <code>Start</code> and <code>Restart</code>
+		on a worker with a done context return nil, and the worker stops again at once. After <code>Stop</code>, <code>Restart</code> works.
+	</Fragment>
+</SceneFrame>
+
+<script>
+	import './context.ts';
+</script>

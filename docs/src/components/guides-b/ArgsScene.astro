@@ -1,0 +1,31 @@
+---
+import SceneFrame from './SceneFrame.astro';
+---
+
+<SceneFrame scene="args" title="Argument order" loops={false} code="worker := varmq.NewErrWorker(send)" hint="// reorder the arguments: the last one that sets a value wins">
+	<div class="gb-cfg">
+		<div>
+			<span class="gb-label" style="padding:0">Arguments after the function</span>
+			<ol class="gb-args" data-args></ol>
+		</div>
+		<div>
+			<span class="gb-label" style="padding:0">Read from left to right</span>
+			<ol class="gb-trace" data-trace></ol>
+			<dl class="gb-res" data-res style="margin-top:14px"></dl>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="gb-btn" data-act="reset">Reset order</button>
+	</Fragment>
+
+	<Fragment slot="alt">
+		A list of arguments for <code>NewErrWorker</code>. Tick one to include it, and move it up or down. The
+		worker applies them from left to right on top of the defaults, so the last one that sets the concurrency or the
+		name wins. An <code>int64</code> sets nothing and raises no error. A concurrency below 1 means one per CPU.
+	</Fragment>
+</SceneFrame>
+
+<script>
+	import './args.ts';
+</script>

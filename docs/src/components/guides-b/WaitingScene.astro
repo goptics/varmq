@@ -1,0 +1,33 @@
+---
+import SceneFrame from './SceneFrame.astro';
+---
+
+<SceneFrame scene="waiting" title="Wait calls on one timeline" code="// pick a case" hint="// pick a case: each call shows when it returns">
+	<div class="gb-tl" data-timeline aria-hidden="true"></div>
+	<ol class="gb-log" data-log aria-label="What each call returned"></ol>
+
+	<Fragment slot="controls">
+		<div class="gb-seg" role="radiogroup" aria-label="Case" data-case>
+			<button type="button" class="gb-btn" role="radio" aria-checked="true" tabindex="0" data-value="pause">Pause, then wait</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="stop">Stop: drain or not</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="pauseWait">Pause: now or after</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="initiated">Never started</button>
+		</div>
+		<button type="button" class="gb-btn gb-btn--primary" data-act="resume">worker.Resume()</button>
+		<button type="button" class="gb-btn gb-btn--primary" data-act="start" hidden>worker.Start()</button>
+		<button type="button" class="gb-btn" data-act="replay">Replay</button>
+	</Fragment>
+
+	<Fragment slot="alt">
+		A timeline of one or two workers that each hold three jobs of 2.4 seconds and run one job at a time. The top row of
+		a worker is its status. The second row is the job that runs. Each other row is one call that blocks: hatched while
+		it waits, solid with an end cap when it returns. The log under the timeline says what each call returned and
+		what <code>NumPending</code> was. <code>Wait</code> returns when no job runs, even if jobs are pending.
+		<code>WaitUntilIdle</code> keeps waiting through a pause, until you press Resume. On a worker that never started,
+		<code>Wait</code> returns at once and <code>WaitUntilIdle</code> waits for Start.
+	</Fragment>
+</SceneFrame>
+
+<script>
+	import './waiting.ts';
+</script>

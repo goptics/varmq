@@ -1,0 +1,52 @@
+---
+// The frame every guide scene sits in: a dark panel with a title bar and readouts,
+// a stage, a control row, and a strip that shows the Go call. The text alternative is the caption.
+import '../../styles/guides-b.css';
+import { highlightGo } from './go';
+
+interface Props {
+	scene: string;
+	title: string;
+	/** Source of the Go snippet in the strip. The line under it shows the call the last button made. */
+	code?: string;
+	/** Hint in the call line before any button is pressed. */
+	hint?: string;
+	/** The scene has a loop, so it gets a pause button. */
+	loops?: boolean;
+	badge?: string;
+}
+
+const { scene, title, code, hint = '// press a button: the call it makes shows here', loops = true, badge = 'simulation' } = Astro.props;
+const uid = `gb-${scene}`;
+---
+
+<figure class="gb not-content" data-scene={scene} aria-labelledby={`${uid}-title`} aria-describedby={`${uid}-cap`}>
+	<div class="gb-frame">
+		<div class="gb-bar">
+			<p class="gb-title" id={`${uid}-title`}>{title} <b>· {badge}</b></p>
+			<dl class="gb-stats"><slot name="stats" /></dl>
+		</div>
+		<div class="gb-stage"><slot /></div>
+		<div class="gb-controls">
+			<slot name="controls" />
+			{
+				loops && (
+					<>
+						<button type="button" class="gb-btn" data-act="pause">Pause</button>
+						<button type="button" class="gb-btn" data-act="step" hidden>Step 1 s</button>
+					</>
+				)
+			}
+		</div>
+		{
+			code && (
+				<div class="gb-code">
+					<pre class="gb-gocode"><code set:html={highlightGo(code)} /></pre>
+					<code class="gb-call" data-call>{hint}</code>
+				</div>
+			)
+		}
+	</div>
+	<figcaption class="gb-cap" id={`${uid}-cap`}><slot name="alt" /></figcaption>
+	<p class="gb-sr" role="status" data-live></p>
+</figure>
