@@ -111,6 +111,33 @@ export function keyBelongsToControl(e: KeyboardEvent) {
 }
 
 /**
+ * Copy `text` and say so on the button for 1.6 s: "Copied", or "Select" when the browser refuses
+ * (then `fallback` is selected so the reader can copy it by hand). `live` gets the same message.
+ */
+export async function copyText(btn: HTMLElement, text: string, fallback?: Element | null, live?: HTMLElement | null) {
+	const label = btn.dataset.label ?? btn.textContent ?? 'Copy';
+	btn.dataset.label = label;
+	try {
+		await navigator.clipboard.writeText(text);
+		btn.textContent = 'Copied';
+		if (live) live.textContent = 'Copied to the clipboard.';
+	} catch {
+		btn.textContent = 'Select';
+		if (fallback) {
+			const range = document.createRange();
+			range.selectNodeContents(fallback);
+			const sel = window.getSelection();
+			sel?.removeAllRanges();
+			sel?.addRange(range);
+		}
+	}
+	window.setTimeout(() => {
+		btn.textContent = label;
+		if (live) live.textContent = '';
+	}, 1600);
+}
+
+/**
  * Copy buttons. A `[data-copy]` button copies the text of the element its value names (a selector),
  * or, when the value is empty, the `pre` of its code card. A `[data-live]` element in the card or
  * `#live` on the page gets the message. One handler serves the whole document.
@@ -119,33 +146,15 @@ let copyBound = false;
 export function copyButtons() {
 	if (copyBound) return;
 	copyBound = true;
-	document.addEventListener('click', async (e) => {
+	document.addEventListener('click', (e) => {
 		const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-copy]');
 		if (!btn) return;
 		const card = btn.closest('.code');
 		const source = btn.dataset.copy ? document.querySelector(btn.dataset.copy) : card?.querySelector('pre');
 		const live = card?.querySelector<HTMLElement>('[data-live]') ?? document.getElementById('live');
-		const label = btn.dataset.label ?? btn.textContent ?? 'Copy';
-		btn.dataset.label = label;
-		try {
-			// innerText keeps the line breaks of block lines (a command in several `span`s).
-			await navigator.clipboard.writeText(((source as HTMLElement | null)?.innerText ?? source?.textContent ?? '').replace(/\n$/, '').trim());
-			btn.textContent = 'Copied';
-			if (live) live.textContent = 'Copied to the clipboard.';
-		} catch {
-			btn.textContent = 'Select';
-			if (source) {
-				const range = document.createRange();
-				range.selectNodeContents(source);
-				const sel = window.getSelection();
-				sel?.removeAllRanges();
-				sel?.addRange(range);
-			}
-		}
-		window.setTimeout(() => {
-			btn.textContent = label;
-			if (live) live.textContent = '';
-		}, 1600);
+		// innerText keeps the line breaks of block lines (a command in several `span`s).
+		const text = ((source as HTMLElement | null)?.innerText ?? source?.textContent ?? '').replace(/\n$/, '').trim();
+		void copyText(btn, text, source, live);
 	});
 }
 

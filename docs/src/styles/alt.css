@@ -464,7 +464,7 @@ body.alt {
 	border: 1px solid var(--panel-rule);
 	border-radius: 16px;
 	overflow: hidden;
-	box-shadow: 0 30px 60px -36px rgba(4, 24, 17, 0.6);
+	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
 	font-family: var(--mono);
 }
 
@@ -593,7 +593,7 @@ body.alt {
 	position: relative;
 	height: 30px;
 	border-radius: 7px;
-	background: rgba(255, 255, 255, 0.045);
+	background: color-mix(in srgb, var(--panel-ink) 4.5%, transparent);
 	border: 1px solid transparent;
 }
 
@@ -687,7 +687,7 @@ body.alt {
 	margin: 0;
 	padding: 14px 16px 16px;
 	border-top: 1px solid var(--panel-rule);
-	background: rgba(0, 0, 0, 0.28);
+	background: color-mix(in srgb, black 28%, transparent);
 	font: 400 0.8125rem/1.65 var(--mono);
 	overflow-x: auto;
 }
@@ -1420,7 +1420,7 @@ body.alt {
 }
 
 .bar a:hover {
-	background: rgba(255, 255, 255, 0.09);
+	background: color-mix(in srgb, var(--panel-ink) 9%, transparent);
 }
 
 .bar__name {

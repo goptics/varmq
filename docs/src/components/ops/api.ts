@@ -1,7 +1,7 @@
 // API explorer: renders the workers, sends the typed request to the model, shows the reply.
 
 import { add, handle, seed, tick, type Reply, type Worker } from './api-model';
-import { h } from '../ui/dom';
+import { copyText, h } from '../ui/dom';
 import { escapeHtml, highlightJson, highlightShell } from '../ui/go';
 
 const root = document.querySelector<HTMLElement>('[data-api]');
@@ -113,14 +113,7 @@ function init(root: HTMLElement) {
 			renderWorkers();
 			send('GET', '/varmq/workers');
 		} else if (act === 'copy') {
-			const text = curl(method.value, path.value.trim());
-			try {
-				await navigator.clipboard.writeText(text);
-				el.textContent = 'Copied';
-			} catch {
-				el.textContent = 'Copy failed';
-			}
-			window.setTimeout(() => (el.textContent = el.dataset.label ?? 'Copy as curl'), 1600);
+			await copyText(el, curl(method.value, path.value.trim()));
 		}
 	});
 
