@@ -64,7 +64,8 @@
 }
 
 /* The call that the last control made. A scene shows it under the stage. */
-.call {
+.call,
+.sframe .call {
 	display: block;
 	margin-top: 4px;
 	padding-left: 10px;
@@ -75,6 +76,17 @@
 
 .call.is-new {
 	animation: call-flash 0.7s var(--ease);
+}
+
+/* A touch target is at least 44 px. */
+@media (pointer: coarse) {
+	.pbtn,
+	.sframe .seg [role='tab'],
+	.sframe .seg [role='radio'],
+	.sfield,
+	button.copy {
+		min-height: 44px;
+	}
 }
 
 @keyframes call-flash {
@@ -270,6 +282,18 @@
 	background: var(--brand-hover);
 }
 
+/* On paper (outside a dark panel). */
+.pbtn--paper {
+	color: var(--ink);
+	border-color: var(--rule);
+	background: transparent;
+	white-space: nowrap;
+}
+
+.pbtn--paper:hover {
+	background: var(--bar-2);
+}
+
 .pbtn--danger {
 	border-color: var(--danger);
 	color: var(--danger);
@@ -437,13 +461,13 @@
 	color: var(--panel-ink-2);
 }
 
-.code__head .copy {
+.code__head button.copy {
 	min-height: 32px;
 	padding: 4px 12px;
 	font-size: 0.75rem;
 }
 
-.copy {
+button.copy {
 	flex: none;
 	min-height: 36px;
 	min-width: 64px;
@@ -457,7 +481,7 @@
 	transition: background-color 0.15s var(--ease);
 }
 
-.copy:hover {
+button.copy:hover {
 	background: var(--panel-fill-2);
 }
 

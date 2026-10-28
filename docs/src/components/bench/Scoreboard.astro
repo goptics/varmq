@@ -46,7 +46,7 @@ const rows = ROWS.map(([id, name, f, metric]) => {
 });
 ---
 
-<div class="bboard not-content" data-pagefind-ignore>
+<div class="bboard on-dark not-content" data-pagefind-ignore>
 	<div class="bboard__head">
 		<p>
 			A group is one case that every subject runs, for example <code>Sleep10ms</code> with 50K workers and one producer. A subject leads a group when it has the highest throughput, or the
@@ -55,7 +55,7 @@ const rows = ROWS.map(([id, name, f, metric]) => {
 	</div>
 	<div class="btable">
 		<table class="btable__t">
-			<caption class="sr">Groups led by VarMQ and by another subject, for each dataset and metric</caption>
+			<caption class="sr-only">Groups led by VarMQ and by another subject, for each dataset and metric</caption>
 			<thead>
 				<tr>
 					<th scope="col">Dataset</th>

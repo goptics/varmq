@@ -1,23 +1,21 @@
 /* Benchmarks page. The explorer and the score board are dark panels in both themes (docs/DESIGN.md: simulation panels).
    Every rule is scoped under .bench or .bboard so nothing leaks into the Starlight shell.
    The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
-   Class names for seg, pbtn, rlane and rg__title copy src/styles/alt.css. */
-
-@import './tokens.css';
+   Tabs and buttons are the shared `seg` and `pbtn` (ui.css). Class names for rlane and rg__title copy src/styles/alt.css. */
 
 .bench,
 .bboard {
-	/* --local-: values the shared tokens do not have. Proposed for tokens.css: wash, wash-2. */
-	--local-wash: rgba(255, 255, 255, 0.05);
-	--local-wash-2: rgba(255, 255, 255, 0.1);
+	/* --local-: values the shared tokens do not have. */
 	--local-cell: 26px;
 
 	container: bench / inline-size;
-	margin-block: 1.5rem;
+	margin: 1.75rem 0 2.25rem;
 	background: var(--panel);
 	color: var(--panel-ink);
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
 	font-family: var(--display);
 	font-size: 0.9375rem;
 	line-height: 1.5;
@@ -75,59 +73,18 @@
 	color: inherit;
 }
 
-.bench .sr,
-.bboard .sr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip-path: inset(50%);
-	white-space: nowrap;
-	border: 0;
-}
-
 .bench [hidden],
 .bboard [hidden] {
 	display: none !important;
 }
 
-/* ---- tabs (alt.css .seg, on dark) ---- */
+.bench__top .seg {
+	display: flex;
+}
 
 .bench__top {
 	padding: 14px 16px;
 	border-bottom: 1px dashed var(--panel-rule);
-}
-
-.bench .seg {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-}
-
-.bench .seg [role='tab'] {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--panel-ink-2);
-	font: 600 0.875rem/1 var(--display);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease);
-}
-
-.bench .seg [role='tab']:hover {
-	background: var(--local-wash-2);
-}
-
-.bench .seg [role='tab'][aria-selected='true'] {
-	background: var(--panel-ink);
-	color: var(--panel);
 }
 
 /* Without JavaScript every panel shows, one under the other. With it, only the selected one. */
@@ -178,7 +135,7 @@
 	flex: none;
 	padding: 3px 6px;
 	border-radius: 4px;
-	background: var(--local-wash-2);
+	background: var(--panel-fill-2);
 	font: 500 0.6875rem/1 var(--mono);
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -197,28 +154,6 @@
 
 .bcmd__line {
 	display: block;
-}
-
-.bench .pbtn {
-	flex: none;
-	min-height: 36px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--local-wash);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease);
-}
-
-.bench .pbtn:hover {
-	background: var(--local-wash-2);
-}
-
-.bench .pbtn[disabled] {
-	opacity: 0.4;
-	cursor: not-allowed;
 }
 
 /* ---- meta and environment ---- */
@@ -355,7 +290,7 @@
 }
 
 .bopt:hover span {
-	background: var(--local-wash-2);
+	background: var(--panel-fill-2);
 }
 
 .bopt input:checked + span {
@@ -511,7 +446,7 @@
 	position: relative;
 	height: 18px;
 	border-radius: 4px;
-	background: var(--local-wash);
+	background: var(--panel-fill);
 }
 
 /* The dashed line is the baseline subject's value. A lane that passes it is ahead. */
@@ -605,8 +540,8 @@
 	background:
 		linear-gradient(to right, var(--panel) 30%, transparent) left center / 28px 100% no-repeat local,
 		linear-gradient(to left, var(--panel) 30%, transparent) right center / 28px 100% no-repeat local,
-		linear-gradient(to right, var(--local-wash-2), transparent) left center / 14px 100% no-repeat scroll,
-		linear-gradient(to left, var(--local-wash-2), transparent) right center / 14px 100% no-repeat scroll;
+		linear-gradient(to right, var(--panel-fill-2), transparent) left center / 14px 100% no-repeat scroll,
+		linear-gradient(to left, var(--panel-fill-2), transparent) right center / 14px 100% no-repeat scroll;
 }
 
 .bmap__t {
@@ -879,14 +814,14 @@
 	margin-left: 4px;
 	border: 1px solid var(--panel-rule);
 	border-radius: 4px;
-	background: var(--local-wash);
+	background: var(--panel-fill);
 	color: var(--panel-accent);
 	font: 500 0.6875rem/1 var(--mono);
 	cursor: pointer;
 }
 
 .blink:hover {
-	background: var(--local-wash-2);
+	background: var(--panel-fill-2);
 }
 
 .bsrc {

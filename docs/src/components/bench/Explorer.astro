@@ -52,7 +52,7 @@ const panels = VIEWS.map((view, i) => {
 	document.documentElement.classList.add('bench-js');
 </script>
 
-<div class="bench not-content" data-bench data-pagefind-ignore>
+<div class="bench on-dark not-content" data-bench data-pagefind-ignore>
 	<div class="bench__top">
 		<div class="seg" role="tablist" aria-label="Benchmark dataset">
 			{
@@ -139,7 +139,7 @@ const panels = VIEWS.map((view, i) => {
 					</div>
 					<div class="btable">
 						<table class="btable__t">
-							<caption class="sr">Library versions for this suite</caption>
+							<caption class="sr-only">Library versions for this suite</caption>
 							<thead>
 								<tr>
 									<th scope="col">Library</th>

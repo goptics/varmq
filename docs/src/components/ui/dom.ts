@@ -128,7 +128,8 @@ export function copyButtons() {
 		const label = btn.dataset.label ?? btn.textContent ?? 'Copy';
 		btn.dataset.label = label;
 		try {
-			await navigator.clipboard.writeText(source?.textContent?.replace(/\n$/, '').trim() ?? '');
+			// innerText keeps the line breaks of block lines (a command in several `span`s).
+			await navigator.clipboard.writeText(((source as HTMLElement | null)?.innerText ?? source?.textContent ?? '').replace(/\n$/, '').trim());
 			btn.textContent = 'Copied';
 			if (live) live.textContent = 'Copied to the clipboard.';
 		} catch {

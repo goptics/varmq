@@ -6,11 +6,13 @@ import { PRESETS, VIEWS, activeFilters, defaultState, filterDefs, fromHash, metr
 import type { Data, State } from './lib.ts';
 import { renderAll } from './render.ts';
 import type { Out } from './render.ts';
+import { copyButtons, tabs as tabsOf } from '../ui/dom';
 
 const data = raw as unknown as Data;
 const root = document.querySelector<HTMLElement>('[data-bench]');
 
 if (root) boot(root);
+copyButtons();
 
 function boot(root: HTMLElement) {
 	const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -158,33 +160,11 @@ function boot(root: HTMLElement) {
 
 	// ---- tabs ----
 
-	function select(tab: HTMLElement, focus = false) {
-		active = tab.dataset.key!;
-		for (const t of tabs) {
-			const on = t === tab;
-			t.setAttribute('aria-selected', String(on));
-			t.tabIndex = on ? 0 : -1;
-			const p = document.getElementById(t.getAttribute('aria-controls') ?? '');
-			p?.classList.toggle('is-on', on);
-		}
-		if (focus) tab.focus();
+	// The shared tabs set aria-selected and the roving tabindex; this shows the panel and redraws.
+	const tabControl = tabsOf(root.querySelector<HTMLElement>('[role="tablist"]')!, (key) => {
+		active = key;
+		for (const t of tabs) document.getElementById(t.getAttribute('aria-controls') ?? '')?.classList.toggle('is-on', t.dataset.key === key);
 		update(active, { user: true });
-	}
-
-	const tablist = root.querySelector('[role="tablist"]')!;
-	tablist.addEventListener('click', (e) => {
-		const tab = (e.target as HTMLElement).closest<HTMLElement>('[role="tab"]');
-		if (tab) select(tab);
-	});
-	tablist.addEventListener('keydown', (e) => {
-		const i = tabs.indexOf(document.activeElement as HTMLElement);
-		if (i < 0) return;
-		const k = (e as KeyboardEvent).key;
-		const next = k === 'ArrowRight' ? (i + 1) % tabs.length : k === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length : k === 'Home' ? 0 : k === 'End' ? tabs.length - 1 : -1;
-		if (next >= 0) {
-			e.preventDefault();
-			select(tabs[next], true);
-		}
 	});
 
 	// ---- controls ----
@@ -238,29 +218,6 @@ function boot(root: HTMLElement) {
 			update(id, { animate: true, user: true });
 			return;
 		}
-		const copy = el.closest<HTMLButtonElement>('[data-copy]');
-		if (copy) {
-			const src = document.querySelector(copy.dataset.copy ?? '');
-			const text = Array.from(src?.querySelectorAll('.bcmd__line') ?? [])
-				.map((l) => l.textContent)
-				.join('\n');
-			const label = copy.dataset.label ?? copy.textContent ?? 'Copy';
-			copy.dataset.label = label;
-			try {
-				await navigator.clipboard.writeText(text);
-				copy.textContent = 'Copied';
-			} catch {
-				copy.textContent = 'Select';
-				if (src) {
-					const range = document.createRange();
-					range.selectNodeContents(src);
-					const sel = window.getSelection();
-					sel?.removeAllRanges();
-					sel?.addRange(range);
-				}
-			}
-			window.setTimeout(() => (copy.textContent = label), 1600);
-		}
 	});
 
 	// ---- start ----
@@ -278,8 +235,7 @@ function boot(root: HTMLElement) {
 	update(active);
 	window.addEventListener('hashchange', () => {
 		if (readHash()) {
-			const t = tabs.find((x) => x.dataset.key === active);
-			if (t) select(t);
+			tabControl.select(active);
 		}
 	});
 }

@@ -139,7 +139,7 @@ function renderLanes(data: Data, state: State, m: Metric, cells: Cell[], isFocus
 <span class="rlane__name"><span class="rlane__subject" title="${esc(noteOf(l.subject))}">${esc(label(l.subject))}</span><span class="rlane__sub">${sub}</span></span>
 <span class="rlane__track" aria-hidden="true"><span class="rlane__bar"></span></span>
 <span class="rlane__val">${fmt(l.value, m)}<span class="rlane__unit"> ${esc(m.unit === 'MB' || m.unit === 'ms' ? m.unit : '')}</span></span>
-<span class="rlane__x"><span aria-hidden="true">${x}</span><span class="sr">${esc(x.replace('×', ' times'))} ${esc(set.base ?? 'VarMQ')}, ${word}</span></span>
+<span class="rlane__x"><span aria-hidden="true">${x}</span><span class="sr-only">${esc(x.replace('×', ' times'))} ${esc(set.base ?? 'VarMQ')}, ${word}</span></span>
 </li>`;
 		})
 		.join('');
@@ -182,7 +182,7 @@ function renderMap(state: State, m: Metric, cells: Cell[]): Pick<Out, 'map' | 'l
 		: '';
 	const short = (l: string) => l.replace(/ producers?$/, '').replace(/ pages$/, '');
 	const head2 = `<tr><th scope="col" class="bmap__corner">${esc(map.corner)}</th>${map.colGroups
-		.map((cg) => cg.cols.map((c) => `<th scope="col" class="bmap__col"><span aria-hidden="true">${esc(short(c.label))}</span><span class="sr">${esc(c.label)}</span></th>`).join(''))
+		.map((cg) => cg.cols.map((c) => `<th scope="col" class="bmap__col"><span aria-hidden="true">${esc(short(c.label))}</span><span class="sr-only">${esc(c.label)}</span></th>`).join(''))
 		.join('')}</tr>`;
 
 	const body = map.rows
@@ -272,9 +272,9 @@ function renderRows(data: Data, state: State, m: Metric, cells: Cell[], multi: b
 			const tds = subjects
 				.map((s) => {
 					const v = vals.get(s);
-					if (v === undefined) return `<td class="n bmiss"><span aria-hidden="true">–</span><span class="sr">not run</span></td>`;
+					if (v === undefined) return `<td class="n bmiss"><span aria-hidden="true">–</span><span class="sr-only">not run</span></td>`;
 					const best = p[0]?.subject === s;
-					return `<td class="n${best ? ' is-best' : ''}">${fmt(v, m)}${best ? '<span class="sr"> (best)</span>' : ''}</td>`;
+					return `<td class="n${best ? ' is-best' : ''}">${fmt(v, m)}${best ? '<span class="sr-only"> (best)</span>' : ''}</td>`;
 				})
 				.join('');
 			return `<tr><th scope="row">${esc(groupLabel(c, multi))}</th>${tds}<td>${sourceLink(data, c, multi)}</td></tr>`;
@@ -282,7 +282,7 @@ function renderRows(data: Data, state: State, m: Metric, cells: Cell[], multi: b
 		.join('');
 	return {
 		rowsSummary: `Every row behind these numbers · ${plural(cells.length, 'group')}`,
-		rowsBody: `<div class="btable"><table class="btable__t"><caption class="sr">${esc(m.title)} (${esc(m.unit)}) for each group in scope. The best value of each group is marked.</caption><thead>${head}</thead><tbody>${body}</tbody></table></div>`,
+		rowsBody: `<div class="btable"><table class="btable__t"><caption class="sr-only">${esc(m.title)} (${esc(m.unit)}) for each group in scope. The best value of each group is marked.</caption><thead>${head}</thead><tbody>${body}</tbody></table></div>`,
 	};
 }
 

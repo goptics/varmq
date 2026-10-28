@@ -1524,17 +1524,6 @@ body.alt {
 	white-space: nowrap;
 }
 
-.pbtn--paper {
-	color: var(--ink);
-	border-color: var(--rule);
-	background: transparent;
-	white-space: nowrap;
-}
-
-.pbtn--paper:hover {
-	background: var(--bar-2);
-}
-
 .tear {
 	display: flex;
 	align-items: center;
