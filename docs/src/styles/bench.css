@@ -597,6 +597,8 @@
 /* ---- win map ---- */
 
 .bmap__scroll {
+	/* A positioned box clips the absolute `.sr` text in the cells. Without it the page scrolls sideways. */
+	position: relative;
 	overflow-x: auto;
 	padding-bottom: 4px;
 	/* Edge fades that show only while there is more to scroll to. */
@@ -794,6 +796,7 @@
 /* ---- tables ---- */
 
 .btable {
+	position: relative;
 	overflow-x: auto;
 	border: 1px solid var(--panel-rule);
 	border-radius: 8px;

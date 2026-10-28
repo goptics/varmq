@@ -15,6 +15,7 @@
 	--accent-text: #1b7358;
 
 	--brand: #44bf9e;
+	--brand-hover: #5dd0b0;
 	--brand-ink: #062116;
 	--amber: #f0b24a;
 	--cobalt: #8fb0ff;
@@ -26,6 +27,9 @@
 	--panel-ink-2: #9db9ac;
 	--panel-rule: #27413a;
 	--panel-accent: #5fd4b2;
+	/* Translucent fills for controls and tracks on a dark panel. */
+	--panel-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
+	--panel-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
 
 	--display: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -55,6 +59,7 @@
 /* ---- Go tokens ---- */
 
 :root {
+	/* On paper. */
 	--tk-k: #9d2f6b;
 	--tk-s: #8a5300;
 	--tk-c: #52695e;
@@ -62,16 +67,25 @@
 	--tk-f: #1b6d56;
 	--tk-t: #3a4fb5;
 	--tk-b: #3a4fb5;
+
+	/* On a dark panel (scene frames and code cards). `ui.css` pins `--tk-*` to these inside a panel. */
+	--tk-k-on-dark: #ff8fb8;
+	--tk-s-on-dark: #f0b24a;
+	--tk-c-on-dark: #8fa89c;
+	--tk-n-on-dark: #f0b24a;
+	--tk-f-on-dark: #5fd4b2;
+	--tk-t-on-dark: #8fb0ff;
+	--tk-b-on-dark: #8fb0ff;
 }
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--tk-k: #ff8fb8;
-		--tk-s: #f0b24a;
-		--tk-c: #8fa89c;
-		--tk-n: #f0b24a;
-		--tk-f: #5fd4b2;
-		--tk-t: #8fb0ff;
-		--tk-b: #8fb0ff;
+		--tk-k: var(--tk-k-on-dark);
+		--tk-s: var(--tk-s-on-dark);
+		--tk-c: var(--tk-c-on-dark);
+		--tk-n: var(--tk-n-on-dark);
+		--tk-f: var(--tk-f-on-dark);
+		--tk-t: var(--tk-t-on-dark);
+		--tk-b: var(--tk-b-on-dark);
 	}
 }

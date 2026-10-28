@@ -43,7 +43,7 @@ export default defineConfig({
 				baseUrl: 'https://github.com/goptics/varmq/edit/main/docs/',
 			},
 			lastUpdated: true,
-			customCss: ['./src/styles/tokens.css', './src/styles/docs-theme.css'],
+			customCss: ['./src/styles/tokens.css', './src/styles/ui.css', './src/styles/docs-theme.css'],
 			components: {
 				Head: './src/components/shell/Head.astro',
 				ThemeProvider: './src/components/shell/ThemeProvider.astro',

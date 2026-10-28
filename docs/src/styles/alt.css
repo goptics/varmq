@@ -70,17 +70,6 @@ body.alt {
 	outline-color: var(--panel-accent);
 }
 
-.sr-only {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-	border: 0;
-}
 
 .skip {
 	position: absolute;
@@ -264,7 +253,7 @@ body.alt {
 }
 
 .btn--primary:hover {
-	background: #5dd0b0;
+	background: var(--brand-hover);
 	text-decoration: none;
 }
 
@@ -461,22 +450,7 @@ body.alt {
 	color: var(--panel-ink-2);
 }
 
-.copy {
-	flex: none;
-	min-height: 36px;
-	min-width: 64px;
-	padding: 6px 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: transparent;
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-}
 
-.copy:hover {
-	background: rgba(255, 255, 255, 0.07);
-}
 
 /* ---- Pool instrument (the hero scene) ---- */
 
@@ -671,7 +645,7 @@ body.alt {
 .pool__dots i {
 	aspect-ratio: 1;
 	border-radius: 2px;
-	background: rgba(255, 255, 255, 0.07);
+	background: var(--panel-fill-2);
 }
 
 .pool__dots i.on {
@@ -695,62 +669,13 @@ body.alt {
 	background: var(--panel-2);
 }
 
-.pbtn {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: rgba(255, 255, 255, 0.05);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s;
-}
 
-.pbtn:hover {
-	background: rgba(255, 255, 255, 0.11);
-}
 
-.pbtn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
 
-.pbtn--primary:hover {
-	background: #5dd0b0;
-}
 
-.pbtn[disabled] {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
 
-.stepper {
-	display: inline-flex;
-	align-items: center;
-	gap: 0;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	overflow: hidden;
-}
 
-.stepper .pbtn {
-	border: 0;
-	border-radius: 0;
-	min-width: 40px;
-	padding-inline: 0;
-}
 
-.stepper output {
-	min-width: 76px;
-	padding: 0 10px;
-	text-align: center;
-	font: 500 0.8125rem/1 var(--mono);
-	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-}
 
 .pool__note {
 	margin-left: auto;
@@ -774,24 +699,8 @@ body.alt {
 	overflow-x: auto;
 }
 
-.call {
-	display: block;
-	margin-top: 4px;
-	padding-left: 10px;
-	border-left: 2px solid var(--panel-accent);
-	color: var(--panel-accent);
-	min-height: 1.65em;
-}
 
-.call.is-new {
-	animation: flash 0.7s var(--ease);
-}
 
-@keyframes flash {
-	from {
-		background: color-mix(in srgb, var(--brand) 30%, transparent);
-	}
-}
 
 @media (max-width: 759px) {
 	.pool__stage {
@@ -966,57 +875,14 @@ body.alt {
 
 /* ---- Tabs (shared) ---- */
 
-.seg {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--rule);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--paper) 80%, transparent);
-}
 
-.seg [role='tab'] {
-	min-height: 40px;
-	padding: 8px 16px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--ink-2);
-	font: 600 0.875rem/1 var(--display);
-	cursor: pointer;
-}
 
-.seg [role='tab']:hover {
-	background: var(--bar-2);
-}
 
-.seg [role='tab'][aria-selected='true'] {
-	background: var(--ink);
-	color: var(--paper);
-}
 
-.on-dark .seg {
-	border-color: var(--panel-rule);
-	background: transparent;
-}
 
-.on-dark .seg [role='tab'] {
-	color: var(--panel-ink-2);
-}
 
-.on-dark .seg [role='tab']:hover {
-	background: rgba(255, 255, 255, 0.07);
-}
 
-.on-dark .seg [role='tab'][aria-selected='true'] {
-	background: var(--panel-ink);
-	color: var(--panel);
-}
 
-[role='tabpanel'][hidden] {
-	display: none;
-}
 
 /* ---- Storage scene (section 3) ---- */
 
@@ -1171,42 +1037,10 @@ body.alt {
 
 /* ---- Code blocks on paper ---- */
 
-.code {
-	border: 1px solid var(--rule);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--paper) 86%, var(--bar-2));
-	overflow: hidden;
-}
 
-.code__head {
-	display: flex;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 10px 16px;
-	border-bottom: 1px solid var(--rule);
-	font: 500 0.75rem/1.2 var(--mono);
-	color: var(--ink-3);
-}
 
-.code pre {
-	margin: 0;
-	padding: 16px;
-	overflow-x: auto;
-	font: 400 0.8125rem/1.65 var(--mono);
-	background: transparent;
-	tab-size: 4;
-}
 
-.code--dark {
-	background: var(--panel);
-	border-color: var(--panel-rule);
-	color: var(--panel-ink);
-}
 
-.code--dark .code__head {
-	border-color: var(--panel-rule);
-	color: var(--panel-ink-2);
-}
 
 
 /* ---- Race (benchmarks) ---- */
@@ -1307,7 +1141,7 @@ body.alt {
 .rlane__track {
 	height: 18px;
 	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.05);
+	background: var(--panel-fill);
 	overflow: hidden;
 }
 
@@ -1752,34 +1586,9 @@ body.alt {
 }
 
 
-.pool__code,
-.code--dark {
-	--tk-k: #ff8fb8;
-	--tk-s: #f0b24a;
-	--tk-c: #8fa89c;
-	--tk-n: #f0b24a;
-	--tk-f: #5fd4b2;
-	--tk-t: #8fb0ff;
-	--tk-b: #8fb0ff;
-}
 
-.gocode {
-	margin: 0;
-	white-space: pre;
-	color: inherit;
-}
 
-.gocode code {
-	font: inherit;
-}
 
-.tk-k { color: var(--tk-k); }
-.tk-s { color: var(--tk-s); }
-.tk-c { color: var(--tk-c); font-style: italic; }
-.tk-n { color: var(--tk-n); }
-.tk-f { color: var(--tk-f); }
-.tk-t { color: var(--tk-t); }
-.tk-b { color: var(--tk-b); }
 
 /* Paragraph margins need the .alt prefix to beat the page reset. */
 .alt .race__spec {

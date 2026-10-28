@@ -654,16 +654,8 @@ site-search button > kbd {
 
 /* ---- Code (Expressive Code): a dark panel in both themes ---- */
 
-/* The Go syntax tokens, pinned to their dark values because the panel is dark in both themes.
-   Same values as the dark `--tk-*` set in tokens.css and as `.code--dark` in alt.css. */
+/* The Go syntax tokens take their dark values here: `ui.css` pins them for `.expressive-code`. */
 .expressive-code {
-	--tk-k: #ff8fb8;
-	--tk-s: #f0b24a;
-	--tk-c: #8fa89c;
-	--tk-n: #f0b24a;
-	--tk-f: #5fd4b2;
-	--tk-t: #8fb0ff;
-	--tk-b: #8fb0ff;
 	margin-block: 1.5rem;
 }
 
