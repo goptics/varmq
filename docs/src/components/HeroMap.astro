@@ -8,7 +8,7 @@
 	import type { Timeline } from 'animejs';
 	import { CHAPTERS, STATIC_AT } from '../lib/heromap/chapters.ts';
 	import STYLES from '../lib/heromap/map.css?inline';
-	import { END_FADE, renderMap, type MapNodes } from '../lib/heromap/render.ts';
+	import { renderMap, type MapNodes } from '../lib/heromap/render.ts';
 	import { REGIONS, frame } from '../lib/heromap/scene.ts';
 
 	const NS = 'http://www.w3.org/2000/svg';
@@ -48,12 +48,10 @@
 		reducedMotion = false;
 		/** On screen, in part at least. */
 		intersecting = false;
-		/** Has played since it loaded: until then it holds the still frame, which its first play fades out. */
+		/** Has played since it loaded: until then it holds the still frame, where its first play starts. */
 		started = false;
 		/** The animation's code has been asked for: once, as a failed load is not tried again. */
 		loading = false;
-		/** The still frame fading out, on the first play. */
-		fades?: Animation[];
 		button!: HTMLButtonElement;
 		motion = matchMedia(REDUCE);
 		/** Tells the map its width on screen, which decides whether its labels are big enough to show. */
@@ -92,7 +90,7 @@
 			this.addButton();
 
 			// The still frame until the animation loads: the whole map with every piece on, and the finale's first
-			// caption.
+			// caption. It is the timeline's frame at STATIC_AT, where the first play starts.
 			nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
 			for (const word of nodes.words(CHAPTERS.length, 0)) word.style.opacity = '1';
 		}
@@ -180,37 +178,14 @@
 			const timeline = this.timeline;
 			this.button.hidden = !timeline || this.reducedMotion;
 			if (!timeline) return;
-			if (!this.started) {
-				if (this.playable()) this.firstPlay(timeline);
-				else this.stopFade();
-			} else if (this.playable()) timeline.play();
-			else if (this.reducedMotion) timeline.pause().seek(STATIC_AT);
-			else timeline.pause();
-		}
-
-		/** The first play: the still frame fades out as the loop's end fades the map, then chapter 1 starts. */
-		firstPlay(timeline: Timeline) {
-			if (this.fades) return;
-			const { world, caption } = this.nodes!;
-			const fades = [world, caption].map((el) => el.animate({ opacity: 0 }, { ...END_FADE, fill: 'forwards' }));
-			this.fades = fades;
-			fades[0].onfinish = () => {
-				this.fades = undefined;
-				if (!this.playable()) {
-					for (const fade of fades) fade.cancel();
-					return;
-				}
+			if (this.playable()) {
+				// The first play goes on from the still frame: the whole map runs in the finale, and then the loop
+				// starts over at chapter 1.
+				if (!this.started) timeline.seek(STATIC_AT);
 				this.started = true;
-				timeline.seek(0);
-				for (const fade of fades) fade.cancel();
 				timeline.play();
-			};
-		}
-
-		/** Brings the still frame back, if it was fading out. */
-		stopFade() {
-			for (const fade of this.fades ?? []) fade.cancel();
-			this.fades = undefined;
+			} else if (this.reducedMotion) timeline.pause().seek(STATIC_AT);
+			else timeline.pause();
 		}
 	}
 
