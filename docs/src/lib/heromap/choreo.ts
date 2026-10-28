@@ -61,6 +61,8 @@ const CLEAR = 44; // a copy has left the store's mouth, for the next one, once i
 const NEAR = 16; // a landing square this close to its slot is all but in it: from then on it must not touch
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
+// A caption word rolling out of its box as another rolls in: by more than the box is tall (14 px type, 1.4 lines).
+const ROLL = { by: 20, duration: 420 };
 
 const E = {
 	move: eases.inOutExpo,
@@ -745,8 +747,8 @@ export class Choreo {
 	}
 
 	/**
-	 * Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. A swap has the
-	 * last word leave as words do and its stand-in rise into the same box, a little after.
+	 * Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. A swap rolls the
+	 * last word up out of its box as its stand-in rolls up into it, together, so the two never overlap.
 	 */
 	private captions(c: Chapter, T: number) {
 		let free = 0; // when the previous caption has left
@@ -756,9 +758,13 @@ export class Choreo {
 			this.score.stagger(words, { opacity: 1, translateY: 0 }, T + enter, 55, 520, E.pop);
 			let shown = words;
 			if (cap.swap) {
+				const last = words[words.length - 1];
 				const next = this.nodes.swap(c.n, i);
-				this.score.tween(words[words.length - 1], { opacity: 0, translateY: -8 }, T + cap.swap.at, 300, E.out);
-				this.score.tween(next, { opacity: 1, translateY: 0 }, T + cap.swap.at + 150, 520, E.pop);
+				const at = T + cap.swap.at;
+				this.score.set(next, { opacity: 1, translateY: ROLL.by }, at);
+				this.score.tween(next, { translateY: 0 }, at, ROLL.duration, E.zoom);
+				this.score.tween(last, { translateY: -ROLL.by }, at, ROLL.duration, E.zoom);
+				this.score.set(last, { opacity: 0 }, at + ROLL.duration);
 				shown = [...words.slice(0, -1), next];
 			}
 			this.score.stagger(shown, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
@@ -1155,9 +1161,10 @@ export class Choreo {
 		const prog = stage.box;
 		const x = score.at(cam, 'x', at)[0];
 		[4, -4, 2, 0].forEach((dx, i) => score.tween(cam, { x: x + dx }, at + 60 * i, i === 3 ? 80 : 60, E.fade));
+		const { fades } = PROGRAMS[worker]!;
 		const flash = prog.querySelector('.vm-flash')!;
 		score.tween(flash, { opacity: 1 }, at, 80, E.linear);
-		score.tween(flash, { opacity: 0 }, at + 80, 600, E.fade);
+		if (fades) score.tween(flash, { opacity: 0 }, at + 80, 600, E.fade);
 		score.set(prog.querySelector(':scope > .vm-label')!, { opacity: 0 }, at);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 1 }, at);
 		// The jobs it was running vanish; their records stay in flight in the store.
@@ -1168,27 +1175,34 @@ export class Choreo {
 			const r = nodes.ring(worker, i);
 			score.tween(r.progress, { opacity: 0 }, at + 60, 380, E.out);
 			score.tween(r.check, { opacity: 0 }, at + 60, 380, E.out);
+			// One that stays keeps its box and card, with no goroutine and no place for one.
+			if (!fades) score.tween(r.ghost, { opacity: 0 }, at + 300, 400, E.out);
 		});
+		if (!fades) return;
 		for (const el of [stage.box, ...stage.inside, ...stage.lines]) {
 			score.tween(el, { opacity: 0 }, at + 700, 650, E.out);
 		}
 	}
 
 	/**
-	 * The program boots: its box draws in, as PROGRAM · RESTARTED for SQLite and as itself for Redis's B, then what
-	 * is in it and its lines come back.
+	 * The program boots. SQLite's box draws in as PROGRAM · RESTARTED, then what is in it and its lines come back;
+	 * Redis's B loses its red border and comes back as itself, with its goroutines' places.
 	 */
 	private restart(at: number, worker: Worker) {
 		const { score, nodes } = this;
 		const stage = this.stage(worker);
 		const prog = stage.box;
-		const outline = this.outline(prog);
-		const shape = prog.querySelector('.vm-shape')!;
-		score.set(prog, { opacity: 1 }, at);
-		score.set(outline, { draw: [0, 0] }, at);
-		score.set(shape, { fillOpacity: 0 }, at);
-		score.tween(outline, { draw: [0, 1] }, at, 700, E.draw);
-		score.tween(shape, { fillOpacity: 1 }, at, 700, E.draw);
+		if (PROGRAMS[worker]!.fades) {
+			const outline = this.outline(prog);
+			const shape = prog.querySelector('.vm-shape')!;
+			score.set(prog, { opacity: 1 }, at);
+			score.set(outline, { draw: [0, 0] }, at);
+			score.set(shape, { fillOpacity: 0 }, at);
+			score.tween(outline, { draw: [0, 1] }, at, 700, E.draw);
+			score.tween(shape, { fillOpacity: 1 }, at, 700, E.draw);
+		} else {
+			score.tween(prog.querySelector('.vm-flash')!, { opacity: 0 }, at, 400, E.fade);
+		}
 		score.set(prog.querySelector('.vm-died')!, { opacity: 0 }, at);
 		const label = prog.querySelector(worker === 'sqlite' ? '.vm-restarted' : ':scope > .vm-label')!;
 		score.tween(label, { opacity: 1 }, at, 300, E.fade);
@@ -1205,12 +1219,13 @@ export class Choreo {
 }
 
 /**
- * The programs that die and come back, by their worker: their box and the lines that go with it. Redis's lines stay
- * when B dies: C's runs through B's.
+ * The programs that die and come back, by their worker: their box, the lines that go with it, and whether the
+ * program fades from the map while it is down. SQLite's does, so the store holds the frame alone. Redis's B stays,
+ * dead: a red border, and an empty card. Its lines stay: C's runs through B's.
  */
-const PROGRAMS: Partial<Record<Worker, { box: string; lines: string[] }>> = {
-	sqlite: { box: 's-prog', lines: ['s-add-to-s-queue', 's-queue-to-sqlite', 'sqlite-to-s-tray'] },
-	'redis-b': { box: 'b-prog', lines: [] },
+const PROGRAMS: Partial<Record<Worker, { box: string; lines: string[]; fades: boolean }>> = {
+	sqlite: { box: 's-prog', lines: ['s-add-to-s-queue', 's-queue-to-sqlite', 'sqlite-to-s-tray'], fades: true },
+	'redis-b': { box: 'b-prog', lines: [], fades: false },
 };
 
 /** The card a store's consumer runs its rings in: the SQLite worker's, or Redis's B or C. */

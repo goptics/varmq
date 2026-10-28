@@ -217,8 +217,9 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 }
 
 /**
- * A caption line, one clipping box (`.vm-w`) per word. `*marked*` text is green (`em`) and `!marked!` text red
- * (`b`), as `Caption` in chapters.ts marks it; a mark may wrap several words. Returns the line and each word's
+ * A caption line, one clipping box (`.vm-w`) per word. `*marked*` text is green (`em`), `!marked!` text red (`b`)
+ * and `#marked#` text in its logo's colour (`.vm-brand-<name>`), as `Caption` in chapters.ts marks it; a mark may
+ * wrap several words. Returns the line and each word's
  * inner element, hidden, which is what rises in.
  */
 function captionLine(text: string, swap?: string): { line: HTMLElement; words: HTMLElement[]; swap?: HTMLElement } {
@@ -250,11 +251,12 @@ function captionWord(token: string, open: string): { word: HTMLElement; mark: st
 	const word = document.createElement('span');
 	word.style.opacity = '0';
 	let mark = open;
-	for (const part of token.split(/([*!])/)) {
-		if (part === '*' || part === '!') {
+	for (const part of token.split(/([*!#])/)) {
+		if (part === '*' || part === '!' || part === '#') {
 			mark = mark === part ? '' : mark || part;
 		} else if (part && mark) {
-			const run = document.createElement(mark === '*' ? 'em' : 'b');
+			const run = document.createElement(mark === '*' ? 'em' : mark === '!' ? 'b' : 'span');
+			if (mark === '#') run.className = `vm-brand-${part.toLowerCase().replace(/\W/g, '')}`;
 			run.textContent = part;
 			word.append(run);
 		} else if (part) {

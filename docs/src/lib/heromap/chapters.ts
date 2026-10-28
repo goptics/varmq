@@ -35,12 +35,15 @@ export type Part =
 	| { kind: 'sqlite'; plan: SqlitePlan; events: StoreEvent[] }
 	| { kind: 'redis'; plan: RedisPlan; events: StoreEvent[] };
 
-/** One line under the map. `*word*` is green and `!word!` red; a mark may wrap several words. */
+/**
+ * One line under the map. `*word*` is green and `!word!` red, and `#word#` takes its logo's colour (SQLite's or
+ * Redis's); a mark may wrap several words.
+ */
 export interface Caption {
 	at: number;
 	until: number; // when it starts to leave
 	text: string;
-	swap?: { at: number; text: string }; // at `at`, the last word leaves and `text` rises in its place
+	swap?: { at: number; text: string }; // at `at`, the last word rolls up out of sight as `text` rolls up into its place
 }
 
 export interface Chapter {
@@ -375,7 +378,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 			title: 'Everything together',
 			duration: 9000,
 			captions: [
-				{ at: 300, until: 7500, text: 'One worker model, from memory to *SQLite*', swap: { at: 3900, text: '*Redis*' } },
+				{ at: 300, until: 7500, text: 'One worker model, from memory to #SQLite#', swap: { at: 3900, text: '#Redis#' } },
 			],
 			published,
 			parts: [
@@ -463,5 +466,5 @@ export const STATIC_AT = starts()[CHAPTERS.length - 1] + 1300;
 
 /** A caption's text without its colour marks. */
 export function plain(text: string): string {
-	return text.replace(/[*!]/g, '');
+	return text.replace(/[*!#]/g, '');
 }

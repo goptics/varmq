@@ -100,11 +100,11 @@ describe('chapter rules', () => {
 			assert.ok(cap.at >= 0 && cap.until - cap.at >= 1400, `chapter ${c.n}: ${cap.text}`);
 			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
 			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
-			for (const mark of ['*', '!']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
-			// A swap waits for every word to have risen, and its stand-in, rising 150 ms after, is up before the line leaves.
+			for (const mark of ['*', '!', '#']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
+			// A swap waits for every word to have risen, and its roll (420 ms) is over before the line leaves.
 			if (cap.swap) {
 				assert.ok(cap.at + 55 * (words - 1) + 520 <= cap.swap.at, `chapter ${c.n}: ${cap.text}`);
-				assert.ok(cap.swap.at + 150 + 520 <= cap.until, `chapter ${c.n}: ${cap.text}`);
+				assert.ok(cap.swap.at + 420 <= cap.until, `chapter ${c.n}: ${cap.text}`);
 			}
 		});
 	});

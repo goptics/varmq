@@ -390,6 +390,14 @@ varmq-map .vm-caption b {
 	color: var(--vm-red);
 }
 
+varmq-map .vm-caption .vm-brand-sqlite {
+	color: var(--vm-sqlite);
+}
+
+varmq-map .vm-caption .vm-brand-redis {
+	color: var(--vm-redis);
+}
+
 /* Forced colours paint a backplate behind each line's text, and the lines share one cell, so the hidden lines'
    backplates would cover the one shown. The band keeps its own colours instead, the system's: text on Canvas, the marks too. */
 @media (forced-colors: active) {
@@ -399,7 +407,7 @@ varmq-map .vm-caption b {
 		color: CanvasText;
 	}
 
-	varmq-map .vm-caption :is(em, b) {
+	varmq-map .vm-caption :is(em, b, [class^='vm-brand-']) {
 		color: CanvasText;
 	}
 }
