@@ -3,7 +3,8 @@
 // WithRemoveOnComplete(false)) and only matches a processing row; the first time a process opens a
 // queue, sqliteq sets every processing row back to pending, once per queue in each process.
 
-import { h, job } from './ops';
+import { h, setCall } from '../ui/dom';
+import { job } from './ops';
 
 type Status = 'pending' | 'processing' | 'completed';
 interface Row {
@@ -22,7 +23,7 @@ const root = document.querySelector<HTMLElement>('[data-sflow]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const $ = <T extends HTMLElement>(s: string) => figure.querySelector<T>(s)!;
 	const procs = $('[data-procs]');
 	const body = $('[data-rows]');
@@ -70,11 +71,14 @@ function init(root: HTMLElement) {
 		btn('kill').hidden = s.down;
 		btn('restart').hidden = !s.down;
 		btn('second').disabled = !processing && !running;
-		call.textContent = s.down
-			? '// the process died: the row is still processing'
-			: s.inflight === null
-				? 'pq, err := sdb.NewQueue("jobs")  // resets processing rows, once per queue in this process'
-				: '// one statement turns the row into processing';
+		setCall(
+			call,
+			s.down
+				? '// the process died: the row is still processing'
+				: s.inflight === null
+					? 'pq, err := sdb.NewQueue("jobs")  // resets processing rows, once per queue in this process'
+					: '// one statement turns the row into processing',
+		);
 
 		const tally = Object.entries(s.runs)
 			.map(([id, n]) => `job ${id} started ${n}×`)
@@ -84,7 +88,7 @@ function init(root: HTMLElement) {
 
 	const rowOf = (id: number) => s.rows.find((r) => r.id === id);
 
-	root.closest('.ops-scene')!.addEventListener('click', (e) => {
+	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el || el.disabled) return;
 		const act = el.dataset.act;

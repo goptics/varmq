@@ -1,7 +1,7 @@
 // Scrape replay: a clock drives the numbers of metrics-data.ts through the text, the chart and PromQL.
 
 import { END, METRICS, sample, type Metric, type Sample } from './metrics-data';
-import { h, reducedMotion } from './ops';
+import { h, reducedMotion } from '../ui/dom';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = (tag: string, attrs: Record<string, string | number> = {}, ...kids: Node[]) => {
@@ -24,7 +24,7 @@ const root = document.querySelector<HTMLElement>('[data-prom]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const slider = root.querySelector<HTMLInputElement>('[data-t]')!;
 	const tOut = root.querySelector<HTMLElement>('[data-t-out]')!;
 	const detail = root.querySelector<HTMLElement>('[data-detail]')!;

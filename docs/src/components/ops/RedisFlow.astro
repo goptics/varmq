@@ -1,16 +1,17 @@
 ---
 // A job through the Redis keys of redisq: take, acknowledge, crash, close. The slider is the clock.
-import Scene from './Scene.astro';
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'A scene that shows four Redis keys of a queue named jobs: jobs, jobs:nacked, jobs:timeouts and jobs:heartbeats. Job 7 waits in jobs with jobs 8, 9 and 10. ' +
 	'Take job 7 moves it to jobs:nacked and gives it a deadline in jobs:timeouts. Acknowledge removes both entries. ' +
 	'Kill the process leaves job 7 in jobs:nacked. A slider then moves time forward. On a persistent queue, redisq puts job 7 back at the front of jobs when the program has run for 30 seconds in all. ' +
 	'On a distributed queue another consumer puts it back after about six seconds. Close the queue while the job runs puts the job back at once, and its acknowledgement then fails.';
 ---
 
-<Scene id="rflow" label="Job through Redis" call="pq := rdb.NewQueue(&quot;jobs&quot;)" alt={alt}>
-	<div class="ops-seg ops-seg--dark" role="tablist" aria-label="Kind of queue" data-rflow-modes>
+<Scene id="rflow" title="Job through Redis" call={'pq := rdb.NewQueue("jobs")'} describe={describe}>
+	<div class="seg ops-modes" role="tablist" aria-label="Kind of queue" data-rflow-modes>
 		<button type="button" role="tab" id="rflow-tab-persistent" aria-controls="rflow-panel" aria-selected="true" tabindex="0" data-key="persistent">Persistent queue</button>
 		<button type="button" role="tab" id="rflow-tab-dist" aria-controls="rflow-panel" aria-selected="false" tabindex="-1" data-key="dist">Distributed queue</button>
 	</div>
@@ -27,11 +28,11 @@ const alt =
 	</div>
 
 	<Fragment slot="controls">
-		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="take">Take a job</button>
-		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="ack">Acknowledge</button>
-		<button type="button" class="ops-pbtn ops-pbtn--danger" data-act="kill">Kill the process</button>
-		<button type="button" class="ops-pbtn" data-act="close">Close the queue</button>
-		<button type="button" class="ops-pbtn" data-act="reset">Reset</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="take">Take a job</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="ack">Acknowledge</button>
+		<button type="button" class="pbtn pbtn--danger" data-act="kill">Kill the process</button>
+		<button type="button" class="pbtn" data-act="close">Close the queue</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 </Scene>
 

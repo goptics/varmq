@@ -1,7 +1,8 @@
 ---
 // Crash test for the acknowledgement model: one job goes through the five steps, the reader kills the
 // process at any step, and the scene shows what the storage holds and what each adapter does about it.
-import Scene from './Scene.astro';
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
 
 const modes = [
 	{ key: 'memory', label: 'In memory' },
@@ -10,15 +11,15 @@ const modes = [
 	{ key: 'sqlite', label: 'sqliteq' },
 	{ key: 'own', label: 'Your adapter' },
 ];
-const alt =
+const describe =
 	'A scene with one job, number 7, and three waiting jobs. The job goes through five steps: waiting, taken, running, returned and acknowledged. ' +
 	'You pick where the queue lives: in memory, in redisq on Redis as a persistent or distributed queue, in sqliteq, or in an adapter of your own. ' +
 	'Use Step to move the job on. Use Kill the process to stop the process at the current step. The scene then says what the storage holds and what that adapter does with a job that was taken and not acknowledged. ' +
 	'In memory, the job and the waiting jobs are lost. With redisq and sqliteq the job comes back and runs a second time. With your own adapter, the adapter decides.';
 ---
 
-<Scene id="ack" label="Crash test" call="queue.Add(job)" alt={alt}>
-	<div class="ops-seg ops-seg--dark" role="tablist" aria-label="Where the jobs are stored" data-ack-modes>
+<Scene id="ack" title="Crash test" call="queue.Add(job)" describe={describe}>
+	<div class="seg ops-modes" role="tablist" aria-label="Where the jobs are stored" data-ack-modes>
 		{
 			modes.map((m, i) => (
 				<button
@@ -53,13 +54,13 @@ const alt =
 	</div>
 
 	<Fragment slot="controls">
-		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="step">Step</button>
-		<button type="button" class="ops-pbtn ops-pbtn--danger" data-act="kill">Kill the process</button>
-		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="restart" hidden>Restart the process</button>
-		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="wait" hidden>Wait</button>
-		<button type="button" class="ops-pbtn" data-act="lose" hidden>Never hand it out</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="step">Step</button>
+		<button type="button" class="pbtn pbtn--danger" data-act="kill">Kill the process</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="restart" hidden>Restart the process</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="wait" hidden>Wait</button>
+		<button type="button" class="pbtn" data-act="lose" hidden>Never hand it out</button>
 		<label class="ops-check"><input type="checkbox" data-panic /> The function panics</label>
-		<button type="button" class="ops-pbtn" data-act="reset">Reset</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 </Scene>
 

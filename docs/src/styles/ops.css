@@ -1,21 +1,9 @@
 /* Persistence, operations and reference pages: the scenes in src/components/ops/.
-   Every rule is scoped by the `ops` class and every color comes from tokens.css, so a scene looks the same
-   on stock Starlight and on the restyled shell. Scenes sit on their own surface (a dark panel, or a paper card),
-   so they do not depend on the page background. */
-
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import './tokens.css';
-
-.ops,
-.ops *,
-.ops *::before,
-.ops *::after {
-	box-sizing: border-box;
-}
+   A scene sits in the shared frame (`.sframe`, ui.css) and reads only tokens. The setup steps and the feature
+   matrix are paper components: they carry the `ops` class, which names a container for their narrow layout. */
 
 .ops {
-	container-type: inline-size;
-	container-name: ops;
+	container: ops / inline-size;
 	font-family: var(--display);
 	font-size: 1.0625rem;
 	line-height: 1.6;
@@ -27,100 +15,7 @@
 	display: none !important;
 }
 
-.ops-sr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-	border: 0;
-}
-
-/* Focus ring: 2 px, 3 px offset. On a dark panel it uses the panel accent. */
-.ops :focus-visible {
-	outline: 2px solid var(--accent-text);
-	outline-offset: 3px;
-	border-radius: 4px;
-}
-.ops-frame :focus-visible,
-.ops-code :focus-visible {
-	outline-color: var(--panel-accent);
-}
-
-.ops ::selection {
-	background: color-mix(in srgb, var(--brand) 40%, transparent);
-	color: inherit;
-}
-
-/* ---- Scene frame ---- */
-
-.ops-scene {
-	margin: 1.75rem 0;
-}
-
-.ops-frame {
-	background: var(--panel);
-	color: var(--panel-ink);
-	border: 1px solid var(--panel-rule);
-	border-radius: 16px;
-	overflow: hidden;
-	font-family: var(--mono);
-	font-size: 0.8125rem;
-	line-height: 1.5;
-}
-
-.ops-frame__cap {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 4px 14px;
-	padding: 10px 16px;
-	border-bottom: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-}
-
-.ops-frame__tag {
-	font-size: 0.6875rem;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
-
-.ops-frame__call {
-	min-width: 0;
-	padding: 0;
-	background: none;
-	border: 0;
-	font: inherit;
-	color: var(--panel-accent);
-	overflow-wrap: anywhere;
-}
-
-.ops-frame__body {
-	display: grid;
-	gap: 16px;
-	padding: 16px;
-}
-
-.ops-frame__bar {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	padding: 12px 16px;
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-}
-
-.ops-frame__bar:empty {
-	display: none;
-}
-
 /* Single-column grids must let their tracks shrink below the content, or a long line widens the panel. */
-.ops-frame__body,
 .api,
 .api__req,
 .api__workers,
@@ -131,57 +26,28 @@
 .flow,
 .flow__keys,
 .amap,
+.ack,
 .ack__zones,
 .ack__zone,
 .ack__procs {
 	grid-template-columns: minmax(0, 1fr);
 }
 
-.ops-bar__label,
-.ops-bar__note {
+/* The choice of queue above a panel. */
+.sframe__stage > .ops-modes {
+	display: flex;
+	width: fit-content;
+	max-width: 100%;
+	margin-bottom: 16px;
+}
+/* Five choices fit on one line in the article column. */
+.sframe .seg.ops-modes [role='tab'] {
+	padding-inline: 10px;
+}
+
+.ops-bar__label {
 	font-size: 0.75rem;
 	color: var(--panel-ink-2);
-}
-
-.ops-bar__note {
-	flex: 1 1 220px;
-}
-
-/* ---- Buttons and controls ---- */
-
-.ops-pbtn {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--panel-ink) 6%, transparent);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s;
-}
-.ops-pbtn:hover:not([disabled]) {
-	background: color-mix(in srgb, var(--panel-ink) 13%, transparent);
-}
-.ops-pbtn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
-.ops-pbtn--primary:hover:not([disabled]) {
-	background: color-mix(in srgb, var(--brand) 85%, white);
-}
-.ops-pbtn--danger {
-	border-color: var(--danger);
-	color: var(--danger);
-}
-.ops-pbtn--danger:hover:not([disabled]) {
-	background: color-mix(in srgb, var(--danger) 16%, transparent);
-}
-.ops-pbtn[disabled] {
-	opacity: 0.4;
-	cursor: not-allowed;
 }
 
 .ops-check {
@@ -196,56 +62,6 @@
 .ops-check input {
 	width: 16px;
 	height: 16px;
-	accent-color: var(--brand);
-}
-
-.ops input[type='range'] {
-	accent-color: var(--brand);
-	min-width: 0;
-}
-
-/* Segmented tabs. Paper by default, dark inside a scene. */
-.ops-seg {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--rule);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--paper) 80%, transparent);
-}
-.ops-seg [role='tab'] {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--ink-2);
-	font: 600 0.875rem/1 var(--display);
-	cursor: pointer;
-}
-.ops-seg [role='tab']:hover {
-	background: var(--bar-2);
-}
-.ops-seg [role='tab'][aria-selected='true'] {
-	background: var(--ink);
-	color: var(--paper);
-}
-.ops-seg--dark {
-	border-color: var(--panel-rule);
-	background: transparent;
-	justify-self: start;
-	max-width: 100%;
-}
-.ops-seg--dark [role='tab'] {
-	color: var(--panel-ink-2);
-}
-.ops-seg--dark [role='tab']:hover {
-	background: color-mix(in srgb, var(--panel-ink) 8%, transparent);
-}
-.ops-seg--dark [role='tab'][aria-selected='true'] {
-	background: var(--panel-ink);
-	color: var(--panel);
 }
 
 /* ---- Job squares ---- */
@@ -258,7 +74,7 @@
 	height: 28px;
 	padding: 0 4px;
 	border: 1px solid transparent;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -295,14 +111,13 @@
 		translate: -14px 0;
 	}
 }
-@keyframes ops-flash {
-	from {
-		background: color-mix(in srgb, var(--brand) 30%, transparent);
-	}
-}
 
 /* ---- Boxes shared by the crash test and the flows ---- */
 
+.ack {
+	display: grid;
+	gap: 14px;
+}
 .ack__stage {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1.3fr);
@@ -326,11 +141,11 @@
 	min-width: 0;
 	padding: 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 10px;
+	border-radius: 8px;
 	background: var(--panel-2);
 	transition:
-		opacity 0.3s,
-		border-color 0.3s;
+		opacity 0.3s var(--ease),
+		border-color 0.3s var(--ease);
 }
 .ack__box[data-off] {
 	border-style: dashed;
@@ -397,9 +212,6 @@
 	color: var(--panel-ink-2);
 }
 .ack__zlabel code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	letter-spacing: 0;
 	text-transform: none;
@@ -451,9 +263,6 @@
 	overflow-wrap: anywhere;
 }
 .ack__sub {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	font-size: 0.6875rem;
 	color: var(--panel-accent);
@@ -472,7 +281,7 @@
 	white-space: nowrap;
 }
 
-@container ops (max-width: 559px) {
+@container sframe (max-width: 559px) {
 	.ack__stage {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 10px;
@@ -513,7 +322,7 @@
 	gap: 8px;
 	padding: 10px 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 10px;
+	border-radius: 8px;
 	background: var(--panel-2);
 }
 .flow__keyhead {
@@ -526,9 +335,6 @@
 	color: var(--panel-ink-2);
 }
 .flow__keyhead code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	font-size: 0.8125rem;
 	letter-spacing: 0;
@@ -552,18 +358,22 @@
 	gap: 8px;
 	padding: 4px 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 6px;
+	border-radius: 4px;
 }
 .flow__entry code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	color: var(--amber);
 }
 .flow__entry i {
 	font-style: normal;
 	color: var(--panel-ink-2);
+}
+.flow__clock[hidden] {
+	display: none;
+}
+.flow__clock input,
+.prom__clock input {
+	min-width: 0;
 }
 .flow__clock {
 	display: grid;
@@ -605,9 +415,6 @@
 	font-variant-numeric: tabular-nums;
 }
 .flow__table td code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	color: var(--panel-ink-2);
 	white-space: nowrap;
@@ -634,7 +441,7 @@
 	color: var(--panel-ink-2);
 }
 
-@container ops (min-width: 640px) {
+@container sframe (min-width: 640px) {
 	.flow__keys {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -643,7 +450,7 @@
 	}
 }
 
-@container ops (max-width: 559px) {
+@container sframe (max-width: 559px) {
 	.flow__table td:last-child,
 	.flow__table th:last-child {
 		display: none;
@@ -747,9 +554,6 @@
 	font-size: 0.875rem;
 	letter-spacing: 0;
 	text-transform: none;
-	padding: 0;
-	background: none;
-	border: 0;
 	color: var(--panel-accent);
 }
 .amap__h2 {
@@ -785,17 +589,14 @@
 .amap__methods code,
 .amap__bindrow code,
 .amap__by code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	color: var(--panel-ink);
 	overflow-wrap: anywhere;
 }
 .amap__methods li {
 	padding: 4px 8px;
-	border-radius: 6px;
-	background: rgb(0 0 0 / 0.28);
+	border-radius: 4px;
+	background: var(--panel-2);
 }
 .amap__p-list li {
 	margin: 0;
@@ -850,7 +651,7 @@
 	color: var(--panel-ink);
 }
 
-@container ops (max-width: 639px) {
+@container sframe (max-width: 639px) {
 	.amap__grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -890,16 +691,13 @@
 	gap: 6px 12px;
 	padding: 8px 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 10px;
+	border-radius: 8px;
 	background: var(--panel-2);
 }
 .api__worker.is-changed {
-	animation: ops-flash 0.7s var(--ease);
+	animation: call-flash 0.7s var(--ease);
 }
 .api__wname {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: 600 0.8125rem var(--mono);
 	color: var(--panel-ink);
 	min-width: 15ch;
@@ -940,7 +738,7 @@
 	width: 10px;
 	height: 10px;
 	border-radius: 2px;
-	background: color-mix(in srgb, var(--panel-ink) 12%, transparent);
+	background: var(--panel-fill-2);
 }
 .api__slots i.on {
 	background: var(--brand);
@@ -972,14 +770,14 @@
 	min-height: 32px;
 	padding: 5px 10px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 6px;
+	border-radius: 8px;
 	background: transparent;
 	color: var(--panel-ink);
 	font: 400 0.75rem/1.2 var(--mono);
 	cursor: pointer;
 }
 .api__chip:hover {
-	background: color-mix(in srgb, var(--panel-ink) 8%, transparent);
+	background: var(--panel-fill-2);
 }
 .api__chip b {
 	margin-right: 4px;
@@ -991,24 +789,22 @@
 	gap: 8px;
 	margin-top: 4px;
 }
-.api__method,
 .api__path {
+	flex: 1;
+	min-width: 0;
 	min-height: 40px;
 	padding: 8px 10px;
 	border: 1px solid var(--panel-rule);
 	border-radius: 8px;
-	background: var(--panel);
+	background: var(--panel-2);
 	color: var(--panel-ink);
-	font: 400 0.8125rem/1.2 var(--mono);
-}
-.api__path {
-	flex: 1;
-	min-width: 0;
+	font: 500 0.8125rem/1.2 var(--mono);
+	color-scheme: dark;
 }
 .api__res {
 	padding: 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 10px;
+	border-radius: 8px;
 	background: color-mix(in srgb, black 26%, var(--panel));
 }
 .api__status {
@@ -1028,9 +824,6 @@
 	margin-right: 4px;
 }
 .api__req-line code {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: inherit;
 	color: var(--panel-ink);
 }
@@ -1053,9 +846,6 @@
 }
 .api__wire {
 	margin: 10px 0;
-	padding: 0;
-	background: none;
-	border: 0;
 	font: 400 0.75rem/1.6 var(--mono);
 	color: var(--panel-ink);
 	white-space: pre-wrap;
@@ -1111,14 +901,14 @@
 	padding: 8px 10px;
 	border: 1px solid transparent;
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--panel-ink) 4%, transparent);
+	background: var(--panel-fill);
 	color: var(--panel-ink);
 	font: 400 0.75rem/1.5 var(--mono);
 	text-align: left;
 	cursor: pointer;
 }
 .prom__metric:hover {
-	background: color-mix(in srgb, var(--panel-ink) 9%, transparent);
+	background: var(--panel-fill-2);
 }
 .prom__metric[aria-pressed='true'] {
 	border-color: var(--brand);
@@ -1154,9 +944,6 @@
 	padding: 6px 10px 14px;
 }
 .prom__title {
-	padding: 0;
-	background: none;
-	border: 0;
 	font: 600 0.8125rem var(--mono);
 	color: var(--panel-accent);
 	overflow-wrap: anywhere;
@@ -1235,8 +1022,8 @@
 	display: block;
 	padding: 6px 8px;
 	border: 0;
-	border-radius: 6px;
-	background: rgb(0 0 0 / 0.28);
+	border-radius: 4px;
+	background: var(--panel-2);
 	font: 400 0.75rem/1.5 var(--mono);
 	color: var(--panel-ink);
 	overflow-wrap: anywhere;
@@ -1249,13 +1036,13 @@
 	font-variant-numeric: tabular-nums;
 }
 
-@container ops (max-width: 639px) {
+@container sframe (max-width: 639px) {
 	.prom__grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
-/* ---- Setup steps and code cards (on paper) ---- */
+/* ---- Setup steps (on paper; the code cards are the shared `.code`) ---- */
 
 .ops-steps {
 	display: grid;
@@ -1296,7 +1083,7 @@
 .ops-step__main > * {
 	min-width: 0;
 }
-.ops-step .ops-seg {
+.ops-step .seg {
 	justify-self: start;
 	max-width: 100%;
 }
@@ -1321,7 +1108,8 @@
 	color: var(--accent-text);
 	text-underline-offset: 0.18em;
 }
-.ops-step code {
+.ops-step__p code,
+.ops-step__note code {
 	padding: 1px 5px;
 	border: 0;
 	border-radius: 4px;
@@ -1333,90 +1121,13 @@
 	width: 100%;
 }
 
-.ops-code {
-	position: relative;
-	width: 100%;
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-	background: var(--panel);
-	color: var(--panel-ink);
-	overflow: hidden;
-}
-.ops-code__head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 6px 8px 6px 16px;
-	border-bottom: 1px solid var(--panel-rule);
-	font: 500 0.75rem/1.2 var(--mono);
-	color: var(--panel-ink-2);
-}
-.ops-code pre {
-	margin: 0;
-	padding: 14px 16px;
-	overflow-x: auto;
-	background: transparent;
-	border: 0;
-	font: 400 0.8125rem/1.65 var(--mono);
-	tab-size: 4;
-	color: var(--panel-ink);
-}
-.ops-code pre code {
-	padding: 0;
-	background: none;
-	border: 0;
-	font: inherit;
-	color: inherit;
-}
-.ops-copy {
-	min-height: 32px;
-	padding: 4px 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--panel-ink) 6%, transparent);
-	color: var(--panel-ink);
-	font: 500 0.75rem/1 var(--mono);
-	cursor: pointer;
-}
-.ops-copy:hover {
-	background: color-mix(in srgb, var(--panel-ink) 13%, transparent);
-}
-
-/* Go and shell tokens on a dark panel, from the panel tokens (the dark-theme token values). */
-.ops-frame .tk-k,
-.ops-code .tk-k {
-	color: var(--danger);
-}
-.ops-frame .tk-s,
-.ops-code .tk-s,
-.ops-frame .tk-n,
-.ops-code .tk-n {
-	color: var(--amber);
-}
-.ops-frame .tk-c,
-.ops-code .tk-c {
-	color: var(--panel-ink-2);
-	font-style: italic;
-}
-.ops-frame .tk-f,
-.ops-code .tk-f {
-	color: var(--panel-accent);
-}
-.ops-frame .tk-t,
-.ops-code .tk-t,
-.ops-frame .tk-b,
-.ops-code .tk-b {
-	color: var(--cobalt);
-}
-
 @container ops (max-width: 479px) {
 	.ops-step {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 10px;
 		padding: 14px;
 	}
-	.ops-code pre {
+	.ops-step .code pre {
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
@@ -1672,10 +1383,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.ops *,
-	.ops *::before,
-	.ops *::after {
-		animation: none !important;
-		transition: none !important;
+	.ack__slot .ops-job,
+	.api__worker.is-changed {
+		animation: none;
+	}
+	.ack__box,
+	.amap__node {
+		transition: none;
 	}
 }

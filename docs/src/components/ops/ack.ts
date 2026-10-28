@@ -2,7 +2,8 @@
 // rules follow the pages: varmq acknowledges after the function returns, and what happens to a job
 // that was taken and not acknowledged is the adapter's choice (redisq, sqliteq, or your own).
 
-import { h, job, tabs } from './ops';
+import { h, setCall, tabs } from '../ui/dom';
+import { job } from './ops';
 
 type Mode = 'memory' | 'redis' | 'dist' | 'sqlite' | 'own';
 
@@ -53,7 +54,7 @@ const root = document.querySelector<HTMLElement>('[data-ack]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const $ = <T extends HTMLElement>(s: string) => figure.querySelector<T>(s)!;
 	const procs = $('[data-procs]');
 	const store = $('[data-store]');
@@ -170,7 +171,7 @@ function init(root: HTMLElement) {
 				lose.hidden = false;
 			}
 		}
-		call.textContent = s.down ? '// the process died: no Acknowledge was called' : CALLS[s.stage];
+		setCall(call, s.down ? '// the process died: no Acknowledge was called' : CALLS[s.stage]);
 		out.innerHTML = '';
 		const counts = `Function of job 7: started ${s.started}×, returned ${s.returned}×.`;
 		out.append(h('span', { text: s.msg }), ' ', h('span', { class: 'ack__count', text: counts }));
@@ -280,7 +281,7 @@ function init(root: HTMLElement) {
 		render();
 	}
 
-	root.closest('.ops-scene')!.addEventListener('click', (e) => {
+	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el) return;
 		const act = el.dataset.act;

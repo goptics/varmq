@@ -1,11 +1,13 @@
 ---
 // Scrape replay: the text that /metrics returns while the example program runs, with a clock, a chart of
 // the selected metric, and PromQL for it.
-import Scene from './Scene.astro';
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
+import { highlightShell } from '../ui/go';
 import { METRICS, sample, END } from './metrics-data';
 
 const first = sample(2, null);
-const alt =
+const describe =
 	'A replay of what a Prometheus scrape of /metrics returns while the example program runs 1000 jobs with a concurrency of 10, each job taking 100 milliseconds. ' +
 	'The left side lists the eight metrics in the text format, each with its HELP line, its TYPE line and its value. ' +
 	'A slider sets the time from 0 to 11 seconds, and the values change with it. At 2 seconds the scrape shows completed 190, waiting 800 and processing 10. ' +
@@ -13,10 +15,11 @@ const alt =
 	'A checkbox restarts the process at 5 seconds, which zeroes the counters.';
 ---
 
-<Scene id="prom" label="Scrape replay" call="curl -s localhost:8080/metrics | grep '^foo_worker'" alt={alt}>
+<Scene id="prom" title="Scrape replay" describe={describe}>
+	<code slot="call" class="gocode" data-call set:html={highlightShell("curl -s localhost:8080/metrics | grep '^foo_worker'")} />
 	<div class="prom" data-prom>
 		<div class="prom__clock">
-			<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="play" aria-label="Play the replay">Play</button>
+			<button type="button" class="pbtn pbtn--primary" data-act="play" aria-label="Play the replay">Play</button>
 			<label class="prom__label" for="prom-t">Time</label>
 			<input id="prom-t" type="range" min="0" max={END} step="0.1" value="2" data-t />
 			<output class="prom__t" for="prom-t" data-t-out>2.0 s</output>
@@ -43,8 +46,9 @@ const alt =
 
 	<Fragment slot="controls">
 		<label class="ops-check"><input type="checkbox" data-restart /> Restart the process at 5 s</label>
-		<span class="ops-bar__note" data-note>Numbers follow a real run of this program.</span>
 	</Fragment>
+
+	<p class="sframe__note" slot="note" data-note>Numbers follow a real run of this program.</p>
 </Scene>
 
 <script>

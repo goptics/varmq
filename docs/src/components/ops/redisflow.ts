@@ -4,7 +4,8 @@
 // passed or whose holder's heartbeat is 30 seconds old; a distributed consumer is taken for dead
 // about six seconds after the crash; Close hands jobs back at once.
 
-import { h, job, tabs } from './ops';
+import { h, setCall, tabs } from '../ui/dom';
+import { job } from './ops';
 
 type Mode = 'persistent' | 'dist';
 
@@ -28,7 +29,7 @@ const root = document.querySelector<HTMLElement>('[data-rflow]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const $ = <T extends HTMLElement>(s: string) => figure.querySelector<T>(s)!;
 	const procs = $('[data-procs]');
 	const keys = $('[data-keys]');
@@ -106,13 +107,16 @@ function init(root: HTMLElement) {
 		btn('ack').disabled = s.inflight === null || s.crashed || s.returned;
 		btn('kill').disabled = s.crashed;
 		btn('close').disabled = s.inflight === null || s.crashed || s.closedUnder || s.returned;
-		call.textContent = s.crashed
-			? '// no Acknowledge was called: the entry stays in jobs:nacked'
-			: s.closedUnder
-				? 'pq.Close()  // puts back every job this object took and did not acknowledge'
-				: s.inflight === null
-					? 'pq := rdb.NewQueue("jobs")  // jobs, jobs:nacked, jobs:timeouts, jobs:heartbeats'
-					: 'queue.Add / worker takes job  // one script: jobs → jobs:nacked + deadline';
+		setCall(
+			call,
+			s.crashed
+				? '// no Acknowledge was called: the entry stays in jobs:nacked'
+				: s.closedUnder
+					? 'pq.Close()  // puts back every job this object took and did not acknowledge'
+					: s.inflight === null
+						? 'pq := rdb.NewQueue("jobs")  // jobs, jobs:nacked, jobs:timeouts, jobs:heartbeats'
+						: 'queue.Add / worker takes job  // one script: jobs → jobs:nacked + deadline',
+		);
 
 		const tally = Object.entries(s.runs)
 			.map(([id, n]) => `job ${id} started ${n}×`)
@@ -139,7 +143,7 @@ function init(root: HTMLElement) {
 		}
 	}
 
-	root.closest('.ops-scene')!.addEventListener('click', (e) => {
+	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el || el.disabled) return;
 		const act = el.dataset.act;

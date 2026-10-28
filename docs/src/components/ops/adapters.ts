@@ -1,13 +1,13 @@
 // Interface map: the reader's adapter is a set of parts (Caps). Boxes show what that set satisfies.
 
 import { BASE, BINDINGS, NODES, PRESETS, NO_CAPS, behaviours, type Caps, type NodeDef } from './adapter-data';
-import { h } from './ops';
+import { h, setCall } from '../ui/dom';
 
 const root = document.querySelector<HTMLElement>('[data-amap]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const detail = root.querySelector<HTMLElement>('[data-detail]')!;
 	const bindList = root.querySelector<HTMLElement>('[data-bind]')!;
 	const does = root.querySelector<HTMLElement>('[data-does]')!;
@@ -70,7 +70,7 @@ function init(root: HTMLElement) {
 			...behaviours(caps).flatMap((b) => [h('dt', { text: b.label }), h('dd', { class: b.on ? 'is-on' : '', text: b.text })]),
 		);
 
-		call.textContent = bestCall(caps);
+		setCall(call, bestCall(caps));
 	}
 
 	root.addEventListener('click', (e) => {

@@ -1,10 +1,11 @@
 ---
 // The storage interfaces as a clickable map. The reader builds an adapter by clicking the parts it has
 // and sees which binding calls accept it and what varmq does with it.
-import Scene from './Scene.astro';
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
 import { BASE, NODES, PRESETS } from './adapter-data';
 
-const alt =
+const describe =
 	'A map of the varmq storage interfaces. The root is IBaseQueue, with five methods. A FIFO column has IQueue, IPersistentQueue, IDistributedQueue and IDedupQueue. ' +
 	'A priority column has the same four with a priority. A third column has IAcknowledgeable, ISubscribable, IBatchAcknowledgeable and CapacitySetter. ' +
 	'Each box is a button. Press a part to add it to your type. Press it again to remove it. Boxes that combine parts switch on by themselves. ' +
@@ -13,7 +14,7 @@ const alt =
 const cols = ['FIFO queue', 'Priority queue', 'Either'];
 ---
 
-<Scene id="amap" label="Interface map" call="worker.WithPersistentQueue(pq)" alt={alt}>
+<Scene id="amap" title="Interface map" call="worker.WithPersistentQueue(pq)" describe={describe}>
 	<div class="amap" data-amap>
 		<div class="amap__grid">
 			{cols.map((c, i) => <div class="amap__col" style={`grid-column:${i + 1};grid-row:1`}>{c}</div>)}
@@ -56,7 +57,7 @@ const cols = ['FIFO queue', 'Priority queue', 'Either'];
 
 	<Fragment slot="controls">
 		<span class="ops-bar__label">Start from</span>
-		{PRESETS.map((p) => <button type="button" class="ops-pbtn" data-preset={p.key}>{p.label}</button>)}
+		{PRESETS.map((p) => <button type="button" class="pbtn" data-preset={p.key}>{p.label}</button>)}
 	</Fragment>
 </Scene>
 

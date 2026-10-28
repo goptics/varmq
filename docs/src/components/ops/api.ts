@@ -1,14 +1,14 @@
 // API explorer: renders the workers, sends the typed request to the model, shows the reply.
 
 import { add, handle, seed, tick, type Reply, type Worker } from './api-model';
-import { highlightJson } from './highlight';
-import { h } from './ops';
+import { h } from '../ui/dom';
+import { escapeHtml, highlightJson, highlightShell } from '../ui/go';
 
 const root = document.querySelector<HTMLElement>('[data-api]');
 if (root) init(root);
 
 function init(root: HTMLElement) {
-	const figure = root.closest<HTMLElement>('.ops-scene')!;
+	const figure = root.closest<HTMLElement>('.sframe')!;
 	const $ = <T extends HTMLElement>(s: string) => figure.querySelector<T>(s)!;
 	const workersEl = $('[data-workers]');
 	const statusEl = $('[data-status]');
@@ -67,8 +67,8 @@ function init(root: HTMLElement) {
 				/* keep the compact text */
 			}
 		}
-		const head = `HTTP/1.1 ${r.code} ${r.reason}\n` + r.headers.map(([k, v]) => `<span class="tk-t">${k}</span>: ${v}`).join('\n');
-		const bodyHtml = r.json ? highlightJson(body) : body.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+		const head = `HTTP/1.1 ${r.code} ${r.reason}\n` + r.headers.map(([k, v]) => `<span class="tk-t">${escapeHtml(k)}</span>: ${escapeHtml(v)}`).join('\n');
+		const bodyHtml = r.json ? highlightJson(body) : escapeHtml(body);
 		wire.innerHTML = head + (body ? `\n\n${bodyHtml}` : '\n\n<span class="tk-c">(no body)</span>');
 		why.replaceChildren(h('b', { text: 'Why. ' }), r.why, r.waited ? ' The request waited for the running jobs.' : '');
 	}
@@ -80,7 +80,7 @@ function init(root: HTMLElement) {
 		changed = new Set(Array.from(workers).filter(([k, v]) => before.get(k) !== JSON.stringify(v)).map(([k]) => k));
 		method.value = m;
 		path.value = p.trim();
-		call.textContent = curl(m, p.trim());
+		call.innerHTML = highlightShell(curl(m, p.trim()));
 		renderWorkers();
 		renderReply();
 	}
