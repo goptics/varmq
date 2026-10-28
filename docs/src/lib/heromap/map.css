@@ -371,6 +371,15 @@ varmq-map .vm-w > span {
 	display: inline-block;
 }
 
+/* A caption's last word and the word that takes its place share a box, stacked. */
+varmq-map .vm-w.vm-swap {
+	display: inline-grid;
+}
+
+varmq-map .vm-swap > span {
+	grid-area: 1 / 1;
+}
+
 varmq-map .vm-caption em {
 	font-style: normal;
 	color: var(--vm-green);

@@ -47,6 +47,8 @@ const ring = lookup(new Set(rings), 'ring', id => ({
 const line = lookup(new Set(words.keys()), 'caption', key =>
 	Array.from({ length: words.get(key) }, (_, i) => element(`caption ${key} word ${i}`)),
 );
+const swaps = new Set(CHAPTERS.flatMap(c => c.captions.flatMap((cap, i) => (cap.swap ? [`${c.n}:${i}`] : []))));
+const swapWord = lookup(swaps, 'caption swap', key => element(`caption ${key} swap`));
 const nodes = {
 	svg: element('svg'),
 	world: element('world'),
@@ -56,6 +58,7 @@ const nodes = {
 	job: lookup(new Set(jobs), 'job', id => [element(id), element(`${id} trail 1`), element(`${id} trail 2`)]),
 	record: lookup(new Set(stores.flatMap(p => p.plan.jobs.map(j => j.id))), 'record', id => element(`record ${id}`)),
 	words: (n, i) => line(`${n}:${i}`),
+	swap: (n, i) => swapWord(`${n}:${i}`),
 	setCamera: () => {},
 	setWidth: () => {},
 };

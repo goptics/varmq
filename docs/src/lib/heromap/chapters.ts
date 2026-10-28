@@ -40,6 +40,7 @@ export interface Caption {
 	at: number;
 	until: number; // when it starts to leave
 	text: string;
+	swap?: { at: number; text: string }; // at `at`, the last word leaves and `text` rises in its place
 }
 
 export interface Chapter {
@@ -365,14 +366,16 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
 	// and then its goroutines go. Nothing waits in its queue at the stop. The one caption stays up until the map is
-	// still; the stop only winds it down. From 7800 ms the camera zooms into chapter 1's frame as everything else
-	// fades, and the loop starts over.
+	// still, its last word SQLite giving way to Redis halfway; the stop only winds the map down. From 7800 ms the
+	// camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
 	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
 			duration: 9000,
-			captions: [{ at: 300, until: 7500, text: 'One worker model, from memory to *Redis*' }],
+			captions: [
+				{ at: 300, until: 7500, text: 'One worker model, from memory to *SQLite*', swap: { at: 3900, text: '*Redis*' } },
+			],
 			published,
 			parts: [
 				pool(carry, 'core', {

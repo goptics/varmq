@@ -16,7 +16,8 @@ describe('chapters', () => {
 	it('carry the agreed captions', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
-		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to Redis']);
+		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
+		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
 		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 21);
 	});
 	it('run about 85 seconds', () => {
@@ -100,6 +101,11 @@ describe('chapter rules', () => {
 			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
 			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
 			for (const mark of ['*', '!']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
+			// A swap waits for every word to have risen, and its stand-in, rising 150 ms after, is up before the line leaves.
+			if (cap.swap) {
+				assert.ok(cap.at + 55 * (words - 1) + 520 <= cap.swap.at, `chapter ${c.n}: ${cap.text}`);
+				assert.ok(cap.swap.at + 150 + 520 <= cap.until, `chapter ${c.n}: ${cap.text}`);
+			}
 		});
 	});
 	it('show the finale\'s first caption, fully risen, in the still frame', () => {
@@ -107,6 +113,8 @@ describe('chapter rules', () => {
 		const cap = CHAPTERS[9].captions[0], words = plain(cap.text).split(' ').length;
 		assert.ok(starts()[9] + cap.at + 55 * (words - 1) + 520 <= STATIC_AT, cap.text);
 		assert.ok(STATIC_AT < starts()[9] + cap.until);
+		// The still frame shows the caption's own words, so it comes before the swap.
+		assert.ok(STATIC_AT < starts()[9] + cap.swap.at);
 	});
 	it('start nothing before the camera has arrived', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) assert.ok(p.events[0].at >= 1300, `chapter ${c.n} ${p.kind}`);

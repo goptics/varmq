@@ -528,8 +528,9 @@ export class Choreo {
 			});
 		}
 		for (const c of CHAPTERS) {
-			c.captions.forEach((_, i) => {
-				for (const word of nodes.words(c.n, i)) score.start(word, { opacity: 0, translateY: 10 });
+			c.captions.forEach((cap, i) => {
+				const words = [...nodes.words(c.n, i), ...(cap.swap ? [nodes.swap(c.n, i)] : [])];
+				for (const word of words) score.start(word, { opacity: 0, translateY: 10 });
 			});
 		}
 		// The rest of the text on the map, a chip's and the ACK line's, shows wherever its piece does (`wrap`).
@@ -741,15 +742,25 @@ export class Choreo {
 		}
 	}
 
-	/** Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. */
+	/**
+	 * Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. A swap has the
+	 * last word leave as words do and its stand-in rise into the same box, a little after.
+	 */
 	private captions(c: Chapter, T: number) {
 		let free = 0; // when the previous caption has left
 		c.captions.forEach((cap, i) => {
 			const words = this.nodes.words(c.n, i);
 			const enter = Math.max(cap.at, free);
 			this.score.stagger(words, { opacity: 1, translateY: 0 }, T + enter, 55, 520, E.pop);
-			this.score.stagger(words, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
-			free = cap.until + 300 + 30 * words.length;
+			let shown = words;
+			if (cap.swap) {
+				const next = this.nodes.swap(c.n, i);
+				this.score.tween(words[words.length - 1], { opacity: 0, translateY: -8 }, T + cap.swap.at, 300, E.out);
+				this.score.tween(next, { opacity: 1, translateY: 0 }, T + cap.swap.at + 150, 520, E.pop);
+				shown = [...words.slice(0, -1), next];
+			}
+			this.score.stagger(shown, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
+			free = cap.until + 300 + 30 * shown.length;
 		});
 	}
 

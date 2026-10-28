@@ -36,6 +36,8 @@
 //   arcs' rotate(-90): leave their transform alone.
 // - `words(n, i)`: chapter n's caption i (`Chapter.captions`) as its words, hidden (an inline `opacity: 0`). Each
 //   is the inner element of a word's clipping box, to rise in. The lines are stacked in the caption band.
+// - `swap(n, i)`: for a caption with a `swap`, the word that takes its last word's place: in the same box, stacked
+//   on it, and hidden.
 
 import { CHAPTERS } from './chapters.ts';
 import {
@@ -73,6 +75,8 @@ export interface MapNodes {
 	record(id: string): SVGGElement;
 	/** Chapter n's caption i, as its words. */
 	words(n: number, i: number): HTMLElement[];
+	/** The word that takes the last word's place in chapter n's caption i, which must have a `swap`. */
+	swap(n: number, i: number): HTMLElement;
 	/** Transforms the world and sets `--vm-label` from `labelOpacity` at the scale on screen. */
 	setCamera(c: Camera): void;
 	/** The map's width on screen, in CSS px (400 until set): the zoom times it over 400 is the scale there. */
@@ -211,33 +215,47 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
  * (`b`), as `Caption` in chapters.ts marks it; a mark may wrap several words. Returns the line and each word's
  * inner element, hidden, which is what rises in.
  */
-function captionLine(text: string): { line: HTMLElement; words: HTMLElement[] } {
+function captionLine(text: string, swap?: string): { line: HTMLElement; words: HTMLElement[]; swap?: HTMLElement } {
 	const line = document.createElement('span');
 	line.className = 'vm-cap';
 	const words: HTMLElement[] = [];
 	let mark = ''; // the open mark, `*` or `!`, carried from word to word
+	let box = line;
 	for (const token of text.split(' ')) {
-		const word = document.createElement('span');
-		word.style.opacity = '0';
-		for (const part of token.split(/([*!])/)) {
-			if (part === '*' || part === '!') {
-				mark = mark === part ? '' : mark || part;
-			} else if (part && mark) {
-				const run = document.createElement(mark === '*' ? 'em' : 'b');
-				run.textContent = part;
-				word.append(run);
-			} else if (part) {
-				word.append(part);
-			}
-		}
-		const box = document.createElement('span');
+		const made = captionWord(token, mark);
+		mark = made.mark;
+		box = document.createElement('span');
 		box.className = 'vm-w';
-		box.append(word);
+		box.append(made.word);
 		if (words.length > 0) line.append(' ');
 		line.append(box);
-		words.push(word);
+		words.push(made.word);
 	}
-	return { line, words };
+	if (swap === undefined) return { line, words };
+	// The word that takes the last one's place shares its box, stacked on it.
+	const next = captionWord(swap, '').word;
+	box.classList.add('vm-swap');
+	box.append(next);
+	return { line, words, swap: next };
+}
+
+/** A caption word, hidden, from its token; `open` is the mark open before it, and `mark` the one open after it. */
+function captionWord(token: string, open: string): { word: HTMLElement; mark: string } {
+	const word = document.createElement('span');
+	word.style.opacity = '0';
+	let mark = open;
+	for (const part of token.split(/([*!])/)) {
+		if (part === '*' || part === '!') {
+			mark = mark === part ? '' : mark || part;
+		} else if (part && mark) {
+			const run = document.createElement(mark === '*' ? 'em' : 'b');
+			run.textContent = part;
+			word.append(run);
+		} else if (part) {
+			word.append(part);
+		}
+	}
+	return { word, mark };
 }
 
 /** A job or record: a lane slot's square centred on the group's origin, which the choreographer moves. */
@@ -362,17 +380,20 @@ export function renderMap(host: HTMLElement): MapNodes {
 	caption.className = 'vm-caption';
 	caption.setAttribute('aria-hidden', 'true');
 	const lines = new Map<string, HTMLElement[]>();
+	const swaps = new Map<string, HTMLElement>();
 	for (const chapter of CHAPTERS) {
-		chapter.captions.forEach(({ text }, i) => {
-			const { line, words } = captionLine(text);
-			caption.append(line);
-			lines.set(`${chapter.n}:${i}`, words);
+		chapter.captions.forEach(({ text, swap }, i) => {
+			const made = captionLine(text, swap?.text);
+			caption.append(made.line);
+			lines.set(`${chapter.n}:${i}`, made.words);
+			if (made.swap) swaps.set(`${chapter.n}:${i}`, made.swap);
 		});
 	}
 	host.append(svg, caption);
 
 	const findRing = lookup(rings, 'ring');
 	const findLine = lookup(lines, 'caption');
+	const findSwap = lookup(swaps, 'caption swap');
 	let zoom = Number.NaN; // the camera's, until the first setCamera
 	let width: number = VIEW.w; // the map's on screen
 	let shown = Number.NaN; // what --vm-label holds: most camera moves leave it as it is
@@ -392,6 +413,7 @@ export function renderMap(host: HTMLElement): MapNodes {
 		job: lookup(jobs, 'job'),
 		record: lookup(records, 'record'),
 		words: (n, i) => findLine(`${n}:${i}`),
+		swap: (n, i) => findSwap(`${n}:${i}`),
 		setCamera({ x, y, s }) {
 			// (x, y) goes to the middle of the map area, the square above the caption band.
 			const dx = VIEW.w / 2 - x * s;
