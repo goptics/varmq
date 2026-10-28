@@ -5,9 +5,9 @@ import { CONNS, LABEL_PX, PIECES, REGIONS, VIEW, frame, labelOpacity, slotX, slo
 const inside = (a, b) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const view = c => ({ x: c.x - VIEW.w / 2 / c.s, y: c.y - VIEW.mapH / 2 / c.s, w: VIEW.w / c.s, h: VIEW.mapH / c.s });
-// The narrowest the square is shown, in CSS px: at 1090 px, below which HeroMap.astro leaves it out. It is 373 px
-// there, 367.9 px with a classic 15 px scrollbar, and 381 px from 1120 px on.
-const MIN_SQUARE = 367;
+// The narrowest the square is shown, in CSS px: HeroMap.astro's 23rem floor, which a short screen reaches. From
+// 1090 px the square takes half the hero, up to 524 px, as long as the hero still fits the screen.
+const MIN_SQUARE = 368;
 
 describe('scene', () => {
 	it('pads every lane 10 on both sides', () => {

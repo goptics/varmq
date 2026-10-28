@@ -226,14 +226,25 @@
 		aspect-ratio: 1;
 	}
 
-	/* Below 1090 px (68.125rem) the map is left out and the hero is Starlight's own. Chapter 6's text needs a 366 px
-	   square to stay at 7 px, and Starlight's 7fr 4fr hero gives it that from 1090 px even with a classic 15 px
-	   scrollbar, which narrows the page but not the width media queries see: the square is 373 px there, 368 px with
-	   the scrollbar (scene.test.ts). The map itself is hidden as well, for browsers without :has(). */
+	/* Below 1090 px (68.125rem) the map is left out and the hero is Starlight's own. The map itself is hidden as well,
+	   for browsers without :has(). */
 	@media (max-width: 68.12rem) {
 		varmq-map,
 		.hero > .hero-html:has(> varmq-map) {
 			display: none;
+		}
+	}
+
+	/* From there the hero splits in halves and the square takes its half, instead of Starlight's 7fr 4fr with the image
+	   capped at 25rem: up to 524 px rather than 381. It stays short enough for the hero to fit the screen: the hero
+	   starts 5rem down, and Starlight pads it by 1rem + 10vmin above and below. It never goes under 23rem, where
+	   chapter 6's text would start to fade (scene.test.ts). */
+	@media (min-width: 68.125rem) {
+		.hero:has(> .hero-html > varmq-map) {
+			grid-template-columns: 1fr 1fr;
+		}
+		.hero > .hero-html:has(> varmq-map) {
+			width: clamp(23rem, 100vh - 7rem - 20vmin, 100%);
 		}
 	}
 </style>

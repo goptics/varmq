@@ -335,8 +335,8 @@ varmq-map .vm-caption {
 	background: linear-gradient(to bottom, transparent, var(--sl-color-bg) 60%);
 	color: var(--vm-caption);
 	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
-	font-size: 10.5px;
-	font-size: min(10.5px, 3cqw);
+	font-size: 14px;
+	font-size: min(14px, 2.75cqw);
 	font-weight: 600;
 	letter-spacing: 0.12em;
 	line-height: 1.4;
