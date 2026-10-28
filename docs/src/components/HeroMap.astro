@@ -25,6 +25,8 @@
 		'<rect x="7.25" y="1.5" width="2.5" height="9" rx=".75"/></svg>',
 		'<svg class="vm-play" viewBox="0 0 12 12" aria-hidden="true" focusable="false">',
 		'<path d="M3 1.6v8.8L10.4 6z"/></svg>',
+		'<svg class="vm-ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false">',
+		'<circle cx="14" cy="14" r="13.25" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>',
 	].join('');
 	const REDUCE = '(prefers-reduced-motion: reduce)';
 
@@ -159,6 +161,10 @@
 			try {
 				const { buildTimeline } = await import('../lib/heromap/choreo.ts');
 				this.timeline = buildTimeline(nodes);
+				// The button's ring fills over one loop, from the still frame where the first play starts.
+				const ring = this.button.querySelector('.vm-ring circle')!;
+				this.timeline.onUpdate = ({ iterationCurrentTime: t, iterationDuration: total }) =>
+					ring.setAttribute('stroke-dashoffset', String(1 - ((t - STATIC_AT + total) % total) / total));
 			} catch (error) {
 				console.error('varmq-map: the animation failed to load; the map stays still.', error);
 				return;
