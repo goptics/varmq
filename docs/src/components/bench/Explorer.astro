@@ -1,0 +1,260 @@
+---
+// The benchmark explorer. Every figure comes from data.json (scripts/bench-data.mjs, from the raw
+// `go test -bench` files). The build renders each view in its default state, so the page is complete
+// without JavaScript. explorer.ts then adds the switcher, the filters and the interactive charts.
+import '../../styles/tokens.css';
+import '../../styles/bench.css';
+import raw from './data.json';
+import { PRESETS, VIEWS, activeFilters, chartUrl, currentMetric, defaultState, filterDefs, lossesOf, metricsFor, optionCounts, rawTreeUrl, scopeOf, sourcesOf, blobUrl } from './lib.ts';
+import type { Data } from './lib.ts';
+import { renderAll } from './render.ts';
+
+const data = raw as unknown as Data;
+const { source, env } = data;
+const short = source.commit.slice(0, 7);
+const varmq = env.versions.find((v) => v.name === 'varmq')?.version ?? '';
+const goVersion = /Go [\d.]+/.exec(env.machine)?.[0].replace('Go ', '') ?? '';
+const SORTS = [
+	{ value: 'best', label: 'Best first' },
+	{ value: 'worst', label: 'Worst first' },
+	{ value: 'name', label: 'Name' },
+];
+
+const panels = VIEWS.map((view, i) => {
+	const state = defaultState(data, view.id);
+	const defs = filterDefs(data, view);
+	const active = activeFilters(defs, state.f).map((d) => d.id);
+	const counts = optionCounts(data, state);
+	const out = renderAll(data, state);
+	const ds = sourcesOf(data, view);
+	const metrics = [...metricsFor(view.suite, { test: 'durable' }), ...(view.suite === 'redis' ? metricsFor(view.suite, { test: 'latency' }) : [])];
+	const showing = metricsFor(view.suite, state.f).map((m) => m.id);
+	const nLoss = lossesOf(scopeOf(data, state), currentMetric(state), state).length;
+	return {
+		view,
+		i,
+		state,
+		defs,
+		active,
+		counts,
+		out,
+		ds,
+		metrics,
+		showing,
+		openLoss: nLoss > 0 && nLoss <= 12,
+		versions: env.versions.filter((v) => v.suites.includes(view.suite)),
+		presets: PRESETS[view.id] ?? [],
+	};
+});
+---
+
+<script is:inline>
+	document.documentElement.classList.add('bench-js');
+</script>
+
+<div class="bench not-content" data-bench data-pagefind-ignore>
+	<div class="bench__top">
+		<div class="seg" role="tablist" aria-label="Benchmark dataset">
+			{
+				panels.map((p) => (
+					<button type="button" role="tab" id={`bench-tab-${p.view.id}`} aria-controls={`bench-panel-${p.view.id}`} aria-selected={p.i === 0 ? 'true' : 'false'} tabindex={p.i === 0 ? 0 : -1} data-key={p.view.id}>
+						{p.view.tab}
+					</button>
+				))
+			}
+		</div>
+	</div>
+
+	{
+		panels.map((p) => (
+			<section class:list={['bench__panel', { 'is-on': p.i === 0 }]} role="tabpanel" id={`bench-panel-${p.view.id}`} aria-labelledby={`bench-tab-${p.view.id}`} data-view={p.view.id}>
+				<div>
+					<h3 class="bench__title">{p.view.title}</h3>
+					<p class="bench__blurb">{p.view.blurb}</p>
+				</div>
+
+				<div class="bcaption">
+					<span class="bcaption__tag">go</span>
+					<code class="bcmd" id={`bench-cmd-${p.view.id}`} data-out="command" set:html={p.out.command} />
+					<button type="button" class="pbtn" data-copy={`#bench-cmd-${p.view.id}`} hidden data-js>
+						Copy
+					</button>
+				</div>
+
+				<dl class="bmeta">
+					<div>
+						<dt>Run</dt>
+						<dd>{p.ds[0].runDate}</dd>
+					</div>
+					<div>
+						<dt>Commit</dt>
+						<dd>
+							<a href={`https://github.com/${source.repo}/tree/${source.commit}`}>{short}</a>
+						</dd>
+					</div>
+					<div>
+						<dt>varmq</dt>
+						<dd>{varmq}</dd>
+					</div>
+					<div>
+						<dt>Go</dt>
+						<dd>{goVersion}</dd>
+					</div>
+					<div>
+						<dt>CPU</dt>
+						<dd>{p.ds[0].cpu.replace('13th Gen Intel(R) Core(TM) ', 'Intel ')}</dd>
+					</div>
+					<div>
+						<dt>{p.view.suite === 'pool' ? 'GOMAXPROCS' : 'Threads'}</dt>
+						<dd>{p.view.id === 'pool-all' ? '24, 8, 4' : p.ds[0].procs}</dd>
+					</div>
+					<div>
+						<dt>Raw</dt>
+						<dd>
+							{p.ds.map((d, k) => (
+								<>
+									{k > 0 && ', '}
+									<a href={blobUrl(data, d)}>{d.file.split('/').pop()}</a>
+								</>
+							))}
+						</dd>
+					</div>
+					<div>
+						<dt>Charts</dt>
+						<dd>
+							<a href={chartUrl(p.view)}>benchmarks.goptics.org</a>
+						</dd>
+					</div>
+				</dl>
+
+				<details class="bdet benv">
+					<summary>Environment and library versions</summary>
+					<div class="bdet__body">
+						<p>{env.machine}</p>
+						<p>{env.pinning}</p>
+						<p>
+							CPU line of the raw file: <code>{p.ds[0].cpu}</code>. Copied from the{' '}
+							<a href={rawTreeUrl(data, 'README.md')}>benchmarks README</a> and the header of each raw file.
+						</p>
+					</div>
+					<div class="btable">
+						<table class="btable__t">
+							<caption class="sr">Library versions for this suite</caption>
+							<thead>
+								<tr>
+									<th scope="col">Library</th>
+									<th scope="col">Version</th>
+								</tr>
+							</thead>
+							<tbody>
+								{p.versions.map((v) => (
+									<tr>
+										<th scope="row">{v.url ? <a href={v.url}>{v.label}</a> : v.label}</th>
+										<td style="text-align:left">{v.version}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				</details>
+
+				<form class="bctl" aria-label={`Filters for ${p.view.title}`} data-controls novalidate>
+					{p.defs.map((d) => (
+						<fieldset class="bfs" data-filter={d.id} hidden={!p.active.includes(d.id)}>
+							<legend>{d.label}</legend>
+							<div class="bopts">
+								{[...(d.all ? [{ value: 'all', label: 'All' }] : []), ...d.options].map((o) => (
+									<label class="bopt">
+										<input type="radio" name={`${p.view.id}:${d.id}`} value={o.value} checked={p.state.f[d.id] === o.value} disabled={p.counts[d.id][o.value] === 0 && p.state.f[d.id] !== o.value} />
+										<span>{o.label}</span>
+									</label>
+								))}
+							</div>
+						</fieldset>
+					))}
+					<fieldset class="bfs" data-metric>
+						<legend>Show</legend>
+						<div class="bopts">
+							{p.metrics.map((m) => (
+								<label class="bopt" hidden={!p.showing.includes(m.id)} data-m={m.id}>
+									<input type="radio" name={`${p.view.id}:metric`} value={m.id} checked={p.state.metric === m.id} />
+									<span>{m.label}</span>
+								</label>
+							))}
+						</div>
+					</fieldset>
+					<fieldset class="bfs" data-sort>
+						<legend>Order</legend>
+						<div class="bopts">
+							{SORTS.map((o) => (
+								<label class="bopt">
+									<input type="radio" name={`${p.view.id}:sort`} value={o.value} checked={p.state.sort === o.value} />
+									<span>{o.label}</span>
+								</label>
+							))}
+						</div>
+					</fieldset>
+					{p.view.suite === 'pool' && (
+						<fieldset class="bfs" data-baselines>
+							<legend>Baselines</legend>
+							<div class="bopts">
+								<label class="bopt bopt--check">
+									<input type="checkbox" name={`${p.view.id}:baselines`} checked={p.state.baselines} />
+									<span>Channel pools †</span>
+								</label>
+							</div>
+						</fieldset>
+					)}
+					<div class="bpre" hidden data-js>
+						<span class="blabel">Try</span>
+						{p.presets.map((pr, k) => (
+							<button type="button" class="pbtn" data-preset={k} title={pr.hint}>
+								{pr.label}
+							</button>
+						))}
+						<button type="button" class="pbtn" data-reset>
+							Clear filters
+						</button>
+					</div>
+				</form>
+
+				<div data-out="scope" set:html={p.out.scope} />
+
+				<div class="bsec">
+					<div data-out="lanes" set:html={p.out.lanes} />
+					<div class="bnote" data-out="laneNote" set:html={p.out.laneNote} />
+				</div>
+
+				<div class="bsec">
+					<div class="rg__title">
+						<h4 id={`${p.view.id}-map`}>Who leads each group</h4>
+						<span>one square = one group of rows</span>
+					</div>
+					<p class="bkey">
+						A filled green square: a VarMQ subject leads the group. An outlined amber square: another subject leads, and its code is in the square. Press a square to see that group in the lanes above.
+					</p>
+					<div data-out="map" set:html={p.out.map} />
+					<div data-out="legend" set:html={p.out.legend} />
+				</div>
+
+				<section class="bloss" aria-labelledby={`${p.view.id}-loss`}>
+					<h4 id={`${p.view.id}-loss`}>Where VarMQ does not win</h4>
+					<div data-out="losses" set:html={p.out.losses} />
+					<details class="bdet" open={p.openLoss} hidden={!p.out.lossesBody}>
+						<summary data-out="lossesSummary" set:html={p.out.lossesSummary} />
+						<div data-out="lossesBody" set:html={p.out.lossesBody} />
+					</details>
+				</section>
+
+				<details class="bdet">
+					<summary data-out="rowsSummary" set:html={p.out.rowsSummary} />
+					<div data-out="rowsBody" set:html={p.out.rowsBody} />
+				</details>
+			</section>
+		))
+	}
+</div>
+
+<script>
+	import './explorer.ts';
+</script>

@@ -32,7 +32,8 @@ export default defineConfig({
 					items: [
 						{ label: 'API reference', link: 'https://pkg.go.dev/github.com/goptics/varmq' },
 						{ label: 'Comparison', slug: 'reference/comparison' },
-						{ label: 'Benchmarks', link: 'https://github.com/goptics/benchmarks' },
+						{ label: 'Benchmarks', slug: 'reference/benchmarks' },
+						{ label: 'Benchmarks repository', link: 'https://github.com/goptics/benchmarks' },
 						{ label: 'Bench log', link: 'https://varmq.goptics.org/bench-log/' },
 						{ label: 'Changelog', link: 'https://github.com/goptics/varmq/blob/main/CHANGELOG.md' },
 					],
