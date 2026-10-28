@@ -1,0 +1,52 @@
+---
+import SceneFrame from './SceneFrame.astro';
+
+const code = `worker := varmq.NewWorker(process, 3)
+queue := worker.BindQueue()`;
+---
+
+<SceneFrame scene="concurrency" title="Worker pool" code={code} hint="// move the slider: TunePool(n) runs and its result shows here">
+	<Fragment slot="stats">
+		<div><dt>NumConcurrency</dt><dd data-stat="limit">3</dd></div>
+		<div><dt>NumProcessing</dt><dd data-stat="processing">0</dd></div>
+		<div><dt>NumPending</dt><dd data-stat="pending">0</dd></div>
+		<div><dt>NumIdleWorkers</dt><dd data-stat="idle">1</dd></div>
+	</Fragment>
+
+	<div aria-hidden="true">
+		<div data-pool></div>
+		<div class="gb-meter">
+			<span class="gb-label">throughput</span>
+			<div class="gb-meter__track">
+				<span class="gb-meter__fill" data-fill></span>
+				<span class="gb-meter__tick" data-tick-cap></span>
+				<span class="gb-meter__tick gb-meter__tick--arr" data-tick-arr></span>
+			</div>
+			<p class="gb-meter__text" data-meter-text></p>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<label class="gb-field">
+			limit
+			<input type="range" min="1" max="12" value="3" data-limit aria-describedby="gb-concurrency-cap" />
+			<output data-limit-out>3</output>
+		</label>
+		<button type="button" class="gb-btn gb-btn--primary" data-act="add3">Add 3 jobs</button>
+		<button type="button" class="gb-btn" data-act="add12">Add 12 jobs</button>
+		<button type="button" class="gb-btn" data-act="same">TunePool(same)</button>
+		<button type="button" class="gb-btn" data-act="producer" aria-pressed="true">Producer: on</button>
+	</Fragment>
+
+	<Fragment slot="alt">
+		A simulation of one worker. Each job takes 2.4 seconds. The slider calls <code>TunePool</code> on the running
+		worker. The lanes show the goroutines: a busy one holds a job, an idle one waits in the pool, and a dashed lane
+		is a slot below the limit with no goroutine yet. The meter compares the jobs that finish each second with the
+		ceiling, which is the limit divided by 2.4 s, and with the jobs that arrive. With a limit of 1 the one goroutine
+		takes the waiting jobs as a batch, and raising the limit does not spread that batch.
+	</Fragment>
+</SceneFrame>
+
+<script>
+	import './concurrency.ts';
+</script>

@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import ContextScene from '../../../components/guides-b/ContextScene.astro';
 
 A worker can follow a [`context.Context`](https://pkg.go.dev/context#Context). When that context is done, the worker shuts down. This page covers how to give a worker one, what the shutdown does to running and waiting jobs, and the worker's own [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context).
 
@@ -35,6 +36,10 @@ When the context is done, because you called its cancel function or its deadline
 - **The worker is `Stopping` while jobs run, then `Stopped`.** It reaches `Stopped` once the running jobs have returned and its goroutines are gone.
 - **Nothing is reported as an error.** The cancellation does not reach [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) or the [error handler](/guides/errors/).
 - **The queue keeps taking jobs.** [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) still returns `true` after the worker has stopped, and the job waits for a worker that will not run it. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the queue makes `Add` refuse jobs, and [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes the waiting ones. See [queues](/guides/queues/#len-purge-and-close).
+
+Cancel the context in the scene below and watch which jobs keep going. Turn on the function that watches `Done()` to see a job end early.
+
+<ContextScene />
 
 The program below adds job 1 to a worker with concurrency 1, then adds jobs 2 and 3 while job 1 runs, and cancels the context.
 

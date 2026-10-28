@@ -5,7 +5,14 @@ sidebar:
   order: 13
 ---
 
+import ConfigScene from '../../../components/guides-b/ConfigScene.astro';
+import ArgsScene from '../../../components/guides-b/ArgsScene.astro';
+
 varmq is configured with functions you pass when you create something: a worker, a job, a queue or a topic. This page lists all of them in one table, then explains how they combine. Each row links to the guide that covers the option in full.
+
+Tick options in the scene below and it builds the call. A result list says what the worker gets.
+
+<ConfigScene />
 
 ## Where each option goes
 
@@ -70,6 +77,10 @@ Only a value of type `int` sets the concurrency. A value of another integer type
 // 4 is the concurrency and "mailer" is the name.
 worker := varmq.NewErrWorker(send, 4, "mailer", varmq.WithAutoRun(false))
 ```
+
+Reorder the arguments below to see which one wins.
+
+<ArgsScene />
 
 The arguments are applied from left to right on top of the defaults, so the last one that sets a value wins. `varmq.NewWorker(f, 2, varmq.WithConcurrency(8))` runs 8 at once. A string and `WithName` set the same name, so with both, the later one decides. [Worker types](/guides/worker-types/#what-follows-the-function) lists the same arguments next to the three constructors.
 

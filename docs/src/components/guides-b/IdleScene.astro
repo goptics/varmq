@@ -1,0 +1,46 @@
+---
+import SceneFrame from './SceneFrame.astro';
+
+const code = `worker := varmq.NewWorker(process, 6)`;
+---
+
+<SceneFrame scene="idle" title="Idle goroutines" code={code} hint="// press Add jobs: the burst runs, then the pool shrinks">
+	<Fragment slot="stats">
+		<div><dt>NumConcurrency</dt><dd data-stat="limit">6</dd></div>
+		<div><dt>NumIdleWorkers</dt><dd data-stat="idle">1</dd></div>
+		<div><dt>minimum idle</dt><dd data-stat="min">1</dd></div>
+		<div><dt>next sweep</dt><dd data-stat="sweep">no timer</dd></div>
+	</Fragment>
+
+	<div aria-hidden="true">
+		<div data-pool></div>
+	</div>
+
+	<Fragment slot="controls">
+		<label class="gb-field">
+			limit
+			<input type="range" min="2" max="12" value="6" data-limit />
+			<output data-limit-out>6</output>
+		</label>
+		<div class="gb-seg" role="radiogroup" aria-label="WithMinIdleWorkerRatio" data-ratio>
+			<button type="button" class="gb-btn" role="radio" aria-checked="true" tabindex="0" data-value="0">ratio: not set</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="25">25</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="50">50</button>
+			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="100">100</button>
+		</div>
+		<button type="button" class="gb-btn" data-act="expiry" aria-pressed="false">Expiry timer: off</button>
+		<button type="button" class="gb-btn gb-btn--primary" data-act="burst">Add jobs</button>
+	</Fragment>
+
+	<Fragment slot="alt">
+		A simulation of the idle goroutines in one worker pool. Press Add jobs to send one job for each slot of the limit.
+		Each goroutine runs a job for 1.6 seconds, then goes back to the pool or exits. With no options the pool keeps one
+		idle goroutine. A ratio keeps that share of the limit, never fewer than one. An expiry timer keeps every goroutine
+		until a sweep finds it idle for longer than the duration, so a goroutine can wait up to about twice the duration.
+		Changing the limit, the ratio or the timer creates a new worker.
+	</Fragment>
+</SceneFrame>
+
+<script>
+	import './idle.ts';
+</script>

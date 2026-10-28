@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import ErrorsScene from '../../../components/guides-b/ErrorsScene.astro';
 
 A failure in varmq shows up in one of three places, and a few values are returned directly from calls you make. This page covers where a failed job is reported, how to read the worker's error channel and set an error handler, and every exported `Err` value with the call that returns it.
 
@@ -18,6 +19,10 @@ A failure in varmq shows up in one of three places, and a few values are returne
 | The job's handle: [`Err()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) or [`Result()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) | what the function returned, or the panic | [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) and [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) |
 | The worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel | every failure the worker sees | all three |
 | The error handler, set with [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler) | every failure the worker sees | all three |
+
+Pick a worker type and a failure in the scene below, then add jobs to see where each failure goes.
+
+<ErrorsScene />
 
 A job's function can fail in two ways, and both are reported the same way:
 
