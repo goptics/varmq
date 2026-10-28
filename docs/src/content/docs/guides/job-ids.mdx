@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import JobIdDedup from '../../../components/guides-a/JobIdDedup.astro';
 
 A job has no ID unless you give it one: [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) returns an empty string. An ID names the job for your own bookkeeping. On an in-memory queue it also keeps a second job with the same ID from waiting in the queue next to the first. [Jobs](/concepts/jobs/#job-ids) introduces IDs. This page has the details.
 
@@ -52,6 +53,10 @@ The worker below is created with [`WithAutoRun(false)`](https://pkg.go.dev/githu
 The second `Add` with the ID `refresh` is refused and returns no handle, so `refresh 2` never runs. The `AddAll` item is accepted, because its ID is `g:refresh`. Once the jobs have left the queue, `refresh` can be used again.
 
 That suits work where many callers ask for the same thing, and one waiting job is enough.
+
+Try it below. The worker has not started, so the jobs wait in the queue. Add the same ID twice, then let the worker take a job and add that ID again.
+
+<JobIdDedup />
 
 ### When an ID is free
 

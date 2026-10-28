@@ -1,0 +1,80 @@
+---
+import Frame from './Frame.astro';
+
+const alt =
+	'A topic with two subscribed workers, email and stock. Publish stores each payload once in a shared log. Each worker reads the log at its own position and makes its own job from every payload, so one Publish gives two jobs. A paused worker reads nothing, so the log keeps every payload until that worker reads it. An unsubscribed worker gets no more payloads, and its unread payloads are dropped. A worker that subscribes later gets only the payloads published after it subscribed. With a topic capacity, Publish returns false when the slowest subscription has that many unread payloads.';
+
+const subs = [
+	{ name: 'email', tone: 'amber', note: 'a slow worker' },
+	{ name: 'stock', tone: 'cobalt', note: 'a fast worker' },
+];
+---
+
+<Frame
+	scene="topic-fanout"
+	label="One Publish gives every subscribed worker its own job"
+	cap={'topic := varmq.NewTopic[Order]()'}
+	alt={alt}
+>
+	<div class="ga-cols ga-cols--2">
+		<section class="ga-panel" aria-label="The topic">
+			<h3>topic</h3>
+			<p class="ga-label">
+				<strong>Shared log</strong><span>one copy of each payload</span>
+				<span class="ga-tag" data-subs>2 subscribers</span>
+			</p>
+			<div class="ga-rail ga-rail--tall" role="list" aria-label="Payloads in the topic log" data-log>
+				<span class="ga-hint" aria-hidden="true">empty</span>
+			</div>
+			<p class="ga-note">A bar under a payload is one subscription. A filled bar means that subscription has read it. A payload leaves the log when every bar is filled.</p>
+			<dl class="ga-read">
+				<dt>Publish()</dt>
+				<dd data-pub data-tone="dim">not called</dd>
+			</dl>
+			<p class="ga-note ga-why" data-why></p>
+		</section>
+
+		<div class="ga-stack">
+			{
+				subs.map((s) => (
+					<section class="ga-panel" data-sub={s.name} aria-label={`${s.name} worker`}>
+						<div class="ga-head">
+							<h3>{s.name} worker <span class="ga-note">{s.note}</span></h3>
+							<span class="ga-head__btns">
+								<button type="button" class="pbtn" data-pause>Pause</button>
+								<button type="button" class="pbtn" data-sub-toggle>Unsubscribe</button>
+							</span>
+						</div>
+						<p class="ga-label">
+							<strong>Its own jobs</strong>
+							<span class="ga-tag" data-state>running</span>
+							<span class="ga-tag" data-unread>0 unread</span>
+							<span class="ga-tag" data-ran>0 ran</span>
+						</p>
+						<div class="ga-rail" role="list" aria-label={`Jobs of the ${s.name} worker`} data-jobs>
+							<span class="ga-hint" aria-hidden="true">no jobs</span>
+						</div>
+					</section>
+				))
+			}
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-publish>Publish(order)</button>
+		<span class="ga-field">
+			<span>capacity</span>
+			<span class="ga-step" data-cap-step>
+				<button type="button" class="pbtn" data-dec aria-label="Lower the topic capacity">−</button>
+				<output data-val>no limit</output>
+				<button type="button" class="pbtn" data-inc aria-label="Raise the topic capacity">+</button>
+			</span>
+		</span>
+		<span class="ga-grow"></span>
+		<button type="button" class="pbtn" data-reset>Reset</button>
+	</Fragment>
+</Frame>
+
+<script>
+	import './topic-fanout';
+</script>

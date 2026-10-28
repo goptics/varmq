@@ -1,0 +1,67 @@
+---
+import Frame from './Frame.astro';
+
+const alt =
+	'Two queues get the same jobs. The first-in first-out queue lets the jobs leave in the order they were added. The priority queue lets the lowest priority number leave first, and keeps the add order for equal numbers. Example: report 10, alert 1 and digest 10 leave the first queue as report, alert, digest, and the priority queue as alert, report, digest.';
+---
+
+<Frame
+	scene="queue-order"
+	label="First-in first-out queue next to a priority queue"
+	cap={'queue.Add("report")   pq.Add("report", 10)'}
+	alt={alt}
+>
+	<div class="ga-cols ga-cols--2">
+		{
+			[
+				['fifo', 'BindQueue()', 'jobs leave in the order they were added'],
+				['pq', 'BindPriorityQueue()', 'lower number leaves first'],
+			].map(([side, call, rule]) => (
+				<section class="ga-panel" data-side={side} aria-label={call}>
+					<h3>{call}</h3>
+					<p class="ga-label">
+						<span>{rule}</span>
+					</p>
+					<p class="ga-label">
+						<strong>Waiting</strong><span data-len>0 jobs</span>
+					</p>
+					<div class="ga-rail" role="list" aria-label={`${call} waiting`} data-waiting>
+						<span class="ga-hint" aria-hidden="true">empty</span>
+					</div>
+					<div class="lane">
+						<span class="lane__id">worker</span>
+						<div class="lane__track" role="list" aria-label="Running job" data-run>
+							<span class="ga-hint" aria-hidden="true">not started</span>
+						</div>
+					</div>
+					<p class="ga-label">
+						<strong>Ran, in order</strong>
+					</p>
+					<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs that ran" data-done>
+						<span class="ga-hint" aria-hidden="true">nothing yet</span>
+					</div>
+				</section>
+			))
+		}
+	</div>
+
+	<Fragment slot="controls">
+		<span class="ga-field">
+			<span>priority</span>
+			<span class="ga-step" data-prio>
+				<button type="button" class="pbtn" data-dec aria-label="Lower the priority number">−</button>
+				<output data-val>10</output>
+				<button type="button" class="pbtn" data-inc aria-label="Raise the priority number">+</button>
+			</span>
+		</span>
+		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
+		<button type="button" class="pbtn" data-example>Load the example</button>
+		<span class="ga-grow"></span>
+		<button type="button" class="pbtn" data-start>Start worker</button>
+		<button type="button" class="pbtn" data-reset>Reset</button>
+	</Fragment>
+</Frame>
+
+<script>
+	import './queue-order';
+</script>

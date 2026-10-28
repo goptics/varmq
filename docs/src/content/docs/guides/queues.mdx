@@ -6,6 +6,8 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import QueueOrder from '../../../components/guides-a/QueueOrder.astro';
+import QueueHandle from '../../../components/guides-a/QueueHandle.astro';
 
 [Workers and queues](/concepts/workers-and-queues/) showed how a worker gets a queue. This page covers the in-memory queues: the first-in first-out queue and the priority queue, how to bound them, and the calls that inspect and empty them.
 
@@ -21,6 +23,10 @@ import GoPlay from '../../../components/GoPlay.astro';
 <GoPlay example="queues-priority" />
 
 The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so all three jobs wait until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). `alert` runs first although it was added second, and `report` runs before `digest` because they share a priority and `report` was added first.
+
+Add jobs to both queues below, then start the worker. The rail shows the order the jobs leave in.
+
+<QueueOrder />
 
 **A lower number runs first.** Among the jobs that are waiting, priority 1 goes before priority 10, whatever order they were added in. Priorities can be negative. Jobs with the same priority run in the order they were added.
 
@@ -41,6 +47,10 @@ When the queue is full, `Add` does not block. It returns a `nil` handle and `fal
 <GoPlay example="queues-capacity" />
 
 Two jobs fit, and `Add` refuses the third with a `nil` handle. The worker is not started, so nothing leaves the queue to make room. Without `WithAutoRun(false)` the worker would take the first jobs at once and the queue would have room again.
+
+Set a capacity below and add jobs until the queue refuses one. Then start the worker: it takes the waiting jobs into a batch, and the queue has room again. `Purge()` and `Close()` are covered in the next section.
+
+<QueueHandle />
 
 Capacity bounds the jobs still in the queue. On a FIFO queue a worker can take several jobs into a batch, and those are no longer in the queue, so more jobs than the capacity can be waiting overall. A batch holds at most 32 jobs. [How it works](/concepts/how-it-works/#what-batching-means-for-your-code) has the details. A priority queue is not batched.
 
