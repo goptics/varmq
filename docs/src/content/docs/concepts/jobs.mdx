@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import JobScene from '../../../components/learn/JobScene.astro';
 
 A job is one unit of work: your data, an optional ID, and a status that changes as the worker deals with it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and, on an in-memory queue, hands you a handle.
 
@@ -55,6 +56,10 @@ An in-memory queue refuses a second `Add` with an ID that a job still in the que
 | `Closed` | The job is done with: it ran, or it was closed before it could. |
 
 `Finished` is short-lived. As soon as your function returns, the worker closes the job to release anyone waiting on it. By the time [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, the status is `Closed`, and [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) is `true`. So `Closed` does not tell you whether the job ran. Record that in your own worker function if it matters.
+
+Move one job through its statuses below. Pick the worker type to see what the handle returns, and try `Close()` at each status.
+
+<JobScene />
 
 The worker below runs one job at a time, and each job takes 500 ms. The program reads both statuses while job-1 runs.
 
