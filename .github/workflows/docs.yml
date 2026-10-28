@@ -1,5 +1,7 @@
 name: Docs
 
+# Pull requests only build and test. A release or a manual run also publishes the
+# site to gh-pages, next to the bench log.
 on:
   pull_request:
     paths:
@@ -8,15 +10,8 @@ on:
       - "assets/diagrams/**"
       - ".github/workflows/docs.yml"
       - ".github/workflows/publish-site.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "docs/**"
-      # Pages embed the README's diagrams from here.
-      - "assets/diagrams/**"
-      - ".github/workflows/docs.yml"
-      - ".github/workflows/publish-site.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 # The reusable publish workflow cannot raise the caller's permissions, so the
@@ -91,7 +86,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
     needs: [examples, build]
     permissions:
       contents: write
