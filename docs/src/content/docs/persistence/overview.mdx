@@ -6,6 +6,8 @@ sidebar:
   order: 1
 ---
 
+import AckScene from '../../../components/ops/AckScene.astro';
+
 An in-memory queue is gone when the process exits. A persistent or distributed queue keeps its jobs in storage outside the process, behind a storage adapter. varmq has no adapter of its own. The two that exist are separate modules: [redisq](https://github.com/goptics/redisq) for Redis and [sqliteq](https://github.com/goptics/sqliteq) for SQLite.
 
 This page covers what the two kinds of queue do in varmq. [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) show the setup and what each adapter does with a job that was not finished. [Adapters](/persistence/adapters/) lists the interfaces, for reading an adapter or writing one.
@@ -51,6 +53,10 @@ Three details about step 3:
 - **A failed or panicking job is acknowledged too.** varmq recovers a panic, counts the job as failed and reports the panic. Then it acknowledges the job like any other. Nothing in varmq retries a job.
 - **A job whose acknowledgement fails is reported.** If `Acknowledge` returns `false`, the worker sends [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) to `Errs()` and the handler. The job's function has already run.
 - **Taken jobs run.** A worker with these queues takes one job per free slot and starts it. A [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) or [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) does not park a job the worker already took, because it is unacknowledged and a long wait could let a visibility timeout hand it to another consumer. Call [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) before you close the adapter's queue, so that running jobs can acknowledge.
+
+The scene below runs one job through these steps. Pick where the queue lives, then press **Kill the process** at any step. It shows what the storage holds, and what redisq, sqliteq or an adapter of your own does about a job that was taken and not acknowledged.
+
+<AckScene />
 
 ## What this guarantees
 

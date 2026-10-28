@@ -1,0 +1,68 @@
+---
+// Crash test for the acknowledgement model: one job goes through the five steps, the reader kills the
+// process at any step, and the scene shows what the storage holds and what each adapter does about it.
+import Scene from './Scene.astro';
+
+const modes = [
+	{ key: 'memory', label: 'In memory' },
+	{ key: 'redis', label: 'redisq, persistent' },
+	{ key: 'dist', label: 'redisq, distributed' },
+	{ key: 'sqlite', label: 'sqliteq' },
+	{ key: 'own', label: 'Your adapter' },
+];
+const alt =
+	'A scene with one job, number 7, and three waiting jobs. The job goes through five steps: waiting, taken, running, returned and acknowledged. ' +
+	'You pick where the queue lives: in memory, in redisq on Redis as a persistent or distributed queue, in sqliteq, or in an adapter of your own. ' +
+	'Use Step to move the job on. Use Kill the process to stop the process at the current step. The scene then says what the storage holds and what that adapter does with a job that was taken and not acknowledged. ' +
+	'In memory, the job and the waiting jobs are lost. With redisq and sqliteq the job comes back and runs a second time. With your own adapter, the adapter decides.';
+---
+
+<Scene id="ack" label="Crash test" call="queue.Add(job)" alt={alt}>
+	<div class="ops-seg ops-seg--dark" role="tablist" aria-label="Where the jobs are stored" data-ack-modes>
+		{
+			modes.map((m, i) => (
+				<button
+					type="button"
+					role="tab"
+					id={`ack-tab-${m.key}`}
+					aria-controls="ack-panel"
+					aria-selected={i === 1 ? 'true' : 'false'}
+					tabindex={i === 1 ? 0 : -1}
+					data-key={m.key}
+				>
+					{m.label}
+				</button>
+			))
+		}
+	</div>
+
+	<div class="ack" id="ack-panel" role="tabpanel" aria-labelledby="ack-tab-redis" data-ack>
+		<div class="ack__stage">
+			<div class="ack__procs" data-procs></div>
+			<svg class="ack__wire" viewBox="0 0 40 24" width="40" height="24" aria-hidden="true">
+				<path d="M6 8h28M30 4l4 4-4 4M34 16H6m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+			</svg>
+			<div class="ack__box ack__store" data-store>
+				<div class="ack__head"><span data-store-name>Redis</span><b data-store-tag>outside</b></div>
+				<div class="ack__zones" data-zones></div>
+			</div>
+		</div>
+
+		<ol class="ack__steps" data-steps aria-label="Steps of one job"></ol>
+		<p class="ack__out" role="status" data-out></p>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="step">Step</button>
+		<button type="button" class="ops-pbtn ops-pbtn--danger" data-act="kill">Kill the process</button>
+		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="restart" hidden>Restart the process</button>
+		<button type="button" class="ops-pbtn ops-pbtn--primary" data-act="wait" hidden>Wait</button>
+		<button type="button" class="ops-pbtn" data-act="lose" hidden>Never hand it out</button>
+		<label class="ops-check"><input type="checkbox" data-panic /> The function panics</label>
+		<button type="button" class="ops-pbtn" data-act="reset">Reset</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './ack';
+</script>

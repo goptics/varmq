@@ -1,0 +1,65 @@
+---
+// The storage interfaces as a clickable map. The reader builds an adapter by clicking the parts it has
+// and sees which binding calls accept it and what varmq does with it.
+import Scene from './Scene.astro';
+import { BASE, NODES, PRESETS } from './adapter-data';
+
+const alt =
+	'A map of the varmq storage interfaces. The root is IBaseQueue, with five methods. A FIFO column has IQueue, IPersistentQueue, IDistributedQueue and IDedupQueue. ' +
+	'A priority column has the same four with a priority. A third column has IAcknowledgeable, ISubscribable, IBatchAcknowledgeable and CapacitySetter. ' +
+	'Each box is a button. Press a part to add it to your type. Press it again to remove it. Boxes that combine parts switch on by themselves. ' +
+	'Below the map, one list shows which binding calls accept the type, and another list says what varmq does with it.';
+
+const cols = ['FIFO queue', 'Priority queue', 'Either'];
+---
+
+<Scene id="amap" label="Interface map" call="worker.WithPersistentQueue(pq)" alt={alt}>
+	<div class="amap" data-amap>
+		<div class="amap__grid">
+			{cols.map((c, i) => <div class="amap__col" style={`grid-column:${i + 1};grid-row:1`}>{c}</div>)}
+			<button type="button" class="amap__node amap__node--base" data-node={BASE.id} style="grid-column:1/-1;grid-row:2" aria-describedby="amap-detail">
+				<span class="amap__name">{BASE.id}</span>
+				<span class="amap__parts">Len, Dequeue, Values, Purge, Close</span>
+				<span class="amap__pill" data-pill>always</span>
+			</button>
+			{
+				NODES.map((n) => (
+					<button
+						type="button"
+						class={`amap__node amap__node--${n.kind}`}
+						data-node={n.id}
+						data-kind={n.kind}
+						style={`grid-column:${n.col + 1};grid-row:${n.row + 3}`}
+						aria-describedby="amap-detail"
+					>
+						<span class="amap__name">{n.id}</span>
+						{n.parts && <span class="amap__parts">{n.parts}</span>}
+						{n.methods.length > 0 && n.kind !== 'composite' && <span class="amap__parts">{n.methods.length === 1 ? n.methods[0].split('(')[0] : n.methods.map((m) => m.split('(')[0]).join(', ')}</span>}
+						<span class="amap__pill" data-pill>no</span>
+					</button>
+				))
+			}
+		</div>
+
+		<div class="amap__lower">
+			<section class="amap__detail" id="amap-detail" aria-live="polite" data-detail></section>
+			<section class="amap__bind" aria-label="Binding calls">
+				<p class="amap__h">Accepted by</p>
+				<ul class="amap__list" data-bind></ul>
+			</section>
+		</div>
+		<section class="amap__does" aria-label="What varmq does with your type">
+			<p class="amap__h">What varmq does with it</p>
+			<dl class="amap__dl" data-does></dl>
+		</section>
+	</div>
+
+	<Fragment slot="controls">
+		<span class="ops-bar__label">Start from</span>
+		{PRESETS.map((p) => <button type="button" class="ops-pbtn" data-preset={p.key}>{p.label}</button>)}
+	</Fragment>
+</Scene>
+
+<script>
+	import './adapters';
+</script>

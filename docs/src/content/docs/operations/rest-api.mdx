@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import ApiExplorer from '../../../components/ops/ApiExplorer.astro';
+
 varmq ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
 
 :::caution
@@ -147,6 +149,14 @@ The `{action}` is one of `pause`, `resume`, `restart`, `start` and `stop`. Each 
 - **`restart` waits.** [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) stops the worker, waits until it has stopped, and starts it. The request is answered after that, so it can take as long as the running jobs do.
 
 The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) with the number. A number below 1 becomes the CPU count. [Concurrency](/guides/concurrency/#changing-the-limit-with-tunepool) covers what a change does to jobs already running.
+
+### Try the routes
+
+The explorer below runs a model of the handler in the page. It calls no server. Its replies match the real handler: a Go program called `varmq.Handler("/varmq")` for each worker status and each route, and the model gives the same status code, body and headers. The two workers are the ones of the program above, with example numbers.
+
+Press **PATCH pause** on `email-sender`, then **PATCH resume**. A worker that is running jobs reads `Pausing`, and resume is refused until it reads `Paused`. Press **Let running jobs finish** to let time pass.
+
+<ApiExplorer />
 
 ## What a worker looks like
 
