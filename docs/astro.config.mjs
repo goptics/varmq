@@ -15,7 +15,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'VarMQ',
-			description: 'A typed worker pool and message queue for Go.',
+			description: 'A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program',
 			logo: {
 				dark: './src/assets/logo-dark.svg',
 				light: './src/assets/logo-light.svg',
