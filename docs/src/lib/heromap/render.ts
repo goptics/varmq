@@ -258,7 +258,7 @@ function captionWord(token: string, open: string): { word: HTMLElement; mark: st
 			mark = mark === part ? '' : mark || part;
 		} else if (part && mark) {
 			const run = document.createElement(mark === '*' ? 'em' : mark === '!' ? 'b' : 'span');
-			if (mark === '#') run.className = `vm-brand-${part.toLowerCase().replace(/\W/g, '')}`;
+			if (mark === '#') run.className = `vm-brand-${part.toLowerCase()}`;
 			run.textContent = part;
 			word.append(run);
 		} else if (part) {

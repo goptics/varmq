@@ -55,7 +55,7 @@ describe('simulatePool', () => {
 		const jobs = [...burst(2, 3000), { id: 'j2', source: 'q', at: 4500, work: 500 }];
 		const p = plan({ jobs, controls: [{ at: 1500, op: 'stop' }, { at: 6000, op: 'restart' }] });
 		const ev = simulatePool(p);
-		assert.deepEqual(ev.find(e => e.type === 'control' && e.op === 'restart'), { at: 6000, type: 'control', op: 'restart', ring: 0 });
+		assert.deepEqual(ev.find(e => e.type === 'control' && e.op === 'restart'), { at: 6000, type: 'control', op: 'restart' });
 		assert.deepEqual(dispatches(ev).find(e => e.job === 'j2'), { at: 6400, type: 'dispatch', job: 'j2', source: 'q', ring: 0, spawned: false, waiting: 0 });
 		assert.deepEqual(endState(p, ev).idle, [0]);
 	});

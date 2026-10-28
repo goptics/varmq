@@ -359,7 +359,6 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 	const waiting = new Set(crew); // the workers waiting for a wake, until it arrives
 	const idle = new Set(crew); // the consumers Redis may wake: waiting, with no wake on its way to them
 	const taker = new Map<string, Worker>(); // who took each job last
-	const back = new Set<string>(); // jobs put back after the crash, which run their `rework`
 	let waking = 0; // wakes on their way
 
 	// One pop: a job per credit from the head of the queue. A short one leaves the worker waiting for a wake.
@@ -370,8 +369,9 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 			idle.add(w);
 		}
 		for (const job of jobs) {
+			const rerun = taker.has(job); // taken before: put back after the crash, so it runs its `rework`
 			taker.set(job, w);
-			const duration = (back.has(job) ? plan.crash?.rework[job] : undefined) ?? work.get(job)!;
+			const duration = (rerun ? plan.crash?.rework[job] : undefined) ?? work.get(job)!;
 			take(now, w, job, duration, (at) => {
 				if (!waiting.has(w)) timer(at, (t) => pull(t, w));
 			});
@@ -415,7 +415,6 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 		timer(crash.at + crash.backAfter, (now) => {
 			const jobs = held();
 			emit({ at: now, type: 'requeue', jobs });
-			for (const job of jobs) back.add(job);
 			wake(now);
 		});
 		timer(crash.restartAt, (now) => {

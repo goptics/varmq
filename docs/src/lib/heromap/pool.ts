@@ -53,8 +53,7 @@ export type PoolEvent =
 	| { at: number; type: 'done'; job: string; ring: number }
 	| { at: number; type: 'idle'; ring: number }
 	| { at: number; type: 'exit'; ring: number }
-	// A restart's `ring` is the goroutine `Start` leaves idle.
-	| { at: number; type: 'control'; op: 'pause' | 'resume' | 'stop' | 'restart' | 'tune'; to?: number; ring?: number };
+	| { at: number; type: 'control'; op: 'pause' | 'resume' | 'stop' | 'restart' | 'tune'; to?: number };
 
 /**
  * The pool after an event. `busy` ascends. `idle` is the pool's stack, so the ring that went idle last is at
@@ -127,7 +126,7 @@ function track(plan: PoolPlan) {
 				break;
 			case 'control':
 				if (e.op === 'tune' && e.to !== undefined) pool.limit = e.to;
-				if (e.op === 'restart' && e.ring !== undefined) pool.idle.push(e.ring);
+				if (e.op === 'restart') pool.idle.push(0); // `Start` leaves one goroutine idle; nothing runs at a restart
 				break;
 		}
 	}
@@ -250,7 +249,6 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 		}
 
 		if (c.op === 'tune') emit({ at: now, type: 'control', op: 'tune', to: c.to });
-		else if (c.op === 'restart') emit({ at: now, type: 'control', op: 'restart', ring: lowestFree(pool.busy) });
 		else emit({ at: now, type: 'control', op: c.op });
 		if (c.op === 'pause') paused = true;
 		if (c.op === 'resume') paused = false;

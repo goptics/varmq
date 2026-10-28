@@ -994,7 +994,7 @@ export class Choreo {
 		// one idle goroutine `Start` leaves.
 		const on = e.op === 'resume' || e.op === 'restart';
 		this.score.tween(this.loop(), { opacity: on ? 1 : 0.35 }, at, 300, E.fade);
-		if (e.op === 'restart') this.spawn(part.worker, e.ring!, at + 300);
+		if (e.op === 'restart') this.spawn(part.worker, 0, at + 300);
 	}
 
 	// -- Stores -------------------------------------------------------------------------------------------------
@@ -1171,7 +1171,7 @@ export class Choreo {
 		const prog = nodes.piece(PROGRAMS[worker]!);
 		score.tween(prog.querySelector('.vm-flash')!, { opacity: 0 }, at, 400, E.fade);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 0 }, at);
-		const label = prog.querySelector(worker === 'sqlite' ? '.vm-restarted' : ':scope > .vm-label')!;
+		const label = prog.querySelector('.vm-restarted') ?? prog.querySelector(':scope > .vm-label')!;
 		score.tween(label, { opacity: 1 }, at, 300, E.fade);
 		RINGS[worker].forEach((_, i) => {
 			const r = nodes.ring(worker, i);
