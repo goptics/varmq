@@ -269,7 +269,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
 	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
-	// down 2600 ms: its stage is gone 1350 ms after the crash, so the store holds the frame alone for over a second.
+	// down 2600 ms, its box red and its card empty.
 	(carry) => ({
 		title: 'SQLite',
 		duration: 17000,

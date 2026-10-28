@@ -512,7 +512,7 @@ export class Choreo {
 			score.start(g, { opacity: c.kind === 'line' || on ? 1 : 0 });
 			if (c.kind === 'line') score.start(this.outline(g), { draw: [0, on ? 1 : 0] });
 		}
-		for (const { box } of Object.values(PROGRAMS)) {
+		for (const box of Object.values(PROGRAMS)) {
 			for (const crash of ['.vm-flash', '.vm-died', '.vm-restarted']) {
 				const el = nodes.piece(box).querySelector(crash);
 				if (el) score.start(el, { opacity: 0 });
@@ -1139,35 +1139,18 @@ export class Choreo {
 		for (const id of jobs) queue.held.set(id, { sq: records.get(id)!, slot: after.indexOf(id) });
 	}
 
-	/** A program's stage: its box and labels, what is in it (Add(), the worker with its rings), and its own lines. */
-	private stage(worker: Worker): { box: Element; inside: Element[]; lines: Element[] } {
-		const { nodes } = this;
-		const { box, lines } = PROGRAMS[worker]!;
-		const rings = RINGS[worker].flatMap((_, i) => {
-			const r = nodes.ring(worker, i);
-			return [r.ring, r.ghost];
-		});
-		return {
-			box: nodes.piece(box),
-			inside: [...PIECES.filter((p) => p.parent === box).map((p) => nodes.piece(p.id)), ...rings],
-			lines: lines.map((id) => nodes.piece(id)),
-		};
-	}
-
-	/** The program dies mid-job: the view shakes, the jobs it ran vanish, and its stage goes; their records stay. */
+	/**
+	 * The program dies mid-job: the view shakes, its box turns red and reads · DIED, and its card empties: the jobs it
+	 * ran vanish, and its goroutines and their places go. Their records stay in flight in the store.
+	 */
 	private crash(at: number, worker: Worker, running: Square[]) {
 		const { score, nodes, cam } = this;
-		const stage = this.stage(worker);
-		const prog = stage.box;
+		const prog = nodes.piece(PROGRAMS[worker]!);
 		const x = score.at(cam, 'x', at)[0];
 		[4, -4, 2, 0].forEach((dx, i) => score.tween(cam, { x: x + dx }, at + 60 * i, i === 3 ? 80 : 60, E.fade));
-		const { fades } = PROGRAMS[worker]!;
-		const flash = prog.querySelector('.vm-flash')!;
-		score.tween(flash, { opacity: 1 }, at, 80, E.linear);
-		if (fades) score.tween(flash, { opacity: 0 }, at + 80, 600, E.fade);
+		score.tween(prog.querySelector('.vm-flash')!, { opacity: 1 }, at, 80, E.linear);
 		score.set(prog.querySelector(':scope > .vm-label')!, { opacity: 0 }, at);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 1 }, at);
-		// The jobs it was running vanish; their records stay in flight in the store.
 		for (const copy of running) {
 			if (score.at(copy.els[0], 'opacity', at)[0] > 0) each(score, copy.els, { opacity: 0 }, at + 60, 380, E.out);
 		}
@@ -1175,34 +1158,18 @@ export class Choreo {
 			const r = nodes.ring(worker, i);
 			score.tween(r.progress, { opacity: 0 }, at + 60, 380, E.out);
 			score.tween(r.check, { opacity: 0 }, at + 60, 380, E.out);
-			// One that stays keeps its box and card, with no goroutine and no place for one.
-			if (!fades) score.tween(r.ghost, { opacity: 0 }, at + 300, 400, E.out);
+			score.tween(r.ghost, { opacity: 0 }, at + 300, 400, E.out);
 		});
-		if (!fades) return;
-		for (const el of [stage.box, ...stage.inside, ...stage.lines]) {
-			score.tween(el, { opacity: 0 }, at + 700, 650, E.out);
-		}
 	}
 
 	/**
-	 * The program boots. SQLite's box draws in as PROGRAM · RESTARTED, then what is in it and its lines come back;
-	 * Redis's B loses its red border and comes back as itself, with its goroutines' places.
+	 * The program boots: its red border clears, it reads PROGRAM · RESTARTED for SQLite and its own name for Redis's
+	 * B, and its goroutines' places come back.
 	 */
 	private restart(at: number, worker: Worker) {
 		const { score, nodes } = this;
-		const stage = this.stage(worker);
-		const prog = stage.box;
-		if (PROGRAMS[worker]!.fades) {
-			const outline = this.outline(prog);
-			const shape = prog.querySelector('.vm-shape')!;
-			score.set(prog, { opacity: 1 }, at);
-			score.set(outline, { draw: [0, 0] }, at);
-			score.set(shape, { fillOpacity: 0 }, at);
-			score.tween(outline, { draw: [0, 1] }, at, 700, E.draw);
-			score.tween(shape, { fillOpacity: 1 }, at, 700, E.draw);
-		} else {
-			score.tween(prog.querySelector('.vm-flash')!, { opacity: 0 }, at, 400, E.fade);
-		}
+		const prog = nodes.piece(PROGRAMS[worker]!);
+		score.tween(prog.querySelector('.vm-flash')!, { opacity: 0 }, at, 400, E.fade);
 		score.set(prog.querySelector('.vm-died')!, { opacity: 0 }, at);
 		const label = prog.querySelector(worker === 'sqlite' ? '.vm-restarted' : ':scope > .vm-label')!;
 		score.tween(label, { opacity: 1 }, at, 300, E.fade);
@@ -1212,21 +1179,13 @@ export class Choreo {
 			score.set(score.drawable(r.check), { draw: [0, 0] }, at);
 			score.set(r.progress, { opacity: 1 }, at + 250);
 			score.set(r.check, { opacity: 1 }, at + 250);
+			score.tween(r.ghost, { opacity: 1 }, at + 250, 400, E.fade);
 		});
-		for (const el of stage.inside) score.tween(el, { opacity: 1 }, at + 250, 400, E.fade);
-		for (const el of stage.lines) score.tween(el, { opacity: 1 }, at + 400, 400, E.fade);
 	}
 }
 
-/**
- * The programs that die and come back, by their worker: their box, the lines that go with it, and whether the
- * program fades from the map while it is down. SQLite's does, so the store holds the frame alone. Redis's B stays,
- * dead: a red border, and an empty card. Its lines stay: C's runs through B's.
- */
-const PROGRAMS: Partial<Record<Worker, { box: string; lines: string[]; fades: boolean }>> = {
-	sqlite: { box: 's-prog', lines: ['s-add-to-s-queue', 's-queue-to-sqlite', 'sqlite-to-s-tray'], fades: true },
-	'redis-b': { box: 'b-prog', lines: [], fades: false },
-};
+/** The programs that die and come back, by their worker. While down, each keeps its box, red, and an empty card. */
+const PROGRAMS: Partial<Record<Worker, string>> = { sqlite: 's-prog', 'redis-b': 'b-prog' };
 
 /** The card a store's consumer runs its rings in: the SQLite worker's, or Redis's B or C. */
 const consumer = (id: string): Worker => (id === 'sqlite' ? 'sqlite' : (`redis-${id}` as Worker));

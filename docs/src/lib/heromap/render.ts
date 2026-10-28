@@ -199,8 +199,10 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 		const centre = { x: x + w / 2, y: y + h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central' };
 		add(g, 'text', { class: 'vm-text', ...centre }, label);
 	} else if (p.kind === 'loop') {
+		// EVENT over LOOP: on one line it would reach the worker's card and the third queue's line.
 		const baseline = y + h + LABEL_GAP + LABEL_PX - DESCENT;
-		add(g, 'text', { class: 'vm-label', x: x + w / 2, y: baseline, 'text-anchor': 'middle' }, label);
+		const text = add(g, 'text', { class: 'vm-label', 'text-anchor': 'middle' });
+		label.split('\n').forEach((line, i) => add(text, 'tspan', { x: x + w / 2, y: baseline + LABEL_PX * i }, line));
 	} else {
 		const logo = LOGOS[p.id];
 		if (logo) {

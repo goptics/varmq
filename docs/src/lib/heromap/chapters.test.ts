@@ -200,13 +200,12 @@ describe('chapter rules', () => {
 		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
 		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
 	});
-	it('chapter 7 tells the store fixture\'s story, and shows the store alone before the restart', () => {
+	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
 		// s0 and s2 run when the program dies, and the restart puts them back ahead of s3
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['s0', 's2']);
 		assert.deepEqual(queueStates(ev)[index('requeue')].order, ['s0', 's2', 's3']);
-		// The program stage has faded by the crash + 1350, and only the store and its two records hold the frame
-		// until the restart, for about 1.2 s.
+		// The program stays down, its box red and its card empty, long enough to read the caption about it.
 		assert.ok(ev[index('restart')].at - ev[index('crash')].at >= 2600);
 	});
 	it('chapter 8 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {

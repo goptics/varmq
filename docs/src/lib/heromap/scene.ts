@@ -41,9 +41,9 @@ export type PieceKind = 'program' | 'store' | 'lane' | 'tray' | 'card' | 'loop' 
 
 /**
  * Something drawn on the map. It switches on in `chapter` (1 to 9) and stays on. `parent` names the
- * piece whose box it sits inside. `label` is its text, one 14-unit line: inside a chip; below the loop,
- * centred and 6 units clear of it; and above anything else, starting at its left edge and 6 units
- * clear of its top.
+ * piece whose box it sits inside. `label` is its text, one 14-unit line (two for the loop, split at a
+ * newline): inside a chip; below the loop, centred and 6 units clear of it; and above anything else,
+ * starting at its left edge and 6 units clear of its top.
  */
 export interface Piece {
 	id: string;
@@ -77,7 +77,7 @@ export const PIECES: Piece[] = [
 	{ id: 'add', kind: 'chip', chapter: 1, box: chip(96, 390, 68), label: 'Add()' },
 	{ id: 'queue', kind: 'lane', chapter: 1, box: lane(190, 368), label: 'QUEUE' },
 	// The loop is a circle of radius 26 centred on (520, 390); its box is the square around it.
-	{ id: 'loop', kind: 'loop', chapter: 1, box: rect(494, 364, 52, 52), label: 'LOOP' },
+	{ id: 'loop', kind: 'loop', chapter: 1, box: rect(494, 364, 52, 52), label: 'EVENT\nLOOP' },
 	{ id: 'core', kind: 'card', chapter: 1, box: rect(570, 340, 200, 100), label: 'WORKER' },
 
 	// 3. Results and errors: a worker of its own, because a result worker cannot subscribe to a topic.
