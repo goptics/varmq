@@ -1,0 +1,67 @@
+---
+title: Benchmarks
+description: How fast VarMQ is against other Go worker pools and against Redis and SQLite job queues. Real numbers from the raw benchmark output, with filters, charts, and the groups where VarMQ does not win.
+---
+
+import Scoreboard from '../../../components/bench/Scoreboard.astro';
+import Explorer from '../../../components/bench/Explorer.astro';
+import data from '../../../components/bench/data.json';
+
+export const sha = data.source.commit.slice(0, 7);
+export const varmq = data.env.versions.find((v) => v.name === 'varmq').version;
+export const rows = data.datasets.reduce((n, d) => n + d.rowCount, 0).toLocaleString('en-US');
+export const repo = `https://github.com/${data.source.repo}`;
+
+This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every figure comes from one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>. The run is from {data.source.runDate}, with varmq {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
+
+## Scoreboard
+
+The table counts how many groups VarMQ leads and how many another subject leads. Read the lines for memory next to the lines for throughput. VarMQ leads throughput in most pool groups and trails on memory.
+
+<Scoreboard />
+
+## Explore the rows
+
+Choose a dataset, then narrow it with the filters. The lanes show the mean of the rows in scope, and the last column divides each lane by VarMQ. Press a square in the map to see one group, with a link to each row in the raw file. The line at the top is the `go test` command that runs the same rows on your machine.
+
+<Explorer />
+
+## How to read the numbers
+
+- **A row is one line of output.** A group is the rows that run one case with different subjects, for example `Sleep10ms` with 50K workers and one producer. A subject leads a group when its row is the best one.
+- **Two runs per row.** The files use `-benchtime=2x`, with no warm-up run. Absolute numbers change from run to run, so compare ratios inside one run.
+- **A lane is a mean.** When several groups are in scope, a lane is the arithmetic mean of that subject over them. A subject that misses some of the groups is left out, because its mean would cover other rows. Narrow the filters to see it.
+- **MB means 10^6 bytes.** Memory is the `B/op` column divided by one million. The charts at [benchmarks.goptics.org](https://benchmarks.goptics.org) divide by 2^20 and still print MB, so their memory figures are {(100 * (1 - 1e6 / 2 ** 20)).toFixed(1)} % smaller.
+- **Pool memory covers the whole process.** It counts every allocation during a run of 1M tasks. VarMQ's `Add` never blocks, so waiting tasks sit in an unbounded queue and use memory.
+- **† marks a baseline.** `GoroutinePool` and `BufferedPool` are N goroutines that read one channel. They are not libraries. Switch them off with the Baselines control.
+- **Redis has two VarMQ subjects.** `VarMQ` runs with one instance. `VarMQDistributed` runs with one and with four. Where VarMQ does not run, the × column divides by `VarMQDistributed`. The charts leave `VarMQDistributed` out of the one-instance, enqueue and latency groups. This page keeps it, because it is in the raw file.
+- **Latency is enqueue to handler.** One job at a time, 1,000 jobs, 10 workers, one instance. Lower is better.
+
+For the full method of each suite, read the READMEs in the benchmarks repository: <a href={`${repo}/blob/${data.source.commit}/pool/README.md`}>pool</a>, <a href={`${repo}/blob/${data.source.commit}/redis/README.md`}>Redis</a> and <a href={`${repo}/blob/${data.source.commit}/sqlite/README.md`}>SQLite</a>.
+
+## Where the data comes from
+
+The page reads a committed snapshot, `src/components/bench/data.json`. A script builds it from the raw `.txt` files at one commit of the benchmarks repository. The script keeps the line number of every row, which is how the page links each figure to its line. The docs build does not use the network.
+
+The live charts at benchmarks.goptics.org do not send a CORS header. A browser on this site cannot read their dataset, so the page cannot refresh itself. To update the snapshot, run these commands in the `docs/` folder:
+
+```bash
+node scripts/bench-data.mjs --ref main --check-live
+pnpm test
+```
+
+`--check-live` compares every row with the published chart data and fails on a difference. The tests check the figures against the home page and check that each `go test` command selects exactly the groups in scope.
+
+## Run it yourself
+
+Install Go 1.26 or later and [Task](https://taskfile.dev), then clone <a href={repo}>goptics/benchmarks</a>. The Redis suite needs Docker. The SQLite suite needs a C compiler.
+
+```bash
+task pool:bench                      # one iteration of every pool benchmark
+task redis:up redis:bench redis:down
+task sqlite:bench
+```
+
+The caption above the lanes shows the command for one slice. The full run takes hours: the committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.
+
+See also the [comparison](/reference/comparison/) of features and the [bench log](https://varmq.goptics.org/bench-log/).
