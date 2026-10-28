@@ -1,280 +1,7 @@
 /* Scenes for the learn pages (start, concepts). Follows docs/DESIGN.md.
-   Every scene is a dark panel in both themes, so it reads the same on stock Starlight and on the restyled shell.
-   Class prefix: `l`. Values that the shared tokens do not carry are `--local-` custom properties. */
-
-@import './tokens.css';
-
-/* ---- Frame ---- */
-
-.lscene {
-	/* Go syntax on a dark panel. The shared --tk-* values are for paper; these read on --panel in both themes. */
-	--local-tk-k: color-mix(in srgb, var(--danger) 72%, var(--cobalt));
-	--local-tk-s: var(--amber);
-	--local-tk-c: var(--panel-ink-2);
-	--local-tk-f: var(--panel-accent);
-	--local-tk-t: var(--cobalt);
-	--local-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
-	--local-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
-
-	container: lscene / inline-size;
-	margin: 1.75rem 0 2.25rem;
-	background: var(--panel);
-	color: var(--panel-ink);
-	border: 1px solid var(--panel-rule);
-	border-radius: 16px;
-	overflow: hidden;
-	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
-	font-family: var(--mono);
-	font-size: 0.8125rem;
-	line-height: 1.5;
-	text-align: left;
-	letter-spacing: normal;
-}
-
-.lscene *,
-.lscene *::before,
-.lscene *::after {
-	box-sizing: border-box;
-}
-
-.lscene :where(p, dl, dd, ul, ol, pre, figure) {
-	margin: 0;
-	padding: 0;
-}
-
-.lscene :where(ul, ol) {
-	list-style: none;
-}
-
-.lscene :where(code, kbd) {
-	font-family: var(--mono);
-	background: none;
-	border: 0;
-	padding: 0;
-	font-size: inherit;
-	color: inherit;
-}
-
-.lscene ::selection {
-	background: color-mix(in srgb, var(--brand) 45%, transparent);
-	color: var(--panel-ink);
-}
-
-.lscene {
-	scrollbar-color: var(--panel-rule) transparent;
-}
-
-.lscene__call:not(:has(*)),
-.lscene__controls:not(:has(*)) {
-	display: none;
-}
-
-.lscene :focus-visible {
-	outline: 2px solid var(--panel-accent);
-	outline-offset: 3px;
-	border-radius: 4px;
-}
-
-.lscene .sr-only,
-.lsr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-	border: 0;
-}
-
-.lscene__bar {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: space-between;
-	align-items: center;
-	gap: 8px 24px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--panel-rule);
-	font-size: 0.75rem;
-	line-height: 1.2;
-}
-
-.lscene__title {
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
-
-.lscene__title b {
-	color: var(--panel-accent);
-	font-weight: 500;
-}
-
-.lstats {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 22px;
-}
-
-.lstats div {
-	display: flex;
-	gap: 7px;
-}
-
-.lstats dt {
-	color: var(--panel-ink-2);
-}
-
-.lstats dd {
-	min-width: 2ch;
-	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-}
-
-.lscene__stage {
-	padding: 16px;
-}
-
-/* The caption line: the Go call that makes what the stage shows. */
-
-.lscene__call {
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel);
-	padding: 12px 16px;
-	min-height: 3.2rem;
-}
-
-.lcall {
-	display: block;
-	margin: 0;
-	padding: 0;
-	background: none;
-	border: 0;
-	font: 400 0.8125rem/1.65 var(--mono);
-	color: var(--panel-ink);
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	tab-size: 2;
-}
-
-.ltk-k { color: var(--local-tk-k); }
-.ltk-s { color: var(--local-tk-s); }
-.ltk-c { color: var(--local-tk-c); font-style: italic; }
-.ltk-n { color: var(--local-tk-s); }
-.ltk-f { color: var(--local-tk-f); }
-.ltk-t { color: var(--local-tk-t); }
-.ltk-b { color: var(--local-tk-t); }
-
-.lscene__controls {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	padding: 12px 14px;
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-}
-
-.lscene__controls:empty {
-	display: none;
-}
-
-.lnote {
-	padding: 10px 16px 12px;
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-	font-size: 0.75rem;
-	line-height: 1.5;
-	color: var(--panel-ink-2);
-}
-
-.lscene .lnote kbd {
-	padding: 1px 5px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
-	background: var(--local-fill);
-	font: inherit;
-	color: var(--panel-ink);
-}
-
-.lspacer {
-	flex: 1 1 0;
-}
-
-/* ---- Buttons and segmented choices ---- */
-
-.lbtn {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--local-fill);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease);
-}
-
-.lbtn:hover {
-	background: var(--local-fill-2);
-}
-
-.lbtn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
-
-.lbtn--primary:hover {
-	background: color-mix(in srgb, var(--brand) 82%, var(--panel-ink));
-}
-
-.lbtn[disabled],
-.lbtn[aria-disabled='true'] {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-
-.lbtn[aria-pressed='true'] {
-	border-color: var(--panel-accent);
-	color: var(--panel-accent);
-}
-
-.lseg {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-}
-
-.lseg [role='tab'],
-.lseg [role='radio'] {
-	min-height: 36px;
-	padding: 8px 14px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--panel-ink-2);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease);
-}
-
-.lseg [role='tab']:hover,
-.lseg [role='radio']:hover {
-	background: var(--local-fill-2);
-}
-
-.lseg [aria-selected='true'],
-.lseg [aria-checked='true'] {
-	background: var(--panel-ink);
-	color: var(--panel);
-}
+   The frame, buttons, tabs, steppers, code cards and Go tokens come from ui.css.
+   This file holds only what the scenes add: job chips, lanes, and the boards of each scene.
+   Class prefix: `l` for shared vocabulary, one short prefix for each scene. */
 
 .lgroup {
 	display: inline-flex;
@@ -289,16 +16,7 @@
 	text-transform: uppercase;
 }
 
-/* ---- Vocabulary: label, job chip, lane ---- */
-
-.llabel {
-	display: block;
-	margin-bottom: 10px;
-	font-size: 0.6875rem;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
+/* ---- Vocabulary: job chip, lane ---- */
 
 .ljob {
 	display: inline-grid;
@@ -306,7 +24,7 @@
 	min-width: 36px;
 	height: 28px;
 	padding-inline: 6px;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -316,6 +34,11 @@
 
 .ljob--b {
 	background: var(--cobalt);
+}
+
+.ljob--c {
+	background: var(--panel-ink);
+	color: var(--panel);
 }
 
 .ljob--done {
@@ -376,16 +99,31 @@
 }
 
 .llane__track {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	min-height: 34px;
 	padding: 2px 6px;
-	border-radius: 7px;
-	background: var(--local-fill);
+	border-radius: 8px;
+	background: var(--panel-fill);
 	border: 1px solid transparent;
 	font-size: 0.75rem;
 	color: var(--panel-ink-2);
+	overflow: hidden;
+}
+
+.llane__track > :not(.llane__fill) {
+	position: relative;
+}
+
+.llane__fill {
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--brand) 26%, transparent);
+	transform-origin: left center;
+	transform: scaleX(0);
+	pointer-events: none;
 }
 
 .llane[data-s='none'] .llane__track {
@@ -402,7 +140,11 @@
 	color: var(--panel-ink);
 }
 
-/* ---- Event loop step-through ---- */
+.sframe.is-paused .llane__fill {
+	opacity: 0.6;
+}
+
+/* ---- Event loop and pool ---- */
 
 .eloop {
 	display: grid;
@@ -518,6 +260,13 @@
 	text-wrap: pretty;
 }
 
+.ppool__text {
+	min-height: 3.2em;
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px dashed var(--panel-rule);
+}
+
 .epips {
 	display: flex;
 	flex-wrap: wrap;
@@ -539,7 +288,7 @@
 	content: '';
 	width: 22px;
 	height: 6px;
-	border-radius: 3px;
+	border-radius: 4px;
 	background: var(--panel-rule);
 	transform: scaleX(0.72);
 	transition: background-color 0.2s var(--ease), transform 0.2s var(--ease);
@@ -554,11 +303,7 @@
 	background: var(--brand);
 }
 
-.lbtn[aria-disabled='true'] {
-	pointer-events: none;
-}
-
-@container lscene (max-width: 640px) {
+@container sframe (max-width: 640px) {
 	.eloop {
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		grid-template-areas:
@@ -589,68 +334,14 @@
 	}
 }
 
+/* A reader who asks for less motion gets the end state of every learn scene. */
 @media (prefers-reduced-motion: reduce) {
-	.lscene *,
-	.lscene *::before,
-	.lscene *::after {
+	.sframe.learn *,
+	.sframe.learn *::before,
+	.sframe.learn *::after {
 		animation: none !important;
 		transition: none !important;
 	}
-}
-
-/* ---- Pool scene and shared steppers ---- */
-
-.lstepper {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.lstepper .lbtn {
-	min-width: 40px;
-	padding-inline: 0;
-	text-align: center;
-}
-
-.lstepper output {
-	min-width: 2ch;
-	text-align: center;
-	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-}
-
-.llane__track {
-	position: relative;
-	overflow: hidden;
-}
-
-.llane__fill {
-	position: absolute;
-	inset: 0;
-	background: color-mix(in srgb, var(--brand) 26%, transparent);
-	transform-origin: left center;
-	transform: scaleX(0);
-	pointer-events: none;
-}
-
-.llane__track > :not(.llane__fill) {
-	position: relative;
-}
-
-.ppool__text {
-	min-height: 3.2em;
-	margin-top: 16px;
-	padding-top: 14px;
-	border-top: 1px dashed var(--panel-rule);
-}
-
-.lscene.is-paused .llane__fill {
-	opacity: 0.6;
-}
-
-.ljob--c {
-	background: var(--panel-ink);
-	color: var(--panel);
 }
 
 /* ---- Topic ---- */
@@ -763,26 +454,10 @@
 	font-size: 0.75rem;
 }
 
-@container lscene (max-width: 520px) {
+@container sframe (max-width: 520px) {
 	.tp__workers {
 		grid-template-columns: minmax(0, 1fr);
 	}
-}
-
-/* ---- Selects ---- */
-
-.lscene select {
-	min-height: 40px;
-	padding: 6px 10px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--panel-2);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1.2 var(--mono);
-	text-transform: none;
-	letter-spacing: 0;
-	color-scheme: dark;
-	cursor: pointer;
 }
 
 /* ---- Batch planner ---- */
@@ -793,7 +468,7 @@
 	gap: 8px;
 }
 
-.bp__preset {
+.bp__presets .bp__preset {
 	min-height: 36px;
 	padding: 6px 12px;
 	font-size: 0.75rem;
@@ -832,8 +507,8 @@
 .bp__track {
 	display: block;
 	height: 14px;
-	border-radius: 7px;
-	background: var(--local-fill);
+	border-radius: 8px;
+	background: var(--panel-fill);
 	overflow: hidden;
 }
 
@@ -841,7 +516,7 @@
 	display: block;
 	width: 100%;
 	height: 100%;
-	border-radius: 7px;
+	border-radius: 8px;
 	background: var(--panel-ink-2);
 	transform-origin: left center;
 	transition: transform 0.35s var(--ease);
@@ -879,7 +554,7 @@
 	margin-bottom: 6px;
 }
 
-@container lscene (max-width: 520px) {
+@container sframe (max-width: 520px) {
 	.bp__bar {
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 2px 12px;
@@ -933,7 +608,7 @@
 	font-size: 0.6875rem;
 }
 
-.bq__prio select {
+.sframe .bq__prio select {
 	min-height: 32px;
 	padding: 2px 6px;
 	font-size: 0.75rem;
@@ -958,7 +633,7 @@
 .jb__stage {
 	padding: 10px 4px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 6px;
+	border-radius: 4px;
 	text-align: center;
 	font-size: 0.75rem;
 	color: var(--panel-ink-2);
@@ -966,7 +641,7 @@
 }
 
 .jb__stage[data-s='past'] {
-	background: var(--local-fill);
+	background: var(--panel-fill);
 	color: var(--panel-ink);
 }
 
@@ -1026,7 +701,7 @@
 	color: var(--panel-ink-2);
 }
 
-@container lscene (max-width: 600px) {
+@container sframe (max-width: 600px) {
 	.jb__views {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -1051,7 +726,7 @@
 	margin-inline: auto;
 }
 
-@container lscene (max-width: 700px) {
+@container sframe (max-width: 700px) {
 	.lc__svg--wide {
 		display: none;
 	}
@@ -1170,7 +845,7 @@
 	margin-top: 16px;
 }
 
-.lc__jobs .llabel {
+.lc__jobs .slabel {
 	margin: 0;
 }
 
@@ -1238,18 +913,18 @@
 	color: var(--panel-ink);
 }
 
-.lbtn[data-err='true'] {
+.pbtn[data-err='true'] {
 	border-style: dashed;
 	color: var(--panel-ink-2);
 }
 
-@container lscene (max-width: 620px) {
+@container sframe (max-width: 620px) {
 	.lc__panels {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
-/* ---- Install tabs and code cards ---- */
+/* ---- Install tabs ---- */
 
 .it__panel {
 	display: grid;
@@ -1257,66 +932,12 @@
 	margin-top: 14px;
 }
 
-.it__panel[hidden] {
-	display: none;
-}
-
 .it__about {
 	font: 400 0.9375rem/1.5 var(--display);
 	color: var(--panel-ink-2);
 }
 
-.lcode {
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-	background: var(--panel-2);
-	overflow: hidden;
-}
-
-.lcode__head {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 12px;
-	padding: 4px 6px 4px 14px;
-	border-bottom: 1px solid var(--panel-rule);
-	font-size: 0.75rem;
-	color: var(--panel-ink-2);
-}
-
-.lcode__copy {
-	min-height: 32px;
-	padding: 4px 10px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 6px;
-	background: var(--local-fill);
-	color: var(--panel-ink);
-	font: 500 0.75rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease);
-}
-
-.lcode__copy:hover {
-	background: var(--local-fill-2);
-}
-
-.lcode pre {
-	margin: 0;
-	padding: 14px 16px;
-	overflow-x: auto;
-	background: transparent;
-	border: 0;
-	font: 400 0.8125rem/1.65 var(--mono);
-	tab-size: 4;
-	color: var(--panel-ink);
-}
-
-.lcode pre code {
-	font: inherit;
-	white-space: pre;
-}
-
-.lcode--cmd pre code::before {
+.it__cmd pre code::before {
 	content: '$ ';
 	color: var(--panel-ink-2);
 }
@@ -1338,8 +959,8 @@
 .qt__track {
 	position: relative;
 	height: 34px;
-	border-radius: 7px;
-	background: var(--local-fill);
+	border-radius: 8px;
+	background: var(--panel-fill);
 }
 
 .qt__track::after {
@@ -1367,7 +988,7 @@
 	align-items: center;
 	padding-inline: 8px;
 	border: 1px dashed var(--panel-ink-2);
-	border-radius: 6px;
+	border-radius: 4px;
 	font-size: 0.75rem;
 	color: var(--panel-ink-2);
 	white-space: nowrap;
@@ -1430,18 +1051,7 @@
 	color: var(--panel-ink);
 }
 
-.qt__scrub {
-	display: flex;
-	flex: 1 1 160px;
-	min-width: 140px;
-}
-
-.qt__scrub input {
-	width: 100%;
-	accent-color: var(--brand);
-}
-
-@container lscene (max-width: 440px) {
+@container sframe (max-width: 440px) {
 	.qt__grid {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 4px;

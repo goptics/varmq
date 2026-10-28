@@ -1,7 +1,8 @@
 ---
 // One worker, one to three queues. Mirrors source_manager.go and internal/helpers/manager.go:
 // the strategy picks the queue for every single job, and a tie in priority goes to the queue bound first.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -13,9 +14,11 @@ const { id = 'bind' } = Astro.props;
 	id={id}
 	title="Queues and a worker"
 	tag="simulation"
+	class="learn"
+	call={"worker := varmq.NewWorker(process, 2)\nemails := worker.BindQueue()"}
 	describe="One worker with a concurrency limit of 2. Bind up to three queues to it, each with three jobs. Pick a strategy: Priority, RoundRobin, MaxLen or MinLen. The scene lists the order in which the worker takes the jobs, two slots at a time, and says which rule chose each queue. A queue can be given a priority number; a lower number goes first, and a tie goes to the queue bound first."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>queues</dt><dd data-stat="queues">1</dd></div>
 		<div><dt>strategy</dt><dd data-stat="strategy">Priority</dd></div>
 		<div><dt>limit</dt><dd>2</dd></div>
@@ -25,37 +28,35 @@ const { id = 'bind' } = Astro.props;
 		<div class="bq__queues" data-queues></div>
 
 		<div class="bq__run">
-			<span class="llabel">order the worker takes them · 2 slots</span>
+			<span class="slabel">order the worker takes them · 2 slots</span>
 			<div data-slots></div>
 		</div>
 
 		<p class="estep__text ppool__text" aria-live="polite" data-readout></p>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn lbtn--primary" data-act="bind">Bind another queue</button>
-		<button type="button" class="lbtn" data-act="unbind">Remove the last queue</button>
-		<span class="lspacer"></span>
+		<button type="button" class="pbtn pbtn--primary" data-act="bind">Bind another queue</button>
+		<button type="button" class="pbtn" data-act="unbind">Remove the last queue</button>
+		<span class="sframe__spacer"></span>
 		<div class="lgroup">
 			<span id={`${id}-sl`}>strategy</span>
-			<div class="lseg" role="radiogroup" aria-labelledby={`${id}-sl`} data-strategy>
-				<button type="button" role="radio" aria-checked="true" data-v="Priority">Priority</button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="RoundRobin">RoundRobin</button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="MaxLen">MaxLen</button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="MinLen">MinLen</button>
+			<div class="seg" role="radiogroup" aria-labelledby={`${id}-sl`} data-strategy>
+				<button type="button" role="radio" aria-checked="true" data-key="Priority">Priority</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="RoundRobin">RoundRobin</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="MaxLen">MaxLen</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="MinLen">MinLen</button>
 			</div>
 		</div>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		Every job takes the same time here, so each row of the order is one time step. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
-	import { segmented, setCall } from './ui';
+	import { tabs, setCall } from '../ui/dom';
 
 	type Strategy = 'Priority' | 'RoundRobin' | 'MaxLen' | 'MinLen';
 	type Queue = { name: string; tag: string; priority: number | null; len: number };
@@ -69,7 +70,7 @@ const { id = 'bind' } = Astro.props;
 	const PER_QUEUE = 3;
 
 	document.querySelectorAll<HTMLElement>('[data-bind]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 
 		let strategy: Strategy = 'Priority';
@@ -185,8 +186,8 @@ const { id = 'bind' } = Astro.props;
 			scene.querySelector<HTMLElement>(`[data-prio="${s.dataset.prio}"]`)?.focus();
 		});
 
-		segmented(q('[data-strategy]'), (item) => {
-			strategy = item.dataset.v as Strategy;
+		tabs(q('[data-strategy]'), (key) => {
+			strategy = key as Strategy;
 			render();
 		});
 

@@ -1,7 +1,8 @@
 ---
 // A worker pool that drains a backlog. Runs the rules of worker_eventloop.go and worker_pool.go through
 // engine.ts: one signal slot, the free-slot check, a pool that spawns on demand, and freePoolNode.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -15,9 +16,11 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 	id={id}
 	title="Worker pool"
 	tag="simulation"
+	class="learn"
+	call={`worker := varmq.NewWorker(process, ${concurrency})\nqueue := worker.BindQueue()`}
 	describe="A worker pool drains a backlog. Press Add to put jobs in the queue. The jobs arrive as one wake-up for the event loop, which hands them to pool goroutines while a slot is free. The goroutines spawn on demand and the pool shrinks back to one idle goroutine when the queue is empty. Steppers change the concurrency limit and the number of jobs. Play, Pause and Step control the playback."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>loop</dt><dd data-stat="loop">asleep</dd></div>
 		<div><dt>busy</dt><dd data-stat="busy">0</dd></div>
 		<div><dt>queued</dt><dd data-stat="queued">0</dd></div>
@@ -27,11 +30,11 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 	<div data-pool data-jobs={jobs} data-c={concurrency}>
 		<div class="eloop" aria-hidden="true">
 			<div class="eloop__col">
-				<span class="llabel">queue</span>
+				<span class="slabel">queue</span>
 				<div class="lstrip" data-queue></div>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">event loop</span>
+				<span class="slabel">event loop</span>
 				<div class="enode" data-node data-awake="false"><span data-node-text>asleep</span></div>
 				<div class="eslot" data-slot data-full="false">
 					<span class="eslot__cell" data-slot-cell>–</span>
@@ -40,57 +43,55 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 				<p class="eslot" data-dropped hidden></p>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">pool · up to <span data-limit>4</span></span>
+				<span class="slabel">pool · up to <span data-limit>4</span></span>
 				<div data-lanes></div>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">done</span>
+				<span class="slabel">done</span>
 				<div class="lstrip" data-done></div>
 			</div>
 		</div>
 		<p class="estep__text ppool__text" aria-live="polite" data-readout>Press Add to put jobs in the queue.</p>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn lbtn--primary" data-act="add">Add <span data-n>6</span> jobs</button>
-		<button type="button" class="lbtn" data-act="play" aria-pressed="false">Pause</button>
-		<button type="button" class="lbtn" data-act="step">Step</button>
-		<button type="button" class="lbtn" data-act="reset">Reset</button>
-		<span class="lspacer"></span>
+		<button type="button" class="pbtn pbtn--primary" data-act="add">Add <span data-n>6</span> jobs</button>
+		<button type="button" class="pbtn" data-act="play" aria-pressed="false">Pause</button>
+		<button type="button" class="pbtn" data-act="step">Step</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
+		<span class="sframe__spacer"></span>
 		<div class="lgroup">
 			<span id={`${id}-cl`}>limit</span>
-			<div class="lstepper" role="group" aria-labelledby={`${id}-cl`}>
-				<button type="button" class="lbtn" data-act="c-" aria-label="Lower the concurrency limit">−</button>
+			<div class="stepper" role="group" aria-labelledby={`${id}-cl`}>
+				<button type="button" class="pbtn" data-act="c-" aria-label="Lower the concurrency limit">−</button>
 				<output data-c-out>4</output>
-				<button type="button" class="lbtn" data-act="c+" aria-label="Raise the concurrency limit">+</button>
+				<button type="button" class="pbtn" data-act="c+" aria-label="Raise the concurrency limit">+</button>
 			</div>
 		</div>
 		<div class="lgroup">
 			<span id={`${id}-jl`}>jobs</span>
-			<div class="lstepper" role="group" aria-labelledby={`${id}-jl`}>
-				<button type="button" class="lbtn" data-act="n-" aria-label="Add fewer jobs">−</button>
+			<div class="stepper" role="group" aria-labelledby={`${id}-jl`}>
+				<button type="button" class="pbtn" data-act="n-" aria-label="Add fewer jobs">−</button>
 				<output data-n-out>6</output>
-				<button type="button" class="lbtn" data-act="n+" aria-label="Add more jobs">+</button>
+				<button type="button" class="pbtn" data-act="n+" aria-label="Add more jobs">+</button>
 			</div>
 		</div>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		Each job takes about a second, so every hand-off is one job (batching is below). A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
 	import { PoolModel, type Step } from './engine';
-	import { setCall, reducedMotion } from './ui';
+	import { setCall, reducedMotion } from '../ui/dom';
 
 	const GAP = 340; // ms of presentation time between the visible steps of the loop
 	const JOB_MS = 1400; // ms of presentation time for one job
 
 	document.querySelectorAll<HTMLElement>('[data-pool]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 		const stat = (k: string) => q(`[data-stat="${k}"]`);
 		const INTRO = 'Press Add to put jobs in the queue.';

@@ -1,8 +1,9 @@
 ---
 // Install variants as tabs: the core package alone, or with a storage adapter. Each tab has the go get
 // command and the import, each with a copy button.
-import Scene from './Scene.astro';
-import { highlightGo } from './go';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
+import { highlightGo } from '../ui/go';
 
 interface Props {
 	id?: string;
@@ -38,13 +39,14 @@ const tabs = [
 	id={id}
 	title="Install"
 	tag="go get"
+	class="learn"
 	describe="Three install variants as tabs: varmq alone, varmq with the Redis adapter redisq, and varmq with the SQLite adapter sqliteq. Each tab shows the go get command and the import, and each has a copy button."
 >
 	<div class="it" data-install>
-		<div class="lseg" role="tablist" aria-label="Install variant">
+		<div class="seg" role="tablist" aria-label="Install variant">
 			{
 				tabs.map((t, i) => (
-					<button type="button" role="tab" id={`${id}-tab-${t.key}`} aria-controls={`${id}-panel-${t.key}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+					<button type="button" role="tab" data-key={t.key} id={`${id}-tab-${t.key}`} aria-controls={`${id}-panel-${t.key}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
 						{t.label}
 					</button>
 				))
@@ -54,33 +56,36 @@ const tabs = [
 			tabs.map((t, i) => (
 				<div class="it__panel" role="tabpanel" id={`${id}-panel-${t.key}`} aria-labelledby={`${id}-tab-${t.key}`} hidden={i !== 0}>
 					<p class="it__about">{t.about}</p>
-					<div class="lcode lcode--cmd">
-						<div class="lcode__head">
+					<div class="code code--dark it__cmd">
+						<div class="code__head">
 							<span>terminal</span>
-							<button type="button" class="lcode__copy" data-copy={`#${id}-cmd-${t.key}`} aria-label={`Copy the ${t.label} install command`}>Copy</button>
+							<button type="button" class="copy" data-copy aria-label={`Copy the ${t.label} install command`}>Copy</button>
 						</div>
-						<pre><code id={`${id}-cmd-${t.key}`}>{t.cmd}</code></pre>
+						<pre><code>{t.cmd}</code></pre>
+						<p class="sr-only" role="status" aria-live="polite" data-live></p>
 					</div>
-					<div class="lcode">
-						<div class="lcode__head">
+					<div class="code code--dark">
+						<div class="code__head">
 							<span>main.go</span>
-							<button type="button" class="lcode__copy" data-copy={`#${id}-imp-${t.key}`} aria-label={`Copy the ${t.label} import`}>Copy</button>
+							<button type="button" class="copy" data-copy aria-label={`Copy the ${t.label} import`}>Copy</button>
 						</div>
-						<pre><code id={`${id}-imp-${t.key}`} set:html={highlightGo(t.imp)} /></pre>
+						<pre><code set:html={highlightGo(t.imp)} /></pre>
+						<p class="sr-only" role="status" aria-live="polite" data-live></p>
 					</div>
 				</div>
 			))
 		}
 	</div>
 
-	<p class="lnote" slot="note">varmq needs Go 1.24 or newer. Run <code>go version</code> to check.</p>
+	<p class="sframe__note" slot="note">varmq needs Go 1.24 or newer. Run <code>go version</code> to check.</p>
 </Scene>
 
 <script>
-	import { segmented, copyButtons } from './ui';
+	import { tabs, copyButtons } from '../ui/dom';
+
+	copyButtons();
 
 	document.querySelectorAll<HTMLElement>('[data-install]').forEach((root) => {
-		segmented(root.querySelector<HTMLElement>('[role="tablist"]')!, () => {});
-		copyButtons(root);
+		tabs(root.querySelector<HTMLElement>('[role="tablist"]')!);
 	});
 </script>

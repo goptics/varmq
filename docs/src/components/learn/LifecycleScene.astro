@@ -2,7 +2,8 @@
 // The seven worker states as a diagram you can click, and a worker you can drive. The rules come from
 // worker_lifecycle.go, worker_state.go and worker_wait.go: Start, Pause, Resume, Stop and Restart,
 // and the errors they return from each state.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -97,9 +98,11 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 	id={id}
 	title="Worker lifecycle"
 	tag="state diagram"
+	class="learn"
+	call={"worker := varmq.NewWorker(process, varmq.WithAutoRun(false))\nqueue := worker.BindQueue() // then three Add calls"}
 	describe="The seven worker states as a diagram: Initiated, Idle, Running, Pausing, Paused, Stopping and Stopped. Idle and Running swap on their own as jobs start and finish. Start, Pause, Resume, Stop and Restart move the worker between states. Click a state to see what it means, which Is-methods answer yes for it, and what each method returns from it. The buttons under the diagram call the methods on a live worker model that has three queued jobs and runs one job at a time. A job that is running must finish before Pausing becomes Paused or Stopping becomes Stopped."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>Status()</dt><dd data-stat="status">Initiated</dd></div>
 		<div><dt>queued</dt><dd data-stat="queued">3</dd></div>
 		<div><dt>running</dt><dd data-stat="running">0</dd></div>
@@ -107,7 +110,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 	</dl>
 
 	<div class="lc" data-life>
-		<svg class="lsr" width="0" height="0" aria-hidden="true" focusable="false">
+		<svg class="sr-only" width="0" height="0" aria-hidden="true" focusable="false">
 			<defs>
 				<marker id={`${id}-ah`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
 					<path d="M0,0.5 L8,4 L0,7.5 z" class="lah" />
@@ -143,9 +146,9 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		}
 
 		<div class="lc__jobs" aria-hidden="true">
-			<span class="llabel">queue</span> <span class="lstrip" data-queue></span>
-			<span class="llabel">running</span> <span class="lstrip" data-run></span>
-			<span class="llabel">done</span> <span class="lstrip" data-done></span>
+			<span class="slabel">queue</span> <span class="lstrip" data-queue></span>
+			<span class="slabel">running</span> <span class="lstrip" data-run></span>
+			<span class="slabel">done</span> <span class="lstrip" data-done></span>
 		</div>
 
 		<div class="lc__panels">
@@ -160,35 +163,33 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				</table>
 			</section>
 			<section class="lc__side" aria-labelledby={`${id}-ct`}>
-				<p class="llabel" id={`${id}-ct`}>The worker now</p>
+				<p class="slabel" id={`${id}-ct`}>The worker now</p>
 				<p class="lc__checks" data-checks></p>
-				<p class="llabel lc__loghead">Log</p>
+				<p class="slabel lc__loghead">Log</p>
 				<ol class="lc__log" data-log aria-live="polite"></ol>
 			</section>
 		</div>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn" data-m="Start">Start()</button>
-		<button type="button" class="lbtn" data-m="Pause">Pause()</button>
-		<button type="button" class="lbtn" data-m="Resume">Resume()</button>
-		<button type="button" class="lbtn" data-m="Stop">Stop()</button>
-		<button type="button" class="lbtn" data-m="Restart">Restart()</button>
-		<span class="lspacer"></span>
-		<button type="button" class="lbtn" data-act="add">Add job</button>
-		<button type="button" class="lbtn lbtn--primary" data-act="finish">Finish running job</button>
-		<button type="button" class="lbtn" data-act="reset">Reset</button>
+		<button type="button" class="pbtn" data-m="Start">Start()</button>
+		<button type="button" class="pbtn" data-m="Pause">Pause()</button>
+		<button type="button" class="pbtn" data-m="Resume">Resume()</button>
+		<button type="button" class="pbtn" data-m="Stop">Stop()</button>
+		<button type="button" class="pbtn" data-m="Restart">Restart()</button>
+		<span class="sframe__spacer"></span>
+		<button type="button" class="pbtn" data-act="add">Add job</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="finish">Finish running job</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		The worker has concurrency 1 and <code>WithAutoRun(false)</code>. Pause and Stop never interrupt a running job, so press Finish to let it end. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
-	import { setCall } from './ui';
+	import { setCall } from '../ui/dom';
 
 	type S = 'Initiated' | 'Idle' | 'Running' | 'Pausing' | 'Paused' | 'Stopping' | 'Stopped';
 	type M = 'Start' | 'Pause' | 'Resume' | 'Stop' | 'Restart';
@@ -246,7 +247,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 	}
 
 	document.querySelectorAll<HTMLElement>('[data-life]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends Element>(s: string) => scene.querySelector<T>(s) as T;
 		const all = <T extends Element>(s: string) => Array.from(scene.querySelectorAll<T>(s));
 

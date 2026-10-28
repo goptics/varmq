@@ -1,7 +1,8 @@
 ---
 // A topic: one shared log, one cursor per subscribed worker. Mirrors topic.go and internal/topics/log.go:
 // Publish appends once and signals every subscribed worker. Each worker reads through its own cursor.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -13,9 +14,11 @@ const { id = 'topic' } = Astro.props;
 	id={id}
 	title="Topic"
 	tag="simulation"
+	class="learn"
+	call={"topic := varmq.NewTopic[string]()\nworkerA.WithTopic(topic)\nworkerB.WithTopic(topic)"}
 	describe="One topic with two subscribed workers. Press Publish to append a payload to the shared log once. Each worker reads the log through its own cursor and makes its own job. Worker B is slower than worker A, and you can pause it. A payload stays in the log until both cursors have moved past it, and a slow or paused worker never holds up Publish or the other worker."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>published</dt><dd data-stat="pub">0</dd></div>
 		<div><dt>in log</dt><dd data-stat="held">0</dd></div>
 		<div><dt>A ran</dt><dd data-stat="a">0</dd></div>
@@ -23,7 +26,7 @@ const { id = 'topic' } = Astro.props;
 	</dl>
 
 	<div class="tp" data-topic>
-		<span class="llabel">shared log</span>
+		<span class="slabel">shared log</span>
 		<ol class="tp__cells" data-cells aria-hidden="true"></ol>
 		<div class="tp__workers" aria-hidden="true">
 			<div class="tp__w" data-w="a">
@@ -38,22 +41,20 @@ const { id = 'topic' } = Astro.props;
 		<p class="estep__text ppool__text" aria-live="polite" data-readout>Press Publish. The payload goes in the log once.</p>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn lbtn--primary" data-act="pub">Publish</button>
-		<button type="button" class="lbtn" data-act="pub3">Publish 3</button>
-		<button type="button" class="lbtn" data-act="pauseb" aria-pressed="false">Pause B</button>
-		<button type="button" class="lbtn" data-act="reset">Reset</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="pub">Publish</button>
+		<button type="button" class="pbtn" data-act="pub3">Publish 3</button>
+		<button type="button" class="pbtn" data-act="pauseb" aria-pressed="false">Pause B</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		A topic is in-memory only. This scene keeps the last 12 payloads. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
-	import { setCall } from './ui';
+	import { setCall } from '../ui/dom';
 
 	const SETUP = ['topic := varmq.NewTopic[string]()', 'workerA.WithTopic(topic)', 'workerB.WithTopic(topic)'].join('\n');
 	const MAX = 12;
@@ -61,7 +62,7 @@ const { id = 'topic' } = Astro.props;
 	type W = { key: 'a' | 'b'; ms: number; cursor: number; running: number | null; ran: number; paused: boolean; timer: number | undefined };
 
 	document.querySelectorAll<HTMLElement>('[data-topic]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 		const stat = (k: string) => q(`[data-stat="${k}"]`);
 

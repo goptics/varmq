@@ -1,7 +1,8 @@
 ---
 // Batched dispatch, worked out with the same functions the worker uses (batchSize, batchBudget, planBatch).
 // The presets are the rows of the table on the page.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -22,15 +23,17 @@ const presets = [
 	id={id}
 	title="Batched dispatch"
 	tag="calculator"
+	class="learn"
+	call="k := min(even, budget, 32)"
 	describe="A calculator for the number of jobs one hand-off carries. Pick a preset or set the concurrency limit, the time one job takes and the number of waiting jobs. The scene shows the three numbers the worker compares: an even split of the waiting jobs, the number that keeps hand-offs about 32 microseconds apart, and the cap of 32. The smallest one is the batch size. For a small limit it also lists the first hand-offs, one per goroutine."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>jobs per hand-off</dt><dd data-stat="k">1</dd></div>
 	</dl>
 
 	<div class="bp" data-batch>
 		<div class="bp__presets" role="group" aria-label="Presets from the table">
-			{presets.map((p) => <button type="button" class="lbtn bp__preset" data-preset={p.key} data-c={p.c} data-ms={p.ms} data-jobs={p.jobs}>{p.label}</button>)}
+			{presets.map((p) => <button type="button" class="pbtn bp__preset" data-preset={p.key} data-c={p.c} data-ms={p.ms} data-jobs={p.jobs}>{p.label}</button>)}
 		</div>
 
 		<div class="bp__inputs">
@@ -83,24 +86,22 @@ const presets = [
 		<p class="estep__text ppool__text" aria-live="polite" data-readout></p>
 
 		<div class="bp__round" data-round hidden>
-			<span class="llabel">first hand-offs</span>
+			<span class="slabel">first hand-offs</span>
 			<div data-round-rows></div>
 		</div>
 	</div>
 
-	<code class="lcall" slot="call" data-call>k := min(even, budget, 32)</code>
-
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		Steady state: the pool is full, so alive goroutines equal the limit. The worker takes the smallest of the three numbers. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
 	import { batchBudget, batchSize, MAX_BATCH, PoolModel } from './engine';
-	import { setCall } from './ui';
+	import { setCall } from '../ui/dom';
 
 	document.querySelectorAll<HTMLElement>('[data-batch]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 		const sel = (k: string) => q<HTMLSelectElement>(`[data-in="${k}"]`);
 		const fmt = (n: number) => n.toLocaleString('en-US');

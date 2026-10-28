@@ -1,21 +1,25 @@
 ---
 // The quick-start program on a timeline: main adds two jobs and waits, the worker runs them.
 // Concurrency 1 runs the jobs one after the other. Concurrency 2 runs them together.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
 }
 const { id = 'quick' } = Astro.props;
+const call = 'worker := varmq.NewWorker(func(j varmq.Job[int]) {\n\tfmt.Printf("Processing %d\\n", j.Data())\n\ttime.Sleep(1 * time.Second)\n}) // default concurrency is 1';
 ---
 
 <Scene
 	id={id}
 	title="The quick start"
 	tag="timeline"
+	class="learn"
+	call={call}
 	describe="The quick-start program on a timeline of two seconds. Main calls Add twice at time zero, then waits in WaitUntilIdle. With concurrency 1 the worker runs job 1 from 0 to 1 second and job 2 from 1 to 2 seconds. With concurrency 2 both jobs run from 0 to 1 second. A slider moves through time, and the printed lines appear as time passes. Play replays the run."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>time</dt><dd data-stat="t">2.0 s</dd></div>
 		<div><dt>printed</dt><dd data-stat="lines">3</dd></div>
 	</dl>
@@ -33,40 +37,38 @@ const { id = 'quick' } = Astro.props;
 		</div>
 
 		<div class="qt__out">
-			<span class="llabel">output</span>
+			<span class="slabel">output</span>
 			<pre class="qt__pre" data-out aria-live="polite"></pre>
 		</div>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn lbtn--primary" data-act="play">Play</button>
-		<label class="qt__scrub">
-			<span class="lsr">Time in seconds</span>
+		<button type="button" class="pbtn pbtn--primary" data-act="play">Play</button>
+		<label class="sfield">
+			<span>time</span>
 			<input type="range" min="0" max="2000" step="50" value="2000" data-scrub aria-label="Time in seconds" />
 		</label>
 		<div class="lgroup">
 			<span id={`${id}-cl`}>concurrency</span>
-			<div class="lseg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
-				<button type="button" role="radio" aria-checked="true" data-c="1">1 (default)</button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-c="2">2</button>
+			<div class="seg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
+				<button type="button" role="radio" aria-checked="true" data-key="1">1 (default)</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="2">2</button>
 			</div>
 		</div>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		The Go Playground runs on a simulated clock, and so does this model: it draws the program, it does not time it. With concurrency 2 the two lines print together, in either order.
 	</p>
 </Scene>
 
 <script>
-	import { segmented, setCall, reducedMotion } from './ui';
+	import { tabs, setCall, reducedMotion } from '../ui/dom';
 
 	const END = 2000; // ms of the model
 
 	document.querySelectorAll<HTMLElement>('[data-quick]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 
 		let c: 1 | 2 = 1;
@@ -148,8 +150,8 @@ const { id = 'quick' } = Astro.props;
 			draw();
 		});
 
-		segmented(q('[data-conc]'), (item) => {
-			c = item.dataset.c === '2' ? 2 : 1;
+		tabs(q('[data-conc]'), (key) => {
+			c = key === '2' ? 2 : 1;
 			playing = false;
 			t = END;
 			setCall(

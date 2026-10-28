@@ -1,7 +1,8 @@
 ---
 // "How it works": one job from Add to done, a step at a time. Mirrors worker_eventloop.go:
 // one loop goroutine, a signal slot that holds one signal, and a pool that starts with one idle goroutine.
-import Scene from './Scene.astro';
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
 
 interface Props {
 	id?: string;
@@ -13,9 +14,11 @@ const { id = 'eloop' } = Astro.props;
 	id={id}
 	title="Event loop"
 	tag="step through"
+	class="learn"
+	call={"worker := varmq.NewWorker(process, 1)\nqueue := worker.BindQueue()"}
 	describe="A step-through of one worker. Press Next to move a job from Add, into the queue, through the event loop, to a pool goroutine and back. The concurrency selector switches between a worker that runs one job at a time and one that runs two. Each step names the Go call and says what the loop checks."
 >
-	<dl class="lstats" slot="stats">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>step</dt><dd data-stat="step">1 / 8</dd></div>
 		<div><dt>busy</dt><dd data-stat="busy">0</dd></div>
 		<div><dt>queued</dt><dd data-stat="queued">0</dd></div>
@@ -25,11 +28,11 @@ const { id = 'eloop' } = Astro.props;
 	<div data-eloop>
 		<div class="eloop" aria-hidden="true">
 			<div class="eloop__col">
-				<span class="llabel">queue</span>
+				<span class="slabel">queue</span>
 				<div class="lstrip" data-queue></div>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">event loop</span>
+				<span class="slabel">event loop</span>
 				<div class="enode" data-node data-awake="false"><span data-node-text>asleep</span></div>
 				<div class="eslot" data-slot data-full="false">
 					<span class="eslot__cell" data-slot-cell>–</span>
@@ -37,11 +40,11 @@ const { id = 'eloop' } = Astro.props;
 				</div>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">pool · up to <span data-limit>1</span></span>
+				<span class="slabel">pool · up to <span data-limit>1</span></span>
 				<div data-lanes></div>
 			</div>
 			<div class="eloop__col">
-				<span class="llabel">done</span>
+				<span class="slabel">done</span>
 				<div class="lstrip" data-done></div>
 			</div>
 		</div>
@@ -53,30 +56,28 @@ const { id = 'eloop' } = Astro.props;
 		</div>
 	</div>
 
-	<code class="lcall" slot="call" data-call></code>
-
 	<Fragment slot="controls">
-		<button type="button" class="lbtn" data-act="back">Back</button>
-		<button type="button" class="lbtn lbtn--primary" data-act="next">Next</button>
-		<button type="button" class="lbtn" data-act="restart">Restart</button>
+		<button type="button" class="pbtn" data-act="back">Back</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="next">Next</button>
+		<button type="button" class="pbtn" data-act="restart">Restart</button>
 		<ol class="epips" aria-label="Jump to a step" data-pips></ol>
-		<span class="lspacer"></span>
+		<span class="sframe__spacer"></span>
 		<div class="lgroup">
 			<span id={`${id}-cl`}>concurrency</span>
-			<div class="lseg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
-				<button type="button" role="radio" aria-checked="true" data-c="1">1</button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-c="2">2</button>
+			<div class="seg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
+				<button type="button" role="radio" aria-checked="true" data-key="1">1</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="2">2</button>
 			</div>
 		</div>
 	</Fragment>
 
-	<p class="lnote" slot="note">
+	<p class="sframe__note" slot="note">
 		Use <kbd>←</kbd> and <kbd>→</kbd> to step. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
 <script>
-	import { segmented, setCall, keyBelongsToControl } from './ui';
+	import { tabs, setCall, keyBelongsToControl } from '../ui/dom';
 
 	type Lane = { s: 'none' | 'idle' | 'busy'; job?: number };
 	type Frame = {
@@ -231,7 +232,7 @@ const { id = 'eloop' } = Astro.props;
 	}
 
 	document.querySelectorAll<HTMLElement>('[data-eloop]').forEach((root) => {
-		const scene = root.closest<HTMLElement>('.lscene')!;
+		const scene = root.closest<HTMLElement>('.sframe')!;
 		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
 		const stat = (k: string) => q(`[data-stat="${k}"]`);
 
@@ -324,8 +325,8 @@ const { id = 'eloop' } = Astro.props;
 			}
 		});
 
-		segmented(q('[data-conc]'), (item) => {
-			c = item.dataset.c === '2' ? 2 : 1;
+		tabs(q('[data-conc]'), (key) => {
+			c = key === '2' ? 2 : 1;
 			const keep = Math.min(i, frames(c).length - 1);
 			list = frames(c);
 			i = keep;
