@@ -108,7 +108,7 @@ Binding one wraps it so that `Add` writes JSON and the worker reads with `Dequeu
 
 [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) has one method, [`Subscribe(func(action string))`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe). It is what makes a queue distributed.
 
-`WithDistributedQueue` and `WithDistributedPriorityQueue` call `Subscribe` once, while binding, and pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull, and it also feeds the worker's counters. Any other action is ignored, so an adapter may send others, as redisq v1.4.0 does with `"dequeued"`. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewDistributedQueue` does not call `Subscribe`, because it has no worker.
+`WithDistributedQueue` and `WithDistributedPriorityQueue` call `Subscribe` once, while binding, and pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull, and it also feeds the worker's counters. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewDistributedQueue` does not call `Subscribe`, because it has no worker.
 
 For a distributed queue, [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) may differ from what you expect. These docs do not cover how a distributed queue's counters count yet; [Metrics](/guides/metrics/) covers in-memory queues only.
 
@@ -146,13 +146,11 @@ They belong to the in-memory queues. A persistent or distributed `Add` returns o
 
 ## What redisq and sqliteq implement
 
-| Interface | redisq v1.4.0 | sqliteq |
+| Interface | redisq | sqliteq |
 |---|---|---|
 | `IBaseQueue`, `IQueue`, `IPriorityQueue`, `IAcknowledgeable` | yes | yes |
 | `IPersistentQueue`, `IPersistentPriorityQueue` | yes | yes |
 | `ISubscribable`, `IDistributedQueue`, `IDistributedPriorityQueue` | yes, on the `NewDistributed...` queues | no |
-| `IBatchAcknowledgeable` | no | yes |
-| `IDedupQueue`, `IDedupPriorityQueue` | no | yes |
+| `IBatchAcknowledgeable` | yes | yes |
+| `IDedupQueue`, `IDedupPriorityQueue` | yes | yes |
 | `CapacitySetter` | no | no |
-
-redisq v1.5.0 also implements the batch and the dedup interfaces. It is newer than the version the examples use, so [the Redis page](/persistence/redis/#newer-redisq-releases) says what changed instead of describing it.

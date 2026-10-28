@@ -81,7 +81,7 @@ func main() {
 
 Three choices in it matter:
 
-- **The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) and started after the bind.** That is what makes it look at jobs a previous run left in the file. [The overview](/persistence/overview/#starting-a-worker-on-a-non-empty-queue) says why.
+- **The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) and started after the bind.** Binding an sqliteq queue already makes the worker look for jobs a previous run left in the file, as [the overview](/persistence/overview/#starting-a-worker-on-a-non-empty-queue) says. Starting it later only holds it back while the program counts them.
 - **[`queue.Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) is read before [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start).** It counts the jobs in the table that are waiting, not the ones a worker has taken.
 - **Every job finishes before the deferred closes run.** [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) lets every job run, then stops the worker.
 
