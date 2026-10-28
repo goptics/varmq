@@ -1,11 +1,16 @@
 ---
 title: How it works
-description: The event loop, the goroutine pool, topic fan-out and batched dispatch behind a varmq worker, with animated diagrams.
+description: The event loop, the goroutine pool, topic fan-out and batched dispatch behind a varmq worker, with interactive scenes.
 sidebar:
   order: 4
 ---
 
-Each worker has two moving parts: one **event loop** that decides what runs next, and a **pool** of goroutines that run your function. A job travels from `Add`, through the queue and the event loop, to a pool goroutine. The diagrams below loop, and each one steps through a single case.
+import PoolScene from '../../../components/learn/PoolScene.astro';
+import TopicScene from '../../../components/learn/TopicScene.astro';
+import BatchPlanner from '../../../components/learn/BatchPlanner.astro';
+import EventLoopSteps from '../../../components/learn/EventLoopSteps.astro';
+
+Each worker has two moving parts: one **event loop** that decides what runs next, and a **pool** of goroutines that run your function. A job travels from `Add`, through the queue and the event loop, to a pool goroutine. The scenes below are models of the library. Each one steps through a single case, and you can step through it yourself.
 
 ## The event loop
 
@@ -13,17 +18,17 @@ Every worker runs one event loop, a single goroutine. It sleeps until something 
 
 A slot is free while the number of busy pool goroutines is below the worker's concurrency. If no slot is free, the loop waits for a goroutine to come back.
 
-![The varmq event loop with one worker: Add enqueues a job and signals the loop, the loop sends it to Worker 1, a second job waits in the queue until Worker 1 finishes and signals the loop](../../../../../assets/diagrams/varmq-single-worker.svg)
+<EventLoopSteps />
 
 ## The worker pool
 
 Every [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add), and every job in an [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll), tries to wake the event loop. The signal channel holds only one pending signal, so the extra signals are dropped. That is enough: one wake-up lets the loop keep dispatching back to back while the queue has work and a slot is free. A signal that arrives while another is pending costs nothing.
 
-The concurrency limit is an upper bound, not a pool size. The pool starts with one idle goroutine and spawns more while another one would drain the backlog faster than it costs. When a goroutine finishes, it stays in the pool if more jobs are waiting than idle goroutines are ready to run them. Otherwise it exits, and the pool shrinks back to one idle goroutine. The diagrams label the goroutines Worker 1, Worker 2 and so on. [`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) and [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) change how many idle goroutines stay around. [Concurrency](/guides/concurrency/) covers both.
+The concurrency limit is an upper bound, not a pool size. The pool starts with one idle goroutine and spawns more while another one would drain the backlog faster than it costs. When a goroutine finishes, it stays in the pool if more jobs are waiting than idle goroutines are ready to run them. Otherwise it exits, and the pool shrinks back to one idle goroutine. The scenes label the goroutines Worker 1, Worker 2 and so on. [`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) and [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) change how many idle goroutines stay around. [Concurrency](/guides/concurrency/) covers both.
 
 Below, six jobs are added to a worker with concurrency 4. Four go out back to back, the other two wait in the queue, and the pool shrinks as it drains.
 
-![A varmq worker pool with concurrency 4: six Add calls produce one wake-up, the event loop dispatches four jobs to four goroutines, two jobs wait, and the pool shrinks back to one idle goroutine](../../../../../assets/diagrams/varmq-worker-pool.svg)
+<PoolScene />
 
 ## Topics
 
@@ -31,7 +36,7 @@ A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) feeds the same ev
 
 A payload stays in the log until every subscription has read it. Below, two workers subscribe to one topic, and the slower one keeps a chunk of the log alive until its cursor moves past it.
 
-![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](../../../../../assets/diagrams/varmq-topic.svg)
+<TopicScene />
 
 [Topics](/guides/topics/) covers subscribing, capacity and priority.
 
@@ -55,9 +60,9 @@ With enough jobs waiting, that works out like this:
 | 10,000 or more goroutines, 10 ms jobs | 32 |
 | Concurrency 1, any jobs | up to 32, because one goroutine runs jobs in order anyway |
 
-The diagram shows a worker that has already timed its jobs, with 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. A fresh worker hands out one job at a time until its first batch finishes.
+The scene starts on a worker that has already timed its jobs, with 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. A fresh worker hands out one job at a time until its first batch finishes. Pick a row of the table, or set your own numbers, to see the batch size.
 
-![Batched dispatch with concurrency 2: eight Add calls, the first worker takes four jobs in one hand-off, a second worker is spawned for two, and the last two jobs go out one at a time](../../../../../assets/diagrams/varmq-batch.svg)
+<BatchPlanner />
 
 ### What batching means for your code
 

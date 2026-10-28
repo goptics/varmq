@@ -1,0 +1,193 @@
+---
+// Batched dispatch, worked out with the same functions the worker uses (batchSize, batchBudget, planBatch).
+// The presets are the rows of the table on the page.
+import Scene from './Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'batch' } = Astro.props;
+
+const presets = [
+	{ key: 'a', label: '10 goroutines · 3 s jobs', c: 10, ms: 3000, jobs: 100000 },
+	{ key: 'b', label: '24 goroutines · 1 ms jobs', c: 24, ms: 1, jobs: 100000 },
+	{ key: 'c', label: '3,000 goroutines · 10 ms jobs', c: 3000, ms: 10, jobs: 100000 },
+	{ key: 'd', label: '10,000 goroutines · 10 ms jobs', c: 10000, ms: 10, jobs: 1000000 },
+	{ key: 'e', label: 'Concurrency 1', c: 1, ms: 1, jobs: 100000 },
+	{ key: 'f', label: '8 cheap jobs · concurrency 2', c: 2, ms: 0.001, jobs: 8 },
+];
+---
+
+<Scene
+	id={id}
+	title="Batched dispatch"
+	tag="calculator"
+	describe="A calculator for the number of jobs one hand-off carries. Pick a preset or set the concurrency limit, the time one job takes and the number of waiting jobs. The scene shows the three numbers the worker compares: an even split of the waiting jobs, the number that keeps hand-offs about 32 microseconds apart, and the cap of 32. The smallest one is the batch size. For a small limit it also lists the first hand-offs, one per goroutine."
+>
+	<dl class="lstats" slot="stats">
+		<div><dt>jobs per hand-off</dt><dd data-stat="k">1</dd></div>
+	</dl>
+
+	<div class="bp" data-batch>
+		<div class="bp__presets" role="group" aria-label="Presets from the table">
+			{presets.map((p) => <button type="button" class="lbtn bp__preset" data-preset={p.key} data-c={p.c} data-ms={p.ms} data-jobs={p.jobs}>{p.label}</button>)}
+		</div>
+
+		<div class="bp__inputs">
+			<label class="bp__field">
+				<span>concurrency limit</span>
+				<select data-in="c">
+					{[1, 2, 4, 8, 10, 24, 3000, 10000].map((n) => <option value={n}>{n.toLocaleString('en-US')}</option>)}
+				</select>
+			</label>
+			<label class="bp__field">
+				<span>one job takes</span>
+				<select data-in="ms">
+					<option value="0">not timed yet (first batch)</option>
+					<option value="0.001">1 µs</option>
+					<option value="0.1">100 µs</option>
+					<option value="1">1 ms</option>
+					<option value="10">10 ms</option>
+					<option value="3000">3 s</option>
+				</select>
+			</label>
+			<label class="bp__field">
+				<span>jobs waiting</span>
+				<select data-in="jobs">
+					<option value="8">8</option>
+					<option value="100">100</option>
+					<option value="100000">100,000</option>
+					<option value="1000000">1,000,000</option>
+				</select>
+			</label>
+		</div>
+
+		<div class="bp__bars" aria-hidden="true">
+			<div class="bp__bar" data-bar="even">
+				<span class="bp__name">even split</span>
+				<span class="bp__track"><span class="bp__fill"></span></span>
+				<span class="bp__val" data-val="even">0</span>
+			</div>
+			<div class="bp__bar" data-bar="budget">
+				<span class="bp__name">32 µs apart</span>
+				<span class="bp__track"><span class="bp__fill"></span></span>
+				<span class="bp__val" data-val="budget">0</span>
+			</div>
+			<div class="bp__bar" data-bar="cap">
+				<span class="bp__name">cap</span>
+				<span class="bp__track"><span class="bp__fill"></span></span>
+				<span class="bp__val" data-val="cap">32</span>
+			</div>
+		</div>
+
+		<p class="estep__text ppool__text" aria-live="polite" data-readout></p>
+
+		<div class="bp__round" data-round hidden>
+			<span class="llabel">first hand-offs</span>
+			<div data-round-rows></div>
+		</div>
+	</div>
+
+	<code class="lcall" slot="call" data-call>k := min(even, budget, 32)</code>
+
+	<p class="lnote" slot="note">
+		Steady state: the pool is full, so alive goroutines equal the limit. The worker takes the smallest of the three numbers. A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { batchBudget, batchSize, MAX_BATCH, PoolModel } from './engine';
+	import { setCall } from './ui';
+
+	document.querySelectorAll<HTMLElement>('[data-batch]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.lscene')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+		const sel = (k: string) => q<HTMLSelectElement>(`[data-in="${k}"]`);
+		const fmt = (n: number) => n.toLocaleString('en-US');
+
+		const setSelect = (el: HTMLSelectElement, value: number) => {
+			if (![...el.options].some((o) => Number(o.value) === value)) {
+				const o = document.createElement('option');
+				o.value = String(value);
+				o.textContent = fmt(value);
+				el.append(o);
+			}
+			el.value = String(value);
+		};
+
+		const render = () => {
+			const c = Number(sel('c').value);
+			const ms = Number(sel('ms').value);
+			const jobs = Number(sel('jobs').value);
+			const nanos = ms * 1e6;
+
+			const shares = Math.min(c, jobs);
+			const even = batchSize(jobs, shares);
+			const budget = c > 1 ? batchBudget(nanos, c) : MAX_BATCH;
+			const k = Math.min(even, budget, MAX_BATCH);
+			const winner = k === even && even < budget ? 'even' : k === budget && budget < MAX_BATCH ? 'budget' : 'cap';
+
+			for (const [key, v] of [['even', even], ['budget', budget], ['cap', MAX_BATCH]] as const) {
+				const bar = q(`[data-bar="${key}"]`);
+				bar.dataset.win = String(Math.min(v, MAX_BATCH) === k);
+				(bar.querySelector('.bp__fill') as HTMLElement).style.transform = `scaleX(${Math.max(0.02, Math.min(v, MAX_BATCH) / MAX_BATCH)})`;
+				q(`[data-val="${key}"]`).textContent = v > MAX_BATCH ? `${fmt(v)} (cap 32)` : fmt(v);
+			}
+			q('[data-stat="k"]').textContent = String(k);
+
+			const why =
+				c === 1
+					? 'A lone goroutine runs jobs in queue order anyway, so the hand-off-gap rule does not apply.'
+					: ms === 0
+						? 'No job has been timed yet, so the budget is 1: the worker hands out one job at a time until the first batch finishes.'
+						: winner === 'budget'
+							? `With ${fmt(c)} goroutines and ${ms >= 1000 ? ms / 1000 + ' s' : ms >= 1 ? ms + ' ms' : ms * 1000 + ' µs'} jobs, a hand-off every 32 µs needs ${fmt(budget)} job${budget === 1 ? '' : 's'} per batch.`
+							: winner === 'even'
+								? `Only ${fmt(jobs)} job${jobs === 1 ? ' is' : 's are'} waiting, so an even split across ${fmt(shares)} goroutine${shares === 1 ? '' : 's'} is the smallest number.`
+								: 'The cap of 32 is the smallest number.';
+			q('[data-readout]').textContent = `Each hand-off carries ${k} job${k === 1 ? '' : 's'}. ${why}`;
+			setCall(q('[data-call]'), `k := min(${fmt(even)}, ${fmt(budget)}, 32) // = ${k}`);
+
+			// The first round of hand-offs, for a limit small enough to list.
+			const round = q('[data-round]');
+			if (c <= 8 && jobs <= 1000) {
+				const m = new PoolModel(c, ms, ms > 0);
+				m.add(jobs);
+				const rows: string[] = [];
+				let guard = 0;
+				for (;;) {
+					const s = m.advance(0);
+					if (s.kind === 'handoff') {
+						rows.push(`<div class="bp__row"><span class="llane__id">W${s.node}</span><div class="llane__track">${s.jobs.map((j) => `<span class="ljob">${j}</span>`).join('')}<span>${s.jobs.length} job${s.jobs.length === 1 ? '' : 's'}${s.spawned ? ' · new goroutine' : ''}</span></div></div>`);
+					}
+					if (s.kind === 'sleep' || ++guard > 200) break;
+				}
+				const waiting = m.queue.length;
+				rows.push(`<p class="lempty">${waiting > 0 ? `${waiting} job${waiting === 1 ? '' : 's'} wait${waiting === 1 ? 's' : ''} in the queue. They go out as goroutines free up.` : 'The queue is empty after the first hand-offs.'}</p>`);
+				q('[data-round-rows]').innerHTML = rows.join('');
+				round.hidden = false;
+			} else {
+				round.hidden = true;
+			}
+		};
+
+		scene.addEventListener('click', (e) => {
+			const b = (e.target as HTMLElement).closest<HTMLElement>('[data-preset]');
+			if (!b) return;
+			setSelect(sel('c'), Number(b.dataset.c));
+			setSelect(sel('ms'), Number(b.dataset.ms));
+			setSelect(sel('jobs'), Number(b.dataset.jobs));
+			scene.querySelectorAll('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+			render();
+		});
+		scene.addEventListener('change', (e) => {
+			if ((e.target as HTMLElement).closest('[data-in]')) {
+				scene.querySelectorAll('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+				render();
+			}
+		});
+
+		// Start on the first row of the table.
+		q<HTMLElement>('[data-preset="f"]').click();
+	});
+</script>

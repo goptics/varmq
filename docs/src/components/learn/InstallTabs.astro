@@ -1,0 +1,86 @@
+---
+// Install variants as tabs: the core package alone, or with a storage adapter. Each tab has the go get
+// command and the import, each with a copy button.
+import Scene from './Scene.astro';
+import { highlightGo } from './go';
+
+interface Props {
+	id?: string;
+}
+const { id = 'install' } = Astro.props;
+
+const tabs = [
+	{
+		key: 'core',
+		label: 'varmq',
+		about: 'The in-memory worker pool, queues and topics.',
+		cmd: 'go get github.com/goptics/varmq',
+		imp: 'import "github.com/goptics/varmq"',
+	},
+	{
+		key: 'redis',
+		label: '+ Redis',
+		about: 'Adds redisq, for persistent and distributed queues in Redis.',
+		cmd: 'go get github.com/goptics/varmq github.com/goptics/redisq',
+		imp: 'import (\n\t"github.com/goptics/redisq"\n\t"github.com/goptics/varmq"\n)',
+	},
+	{
+		key: 'sqlite',
+		label: '+ SQLite',
+		about: 'Adds sqliteq, for persistent queues in SQLite files.',
+		cmd: 'go get github.com/goptics/varmq github.com/goptics/sqliteq',
+		imp: 'import (\n\t"github.com/goptics/sqliteq"\n\t"github.com/goptics/varmq"\n)',
+	},
+];
+---
+
+<Scene
+	id={id}
+	title="Install"
+	tag="go get"
+	describe="Three install variants as tabs: varmq alone, varmq with the Redis adapter redisq, and varmq with the SQLite adapter sqliteq. Each tab shows the go get command and the import, and each has a copy button."
+>
+	<div class="it" data-install>
+		<div class="lseg" role="tablist" aria-label="Install variant">
+			{
+				tabs.map((t, i) => (
+					<button type="button" role="tab" id={`${id}-tab-${t.key}`} aria-controls={`${id}-panel-${t.key}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+						{t.label}
+					</button>
+				))
+			}
+		</div>
+		{
+			tabs.map((t, i) => (
+				<div class="it__panel" role="tabpanel" id={`${id}-panel-${t.key}`} aria-labelledby={`${id}-tab-${t.key}`} hidden={i !== 0}>
+					<p class="it__about">{t.about}</p>
+					<div class="lcode lcode--cmd">
+						<div class="lcode__head">
+							<span>terminal</span>
+							<button type="button" class="lcode__copy" data-copy={`#${id}-cmd-${t.key}`} aria-label={`Copy the ${t.label} install command`}>Copy</button>
+						</div>
+						<pre><code id={`${id}-cmd-${t.key}`}>{t.cmd}</code></pre>
+					</div>
+					<div class="lcode">
+						<div class="lcode__head">
+							<span>main.go</span>
+							<button type="button" class="lcode__copy" data-copy={`#${id}-imp-${t.key}`} aria-label={`Copy the ${t.label} import`}>Copy</button>
+						</div>
+						<pre><code id={`${id}-imp-${t.key}`} set:html={highlightGo(t.imp)} /></pre>
+					</div>
+				</div>
+			))
+		}
+	</div>
+
+	<p class="lnote" slot="note">varmq needs Go 1.24 or newer. Run <code>go version</code> to check.</p>
+</Scene>
+
+<script>
+	import { segmented, copyButtons } from './ui';
+
+	document.querySelectorAll<HTMLElement>('[data-install]').forEach((root) => {
+		segmented(root.querySelector<HTMLElement>('[role="tablist"]')!, () => {});
+		copyButtons(root);
+	});
+</script>

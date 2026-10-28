@@ -1,0 +1,485 @@
+---
+// The seven worker states as a diagram you can click, and a worker you can drive. The rules come from
+// worker_lifecycle.go, worker_state.go and worker_wait.go: Start, Pause, Resume, Stop and Restart,
+// and the errors they return from each state.
+import Scene from './Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'life' } = Astro.props;
+
+type Pt = [number, number];
+interface Edge {
+	id: string;
+	d: string;
+	label: string;
+	at: Pt;
+	anchor?: 'start' | 'middle' | 'end';
+}
+interface Layout {
+	key: 'wide' | 'tall';
+	vb: Pt;
+	nodes: Record<string, Pt>;
+	nw: number;
+	group: [number, number, number, number];
+	groupLabel: Pt;
+	groupText: string;
+	edges: Edge[];
+}
+
+const NH = 44;
+
+const wide: Layout = {
+	key: 'wide',
+	vb: [800, 316],
+	nw: 120,
+	nodes: {
+		Initiated: [0, 50],
+		Stopped: [0, 200],
+		Idle: [200, 50],
+		Running: [440, 50],
+		Paused: [200, 200],
+		Pausing: [440, 200],
+		Stopping: [680, 125],
+	},
+	group: [165, 14, 470, 256],
+	groupLabel: [177, 33],
+	groupText: 'started: Stop() works from any of these',
+	edges: [
+		{ id: 'start-init', d: 'M120,72 H196', label: 'Start()', at: [127, 64] },
+		{ id: 'start-stopped', d: 'M120,222 H146 V72', label: 'Start() / Restart()', at: [0, 190] },
+		{ id: 'idle-run', d: 'M320,62 H436', label: 'job starts', at: [378, 55], anchor: 'middle' },
+		{ id: 'run-idle', d: 'M440,82 H324', label: 'all jobs done', at: [382, 100], anchor: 'middle' },
+		{ id: 'pause-idle', d: 'M240,94 V196', label: 'Pause()', at: [232, 150], anchor: 'end' },
+		{ id: 'resume', d: 'M280,200 V98', label: 'Resume()', at: [288, 150] },
+		{ id: 'pause-run', d: 'M500,94 V196', label: 'Pause()', at: [508, 150] },
+		{ id: 'pausing-paused', d: 'M440,222 H324', label: 'last job ends', at: [382, 214], anchor: 'middle' },
+		{ id: 'stop', d: 'M635,147 H676', label: 'Stop()', at: [656, 139], anchor: 'middle' },
+		{ id: 'stopping-stopped', d: 'M740,169 V298 H30 V248', label: 'running jobs end', at: [390, 290], anchor: 'middle' },
+	],
+};
+
+const tall: Layout = {
+	key: 'tall',
+	vb: [340, 478],
+	nw: 130,
+	nodes: {
+		Initiated: [10, 0],
+		Idle: [10, 124],
+		Running: [200, 124],
+		Paused: [10, 286],
+		Pausing: [200, 286],
+		Stopped: [10, 424],
+		Stopping: [200, 424],
+	},
+	group: [0, 84, 340, 290],
+	groupLabel: [92, 102],
+	groupText: 'started: Stop() works here',
+	edges: [
+		{ id: 'start-init', d: 'M75,44 V120', label: 'Start()', at: [83, 76] },
+		{ id: 'start-stopped', d: 'M75,424 V378', label: 'Start() / Restart()', at: [83, 402] },
+		{ id: 'idle-run', d: 'M140,134 H196', label: 'starts', at: [168, 128], anchor: 'middle' },
+		{ id: 'run-idle', d: 'M200,158 H144', label: 'done', at: [172, 174], anchor: 'middle' },
+		{ id: 'pause-idle', d: 'M40,168 V282', label: 'Pause()', at: [48, 232] },
+		{ id: 'resume', d: 'M118,286 V172', label: 'Resume()', at: [126, 232] },
+		{ id: 'pause-run', d: 'M265,168 V282', label: 'Pause()', at: [273, 232] },
+		{ id: 'pausing-paused', d: 'M200,308 H144', label: 'ends', at: [172, 302], anchor: 'middle' },
+		{ id: 'stop', d: 'M265,374 V420', label: 'Stop()', at: [273, 400] },
+		{ id: 'stopping-stopped', d: 'M200,446 H144', label: 'ends', at: [172, 440], anchor: 'middle' },
+	],
+};
+const layouts = [wide, tall];
+const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 'Stopped'];
+---
+
+<Scene
+	id={id}
+	title="Worker lifecycle"
+	tag="state diagram"
+	describe="The seven worker states as a diagram: Initiated, Idle, Running, Pausing, Paused, Stopping and Stopped. Idle and Running swap on their own as jobs start and finish. Start, Pause, Resume, Stop and Restart move the worker between states. Click a state to see what it means, which Is-methods answer yes for it, and what each method returns from it. The buttons under the diagram call the methods on a live worker model that has three queued jobs and runs one job at a time. A job that is running must finish before Pausing becomes Paused or Stopping becomes Stopped."
+>
+	<dl class="lstats" slot="stats">
+		<div><dt>Status()</dt><dd data-stat="status">Initiated</dd></div>
+		<div><dt>queued</dt><dd data-stat="queued">3</dd></div>
+		<div><dt>running</dt><dd data-stat="running">0</dd></div>
+		<div><dt>done</dt><dd data-stat="done">0</dd></div>
+	</dl>
+
+	<div class="lc" data-life>
+		<svg class="lsr" width="0" height="0" aria-hidden="true" focusable="false">
+			<defs>
+				<marker id={`${id}-ah`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+					<path d="M0,0.5 L8,4 L0,7.5 z" class="lah" />
+				</marker>
+				<marker id={`${id}-ah-hot`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+					<path d="M0,0.5 L8,4 L0,7.5 z" class="lah lah--hot" />
+				</marker>
+			</defs>
+		</svg>
+		{
+			layouts.map((L) => (
+				<svg class={`lc__svg lc__svg--${L.key}`} viewBox={`0 0 ${L.vb[0]} ${L.vb[1]}`} role="group" aria-label="Worker states">
+					<rect class="lc__group" x={L.group[0]} y={L.group[1]} width={L.group[2]} height={L.group[3]} rx="12" />
+					<text class="lc__glabel" x={L.groupLabel[0]} y={L.groupLabel[1]}>{L.groupText}</text>
+					{L.edges.map((e) => (
+						<g class="ledge" data-edge={e.id}>
+							<path d={e.d} fill="none" style={`marker-end:url(#${id}-ah)`} data-hot-marker={`url(#${id}-ah-hot)`} />
+							<text class="ledge__t" x={e.at[0]} y={e.at[1]} text-anchor={e.anchor ?? 'start'}>{e.label}</text>
+						</g>
+					))}
+					{order.map((name) => {
+						const [x, y] = L.nodes[name];
+						return (
+							<g class="lnode" data-state={name} role="button" tabindex="0" aria-pressed="false" aria-label={`${name} state`} transform={`translate(${x},${y})`}>
+								<rect width={L.nw} height={NH} rx="8" />
+								<text x={L.nw / 2} y={NH / 2 + 4.5} text-anchor="middle">{name}</text>
+								<text class="lnode__now" x={L.nw / 2} y={NH - 8} text-anchor="middle">now</text>
+							</g>
+						);
+					})}
+				</svg>
+			))
+		}
+
+		<div class="lc__jobs" aria-hidden="true">
+			<span class="llabel">queue</span> <span class="lstrip" data-queue></span>
+			<span class="llabel">running</span> <span class="lstrip" data-run></span>
+			<span class="llabel">done</span> <span class="lstrip" data-done></span>
+		</div>
+
+		<div class="lc__panels">
+			<section class="lc__detail" aria-live="polite" aria-labelledby={`${id}-dt`}>
+				<p class="estep__n" id={`${id}-dt`}>Selected state</p>
+				<p class="estep__title" data-d-name>Initiated</p>
+				<p class="estep__text" data-d-text></p>
+				<p class="lc__is" data-d-is></p>
+				<table class="jb__table lc__table">
+					<thead><tr><th>call from here</th><td>result</td></tr></thead>
+					<tbody data-d-rows></tbody>
+				</table>
+			</section>
+			<section class="lc__side" aria-labelledby={`${id}-ct`}>
+				<p class="llabel" id={`${id}-ct`}>The worker now</p>
+				<p class="lc__checks" data-checks></p>
+				<p class="llabel lc__loghead">Log</p>
+				<ol class="lc__log" data-log aria-live="polite"></ol>
+			</section>
+		</div>
+	</div>
+
+	<code class="lcall" slot="call" data-call></code>
+
+	<Fragment slot="controls">
+		<button type="button" class="lbtn" data-m="Start">Start()</button>
+		<button type="button" class="lbtn" data-m="Pause">Pause()</button>
+		<button type="button" class="lbtn" data-m="Resume">Resume()</button>
+		<button type="button" class="lbtn" data-m="Stop">Stop()</button>
+		<button type="button" class="lbtn" data-m="Restart">Restart()</button>
+		<span class="lspacer"></span>
+		<button type="button" class="lbtn" data-act="add">Add job</button>
+		<button type="button" class="lbtn lbtn--primary" data-act="finish">Finish running job</button>
+		<button type="button" class="lbtn" data-act="reset">Reset</button>
+	</Fragment>
+
+	<p class="lnote" slot="note">
+		The worker has concurrency 1 and <code>WithAutoRun(false)</code>. Pause and Stop never interrupt a running job, so press Finish to let it end. A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { setCall } from './ui';
+
+	type S = 'Initiated' | 'Idle' | 'Running' | 'Pausing' | 'Paused' | 'Stopping' | 'Stopped';
+	type M = 'Start' | 'Pause' | 'Resume' | 'Stop' | 'Restart';
+
+	const METHODS: M[] = ['Start', 'Pause', 'Resume', 'Stop', 'Restart'];
+
+	const MEANING: Record<S, string> = {
+		Initiated: 'Created with WithAutoRun(false) and not started yet.',
+		Idle: 'Started, with no job running.',
+		Running: 'At least one job is running.',
+		Pausing: 'Pause was called while jobs were running. They finish, and the worker takes no new ones.',
+		Paused: 'No job is running and none will start until Resume.',
+		Stopping: 'Stop was called. Running jobs finish, then the worker’s goroutines are removed.',
+		Stopped: 'The event loop has ended and the goroutines are gone. Jobs still in the queue stay there.',
+	};
+
+	const IS: Record<S, string[]> = {
+		Initiated: [],
+		Idle: ['IsIdle', 'IsActive'],
+		Running: ['IsRunning', 'IsActive'],
+		Pausing: [],
+		Paused: ['IsPaused'],
+		Stopping: [],
+		Stopped: ['IsStopped'],
+	};
+
+	/** What a call does from a state. `to` is the state it moves to; `err` is the error it returns. */
+	function outcome(s: S, m: M, running: boolean): { to: S | null; err: string | null; note: string } {
+		const same = (note = 'no change'): { to: null; err: null; note: string } => ({ to: null, err: null, note });
+		const fail = (err: string) => ({ to: null as S | null, err, note: 'no change' });
+		switch (m) {
+			case 'Start':
+				if (s === 'Initiated' || s === 'Stopped') return { to: 'Idle', err: null, note: '' };
+				if (s === 'Idle' || s === 'Running') return fail('ErrRunningWorker');
+				return fail({ Pausing: 'ErrWorkerPausing', Paused: 'ErrWorkerPaused', Stopping: 'ErrWorkerStopping' }[s as 'Pausing' | 'Paused' | 'Stopping']);
+			case 'Pause':
+				if (s === 'Idle') return { to: 'Paused', err: null, note: '' };
+				if (s === 'Running') return { to: running ? 'Pausing' : 'Paused', err: null, note: 'Paused once the running job ends' };
+				if (s === 'Pausing' || s === 'Paused') return same();
+				if (s === 'Initiated') return fail('ErrNotRunningWorker');
+				return fail(s === 'Stopping' ? 'ErrWorkerStopping' : 'ErrWorkerStopped');
+			case 'Resume':
+				if (s === 'Paused') return { to: 'Idle', err: null, note: 'then it pulls jobs again' };
+				if (s === 'Idle' || s === 'Running') return same();
+				if (s === 'Initiated') return fail('ErrNotRunningWorker');
+				return fail({ Pausing: 'ErrWorkerPausing', Stopping: 'ErrWorkerStopping', Stopped: 'ErrWorkerStopped' }[s as 'Pausing' | 'Stopping' | 'Stopped']);
+			case 'Stop':
+				if (s === 'Initiated') return fail('ErrNotRunningWorker');
+				if (s === 'Stopping' || s === 'Stopped') return same();
+				return { to: 'Stopping', err: null, note: 'Stopped once running jobs end' };
+			case 'Restart':
+				if (s === 'Initiated') return fail('ErrNotRunningWorker');
+				return { to: 'Idle', err: null, note: 'stops, waits for Stopped, starts again' };
+		}
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-life]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.lscene')!;
+		const q = <T extends Element>(s: string) => scene.querySelector<T>(s) as T;
+		const all = <T extends Element>(s: string) => Array.from(scene.querySelectorAll<T>(s));
+
+		let s: S;
+		let queued: number[];
+		let runningJob: number | null;
+		let done: number[];
+		let nextJob: number;
+		let restartPending: boolean;
+		let selected: S;
+		let log: string[];
+		let timer: number | undefined;
+
+		const chip = (n: number, cls = '') => `<span class="ljob ${cls}">${n}</span>`;
+
+		const hot = (...ids: string[]) => {
+			all<SVGElement>('.ledge').forEach((e) => {
+				const on = ids.includes(e.dataset.edge ?? '');
+				e.classList.toggle('is-hot', on);
+				const path = e.querySelector('path');
+				if (path) path.style.markerEnd = on ? path.dataset.hotMarker! : path.style.markerEnd.replace('-hot', '');
+			});
+		};
+
+		const pull = (): boolean => {
+			if ((s === 'Idle' || s === 'Running') && runningJob === null && queued.length > 0) {
+				runningJob = queued.shift()!;
+				if (s === 'Idle') {
+					s = 'Running';
+					hot('idle-run');
+				}
+				return true;
+			}
+			return false;
+		};
+
+		const toStopped = () => {
+			s = 'Stopped';
+			log.unshift('Stopping → Stopped: the event loop ended, the goroutines are gone.');
+			hot('stopping-stopped');
+			if (restartPending) {
+				restartPending = false;
+				s = 'Idle';
+				log.unshift('Restart() continues: Stopped → Idle.');
+				hot('stopping-stopped', 'start-stopped');
+				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+			}
+		};
+
+		const finish = () => {
+			if (runningJob === null) return;
+			const job = runningJob;
+			done.push(job);
+			runningJob = null;
+			log.unshift(`Job ${job} finishes.`);
+			if (s === 'Running') {
+				s = 'Idle';
+				hot('run-idle');
+				log.unshift('Running → Idle: no job is running.');
+				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+			} else if (s === 'Pausing') {
+				s = 'Paused';
+				hot('pausing-paused');
+				log.unshift('Pausing → Paused: the last running job ended.');
+			} else if (s === 'Stopping') {
+				toStopped();
+			}
+		};
+
+		const settleStopping = () => {
+			window.clearTimeout(timer);
+			if (s === 'Stopping' && runningJob === null) {
+				timer = window.setTimeout(() => {
+					if (s === 'Stopping' && runningJob === null) {
+						toStopped();
+						render();
+					}
+				}, 700);
+			}
+		};
+
+		const call = (m: M) => {
+			const o = outcome(s, m, runningJob !== null);
+			const from = s;
+			const errText = o.err ?? 'nil';
+			setCall(q('[data-call]'), `err := worker.${m}() // err = ${errText}`);
+			if (o.err) {
+				log.unshift(`${m}() returned ${o.err}. The worker stays ${from}.`);
+				hot();
+			} else if (m === 'Restart' && o.to) {
+				log.unshift(`Restart(): Stop first, from ${from}.`);
+				if (from === 'Stopped') {
+					s = 'Idle';
+					hot('start-stopped');
+					log.unshift('Already stopped, so Start follows at once: Stopped → Idle.');
+					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				} else if (runningJob === null) {
+					s = 'Stopping';
+					restartPending = true;
+					hot('stop');
+					log.unshift(`${from} → Stopping.`);
+				} else {
+					s = 'Stopping';
+					restartPending = true;
+					hot('stop');
+					log.unshift(`${from} → Stopping. Restart() blocks until the running job ends, then starts the worker again.`);
+				}
+			} else if (o.to) {
+				s = o.to;
+				if (m === 'Start') {
+					hot(from === 'Initiated' ? 'start-init' : 'start-stopped');
+					log.unshift(`${from} → Idle.`);
+					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				} else if (m === 'Pause') {
+					hot(from === 'Idle' ? 'pause-idle' : 'pause-run');
+					log.unshift(`${from} → ${s}${s === 'Pausing' ? '. The running job finishes, and no new job starts.' : '.'}`);
+				} else if (m === 'Resume') {
+					hot('resume');
+					log.unshift('Paused → Idle.');
+					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				} else if (m === 'Stop') {
+					hot('stop');
+					log.unshift(`${from} → Stopping.`);
+				}
+			} else {
+				log.unshift(`${m}() changed nothing: the worker is already ${from === 'Idle' && m === 'Resume' ? 'active' : from}.`);
+				hot();
+			}
+			settleStopping();
+			selected = s;
+			render();
+		};
+
+		const render = () => {
+			// Diagram.
+			all<SVGElement>('.lnode').forEach((n) => {
+				const name = n.dataset.state as S;
+				n.classList.toggle('is-current', name === s);
+				n.classList.toggle('is-sel', name === selected);
+				n.setAttribute('aria-pressed', String(name === selected));
+				n.setAttribute('aria-label', `${name} state${name === s ? ', the worker is in it now' : ''}`);
+			});
+
+			// Counts and chips.
+			q('[data-stat="status"]').textContent = s;
+			q('[data-stat="queued"]').textContent = String(queued.length);
+			q('[data-stat="running"]').textContent = runningJob === null ? '0' : '1';
+			q('[data-stat="done"]').textContent = String(done.length);
+			q('[data-queue]').innerHTML = queued.length ? queued.map((n) => chip(n)).join('') : '<span class="lempty">none</span>';
+			q('[data-run]').innerHTML = runningJob === null ? '<span class="lempty">none</span>' : chip(runningJob);
+			q('[data-done]').innerHTML = done.length ? done.map((n) => chip(n, 'ljob--done')).join('') : '<span class="lempty">none</span>';
+
+			// Detail of the selected state.
+			q('[data-d-name]').textContent = selected + (selected === s ? ' (now)' : '');
+			q('[data-d-text]').textContent = MEANING[selected];
+			q('[data-d-is]').textContent = IS[selected].length ? `Answers yes: ${IS[selected].join(', ')}.` : 'No Is* method answers yes for this state. Read Status().';
+			q('[data-d-rows]').innerHTML = METHODS.map((m) => {
+				const o = outcome(selected, m, selected === 'Running');
+				const res = o.err ? `<code>${o.err}</code>` : o.to ? `→ ${o.to}${o.note ? ` <span>(${o.note})</span>` : ''}` : `nil <span>(${o.note})</span>`;
+				return `<tr><th><code>${m}()</code></th><td>${res}</td></tr>`;
+			}).join('');
+
+			// Is* checks of the worker itself.
+			const yes = (n: S[]) => String(n.includes(s));
+			q('[data-checks]').innerHTML = [
+				['IsIdle()', yes(['Idle'])],
+				['IsRunning()', yes(['Running'])],
+				['IsActive()', yes(['Idle', 'Running'])],
+				['IsPaused()', yes(['Paused'])],
+				['IsStopped()', yes(['Stopped'])],
+			]
+				.map(([k, v]) => `<span class="lcheck" data-on="${v}"><code>${k}</code> ${v}</span>`)
+				.join('');
+			q('[data-log]').innerHTML = log.slice(0, 5).map((l) => `<li>${l}</li>`).join('');
+
+			// Controls.
+			all<HTMLElement>('[data-m]').forEach((b) => {
+				const o = outcome(s, b.dataset.m as M, runningJob !== null);
+				b.dataset.err = String(!!o.err);
+			});
+			q('[data-act="finish"]').setAttribute('aria-disabled', String(runningJob === null));
+		};
+
+		const reset = () => {
+			window.clearTimeout(timer);
+			s = 'Initiated';
+			queued = [1, 2, 3];
+			runningJob = null;
+			done = [];
+			nextJob = 4;
+			restartPending = false;
+			selected = 'Initiated';
+			log = ['Created with WithAutoRun(false). Three jobs wait in the queue.'];
+			setCall(q('[data-call]'), 'worker := varmq.NewWorker(process, varmq.WithAutoRun(false))\nqueue := worker.BindQueue() // then three Add calls');
+			hot();
+			render();
+		};
+
+		scene.addEventListener('click', (e) => {
+			const t = e.target as HTMLElement;
+			const node = t.closest<SVGElement>('.lnode');
+			if (node) {
+				selected = node.dataset.state as S;
+				return render();
+			}
+			const m = t.closest<HTMLElement>('[data-m]');
+			if (m) return call(m.dataset.m as M);
+			const a = t.closest<HTMLElement>('[data-act]');
+			if (!a || a.getAttribute('aria-disabled') === 'true') return;
+			if (a.dataset.act === 'add') {
+				queued.push(nextJob++);
+				log.unshift(`Add: job ${nextJob - 1} joins the queue.`);
+				setCall(q('[data-call]'), `queue.Add(${nextJob - 1})`);
+				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				render();
+			} else if (a.dataset.act === 'finish') {
+				finish();
+				settleStopping();
+				selected = s;
+				setCall(q('[data-call]'), '// your function returns');
+				render();
+			} else if (a.dataset.act === 'reset') reset();
+		});
+
+		scene.addEventListener('keydown', (e) => {
+			const node = (e.target as HTMLElement).closest<SVGElement>('.lnode');
+			if (node && (e.key === 'Enter' || e.key === ' ')) {
+				e.preventDefault();
+				selected = node.dataset.state as S;
+				render();
+			}
+		});
+
+		reset();
+	});
+</script>

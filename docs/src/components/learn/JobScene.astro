@@ -1,0 +1,231 @@
+---
+// One job, two views. Mirrors job.go: the five statuses, Close (claimClose / closeable), and Err and Result,
+// which block until the job is closed. A job that is closed before it runs returns nil, or the zero value.
+import Scene from './Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'job' } = Astro.props;
+const stages = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
+---
+
+<Scene
+	id={id}
+	title="One job"
+	tag="step through"
+	describe="One job moves through the five statuses: Created, Queued, Processing, Finished and Closed. A worker type selector chooses what Add returns: a plain handle, one with Err, or one with Result. Buttons move the job: Add, the worker takes it, the function returns with success or an error, and Close. The scene shows what the caller's handle returns at each moment and what the worker function can see. Close fails with ErrJobProcessing on a running job and with ErrJobAlreadyClosed on a closed one."
+>
+	<dl class="lstats" slot="stats">
+		<div><dt>status</dt><dd data-stat="status">Created</dd></div>
+		<div><dt>IsClosed</dt><dd data-stat="closed">false</dd></div>
+	</dl>
+
+	<div class="jb" data-job>
+		<ol class="jb__rail" aria-hidden="true">
+			{stages.map((s) => <li class="jb__stage" data-stage={s}><span>{s}</span></li>)}
+		</ol>
+
+		<div class="jb__views">
+			<section class="jb__view" aria-labelledby={`${id}-caller`}>
+				<p class="llabel" id={`${id}-caller`}>The caller's handle</p>
+				<table class="jb__table">
+					<tbody data-handle></tbody>
+				</table>
+			</section>
+			<section class="jb__view" aria-labelledby={`${id}-worker`}>
+				<p class="llabel" id={`${id}-worker`}>The worker function gets <code>Job[T]</code></p>
+				<table class="jb__table">
+					<tbody>
+						<tr><th><code>j.Data()</code></th><td>"resize photo"</td></tr>
+						<tr><th><code>j.ID()</code></th><td>"job-1"</td></tr>
+						<tr class="jb__none"><th>status, Close</th><td>not on the interface</td></tr>
+					</tbody>
+				</table>
+			</section>
+		</div>
+
+		<p class="estep__text ppool__text" aria-live="polite" data-readout></p>
+	</div>
+
+	<code class="lcall" slot="call" data-call></code>
+
+	<Fragment slot="controls">
+		<button type="button" class="lbtn lbtn--primary" data-act="next">Add</button>
+		<button type="button" class="lbtn" data-act="fail" hidden>Function returns an error</button>
+		<button type="button" class="lbtn" data-act="close">job.Close()</button>
+		<button type="button" class="lbtn" data-act="reset">Reset</button>
+		<span class="lspacer"></span>
+		<div class="lgroup">
+			<span id={`${id}-wl`}>worker</span>
+			<div class="lseg" role="radiogroup" aria-labelledby={`${id}-wl`} data-type>
+				<button type="button" role="radio" aria-checked="true" data-v="plain">NewWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="err">NewErrWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="result">NewResultWorker</button>
+			</div>
+		</div>
+	</Fragment>
+
+	<p class="lnote" slot="note">
+		Finished lasts only an instant: the worker closes the job as soon as your function returns. A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { segmented, setCall, sleep } from './ui';
+
+	type Kind = 'plain' | 'err' | 'result';
+	type Status = 'Created' | 'Queued' | 'Processing' | 'Finished' | 'Closed';
+
+	document.querySelectorAll<HTMLElement>('[data-job]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.lscene')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+
+		let kind: Kind = 'plain';
+		let status: Status = 'Created';
+		let ran = false; // the function ran (as opposed to a close before it ran)
+		let failed = false;
+		let busy = false;
+		let call = '';
+		let readout = '';
+
+		const addCall = () => `job, ok := queue.Add("resize photo", varmq.WithJobId("job-1"))`;
+
+		const outcome = () => {
+			if (kind === 'plain') return null;
+			if (status !== 'Closed') return { text: 'blocks until the job is closed', wait: true };
+			if (kind === 'err') return { text: failed && ran ? 'errors.New("disk full")' : 'nil', wait: false };
+			return {
+				text: !ran ? '"" (the zero value), nil' : failed ? '"", errors.New("disk full")' : '"thumb.jpg", nil',
+				wait: false,
+			};
+		};
+
+		const render = () => {
+			const closed = status === 'Closed';
+			const out = outcome();
+			const method = kind === 'err' ? 'job.Err()' : 'job.Result()';
+			const rows = [
+				['job.ID()', '"job-1"', false],
+				['job.Status()', `"${status}"`, false],
+				['job.IsClosed()', String(closed), false],
+				['job.Wait()', closed ? 'returns at once' : 'blocks until the job is closed', !closed],
+			];
+			if (out) rows.push([method, out.text, out.wait]);
+			q('[data-handle]').innerHTML = status === 'Created' ? '<tr class="is-wait"><td colspan="2">no handle yet: Add has not returned</td></tr>' : rows.map(([m, v, w]) => `<tr${w ? ' class="is-wait"' : ''}><th><code>${m}</code></th><td>${v}</td></tr>`).join('');
+
+			scene.querySelectorAll<HTMLElement>('[data-stage]').forEach((el) => {
+				const order = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
+				const i = order.indexOf(el.dataset.stage!);
+				const cur = order.indexOf(status);
+				el.dataset.s = i === cur ? 'now' : i < cur ? 'past' : 'next';
+				if (i === cur) el.setAttribute('aria-current', 'step');
+				else el.removeAttribute('aria-current');
+			});
+
+			q('[data-stat="status"]').textContent = status;
+			q('[data-stat="closed"]').textContent = String(closed);
+			q('[data-readout]').textContent = readout;
+			setCall(q('[data-call]'), call);
+
+			const next = q('[data-act="next"]');
+			next.textContent = { Created: 'Add', Queued: 'Worker takes it', Processing: 'Function returns', Finished: 'Closing…', Closed: 'Add a new job' }[status];
+			next.setAttribute('aria-disabled', String(busy));
+			const fail = q('[data-act="fail"]');
+			fail.hidden = !(kind !== 'plain' && status === 'Processing');
+			q('[data-act="close"]').setAttribute('aria-disabled', String(busy || status === 'Created'));
+		};
+
+		const reset = () => {
+			status = 'Created';
+			ran = false;
+			failed = false;
+			busy = false;
+			call = kind === 'plain' ? 'worker := varmq.NewWorker(func(j varmq.Job[string]) { /* … */ })' : kind === 'err' ? 'worker := varmq.NewErrWorker(func(j varmq.Job[string]) error { /* … */ })' : 'worker := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) { /* … */ })';
+			readout = 'The job exists. Add has not stored it yet, so a handle you hold is always past this status.';
+			render();
+		};
+
+		const finish = async (withError: boolean) => {
+			busy = true;
+			failed = withError;
+			ran = true;
+			status = 'Finished';
+			call =
+				kind === 'plain'
+					? '// your function returns'
+					: kind === 'err'
+						? `// your function returns ${withError ? 'errors.New("disk full")' : 'nil'}`
+						: `// your function returns ${withError ? '"", errors.New("disk full")' : '"thumb.jpg", nil'}`;
+			readout = 'Your function returned. The job is Finished for an instant, then the worker closes it.';
+			render();
+			await sleep(700);
+			status = 'Closed';
+			busy = false;
+			call = '// the worker closed the job: Wait, Err and Result are released';
+			readout = `Closed. Closed does not say whether the job ran. ${kind === 'plain' ? '' : 'Err and Result now return what your function sent.'}`;
+			render();
+		};
+
+		const advance = () => {
+			if (busy) return;
+			switch (status) {
+				case 'Created':
+					status = 'Queued';
+					call = addCall();
+					readout = 'Add stored the job in the queue and returned the handle and true. The job is Queued.';
+					break;
+				case 'Queued':
+					status = 'Processing';
+					call = '// a pool goroutine starts process(j)';
+					readout = 'The worker function is running the job. You can no longer close it from outside.';
+					break;
+				case 'Processing':
+					return void finish(false);
+				case 'Closed':
+					return reset();
+			}
+			render();
+		};
+
+		const close = () => {
+			if (busy) return;
+			const line = 'err := job.Close()';
+			if (status === 'Processing') {
+				call = `${line} // err = ErrJobProcessing`;
+				readout = 'A running job cannot be closed from outside. Close returns ErrJobProcessing and nothing changes.';
+			} else if (status === 'Closed') {
+				call = `${line} // err = ErrJobAlreadyClosed`;
+				readout = 'The job is already closed. That includes a job that ran, because the worker closes those too.';
+			} else {
+				status = 'Closed';
+				ran = false;
+				call = `${line} // err = nil`;
+				readout = `Closed before it ran. The worker will skip it, and Wait is released at once.${kind === 'plain' ? '' : kind === 'err' ? ' Err returns nil.' : ' Result returns the zero value and nil.'}`;
+			}
+			render();
+		};
+
+		scene.addEventListener('click', (e) => {
+			const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+			if (!t || t.getAttribute('aria-disabled') === 'true') return;
+			switch (t.dataset.act) {
+				case 'next':
+					return advance();
+				case 'fail':
+					return void finish(true);
+				case 'close':
+					return close();
+				case 'reset':
+					return reset();
+			}
+		});
+
+		segmented(q('[data-type]'), (item) => {
+			kind = item.dataset.v as Kind;
+			reset();
+		});
+
+		reset();
+	});
+</script>
