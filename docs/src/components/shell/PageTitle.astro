@@ -1,0 +1,41 @@
+---
+// The page title with the `JOB nn` banner above it (docs/DESIGN.md, "Banner").
+// nn is the page's position in its sidebar group. The label is the group name.
+// Content pages must not add their own banner: this component adds it for every page.
+
+interface SidebarItem {
+	type: 'link' | 'group';
+	label: string;
+	isCurrent?: boolean;
+	entries?: SidebarItem[];
+}
+
+const { entry, sidebar } = Astro.locals.starlightRoute;
+
+const links = (entries: SidebarItem[]): SidebarItem[] =>
+	entries.flatMap((item) => (item.type === 'group' ? links(item.entries ?? []) : [item]));
+
+let id = 'DOCS';
+let label = '';
+
+if (entry.id === '404' || entry.id.endsWith('/404')) {
+	id = 'JOB 404';
+	label = 'Not found';
+} else {
+	for (const item of sidebar as SidebarItem[]) {
+		if (item.type !== 'group') continue;
+		const position = links(item.entries ?? []).findIndex((link) => link.isCurrent);
+		if (position === -1) continue;
+		id = `JOB ${String(position + 1).padStart(2, '0')}`;
+		label = item.label;
+		break;
+	}
+}
+---
+
+<p class="shell-banner">
+	<span class="shell-banner__id">{id}</span>
+	{label && <span class="shell-banner__label">{label}</span>}
+	<span class="shell-banner__rule" aria-hidden="true"></span>
+</p>
+<h1 id="_top">{entry.data.title}</h1>
