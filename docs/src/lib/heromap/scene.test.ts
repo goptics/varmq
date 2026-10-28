@@ -5,9 +5,10 @@ import { CONNS, LABEL_PX, PIECES, REGIONS, VIEW, frame, labelOpacity, slotX, slo
 const inside = (a, b) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const view = c => ({ x: c.x - VIEW.w / 2 / c.s, y: c.y - VIEW.mapH / 2 / c.s, w: VIEW.w / c.s, h: VIEW.mapH / c.s });
-// The narrowest the square is shown, in CSS px: HeroMap.astro's 23rem floor, which a short screen reaches. From
-// 1090 px the square takes half the hero, up to 524 px, as long as the hero still fits the screen.
+// The narrowest and widest the square is shown, in CSS px: HeroMap.astro's 23rem floor, which a short screen
+// reaches, and half the hero from 1090 px, up to 524 px, as long as the hero still fits the screen.
 const MIN_SQUARE = 368;
+const MAX_SQUARE = 524;
 
 describe('scene', () => {
 	it('pads every lane 10 on both sides', () => {
@@ -32,9 +33,10 @@ describe('scene', () => {
 		assert.ok(frame(REGIONS[8]).s >= 0.6, `chapter 9 scale ${frame(REGIONS[8]).s}`);
 		for (const p of PIECES) assert.ok(inside(p.box, view(frame(REGIONS[9]))), p.id);
 	});
-	it('fades labels between 6.5 and 7 px on screen', () => {
-		assert.equal(labelOpacity(6.4 / LABEL_PX), 0);
+	it('fades labels between 5.75 and 7 px on screen, and hides the finale\'s on the largest square', () => {
+		assert.equal(labelOpacity(5.75 / LABEL_PX), 0);
 		assert.equal(labelOpacity(7 / LABEL_PX), 1);
+		assert.equal(labelOpacity((frame(REGIONS[9]).s * MAX_SQUARE) / VIEW.w), 0);
 	});
 	it('has unique ids and a chapter for every piece and line', () => {
 		const ids = [...PIECES, ...CONNS].map(p => p.id);

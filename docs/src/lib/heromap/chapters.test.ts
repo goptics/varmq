@@ -213,10 +213,11 @@ describe('chapter rules', () => {
 			'11200 spawn sqlite 1', // the requeue's claim takes two again
 			'16200 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
 		]);
-		assert.deepEqual(changes(8, 'redis'), ['3160 spawn b 1', '3400 spawn c 1', '9420 exit c 0', '9920 exit b 0']);
+		// Each woken worker pulls two jobs, the second on a new goroutine, which is the one to exit once nothing waits.
+		assert.deepEqual(changes(8, 'redis'), ['2920 spawn b 1', '3120 spawn c 1', '9420 exit b 1', '9820 exit c 1']);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
 		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);
-		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[1], [1]]);
+		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[0], [0]]);
 	});
 	it('hold no more records in flight than busy rings, but for a dead program\'s, until the requeue', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {

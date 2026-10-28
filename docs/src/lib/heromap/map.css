@@ -41,7 +41,6 @@ varmq-map {
 	--vm-program: rgba(150, 175, 200, 0.03);
 	--vm-program-edge: rgba(150, 175, 200, 0.4);
 	--vm-line: rgba(150, 175, 200, 0.35);
-	--vm-notify: rgba(167, 139, 250, 0.35);
 	--vm-ack: rgba(68, 191, 158, 0.3);
 	--vm-button: rgba(6, 8, 12, 0.6);
 	--vm-button-edge: rgba(150, 175, 200, 0.3);
@@ -88,7 +87,6 @@ varmq-map {
 	--vm-program: rgba(71, 85, 105, 0.03);
 	--vm-program-edge: rgba(71, 85, 105, 0.45);
 	--vm-line: rgba(71, 85, 105, 0.45);
-	--vm-notify: rgba(124, 58, 237, 0.45);
 	--vm-ack: rgba(46, 156, 127, 0.55);
 	--vm-button: rgba(255, 255, 255, 0.75);
 	--vm-button-edge: rgba(71, 85, 105, 0.3);
@@ -248,11 +246,6 @@ varmq-map .vm-conn > .vm-shape {
 	fill: none;
 	stroke: var(--vm-line);
 	stroke-width: 1;
-}
-
-varmq-map .vm-notify > .vm-shape {
-	stroke: var(--vm-notify);
-	stroke-dasharray: 2 3;
 }
 
 varmq-map .vm-ack > .vm-shape {

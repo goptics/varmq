@@ -15,11 +15,12 @@
 //   one statement (`dispatchCredit`). Rows come out by their integer id, which is write order. Opening the queue sets
 //   every `processing` row that was never acked back to `pending` (`requeueNoAck`); claims take the lowest
 //   ids, so those rows sort ahead of every row still waiting, and among themselves in write order.
-// - redisq v1.4.0: an add pushes the job on a list and publishes a notification that every consumer gets.
-//   A woken worker pulls one job per credit, and a job one consumer has taken is not in the list for
-//   another. Which consumer wins a job is a race on the Redis server; here the woken consumers take in
-//   turn, one job each, as a stand-in for it. A job whose process died is requeued only once its
-//   visibility timeout (five minutes by default) has passed, so there is no crash in the Redis story.
+// - redisq: an add pushes the job on a list and wakes only idle consumers, one per job waiting that no wake
+//   is on its way for. A woken worker pulls one job per credit in one pop (`DequeueBatchWithAckIds`), and a
+//   job one consumer has taken is not in the list for another. A pop that fills the worker's credit leaves it
+//   pulling again as each ack frees a ring, with no wake; one that comes back short leaves it idle, waiting
+//   for a wake. A consumer's jobs are requeued only when it stops or its heartbeats stop, so there is no
+//   crash in the Redis story.
 // A job runs `takeTravel` after its take (the copy's flight to the ring) and is done `work` ms later; the
 // animation runs the ring's progress from arrival to done. Its ack lands `ackTravel` after that. The tray
 // has five slots, and a record holds the lowest free one from its take until its ack, so a store's workers'
@@ -335,10 +336,10 @@ export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 }
 
 /**
- * Program A adds, Redis holds the one queue, and each consumer program has a worker. A land notifies
- * every consumer. A consumer that is woken, by a notify or by the ack of one of its jobs, pulls one job
- * per credit, and the consumers woken together take in turn. It refuses more rings than the tray has
- * slots.
+ * Program A adds, Redis holds the one queue, and each consumer program has a worker. A land wakes idle
+ * consumers, in the plan's order, one per job waiting that no wake is on its way for; every consumer is idle
+ * after `Start()`. A woken worker pulls one job per credit in one pop. After a full pop, each ack has its worker
+ * pull again; a short pop leaves it idle until a wake. It refuses more rings than the tray has slots.
  */
 export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 	const rings = plan.consumers.reduce((n, c) => n + c.limit, 0);
@@ -347,33 +348,36 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 	const { store, emit, timer, credit, take, run } = engine(plan);
 	const work = new Map(plan.jobs.map((j) => [j.id, j.work]));
 	const crew: Worker[] = plan.consumers.map((c) => ({ id: c.id, limit: c.limit, deaths: 0 }));
-	const woken = new Set<Worker>(); // the consumers with something to act on since the last pull
-	let turn = 0; // the consumer whose turn comes next
+	const waiting = new Set(crew); // the workers waiting for a wake, until it arrives
+	const idle = new Set(crew); // the consumers Redis may wake: waiting, with no wake on its way to them
+	let waking = 0; // wakes on their way
 
-	// The woken consumers take the head of the queue in turn, one job each, and skip one with no credit.
-	const deal = (now: number) => {
-		for (;;) {
-			const order = [...crew.slice(turn), ...crew.slice(0, turn)];
-			const w = order.find((c) => woken.has(c) && credit(c) > 0);
-			if (!w || store.queue.length === 0) break;
-			const job = store.queue[0];
-			take(now, w, job, work.get(job)!, (at) => wake(at, w));
-			turn = (crew.indexOf(w) + 1) % crew.length;
+	// One pop: a job per credit from the head of the queue. A short one leaves the worker waiting for a wake.
+	const pull = (now: number, w: Worker) => {
+		const jobs = store.queue.slice(0, credit(w));
+		if (jobs.length < credit(w)) {
+			waiting.add(w);
+			idle.add(w);
 		}
-		woken.clear();
-	};
-	const wake = (now: number, w: Worker) => {
-		woken.add(w);
-		timer(now, deal);
+		for (const job of jobs) {
+			take(now, w, job, work.get(job)!, (at) => {
+				if (!waiting.has(w)) timer(at, (t) => pull(t, w));
+			});
+		}
 	};
 
 	for (const j of plan.jobs) {
 		timer(j.at + plan.landAfter, (now) => {
 			emit({ at: now, type: 'land', job: j.id });
 			for (const w of crew) {
+				if (!idle.has(w) || waking >= store.queue.length) continue;
+				idle.delete(w);
+				waking++;
 				timer(now + plan.notifyTravel, (at) => {
+					waking--;
+					waiting.delete(w);
 					emit({ at, type: 'notify', consumer: w.id });
-					wake(at, w);
+					pull(at, w);
 				});
 			}
 		});

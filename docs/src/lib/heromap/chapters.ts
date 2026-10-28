@@ -295,8 +295,9 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 8. The stores' Redis fixture, 1500 ms later: program A adds six jobs, B and C take them in turn, and the
-	// last two wait in the queue until a goroutine's ack lands.
+	// 8. Program A adds six jobs. Redis wakes B and C, the two idle workers, once each, and each pulls a job for
+	// every goroutine it may run. The last two land after C's pull, and wait in the queue until an ack frees a
+	// goroutine and its worker pulls again, with no wake.
 	(carry) => ({
 		title: 'Redis',
 		duration: 12000,
@@ -315,10 +316,10 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				],
 				jobs: stored([
 					['r0', 1800, 2200],
-					['r1', 2040, 1900],
-					['r2', 2280, 2500],
-					['r3', 2520, 2100],
-					['r4', 2760, 1700],
+					['r1', 2000, 1900],
+					['r2', 2200, 2500],
+					['r3', 2400, 1900],
+					['r4', 2800, 1700],
 					['r5', 3000, 1900],
 				]),
 			}),

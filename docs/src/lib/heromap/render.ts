@@ -7,8 +7,8 @@
 //
 // Hooks for the choreographer:
 // - `piece(id)`: a `<g id="vm-<id>">` for each piece and line, shown. Its outline is `.vm-shape` (a rect, the
-//   loop's circle or a line's path), to draw in. The groups marked `.vm-dashed` (the trays, the notify and ack
-//   lines) fade in instead, since drawing would turn their dashes solid, and so do a lane's or tray's five
+//   loop's circle or a line's path), to draw in. The groups marked `.vm-dashed` (the trays and the ack lines)
+//   fade in instead, since drawing would turn their dashes solid, and so do a lane's or tray's five
 //   `.vm-slot`s. Text is `.vm-label` (the ACK line has one too), or `.vm-text` inside a chip. The loop also holds
 //   `.vm-pulse`, a ring over its circle, hidden.
 // - `piece('<id>@<n>')`: chapter n's transient chip in piece `<id>`'s place (`Chapter.chips`), its own element,

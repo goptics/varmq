@@ -318,16 +318,11 @@ class Agenda {
 
 const LOOP = centre(box('loop'));
 
-// The core's Add() feeds the priority lane and the third lane too: its jobs turn up or down between the chip and
-// the lanes.
-const ADD = centre(box('add'));
-const TURN = (box('add').x + box('add').w + box('queue').x) / 2;
-
-/** From Add() or Publish() to a lane's tail end, on its slots' row. */
+/** From a lane's own Add() or Publish() to its tail end, on its slots' row. */
 const ENTRY: Record<string, Pt[]> = {
-	queue: [ADD, ...line('add-to-queue')],
-	prio: [ADD, pt(TURN, ADD.y), pt(TURN, slotY(box('prio').y))],
-	'queue-c': [ADD, pt(TURN, ADD.y), pt(TURN, slotY(box('queue-c').y))],
+	queue: [centre(box('add')), ...line('add-to-queue')],
+	prio: [centre(box('p-add')), ...line('p-add-to-prio')],
+	'queue-c': [centre(box('c-add')), ...line('c-add-to-queue-c')],
 	topic: [centre(box('publish')), ...line('publish-to-topic')],
 	'r-queue': [centre(box('r-add')), ...line('r-add-to-r-queue')],
 	's-queue': [centre(box('s-add')), ...line('s-add-to-s-queue')],
@@ -388,14 +383,19 @@ function inbox(lead: Pt[]): Pt {
 	return pt(b.x + (a.x - b.x) * k, b.y + (a.y - b.y) * k);
 }
 
+/** The line a store's worker pulls its jobs through, from where it leaves the store. Redis wakes a worker down it. */
+function pullLine(worker: Worker): Pt[] {
+	if (worker === 'sqlite') return line('s-queue-to-sqlite');
+	const toB = line('r-queue2-to-redis-b');
+	return worker === 'redis-b' ? toB : [toB[0], ...line('r-queue2-to-redis-c')]; // C's line branches off B's
+}
+
 /**
  * A store job's copy from where its queue's line leaves the store to its consumer's ring. The line to each Redis
  * consumer turns up or down at a bend: a copy for the far ring leaves it there, for the rail below the rings.
  */
 function toStoreRing(worker: Worker, i: number, shown: Shown): Pt[] {
-	const toB = line('r-queue2-to-redis-b');
-	const toC = [toB[0], ...line('r-queue2-to-redis-c')]; // C's line branches off B's
-	const lead = worker === 'sqlite' ? line('s-queue-to-sqlite') : worker === 'redis-b' ? toB : toC;
+	const lead = pullLine(worker);
 	const into = intoCard(worker, i, last(lead), shown);
 	if (worker === 'sqlite' || into.length === 1) return [...lead, ...into];
 	const [mouth, bend] = lead;
@@ -532,6 +532,13 @@ export class Choreo {
 				for (const word of nodes.words(c.n, i)) score.start(word, { opacity: 0, translateY: 10 });
 			});
 		}
+		// The rest of the text on the map, a chip's and the ACK line's, shows wherever its piece does (`wrap`).
+		for (const p of [...PIECES, ...CONNS]) for (const text of this.texts(nodes.piece(p.id))) score.start(text, { opacity: 1 });
+	}
+
+	/** A piece's or a line's text: its label, a chip's text, the SQLite program's crash labels. */
+	private texts(g: Element): Element[] {
+		return [...g.querySelectorAll(':scope > .vm-label, :scope > .vm-text')];
 	}
 
 	private declarePiece(key: string, kind: string, on: boolean) {
@@ -626,6 +633,11 @@ export class Choreo {
 		const rest = [...PIECES, ...CONNS].filter((p) => p.chapter > 1).map((p) => nodes.piece(p.id));
 		for (const el of [...rest, ...rings]) {
 			if (score.at(el, 'opacity', t)[0] > 0) score.tween(el, { opacity: 0 }, t, CAMERA, E.fade);
+		}
+		// Their text goes at once, while the whole map is too small to show any: else the zoom would bring it up,
+		// legible, on pieces that are fading.
+		for (const text of rest.flatMap((g) => this.texts(g))) {
+			if (score.at(text, 'opacity', t)[0] > 0) score.set(text, { opacity: 0 }, t);
 		}
 		score.tween(this.loop(), { opacity: 1 }, t + CAMERA / 2, CAMERA / 2, E.fade);
 	}
@@ -998,7 +1010,7 @@ export class Choreo {
 					if (part.kind !== 'redis') return;
 					agenda.add(at, () => {
 						const travel = part.plan.notifyTravel;
-						this.signal('notify', line(`r-store-to-redis-${e.consumer}`), at - travel, travel);
+						this.signal('notify', pullLine(consumer(e.consumer)), at - travel, travel);
 					});
 					return;
 				// A store's worker is a pool: a goroutine pops in for a take with none idle, or as its program restarts
