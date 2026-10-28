@@ -36,6 +36,9 @@ type PoolPart = Extract<Part, { kind: 'pool' }>;
 type StorePart = Exclude<Part, PoolPart>;
 
 const CAMERA = 1200; // each chapter's camera move
+// How far into its camera move a chapter's new pieces start to draw in: as the view sweeps toward them, so it never
+// arrives on an empty stretch of map.
+const OPENS = 300;
 const DRAW = 650; // a solid outline drawing in
 const POP = 600; // a chip or a ring popping in
 const FADE = 500; // a dashed part fading in
@@ -604,7 +607,7 @@ class Choreo {
 		// Chapter 1 has no camera move: the camera starts on its frame, so its pieces draw in at once.
 		const move = c.n === 1 ? 0 : CAMERA;
 		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
-		this.open(c, T + move);
+		this.open(c, move ? T + OPENS : T);
 		this.captions(c, T);
 		for (const chip of c.chips ?? []) {
 			const g = this.nodes.piece(`${chip.id}@${c.n}`);
