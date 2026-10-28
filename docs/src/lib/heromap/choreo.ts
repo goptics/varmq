@@ -371,6 +371,17 @@ function toRing(worker: Worker, source: string, i: number, shown: Shown): Pt[] {
 	return [...lead, ...intoCard(worker, i, last(lead), shown)];
 }
 
+// The line a topic subscriber's copies take from the topic.
+const LEADS: Record<string, string> = { core: 'topic-to-loop', second: 'topic-to-second' };
+const INBOX = 20; // how far short of its line's end a busy subscriber's copy waits
+
+/** Where a busy subscriber's copy waits for a goroutine: on its line from the topic, INBOX short of the end. */
+function inbox(lead: Pt[]): Pt {
+	const [a, b] = lead.slice(-2);
+	const k = INBOX / dist(a, b);
+	return pt(b.x + (a.x - b.x) * k, b.y + (a.y - b.y) * k);
+}
+
 /**
  * A store job's copy from where its queue's line leaves the store to its consumer's ring. The line to each Redis
  * consumer turns up or down at a bend: a copy for the far ring leaves it there, for the rail below the rings.
@@ -450,9 +461,10 @@ function browserPage(world: SVGGElement): Page {
 type Lanes = (id: string, order: (t: number) => string[]) => Lane;
 type Dispatch = Extract<PoolEvent, { type: 'dispatch' }>;
 
-/** The topic lane of a chapter, and how many of each value's copies have still to leave. */
+/** The topic lane of a chapter, when each value's copies leave it, and how many of them have still to go. */
 interface Topic {
 	lane: Lane;
+	fan: Map<string, number>;
 	left: Map<string, number>;
 }
 
@@ -465,6 +477,8 @@ class Choreo {
 	private readonly shown = new Set<string>();
 	/** Rings on their way out, by when they are gone. */
 	private readonly leaving = new Map<string, number>();
+	/** When each worker's topic inbox is free again: Infinity while a copy waits there. */
+	private readonly inboxes = new Map<string, number>();
 	/** The squares of the chapter being written. */
 	private bodies!: Bodies;
 
@@ -691,21 +705,26 @@ class Choreo {
 
 	// -- Pools --------------------------------------------------------------------------------------------------
 
-	/** The topic lane holds each published value until every subscriber's copy of it has been dispatched. */
+	/**
+	 * A topic is not a queue: Publish wakes every subscriber at once, so all of a value's copies leave the topic
+	 * together, a wake-up after it lands. A subscriber with no goroutine free keeps its copy at its inbox until one is.
+	 */
 	private topic(c: Chapter, T: number, agenda: Agenda, lane: Lanes): Topic | undefined {
 		const values = c.published ?? [];
 		if (values.length === 0) return undefined;
 		const copies = c.parts.flatMap((p) => (p.kind === 'pool' ? p.events : [])).filter(isTopicDispatch);
 		const of = (id: string) => copies.filter((e) => valueOf(e.job) === id);
-		const gone = new Map(values.map((v) => [v.id, T + Math.max(...of(v.id).map((e) => e.at))]));
+		const subscribed = c.parts.filter((p) => p.kind === 'pool' && p.plan.sources.some((s) => s.id === 'topic'));
+		const wake = Math.min(...subscribed.map((p) => (p as PoolPart).plan.wake));
+		const fan = new Map(values.map((v) => [v.id, T + v.at + wake]));
 		const left = new Map(values.map((v) => [v.id, of(v.id).length]));
-		const waiting = (t: number) => values.filter((v) => T + v.at <= t && gone.get(v.id)! > t).map((v) => v.id);
+		const waiting = (t: number) => values.filter((v) => T + v.at <= t && fan.get(v.id)! > t).map((v) => v.id);
 		const topic = lane('topic', waiting);
 		for (const v of values) {
 			const sq = this.job(v.id);
 			agenda.add(T + v.at, () => this.arrive(topic, sq, 'topic', T + v.at, ADD_FLIGHT));
 		}
-		return { lane: topic, left };
+		return { lane: topic, fan, left };
 	}
 
 	/**
@@ -753,7 +772,17 @@ class Choreo {
 					agenda.add(at, () => this.arrive(lane(e.source, order(e.source)), sq, e.source, at, ADD_FLIGHT));
 					return;
 				}
-				case 'dispatch':
+				case 'dispatch': {
+					const fan = e.source === 'topic' ? topic!.fan.get(valueOf(e.job))! : at;
+					if (fan < at) {
+						// The worker is busy: its copy leaves with the others and waits at its inbox.
+						agenda.add(fan, () => {
+							this.toInbox(part.worker, this.copy(e, fan, topic!, squares), fan, topic!.lane);
+							this.published(e, fan, topic!);
+						});
+						agenda.add(at, () => this.dispatch(part.worker, e, at, done.get(e.job)!, squares.get(e.job)!));
+						return;
+					}
 					agenda.add(at, () => {
 						const from = e.source === 'topic' ? topic!.lane : lane(e.source, order(e.source));
 						const sq = e.source === 'topic' ? this.copy(e, at, topic!, squares) : squares.get(e.job)!;
@@ -762,6 +791,7 @@ class Choreo {
 						if (e.source === 'topic') this.published(e, at, topic!);
 					});
 					return;
+				}
 				case 'done':
 					agenda.add(at, () => this.done(part.worker, e.ring, at, squares.get(e.job)!, part.outcomes?.[e.job]));
 					return;
@@ -804,12 +834,29 @@ class Choreo {
 		topic.lane.leave(id, at);
 	}
 
-	/** The job flies from where it waits to its ring, at most FLIGHT and always shorter than its work. */
-	private dispatch(worker: Worker, e: Dispatch, at: number, end: number, sq: Square, from: Lane) {
+	/** A busy subscriber's copy flies out of the topic with the others and waits at the end of its line. */
+	private toInbox(worker: Worker, sq: Square, at: number, from: Lane) {
+		const { score } = this;
+		const lead = line(LEADS[worker]);
+		if ((this.inboxes.get(worker) ?? 0) > at) throw new Error(`heromap: two copies would wait at ${worker}'s inbox`);
+		const here = score.pos(sq.els[0], at);
+		const route = [...from.out(here, lead[0], at), ...lead.slice(1, -1), inbox(lead)];
+		glide(score, sq.els, route, at, Math.min(FLIGHT, Math.max(350, lengthOf([here, ...route]) / SPEED)));
+		this.inboxes.set(worker, Infinity);
+	}
+
+	/** The job flies from where it waits, a lane or its inbox, to its ring: at most FLIGHT and shorter than its work. */
+	private dispatch(worker: Worker, e: Dispatch, at: number, end: number, sq: Square, from?: Lane) {
 		const { score } = this;
 		const here = score.pos(sq.els[0], at);
-		const [exit, ...rest] = toRing(worker, e.source, e.ring, this.showing(worker, at));
-		const route = [...from.out(here, exit, at), ...rest];
+		const toIt = toRing(worker, e.source, e.ring, this.showing(worker, at));
+		const [exit, ...rest] = toIt;
+		let route: Pt[];
+		if (from) route = [...from.out(here, exit, at), ...rest];
+		else {
+			route = toIt.slice(line(LEADS[worker]).length - 1); // on from the inbox, at the end of the line
+			this.inboxes.set(worker, at);
+		}
 		const length = lengthOf([here, ...route]);
 		const flight = Math.min(FLIGHT, end - at - 300, Math.max(350, length / SPEED));
 		if (e.spawned) this.spawn(worker, e.ring, at);

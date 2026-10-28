@@ -237,8 +237,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 6. Each value is published once, and both subscribers make their own job from it. The second worker runs
-	// at concurrency 1, so the second value comes once it has taken the first.
+	// 6. Each value is published once, and both subscribers get it at once and make their own job from it. The
+	// second worker runs at concurrency 1, so its copy of the second value waits at it until the first is done.
 	(carry) => {
 		const published = [
 			{ id: 't0', at: 1900 },
