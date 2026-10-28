@@ -1,0 +1,286 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ worker pool with concurrency 4</title>
+  <desc id="desc">The queue starts empty and the pool holds a single idle worker goroutine; concurrency 4 is only the upper limit. Add is called six times in a row. Each call tries to signal the event loop, but the signal channel holds only one pending signal, so the other five are dropped. From that one signal the event loop dispatches four jobs back to back: the first goes to Worker 1 and Workers 2, 3 and 4 are spawned for the next three, until every slot is busy; the remaining two jobs wait in the queue. When a worker finishes and no other worker is idle, it stays in the pool and receives the next job; when another worker is already idle, it exits. As the queue drains, the pool shrinks back to the single idle Worker 1 and the event loop waits.</desc>
+  <style>
+    :root {
+      --dur: 16s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .loop { stroke: var(--el); stroke-width: 2; }
+    .mgr { stroke: var(--job); }
+    .wk { stroke: var(--worker); }
+    .prod { stroke: var(--item); stroke-width: 2; }
+    .lane { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .slot { fill: none; stroke: var(--item); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+    .item { fill: var(--item); }
+    .pool { fill: none; stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .sig { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .arrow { fill: var(--line); }
+    .arrow-sig { fill: var(--signal); }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .s { fill: var(--signal); }
+    .why { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; fill: var(--no); }
+    .c { fill: var(--fg); }
+    .lg { font-size: 12px; fill: var(--muted); text-anchor: start; }
+
+    /* motion: one shared --dur loop; keyframes generated from a seconds timeline, keyframe name == element id */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    #ring { fill: none; stroke: var(--el); stroke-width: 2; transform-origin: center; }
+    .g-item { fill: var(--item); }
+    .g-job { fill: var(--job); }
+    .g-no { fill: var(--no); }
+    .g-wk { fill: var(--worker); }
+    .bar { fill: var(--worker); transform-origin: left center; }
+    .sigdot { fill: var(--signal); }
+    #sig-add { animation-name: sig-add; }
+    #drop1 { animation-name: drop1; }
+    #drop2 { animation-name: drop2; }
+    #drop3 { animation-name: drop3; }
+    #drop4 { animation-name: drop4; }
+    #drop5 { animation-name: drop5; }
+    #drop-why { animation-name: drop-why; }
+    #done0 { animation-name: done0; }
+    #done1 { animation-name: done1; }
+    #done2 { animation-name: done2; }
+    #done3 { animation-name: done3; }
+    #done4 { animation-name: done4; }
+    #done5 { animation-name: done5; }
+    #job0 { animation-name: job0; }
+    #job1 { animation-name: job1; }
+    #job2 { animation-name: job2; }
+    #job3 { animation-name: job3; }
+    #job4 { animation-name: job4; }
+    #job5 { animation-name: job5; }
+    #item0 { animation-name: item0; }
+    #item1 { animation-name: item1; }
+    #item2 { animation-name: item2; }
+    #item3 { animation-name: item3; }
+    #item4 { animation-name: item4; }
+    #item5 { animation-name: item5; }
+    #ring { animation-name: ring; }
+    #add-glow { animation-name: add-glow; }
+    #yes { animation-name: yes; }
+    #no { animation-name: no; }
+    #why-busy { animation-name: why-busy; }
+    #why-empty { animation-name: why-empty; }
+    #proc-glow { animation-name: proc-glow; }
+    #w2-row { animation-name: w2-row; }
+    #w3-row { animation-name: w3-row; }
+    #w4-row { animation-name: w4-row; }
+    #w1-glow { animation-name: w1-glow; }
+    #w1-bar { animation-name: w1-bar; }
+    #w2-glow { animation-name: w2-glow; }
+    #w2-bar { animation-name: w2-bar; }
+    #w3-glow { animation-name: w3-glow; }
+    #w3-bar { animation-name: w3-bar; }
+    #w4-glow { animation-name: w4-glow; }
+    #w4-bar { animation-name: w4-bar; }
+    @keyframes sig-add { 0% { opacity: 0; transform: translate(70px, 266px); } 3.12% { opacity: 0; transform: translate(70px, 266px); } 3.24% { opacity: 1; transform: translate(70px, 256px); } 5.79% { opacity: 1; transform: translate(70px, 44px); } 10.24% { opacity: 1; transform: translate(440px, 44px); } 10.31% { opacity: 0; transform: translate(446px, 44px); } 100% { opacity: 0; transform: translate(446px, 44px); } }
+    @keyframes drop1 { 0% { opacity: 0; transform: translate(70px, 266px); } 4.06% { opacity: 0; transform: translate(70px, 266px); } 4.38% { opacity: 1; transform: translate(70px, 256px); } 6.25% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop2 { 0% { opacity: 0; transform: translate(70px, 266px); } 5% { opacity: 0; transform: translate(70px, 266px); } 5.31% { opacity: 1; transform: translate(70px, 256px); } 7.19% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop3 { 0% { opacity: 0; transform: translate(70px, 266px); } 5.94% { opacity: 0; transform: translate(70px, 266px); } 6.25% { opacity: 1; transform: translate(70px, 256px); } 8.12% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop4 { 0% { opacity: 0; transform: translate(70px, 266px); } 6.88% { opacity: 0; transform: translate(70px, 266px); } 7.19% { opacity: 1; transform: translate(70px, 256px); } 9.06% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop5 { 0% { opacity: 0; transform: translate(70px, 266px); } 7.81% { opacity: 0; transform: translate(70px, 266px); } 8.12% { opacity: 1; transform: translate(70px, 256px); } 10% { opacity: 0; transform: translate(70px, 232px); } 100% { opacity: 0; transform: translate(70px, 232px); } }
+    @keyframes drop-why { 0% { opacity: 0; } 4.06% { opacity: 0; } 4.81% { opacity: 1; } 11.56% { opacity: 1; } 13.12% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes done0 { 0% { opacity: 0; transform: translate(890px, 221px); } 68.75% { opacity: 0; transform: translate(890px, 221px); } 68.86% { opacity: 1; transform: translate(898px, 221px); } 69.35% { opacity: 1; transform: translate(935px, 221px); } 71.52% { opacity: 1; transform: translate(935px, 58px); } 75.57% { opacity: 1; transform: translate(630px, 58px); } 75.65% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes done1 { 0% { opacity: 0; transform: translate(890px, 271px); } 36.25% { opacity: 0; transform: translate(890px, 271px); } 36.36% { opacity: 1; transform: translate(898px, 271px); } 36.85% { opacity: 1; transform: translate(935px, 271px); } 39.68% { opacity: 1; transform: translate(935px, 58px); } 43.74% { opacity: 1; transform: translate(630px, 58px); } 43.82% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes done2 { 0% { opacity: 0; transform: translate(890px, 321px); } 60% { opacity: 0; transform: translate(890px, 321px); } 60.11% { opacity: 1; transform: translate(898px, 321px); } 60.6% { opacity: 1; transform: translate(935px, 321px); } 64.09% { opacity: 1; transform: translate(935px, 58px); } 68.15% { opacity: 1; transform: translate(630px, 58px); } 68.23% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes done3 { 0% { opacity: 0; transform: translate(890px, 371px); } 55.62% { opacity: 0; transform: translate(890px, 371px); } 55.73% { opacity: 1; transform: translate(898px, 371px); } 56.23% { opacity: 1; transform: translate(935px, 371px); } 60.39% { opacity: 1; transform: translate(935px, 58px); } 64.44% { opacity: 1; transform: translate(630px, 58px); } 64.52% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes done4 { 0% { opacity: 0; transform: translate(890px, 271px); } 71.25% { opacity: 0; transform: translate(890px, 271px); } 71.36% { opacity: 1; transform: translate(898px, 271px); } 71.85% { opacity: 1; transform: translate(935px, 271px); } 74.68% { opacity: 1; transform: translate(935px, 58px); } 78.74% { opacity: 1; transform: translate(630px, 58px); } 78.82% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes done5 { 0% { opacity: 0; transform: translate(890px, 371px); } 83.12% { opacity: 0; transform: translate(890px, 371px); } 83.23% { opacity: 1; transform: translate(898px, 371px); } 83.73% { opacity: 1; transform: translate(935px, 371px); } 87.89% { opacity: 1; transform: translate(935px, 58px); } 91.94% { opacity: 1; transform: translate(630px, 58px); } 92.02% { opacity: 0; transform: translate(624px, 58px); } 100% { opacity: 0; transform: translate(624px, 58px); } }
+    @keyframes job0 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 13.44% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 13.56% { opacity: 1; transform: translate(380px, 296px); } 14.54% { opacity: 1; transform: translate(446px, 296px); } 14.69% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 17.5% { opacity: 0; transform: translate(456px, 296px); } 19.82% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 20.03% { opacity: 1; transform: translate(626px, 296px); } 20.54% { opacity: 1; transform: translate(660px, 296px); } 21.65% { opacity: 1; transform: translate(660px, 221px); } 22.16% { opacity: 1; transform: translate(694px, 221px); } 22.31% { opacity: 0; transform: translate(704px, 221px); } 22.96% { opacity: 0; transform: translate(748px, 221px); } 23.08% { opacity: 1; transform: translate(756px, 221px); } 23.26% { opacity: 1; transform: translate(768px, 221px); } 23.38% { opacity: 0; transform: translate(776px, 221px); } 100% { opacity: 0; transform: translate(776px, 221px); } }
+    @keyframes job1 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 15.94% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 16.06% { opacity: 1; transform: translate(380px, 296px); } 17.04% { opacity: 1; transform: translate(446px, 296px); } 17.19% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 20% { opacity: 0; transform: translate(456px, 296px); } 22.32% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 22.53% { opacity: 1; transform: translate(626px, 296px); } 23.04% { opacity: 1; transform: translate(660px, 296px); } 23.41% { opacity: 1; transform: translate(660px, 271px); } 23.91% { opacity: 1; transform: translate(694px, 271px); } 24.06% { opacity: 0; transform: translate(704px, 271px); } 24.72% { opacity: 0; transform: translate(748px, 271px); } 24.84% { opacity: 1; transform: translate(756px, 271px); } 25.01% { opacity: 1; transform: translate(768px, 271px); } 25.13% { opacity: 0; transform: translate(776px, 271px); } 100% { opacity: 0; transform: translate(776px, 271px); } }
+    @keyframes job2 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 18.44% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 18.56% { opacity: 1; transform: translate(380px, 296px); } 19.54% { opacity: 1; transform: translate(446px, 296px); } 19.69% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 22.5% { opacity: 0; transform: translate(456px, 296px); } 24.82% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 25.03% { opacity: 1; transform: translate(626px, 296px); } 25.54% { opacity: 1; transform: translate(660px, 296px); } 25.91% { opacity: 1; transform: translate(660px, 321px); } 26.41% { opacity: 1; transform: translate(694px, 321px); } 26.56% { opacity: 0; transform: translate(704px, 321px); } 27.22% { opacity: 0; transform: translate(748px, 321px); } 27.34% { opacity: 1; transform: translate(756px, 321px); } 27.51% { opacity: 1; transform: translate(768px, 321px); } 27.63% { opacity: 0; transform: translate(776px, 321px); } 100% { opacity: 0; transform: translate(776px, 321px); } }
+    @keyframes job3 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 20.94% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 21.06% { opacity: 1; transform: translate(380px, 296px); } 22.04% { opacity: 1; transform: translate(446px, 296px); } 22.19% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 25% { opacity: 0; transform: translate(456px, 296px); } 27.32% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 27.53% { opacity: 1; transform: translate(626px, 296px); } 28.04% { opacity: 1; transform: translate(660px, 296px); } 29.15% { opacity: 1; transform: translate(660px, 371px); } 29.66% { opacity: 1; transform: translate(694px, 371px); } 29.81% { opacity: 0; transform: translate(704px, 371px); } 30.46% { opacity: 0; transform: translate(748px, 371px); } 30.58% { opacity: 1; transform: translate(756px, 371px); } 30.76% { opacity: 1; transform: translate(768px, 371px); } 30.88% { opacity: 0; transform: translate(776px, 371px); } 100% { opacity: 0; transform: translate(776px, 371px); } }
+    @keyframes job4 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 46.94% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 47.06% { opacity: 1; transform: translate(380px, 296px); } 48.04% { opacity: 1; transform: translate(446px, 296px); } 48.19% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 51.01% { opacity: 0; transform: translate(456px, 296px); } 53.33% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 53.53% { opacity: 1; transform: translate(626px, 296px); } 54.04% { opacity: 1; transform: translate(660px, 296px); } 54.41% { opacity: 1; transform: translate(660px, 271px); } 54.92% { opacity: 1; transform: translate(694px, 271px); } 55.07% { opacity: 0; transform: translate(704px, 271px); } 55.72% { opacity: 0; transform: translate(748px, 271px); } 55.84% { opacity: 1; transform: translate(756px, 271px); } 56.02% { opacity: 1; transform: translate(768px, 271px); } 56.14% { opacity: 0; transform: translate(776px, 271px); } 100% { opacity: 0; transform: translate(776px, 271px); } }
+    @keyframes job5 { 0% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 67.64% { opacity: 0; transform: translate(372px, 296px); fill: var(--item); } 67.76% { opacity: 1; transform: translate(380px, 296px); } 68.75% { opacity: 1; transform: translate(446px, 296px); } 68.89% { opacity: 0; transform: translate(456px, 296px); fill: var(--item); } 71.71% { opacity: 0; transform: translate(456px, 296px); } 74.03% { opacity: 0; transform: translate(612px, 296px); fill: var(--job); } 74.24% { opacity: 1; transform: translate(626px, 296px); } 74.74% { opacity: 1; transform: translate(660px, 296px); } 75.86% { opacity: 1; transform: translate(660px, 371px); } 76.37% { opacity: 1; transform: translate(694px, 371px); } 76.51% { opacity: 0; transform: translate(704px, 371px); } 77.17% { opacity: 0; transform: translate(748px, 371px); } 77.29% { opacity: 1; transform: translate(756px, 371px); } 77.47% { opacity: 1; transform: translate(768px, 371px); } 77.59% { opacity: 0; transform: translate(776px, 371px); } 100% { opacity: 0; transform: translate(776px, 371px); } }
+    @keyframes item0 { 0% { opacity: 0; transform: translate(110px, 0px); } 1.25% { opacity: 0; transform: translate(110px, 0px); } 2% { opacity: 1; transform: translate(130px, 0px); } 4.38% { opacity: 1; transform: translate(332px, 0px); } 12.81% { opacity: 1; transform: translate(332px, 0px); } 14.37% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes item1 { 0% { opacity: 0; transform: translate(110px, 0px); } 2.19% { opacity: 0; transform: translate(110px, 0px); } 2.94% { opacity: 1; transform: translate(130px, 0px); } 5.31% { opacity: 1; transform: translate(298px, 0px); } 13.44% { opacity: 1; transform: translate(298px, 0px); } 15.31% { opacity: 1; transform: translate(332px, 0px); } 15.31% { opacity: 1; transform: translate(332px, 0px); } 16.88% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes item2 { 0% { opacity: 0; transform: translate(110px, 0px); } 3.12% { opacity: 0; transform: translate(110px, 0px); } 3.88% { opacity: 1; transform: translate(130px, 0px); } 6.25% { opacity: 1; transform: translate(264px, 0px); } 13.44% { opacity: 1; transform: translate(264px, 0px); } 15.31% { opacity: 1; transform: translate(298px, 0px); } 15.94% { opacity: 1; transform: translate(298px, 0px); } 17.81% { opacity: 1; transform: translate(332px, 0px); } 17.81% { opacity: 1; transform: translate(332px, 0px); } 19.38% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes item3 { 0% { opacity: 0; transform: translate(110px, 0px); } 4.06% { opacity: 0; transform: translate(110px, 0px); } 4.81% { opacity: 1; transform: translate(130px, 0px); } 7.19% { opacity: 1; transform: translate(230px, 0px); } 13.44% { opacity: 1; transform: translate(230px, 0px); } 15.31% { opacity: 1; transform: translate(264px, 0px); } 15.94% { opacity: 1; transform: translate(264px, 0px); } 17.81% { opacity: 1; transform: translate(298px, 0px); } 18.44% { opacity: 1; transform: translate(298px, 0px); } 20.31% { opacity: 1; transform: translate(332px, 0px); } 20.31% { opacity: 1; transform: translate(332px, 0px); } 21.88% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes item4 { 0% { opacity: 0; transform: translate(110px, 0px); } 5% { opacity: 0; transform: translate(110px, 0px); } 5.75% { opacity: 1; transform: translate(130px, 0px); } 8.12% { opacity: 1; transform: translate(196px, 0px); } 13.44% { opacity: 1; transform: translate(196px, 0px); } 15.31% { opacity: 1; transform: translate(230px, 0px); } 15.94% { opacity: 1; transform: translate(230px, 0px); } 17.81% { opacity: 1; transform: translate(264px, 0px); } 18.44% { opacity: 1; transform: translate(264px, 0px); } 20.31% { opacity: 1; transform: translate(298px, 0px); } 20.94% { opacity: 1; transform: translate(298px, 0px); } 22.81% { opacity: 1; transform: translate(332px, 0px); } 46.32% { opacity: 1; transform: translate(332px, 0px); } 47.88% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes item5 { 0% { opacity: 0; transform: translate(110px, 0px); } 5.94% { opacity: 0; transform: translate(110px, 0px); } 6.69% { opacity: 1; transform: translate(130px, 0px); } 9.06% { opacity: 1; transform: translate(162px, 0px); } 13.44% { opacity: 1; transform: translate(162px, 0px); } 15.31% { opacity: 1; transform: translate(196px, 0px); } 15.94% { opacity: 1; transform: translate(196px, 0px); } 17.81% { opacity: 1; transform: translate(230px, 0px); } 18.44% { opacity: 1; transform: translate(230px, 0px); } 20.31% { opacity: 1; transform: translate(264px, 0px); } 20.94% { opacity: 1; transform: translate(264px, 0px); } 22.81% { opacity: 1; transform: translate(298px, 0px); } 46.94% { opacity: 1; transform: translate(298px, 0px); } 48.82% { opacity: 1; transform: translate(332px, 0px); } 67.02% { opacity: 1; transform: translate(332px, 0px); } 68.58% { opacity: 0; transform: translate(356px, 0px); } 100% { opacity: 0; transform: translate(356px, 0px); } }
+    @keyframes ring { 0% { opacity: 0; transform: scale(1); } 10.31% { opacity: 0; transform: scale(1); } 10.94% { opacity: 0.9; transform: scale(1.04); } 14.06% { opacity: 0; transform: scale(1.18); } 43.82% { opacity: 0; transform: scale(1); } 44.44% { opacity: 0.9; transform: scale(1.04); } 47.57% { opacity: 0; transform: scale(1.18); } 64.52% { opacity: 0; transform: scale(1); } 65.15% { opacity: 0.9; transform: scale(1.04); } 68.27% { opacity: 0; transform: scale(1.18); } 75.65% { opacity: 0; transform: scale(1); } 76.28% { opacity: 0.9; transform: scale(1.04); } 79.4% { opacity: 0; transform: scale(1.18); } 92.02% { opacity: 0; transform: scale(1); } 92.65% { opacity: 0.9; transform: scale(1.04); } 95.77% { opacity: 0; transform: scale(1.18); } 100% { opacity: 0; transform: scale(1.18); } }
+    @keyframes add-glow { 0% { opacity: 0; } 0.94% { opacity: 0; } 1.69% { opacity: 0.25; } 6.88% { opacity: 0.25; } 8.44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes yes { 0% { opacity: 0; } 10.94% { opacity: 0; } 11.44% { opacity: 0.3; } 12.19% { opacity: 0.3; } 12.81% { opacity: 0; } 13.44% { opacity: 0; } 13.94% { opacity: 0.3; } 14.69% { opacity: 0.3; } 15.31% { opacity: 0; } 15.94% { opacity: 0; } 16.44% { opacity: 0.3; } 17.19% { opacity: 0.3; } 17.81% { opacity: 0; } 18.44% { opacity: 0; } 18.94% { opacity: 0.3; } 19.69% { opacity: 0.3; } 20.31% { opacity: 0; } 44.44% { opacity: 0; } 44.94% { opacity: 0.3; } 45.69% { opacity: 0.3; } 46.32% { opacity: 0; } 65.15% { opacity: 0; } 65.65% { opacity: 0.3; } 66.4% { opacity: 0.3; } 67.02% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes no { 0% { opacity: 0; } 22.19% { opacity: 0; } 22.94% { opacity: 0.3; } 36.5% { opacity: 0.3; } 38.07% { opacity: 0; } 69.17% { opacity: 0; } 69.92% { opacity: 0.3; } 73.23% { opacity: 0.3; } 74.79% { opacity: 0; } 76.59% { opacity: 0; } 77.34% { opacity: 0.3; } 83.82% { opacity: 0.3; } 85.38% { opacity: 0; } 92.96% { opacity: 0; } 93.71% { opacity: 0.3; } 97.02% { opacity: 0.3; } 98.58% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes why-busy { 0% { opacity: 0; } 22.19% { opacity: 0; } 22.94% { opacity: 1; } 36.5% { opacity: 1; } 38.07% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes why-empty { 0% { opacity: 0; } 69.17% { opacity: 0; } 69.92% { opacity: 1; } 73.23% { opacity: 1; } 74.79% { opacity: 0; } 76.59% { opacity: 0; } 77.34% { opacity: 1; } 83.82% { opacity: 1; } 85.38% { opacity: 0; } 92.96% { opacity: 0; } 93.71% { opacity: 1; } 97.02% { opacity: 1; } 98.58% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes proc-glow { 0% { opacity: 0; } 14.69% { opacity: 0; } 15.44% { opacity: 0.18; } 27.32% { opacity: 0.18; } 28.88% { opacity: 0; } 48.19% { opacity: 0; } 48.94% { opacity: 0.18; } 53.33% { opacity: 0.18; } 54.89% { opacity: 0; } 68.9% { opacity: 0; } 69.65% { opacity: 0.18; } 74.03% { opacity: 0.18; } 75.59% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w2-row { 0% { opacity: 0.15; } 14.69% { opacity: 0.15; } 16.56% { opacity: 1; } 73.44% { opacity: 1; } 75.94% { opacity: 0.15; } 100% { opacity: 0.15; } }
+    @keyframes w3-row { 0% { opacity: 0.15; } 17.19% { opacity: 0.15; } 19.06% { opacity: 1; } 62.19% { opacity: 1; } 64.69% { opacity: 0.15; } 100% { opacity: 0.15; } }
+    @keyframes w4-row { 0% { opacity: 0.15; } 19.69% { opacity: 0.15; } 21.56% { opacity: 1; } 85.31% { opacity: 1; } 87.81% { opacity: 0.15; } 100% { opacity: 0.15; } }
+    @keyframes w1-glow { 0% { opacity: 0; } 23.38% { opacity: 0; } 24.13% { opacity: 0.14; } 68.75% { opacity: 0.14; } 70.31% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w1-bar { 0% { opacity: 1; transform: scaleX(0); } 23.38% { opacity: 1; transform: scaleX(0); } 68.75% { opacity: 1; transform: scaleX(1); } 70.62% { opacity: 0; transform: scaleX(1); } 70.69% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @keyframes w2-glow { 0% { opacity: 0; } 25.13% { opacity: 0; } 25.88% { opacity: 0.14; } 36.25% { opacity: 0.14; } 37.81% { opacity: 0; } 56.14% { opacity: 0; } 56.89% { opacity: 0.14; } 71.25% { opacity: 0.14; } 72.81% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w2-bar { 0% { opacity: 1; transform: scaleX(0); } 25.13% { opacity: 1; transform: scaleX(0); } 36.25% { opacity: 1; transform: scaleX(1); } 38.12% { opacity: 0; transform: scaleX(1); } 38.19% { opacity: 1; transform: scaleX(0); } 56.14% { opacity: 1; transform: scaleX(0); } 71.25% { opacity: 1; transform: scaleX(1); } 73.12% { opacity: 0; transform: scaleX(1); } 73.19% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @keyframes w3-glow { 0% { opacity: 0; } 27.63% { opacity: 0; } 28.38% { opacity: 0.14; } 60% { opacity: 0.14; } 61.56% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w3-bar { 0% { opacity: 1; transform: scaleX(0); } 27.63% { opacity: 1; transform: scaleX(0); } 60% { opacity: 1; transform: scaleX(1); } 61.88% { opacity: 0; transform: scaleX(1); } 61.94% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @keyframes w4-glow { 0% { opacity: 0; } 30.88% { opacity: 0; } 31.63% { opacity: 0.14; } 55.62% { opacity: 0.14; } 57.19% { opacity: 0; } 77.59% { opacity: 0; } 78.34% { opacity: 0.14; } 83.12% { opacity: 0.14; } 84.69% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w4-bar { 0% { opacity: 1; transform: scaleX(0); } 30.88% { opacity: 1; transform: scaleX(0); } 55.62% { opacity: 1; transform: scaleX(1); } 57.5% { opacity: 0; transform: scaleX(1); } 57.56% { opacity: 1; transform: scaleX(0); } 77.59% { opacity: 1; transform: scaleX(0); } 83.12% { opacity: 1; transform: scaleX(1); } 85% { opacity: 0; transform: scaleX(1); } 85.06% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -5.4s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+    <marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow-sig" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="419" rx="12"/>
+
+  <g transform="translate(110 88)">
+    <rect class="item" x="0" y="-6" width="12" height="12" rx="3"/><text class="lg" x="20" y="0">job waiting in queue</text>
+    <circle style="fill: var(--job)" cx="6" cy="20" r="6"/><text class="lg" x="20" y="20">job being dispatched</text>
+    <rect style="fill: var(--worker)" x="0" y="37" width="12" height="6" rx="2"/><text class="lg" x="20" y="40">worker busy</text>
+    <circle style="fill: var(--signal)" cx="6" cy="60" r="5"/><text class="lg" x="20" y="60">signal to event loop</text>
+  </g>
+
+  <!-- signal edges: Add and worker-done both wake the event loop -->
+  <path class="sig" d="M70 268V44H446" marker-end="url(#as)"/>
+  <text class="m s" x="270" y="32">Add() → notifyToPullNextJobs()</text>
+  <path class="sig" d="M890 221H935M890 271H935M890 321H935M890 371H935V58H624" marker-end="url(#as)"/>
+  <text class="m s" x="780" y="46">done → notifyToPullNextJobs()</text>
+
+  <!-- producer -->
+  <rect class="box prod" x="20" y="268" width="100" height="56" rx="8"/>
+  <rect id="add-glow" class="a g-item" x="20" y="268" width="100" height="56" rx="8"/>
+  <text class="t" x="70" y="289">Add(job)</text>
+  <text class="m" x="70" y="307">× 6</text>
+  <text id="drop-why" class="why a" x="80" y="226" style="text-anchor:start">dropped: 1 signal pending</text>
+  <text class="m" x="70" y="342">producer</text>
+  <path class="edge" d="M120 296H152" marker-end="url(#a)"/>
+
+  <!-- queue (starts empty) -->
+  <text class="h" x="154" y="256">Queue</text>
+  <rect class="lane" x="154" y="268" width="216" height="56" rx="8"/>
+  <rect class="slot" x="162" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="196" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="230" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="264" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="298" y="281" width="30" height="30" rx="5"/>
+  <rect class="slot" x="332" y="281" width="30" height="30" rx="5"/>
+  <rect id="item0" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <rect id="item1" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <rect id="item2" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <rect id="item3" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <rect id="item4" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <rect id="item5" class="item a" x="0" y="281" width="30" height="30" rx="5"/>
+  <path class="edge" d="M370 296H448" marker-end="url(#a)"/>
+  <text class="m" x="409" y="284">dequeue</text>
+
+  <!-- event loop + check -->
+  <text class="m" x="535" y="18">goroutine</text>
+  <rect class="box loop" x="450" y="30" width="170" height="56" rx="8"/>
+  <rect id="ring" class="a" x="450" y="30" width="170" height="56" rx="8"/>
+  <text class="t" x="535" y="51">Event Loop</text>
+  <text class="m" x="535" y="70">select ← signal</text>
+
+  <path class="edge" d="M535 86V134" marker-end="url(#a)"/>
+  <path class="box" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="yes" class="a g-job" d="M440 176L535 136L630 176L535 216Z"/>
+  <path id="no" class="a g-no" d="M440 176L535 136L630 176L535 216Z"/>
+  <text class="m c" x="535" y="169">queue not empty</text>
+  <text class="m c" x="535" y="184">&amp;&amp; slot free</text>
+
+  <path class="edge" d="M535 216V264" marker-end="url(#a)"/>
+  <text class="m" x="548" y="240" style="text-anchor:start">yes</text>
+  <path class="edge" d="M440 176H415V72H448" marker-end="url(#a)"/>
+  <text class="m" x="376" y="116">no: wait</text>
+  <text id="why-busy" class="why a" x="376" y="132">all 4 busy</text>
+  <text id="why-empty" class="why a" x="376" y="132">queue empty</text>
+
+  <!-- dispatch -->
+  <rect class="box mgr" x="450" y="266" width="170" height="60" rx="8"/>
+  <rect id="proc-glow" class="a g-job" x="450" y="266" width="170" height="60" rx="8"/>
+  <text class="t" x="535" y="288">Process next job</text>
+  <text class="m" x="535" y="308">processNextJob()</text>
+  <path class="edge" d="M620 296H660M660 221V371"/>
+  <path class="edge" d="M660 221H698" marker-end="url(#a)"/>
+  <path class="edge" d="M660 271H698" marker-end="url(#a)"/>
+  <path class="edge" d="M660 321H698" marker-end="url(#a)"/>
+  <path class="edge" d="M660 371H698" marker-end="url(#a)"/>
+  <text class="m" x="640" y="284">job</text>
+
+  <!-- worker pool -->
+  <rect class="pool" x="680" y="168" width="230" height="234" rx="10"/>
+  <text class="h" x="693" y="186">Worker Pool</text>
+  <text class="m" x="898" y="186" style="text-anchor:end">concurrency = 4</text>
+
+  <rect class="box" x="700" y="201" width="50" height="40" rx="6"/><text class="m" x="725" y="221">ch1</text>
+  <path class="edge" d="M750 221H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="201" width="120" height="40" rx="6"/>
+  <rect id="w1-glow" class="a g-wk" x="770" y="201" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="215">Worker 1</text>
+  <rect class="track" x="780" y="230" width="100" height="4" rx="2"/>
+  <rect id="w1-bar" class="a lin bar" x="780" y="230" width="100" height="4" rx="2"/>
+
+  <g id="w2-row" class="a">
+  <rect class="box" x="700" y="251" width="50" height="40" rx="6"/><text class="m" x="725" y="271">ch2</text>
+  <path class="edge" d="M750 271H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="251" width="120" height="40" rx="6"/>
+  <rect id="w2-glow" class="a g-wk" x="770" y="251" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="265">Worker 2</text>
+  <rect class="track" x="780" y="280" width="100" height="4" rx="2"/>
+  <rect id="w2-bar" class="a lin bar" x="780" y="280" width="100" height="4" rx="2"/>
+  </g>
+
+  <g id="w3-row" class="a">
+  <rect class="box" x="700" y="301" width="50" height="40" rx="6"/><text class="m" x="725" y="321">ch3</text>
+  <path class="edge" d="M750 321H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="301" width="120" height="40" rx="6"/>
+  <rect id="w3-glow" class="a g-wk" x="770" y="301" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="315">Worker 3</text>
+  <rect class="track" x="780" y="330" width="100" height="4" rx="2"/>
+  <rect id="w3-bar" class="a lin bar" x="780" y="330" width="100" height="4" rx="2"/>
+  </g>
+
+  <g id="w4-row" class="a">
+  <rect class="box" x="700" y="351" width="50" height="40" rx="6"/><text class="m" x="725" y="371">ch4</text>
+  <path class="edge" d="M750 371H768" marker-end="url(#a)"/>
+  <rect class="box wk" x="770" y="351" width="120" height="40" rx="6"/>
+  <rect id="w4-glow" class="a g-wk" x="770" y="351" width="120" height="40" rx="6"/>
+  <text class="t" x="830" y="365">Worker 4</text>
+  <rect class="track" x="780" y="380" width="100" height="4" rx="2"/>
+  <rect id="w4-bar" class="a lin bar" x="780" y="380" width="100" height="4" rx="2"/>
+  </g>
+
+  <!-- moving tokens on top -->
+  <circle id="job0" class="a lin" r="7"/>
+  <circle id="job1" class="a lin" r="7"/>
+  <circle id="job2" class="a lin" r="7"/>
+  <circle id="job3" class="a lin" r="7"/>
+  <circle id="job4" class="a lin" r="7"/>
+  <circle id="job5" class="a lin" r="7"/>
+  <circle id="sig-add" class="a lin sigdot" r="5"/>
+  <circle id="drop1" class="a lin sigdot" r="5"/>
+  <circle id="drop2" class="a lin sigdot" r="5"/>
+  <circle id="drop3" class="a lin sigdot" r="5"/>
+  <circle id="drop4" class="a lin sigdot" r="5"/>
+  <circle id="drop5" class="a lin sigdot" r="5"/>
+  <circle id="done0" class="a lin sigdot" r="5"/>
+  <circle id="done1" class="a lin sigdot" r="5"/>
+  <circle id="done2" class="a lin sigdot" r="5"/>
+  <circle id="done3" class="a lin sigdot" r="5"/>
+  <circle id="done4" class="a lin sigdot" r="5"/>
+  <circle id="done5" class="a lin sigdot" r="5"/>
+</svg>

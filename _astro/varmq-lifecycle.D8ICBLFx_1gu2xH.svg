@@ -1,0 +1,276 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ worker lifecycle</title>
+  <desc id="desc">A state diagram of the seven worker states, next to a worker that walks through them. Created with WithAutoRun(false), the worker is Initiated and three added jobs wait. Start makes it Idle, and it is Running once job 1 starts. Pause while job 1 runs makes it Pausing; job 1 finishes, and the worker is Paused while jobs 2 and 3 wait. Resume makes it Idle, then Running job 2. Stop while job 2 runs makes it Stopping; job 2 finishes, the goroutines go, and the worker is Stopped while job 3 stays waiting. Restart makes it Idle, then Running job 3, then Idle again.</desc>
+  <style>
+    :root {
+      --dur: 20s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .node { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .move { stroke-dasharray: 5 3; }
+    .lane { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .slot { fill: none; stroke: var(--item); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+    .item { fill: var(--item); }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .arrow { fill: var(--line); }
+    .hl { stroke-width: 2.5; fill-opacity: .18; }
+    .Initiated { fill: var(--line); stroke: var(--line); }
+    .Idle { fill: var(--job); stroke: var(--job); }
+    .Running { fill: var(--worker); stroke: var(--worker); }
+    .Pausing, .Paused { fill: var(--item); stroke: var(--item); }
+    .Stopping, .Stopped { fill: var(--no); stroke: var(--no); }
+    .fl { fill: none; stroke: var(--el); stroke-width: 3; }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .call { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; }
+    .st { font-size: 17px; font-weight: 700; }
+    .ex { font-size: 12px; fill: var(--muted); }
+    .n { font-size: 13px; font-weight: 700; fill: #1f2328; }
+    .note { font-size: 12px; fill: var(--muted); text-anchor: start; }
+    .s { text-anchor: start; }
+    .e { text-anchor: end; }
+
+    /* motion: one shared --dur loop; choreography lives in keyframe percentages (generated from a seconds timeline) */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    .bar { fill: var(--worker); transform-origin: left center; }
+    #hl-Initiated { animation-name: hl-Initiated; }
+    #hl-Idle { animation-name: hl-Idle; }
+    #hl-Running { animation-name: hl-Running; }
+    #hl-Paused { animation-name: hl-Paused; }
+    #hl-Pausing { animation-name: hl-Pausing; }
+    #hl-Stopped { animation-name: hl-Stopped; }
+    #hl-Stopping { animation-name: hl-Stopping; }
+    #f-start { animation-name: f-start; }
+    #f-run { animation-name: f-run; }
+    #f-pause-run { animation-name: f-pause-run; }
+    #f-paused { animation-name: f-paused; }
+    #f-resume { animation-name: f-resume; }
+    #f-stop { animation-name: f-stop; }
+    #f-stopped { animation-name: f-stopped; }
+    #f-restart { animation-name: f-restart; }
+    #f-done { animation-name: f-done; }
+    #c-new { animation-name: c-new; }
+    #c-add { animation-name: c-add; }
+    #c-start { animation-name: c-start; }
+    #c-pause { animation-name: c-pause; }
+    #c-resume { animation-name: c-resume; }
+    #c-stop { animation-name: c-stop; }
+    #c-restart { animation-name: c-restart; }
+    #p-Initiated { animation-name: p-Initiated; }
+    #s-Initiated { animation-name: s-Initiated; }
+    #x-Initiated { animation-name: x-Initiated; }
+    #p-Idle { animation-name: p-Idle; }
+    #s-Idle { animation-name: s-Idle; }
+    #x-Idle { animation-name: x-Idle; }
+    #p-Running { animation-name: p-Running; }
+    #s-Running { animation-name: s-Running; }
+    #x-Running { animation-name: x-Running; }
+    #p-Paused { animation-name: p-Paused; }
+    #s-Paused { animation-name: s-Paused; }
+    #x-Paused { animation-name: x-Paused; }
+    #p-Pausing { animation-name: p-Pausing; }
+    #s-Pausing { animation-name: s-Pausing; }
+    #x-Pausing { animation-name: x-Pausing; }
+    #p-Stopped { animation-name: p-Stopped; }
+    #s-Stopped { animation-name: s-Stopped; }
+    #x-Stopped { animation-name: x-Stopped; }
+    #p-Stopping { animation-name: p-Stopping; }
+    #s-Stopping { animation-name: s-Stopping; }
+    #x-Stopping { animation-name: x-Stopping; }
+    #w-0 { animation-name: w-0; }
+    #w-1 { animation-name: w-1; }
+    #w-2 { animation-name: w-2; }
+    #j1 { animation-name: j1; }
+    #j2 { animation-name: j2; }
+    #j3 { animation-name: j3; }
+    #bar { animation-name: bar; }
+    @keyframes hl-Initiated { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes hl-Idle { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 43% { opacity: 0; } 44% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes hl-Running { 0% { opacity: 0; } 18% { opacity: 0; } 19% { opacity: 1; } 24% { opacity: 1; } 25% { opacity: 0; } 45.5% { opacity: 0; } 46.5% { opacity: 1; } 51.5% { opacity: 1; } 52.5% { opacity: 0; } 72.5% { opacity: 0; } 73.5% { opacity: 1; } 82.5% { opacity: 1; } 83.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes hl-Paused { 0% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 43% { opacity: 1; } 44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes hl-Pausing { 0% { opacity: 0; } 24% { opacity: 0; } 25% { opacity: 1; } 33% { opacity: 1; } 34% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes hl-Stopped { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes hl-Stopping { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.5% { opacity: 1; } 60.5% { opacity: 1; } 61.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-start { 0% { opacity: 0; } 15% { opacity: 0; } 15.6% { opacity: 1; } 17.5% { opacity: 1; } 18.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-run { 0% { opacity: 0; } 17.25% { opacity: 0; } 17.85% { opacity: 1; } 19.75% { opacity: 1; } 21% { opacity: 0; } 45% { opacity: 0; } 45.6% { opacity: 1; } 47.5% { opacity: 1; } 48.75% { opacity: 0; } 72% { opacity: 0; } 72.6% { opacity: 1; } 74.5% { opacity: 1; } 75.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-pause-run { 0% { opacity: 0; } 24% { opacity: 0; } 24.6% { opacity: 1; } 26.5% { opacity: 1; } 27.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-paused { 0% { opacity: 0; } 33% { opacity: 0; } 33.6% { opacity: 1; } 35.5% { opacity: 1; } 36.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-resume { 0% { opacity: 0; } 43% { opacity: 0; } 43.6% { opacity: 1; } 45.5% { opacity: 1; } 46.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-stop { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.1% { opacity: 1; } 54% { opacity: 1; } 55.25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-stopped { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.1% { opacity: 1; } 63% { opacity: 1; } 64.25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-restart { 0% { opacity: 0; } 70% { opacity: 0; } 70.6% { opacity: 1; } 72.5% { opacity: 1; } 73.75% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes f-done { 0% { opacity: 0; } 82.5% { opacity: 0; } 83.1% { opacity: 1; } 85% { opacity: 1; } 86.25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-new { 0% { opacity: 1; } 8% { opacity: 1; } 9% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes c-add { 0% { opacity: 0; } 8% { opacity: 0; } 9% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-start { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 24% { opacity: 1; } 25% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-pause { 0% { opacity: 0; } 24% { opacity: 0; } 25% { opacity: 1; } 43% { opacity: 1; } 44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-resume { 0% { opacity: 0; } 43% { opacity: 0; } 44% { opacity: 1; } 51.5% { opacity: 1; } 52.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-stop { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes c-restart { 0% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Initiated { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes s-Initiated { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes x-Initiated { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes p-Idle { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 43% { opacity: 0; } 44% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Idle { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 43% { opacity: 0; } 44% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Idle { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 43% { opacity: 0; } 44% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Running { 0% { opacity: 0; } 18% { opacity: 0; } 19% { opacity: 1; } 24% { opacity: 1; } 25% { opacity: 0; } 45.5% { opacity: 0; } 46.5% { opacity: 1; } 51.5% { opacity: 1; } 52.5% { opacity: 0; } 72.5% { opacity: 0; } 73.5% { opacity: 1; } 82.5% { opacity: 1; } 83.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Running { 0% { opacity: 0; } 18% { opacity: 0; } 19% { opacity: 1; } 24% { opacity: 1; } 25% { opacity: 0; } 45.5% { opacity: 0; } 46.5% { opacity: 1; } 51.5% { opacity: 1; } 52.5% { opacity: 0; } 72.5% { opacity: 0; } 73.5% { opacity: 1; } 82.5% { opacity: 1; } 83.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Running { 0% { opacity: 0; } 18% { opacity: 0; } 19% { opacity: 1; } 24% { opacity: 1; } 25% { opacity: 0; } 45.5% { opacity: 0; } 46.5% { opacity: 1; } 51.5% { opacity: 1; } 52.5% { opacity: 0; } 72.5% { opacity: 0; } 73.5% { opacity: 1; } 82.5% { opacity: 1; } 83.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Paused { 0% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 43% { opacity: 1; } 44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Paused { 0% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 43% { opacity: 1; } 44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Paused { 0% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 43% { opacity: 1; } 44% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Pausing { 0% { opacity: 0; } 24% { opacity: 0; } 25% { opacity: 1; } 33% { opacity: 1; } 34% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Pausing { 0% { opacity: 0; } 24% { opacity: 0; } 25% { opacity: 1; } 33% { opacity: 1; } 34% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Pausing { 0% { opacity: 0; } 24% { opacity: 0; } 25% { opacity: 1; } 33% { opacity: 1; } 34% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Stopped { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Stopped { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Stopped { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes p-Stopping { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.5% { opacity: 1; } 60.5% { opacity: 1; } 61.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes s-Stopping { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.5% { opacity: 1; } 60.5% { opacity: 1; } 61.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes x-Stopping { 0% { opacity: 0; } 51.5% { opacity: 0; } 52.5% { opacity: 1; } 60.5% { opacity: 1; } 61.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w-0 { 0% { opacity: 1; } 15% { opacity: 1; } 16% { opacity: 0; } 96.5% { opacity: 0; } 97.5% { opacity: 1; } 100% { opacity: 1; } }
+    @keyframes w-1 { 0% { opacity: 0; } 15% { opacity: 0; } 16% { opacity: 1; } 18% { opacity: 1; } 19% { opacity: 0; } 33% { opacity: 0; } 34% { opacity: 1; } 45.5% { opacity: 1; } 46.5% { opacity: 0; } 70% { opacity: 0; } 71% { opacity: 1; } 72.5% { opacity: 1; } 73.5% { opacity: 0; } 82.5% { opacity: 0; } 83.5% { opacity: 1; } 96.5% { opacity: 1; } 97.5% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes w-2 { 0% { opacity: 0; } 60.5% { opacity: 0; } 61.5% { opacity: 1; } 70% { opacity: 1; } 71% { opacity: 0; } 100% { opacity: 0; } }
+    @keyframes j1 { 0% { opacity: 0; transform: translate(620px, 260px); } 9% { opacity: 0; transform: translate(620px, 260px); } 9.66% { opacity: 1; transform: translate(726px, 260px); } 15.75% { opacity: 1; transform: translate(726px, 260px); } 16.59% { opacity: 1; transform: translate(860px, 260px); } 33% { opacity: 1; transform: translate(860px, 260px); } 34.25% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
+    @keyframes j2 { 0% { opacity: 0; transform: translate(620px, 260px); } 10.5% { opacity: 0; transform: translate(620px, 260px); } 10.95% { opacity: 1; transform: translate(692px, 260px); } 16.25% { opacity: 1; transform: translate(692px, 260px); } 17.75% { opacity: 1; transform: translate(726px, 260px); } 43.75% { opacity: 1; transform: translate(726px, 260px); } 44.59% { opacity: 1; transform: translate(860px, 260px); } 60.5% { opacity: 1; transform: translate(860px, 260px); } 61.75% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
+    @keyframes j3 { 0% { opacity: 0; transform: translate(620px, 260px); } 12% { opacity: 0; transform: translate(620px, 260px); } 12.23% { opacity: 1; transform: translate(658px, 260px); } 16.25% { opacity: 1; transform: translate(658px, 260px); } 17.75% { opacity: 1; transform: translate(692px, 260px); } 44.25% { opacity: 1; transform: translate(692px, 260px); } 45.75% { opacity: 1; transform: translate(726px, 260px); } 70.75% { opacity: 1; transform: translate(726px, 260px); } 71.59% { opacity: 1; transform: translate(860px, 260px); } 82.5% { opacity: 1; transform: translate(860px, 260px); } 83.75% { opacity: 0; transform: translate(860px, 260px); } 100% { opacity: 0; transform: translate(860px, 260px); } }
+    @keyframes bar { 0% { opacity: 1; transform: scaleX(0); } 17.5% { opacity: 1; transform: scaleX(0); } 33% { opacity: 1; transform: scaleX(1); } 34.5% { opacity: 0; transform: scaleX(1); } 34.55% { opacity: 1; transform: scaleX(0); } 45.5% { opacity: 1; transform: scaleX(0); } 60.5% { opacity: 1; transform: scaleX(1); } 62% { opacity: 0; transform: scaleX(1); } 62.05% { opacity: 1; transform: scaleX(0); } 72.5% { opacity: 1; transform: scaleX(0); } 82.5% { opacity: 1; transform: scaleX(1); } 84% { opacity: 0; transform: scaleX(1); } 84.05% { opacity: 1; transform: scaleX(0); } 100% { opacity: 1; transform: scaleX(0); } }
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -5.6s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="399" rx="12"/>
+
+  <!-- left: the state machine -->
+  <text class="h" x="40" y="30">States</text>
+  <text class="m s" x="96" y="30">dashed = on its way to the next state</text>
+
+  <path class="edge" d="M160 82H238" marker-end="url(#a)"/>
+  <path class="edge" d="M360 72H438" marker-end="url(#a)"/>
+  <path class="edge" d="M440 94H362" marker-end="url(#a)"/>
+  <path class="edge" d="M318 104V178" marker-end="url(#a)"/>
+  <path class="edge" d="M262 180V106" marker-end="url(#a)"/>
+  <path class="edge" d="M500 104V178" marker-end="url(#a)"/>
+  <path class="edge" d="M440 202H362" marker-end="url(#a)"/>
+  <path class="edge" d="M560 82H590V322H562" marker-end="url(#a)"/>
+  <path class="edge" d="M440 322H362" marker-end="url(#a)"/>
+  <path class="edge" d="M240 322H210V98H238" marker-end="url(#a)"/>
+  <path class="edge" d="M560 202H590"/>
+  <path id="f-start" class="a fl" d="M160 82H238"/>
+  <path id="f-run" class="a fl" d="M360 72H438"/>
+  <path id="f-pause-run" class="a fl" d="M500 104V178"/>
+  <path id="f-paused" class="a fl" d="M440 202H362"/>
+  <path id="f-resume" class="a fl" d="M262 180V106"/>
+  <path id="f-stop" class="a fl" d="M560 82H590V322H562"/>
+  <path id="f-stopped" class="a fl" d="M440 322H362"/>
+  <path id="f-restart" class="a fl" d="M240 322H210V98H238"/>
+  <path id="f-done" class="a fl" d="M440 94H362"/>
+  <rect class="node" x="40" y="60" width="120" height="44" rx="10"/>
+  <rect id="hl-Initiated" class="a hl Initiated" x="40" y="60" width="120" height="44" rx="10"/>
+  <text class="t" x="100" y="82">Initiated</text>
+  <rect class="node" x="240" y="60" width="120" height="44" rx="10"/>
+  <rect id="hl-Idle" class="a hl Idle" x="240" y="60" width="120" height="44" rx="10"/>
+  <text class="t" x="300" y="82">Idle</text>
+  <rect class="node" x="440" y="60" width="120" height="44" rx="10"/>
+  <rect id="hl-Running" class="a hl Running" x="440" y="60" width="120" height="44" rx="10"/>
+  <text class="t" x="500" y="82">Running</text>
+  <rect class="node" x="240" y="180" width="120" height="44" rx="10"/>
+  <rect id="hl-Paused" class="a hl Paused" x="240" y="180" width="120" height="44" rx="10"/>
+  <text class="t" x="300" y="202">Paused</text>
+  <rect class="node move" x="440" y="180" width="120" height="44" rx="10"/>
+  <rect id="hl-Pausing" class="a hl Pausing move" x="440" y="180" width="120" height="44" rx="10"/>
+  <text class="t" x="500" y="202">Pausing</text>
+  <rect class="node" x="240" y="300" width="120" height="44" rx="10"/>
+  <rect id="hl-Stopped" class="a hl Stopped" x="240" y="300" width="120" height="44" rx="10"/>
+  <text class="t" x="300" y="322">Stopped</text>
+  <rect class="node move" x="440" y="300" width="120" height="44" rx="10"/>
+  <rect id="hl-Stopping" class="a hl Stopping move" x="440" y="300" width="120" height="44" rx="10"/>
+  <text class="t" x="500" y="322">Stopping</text>
+
+  <text class="m" x="399" y="48">job starts</text>
+  <text class="m" x="401" y="116">jobs done</text>
+  <text class="m" x="199" y="70">Start()</text>
+  <text class="m s" x="324" y="141">Pause()</text>
+  <text class="m e" x="256" y="141">Resume()</text>
+  <text class="m s" x="506" y="141">Pause()</text>
+  <text class="m" x="401" y="190">job ends</text>
+  <text class="m s" x="596" y="200">Stop()</text>
+  <text class="m" x="401" y="310">job ends</text>
+  <text class="m e" x="204" y="212">Start() or</text>
+  <text class="m e" x="204" y="226">Restart()</text>
+  <text class="note" x="40" y="372">Stop() works from Idle, Running, Pausing or Paused.</text>
+
+  <!-- right: what the worker is doing -->
+  <path class="edge" d="M620 24V376" style="stroke: var(--border)"/>
+  <text class="h" x="650" y="30">Your code</text>
+  <rect class="box" x="650" y="44" width="290" height="40" rx="8"/>
+  <text id="c-new" class="a call" x="795" y="64">NewWorker(fn, WithAutoRun(false))</text>
+  <text id="c-add" class="a call" x="795" y="64">queue.Add(1); Add(2); Add(3)</text>
+  <text id="c-start" class="a call" x="795" y="64">worker.Start()</text>
+  <text id="c-pause" class="a call" x="795" y="64">worker.Pause()</text>
+  <text id="c-resume" class="a call" x="795" y="64">worker.Resume()</text>
+  <text id="c-stop" class="a call" x="795" y="64">worker.Stop()</text>
+  <text id="c-restart" class="a call" x="795" y="64">worker.Restart()</text>
+
+  <text class="h" x="650" y="112">worker.Status()</text>
+  <rect class="box" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Initiated" class="a hl Initiated" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Idle" class="a hl Idle" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Running" class="a hl Running" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Paused" class="a hl Paused" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Pausing" class="a hl Pausing" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Stopped" class="a hl Stopped" x="650" y="126" width="290" height="40" rx="8"/>
+  <rect id="p-Stopping" class="a hl Stopping" x="650" y="126" width="290" height="40" rx="8"/>
+  <text id="s-Initiated" class="a st" x="795" y="146">"Initiated"</text>
+  <text id="s-Idle" class="a st" x="795" y="146">"Idle"</text>
+  <text id="s-Running" class="a st" x="795" y="146">"Running"</text>
+  <text id="s-Paused" class="a st" x="795" y="146">"Paused"</text>
+  <text id="s-Pausing" class="a st" x="795" y="146">"Pausing"</text>
+  <text id="s-Stopped" class="a st" x="795" y="146">"Stopped"</text>
+  <text id="s-Stopping" class="a st" x="795" y="146">"Stopping"</text>
+  <text id="x-Initiated" class="a ex" x="795" y="186">created, not started yet</text>
+  <text id="x-Idle" class="a ex" x="795" y="186">started, no job running</text>
+  <text id="x-Running" class="a ex" x="795" y="186">a job is running</text>
+  <text id="x-Paused" class="a ex" x="795" y="186">nothing runs until Resume()</text>
+  <text id="x-Pausing" class="a ex" x="795" y="186">the running job finishes, no new one starts</text>
+  <text id="x-Stopped" class="a ex" x="795" y="186">loop ended; waiting jobs stay queued</text>
+  <text id="x-Stopping" class="a ex" x="795" y="186">the running job finishes, then goroutines exit</text>
+
+  <text class="h" x="650" y="236">Queue</text>
+  <rect class="lane" x="650" y="252" width="116" height="46" rx="8"/>
+  <rect class="slot" x="658" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="692" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="726" y="260" width="30" height="30" rx="5"/>
+  <path class="edge" d="M766 275H808" marker-end="url(#a)"/>
+  <rect class="box" x="810" y="250" width="130" height="50" rx="8" style="stroke: var(--worker)"/>
+  <text id="w-0" class="a m" x="875" y="275">not started</text>
+  <text id="w-1" class="a m" x="875" y="275">no job running</text>
+  <text id="w-2" class="a m" x="875" y="275">goroutines gone</text>
+  <rect class="track" x="820" y="306" width="110" height="4" rx="2"/>
+  <rect id="bar" class="a lin bar" x="820" y="306" width="110" height="4" rx="2"/>
+  <text class="m" x="875" y="322">running job</text>
+  <text class="note" x="650" y="372">Pause and Stop never interrupt a running job.</text>
+
+  <g id="j1" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">1</text></g>
+  <g id="j2" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">2</text></g>
+  <g id="j3" class="a lin"><rect class="item" width="30" height="30" rx="5"/><text class="n" x="15" y="15">3</text></g>
+</svg>
