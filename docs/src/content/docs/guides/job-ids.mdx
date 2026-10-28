@@ -45,7 +45,7 @@ It is the empty string when the job has no ID.
 
 An in-memory queue keeps at most one job per given ID in the queue. While a job with an ID is in the queue, a second `Add` with the same ID is refused: it returns a `nil` handle and `false`.
 
-The worker below is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so the jobs wait in the queue until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). On a worker that is running, the first `Add` would be taken at once and its ID released.
+The worker below is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so the jobs wait in the queue until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). On a running worker, the first job could leave the queue before the second `Add`, which releases its ID and lets the second one in.
 
 <GoPlay example="job-ids-dedup" />
 

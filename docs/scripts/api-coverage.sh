@@ -62,7 +62,8 @@ done <<<"$names"
 # A version the pages name, in `go get ...@v` or a source link, must be the
 # pinned one, so a Dependabot bump fails here until the pages are updated.
 version=$(cd docs/examples && go list -m -f '{{.Version}}' "$pkg")
-named=$(grep -rhoE "goptics/varmq(@|/blob/)v[0-9]+\.[0-9]+\.[0-9]+" "$docs" | sed -E 's/.*[@/]//' | sort -u)
+# grep exits 1 when the pages name no version, which passes; 2 means the scan failed.
+named=$({ grep -rhoE "goptics/varmq(@|/blob/)v[0-9]+\.[0-9]+\.[0-9]+" "$docs" || [[ $? -eq 1 ]]; } | sed -E 's/.*[@/]//' | sort -u)
 if [[ -n $named && $named != "$version" ]]; then
   echo "API coverage: the pages name varmq" $named "but docs/examples pins $version." >&2
   exit 1
