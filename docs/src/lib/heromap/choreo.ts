@@ -6,7 +6,9 @@
 // How the timeline is built:
 // - The score (`score.ts`) keeps a track of every animated property and the cues that change it, and makes the
 //   timeline: every tween with its from-value written out, all in time order, every property set at 0 so each
-//   loop starts again from chapter 1 with every piece off, and no property ending in a set. It says why.
+//   loop starts again from chapter 1, and no property ending in a set. It says why.
+// - The loop has no seam. It starts with chapter 1's pieces on and every other piece off, and the finale ends by
+//   zooming into chapter 1's frame as everything else fades (`wrap`): its last frame is the loop's first.
 // - Lanes. The squares in a lane keep the simulation's order and stay apart: a square lands in the first slot
 //   behind the ones waiting that it can reach and sit in untouched, and those waiting move up once their way is
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
@@ -14,7 +16,7 @@
 import { eases, svg, type Timeline } from 'animejs';
 import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
-import { END_FADE, type MapNodes } from './render.ts';
+import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
 import {
 	Score,
@@ -68,6 +70,7 @@ const E = {
 	out: eases.inQuad, // leaving: words, fades, a check
 	linear: eases.linear,
 	signal: eases.inOutQuad,
+	zoom: eases.inOutQuad, // the finale's zoom into chapter 1: under way from its first frame, unlike `move`
 	leave: eases.outQuad, // a taken record into the tray, and its copy out of the store: at once
 	vanish: eases.inBack(2),
 	exit: eases.inBack(1.6),
@@ -471,7 +474,8 @@ interface Topic {
 	left: Map<string, number>;
 }
 
-class Choreo {
+/** Writes the whole loop into a score (`build` makes its timeline). Exported for the tests, which read the score. */
+export class Choreo {
 	readonly nodes: MapNodes;
 	readonly page: Page;
 	readonly score: Score;
@@ -489,22 +493,22 @@ class Choreo {
 		this.nodes = nodes;
 		this.page = page;
 		this.score = new Score(TOTAL, page);
-		// The loop opens on chapter 1's frame: from the finale's, the move in would cross an empty map.
+		// The loop opens on chapter 1's frame, where the finale's zoom ends (`wrap`).
 		this.cam = { ...frame(REGIONS[0]) };
 		this.declareStarts();
 	}
 
-	/** Every animated property and where it starts: the world empty, every piece off, every job hidden. */
+	/** Every animated property and where it starts: chapter 1's pieces on, every other piece off, every job hidden. */
 	private declareStarts() {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
-		score.start(nodes.world, { opacity: 0 });
-		for (const p of PIECES) this.declarePiece(p.id, p.kind);
-		for (const c of CHAPTERS) for (const chip of c.chips ?? []) this.declarePiece(`${chip.id}@${c.n}`, 'chip');
+		for (const p of PIECES) this.declarePiece(p.id, p.kind, p.chapter === 1);
+		for (const c of CHAPTERS) for (const chip of c.chips ?? []) this.declarePiece(`${chip.id}@${c.n}`, 'chip', false);
 		for (const c of CONNS) {
 			const g = nodes.piece(c.id);
-			score.start(g, { opacity: c.kind === 'line' ? 1 : 0 });
-			if (c.kind === 'line') score.start(this.outline(g), { draw: [0, 0] });
+			const on = c.chapter === 1;
+			score.start(g, { opacity: c.kind === 'line' || on ? 1 : 0 });
+			if (c.kind === 'line') score.start(this.outline(g), { draw: [0, on ? 1 : 0] });
 		}
 		const prog = nodes.piece('s-prog');
 		for (const crash of ['.vm-flash', '.vm-died', '.vm-restarted']) {
@@ -530,21 +534,22 @@ class Choreo {
 		}
 	}
 
-	private declarePiece(key: string, kind: string) {
+	private declarePiece(key: string, kind: string, on: boolean) {
 		const { score } = this;
 		const g = this.nodes.piece(key);
+		const v = on ? 1 : 0;
 		if (kind === 'chip') {
-			score.start(g, { opacity: 0, scale: 0 });
+			score.start(g, { opacity: v, scale: v });
 			return;
 		}
-		score.start(g, { opacity: kind === 'tray' ? 0 : 1 });
+		score.start(g, { opacity: kind === 'tray' ? v : 1 });
 		if (kind === 'tray') return;
 		// Off, a piece shows nothing: its outline undrawn and its fill clear.
-		score.start(this.outline(g), { draw: [0, 0] });
-		score.start(g.querySelector('.vm-shape')!, { fillOpacity: 0 });
+		score.start(this.outline(g), { draw: [0, v] });
+		score.start(g.querySelector('.vm-shape')!, { fillOpacity: v });
 		const label = g.querySelector(':scope > .vm-label');
-		if (label) score.start(label, { opacity: 0 });
-		for (const slot of g.querySelectorAll('.vm-slot')) score.start(slot, { opacity: 0 });
+		if (label) score.start(label, { opacity: v });
+		for (const slot of g.querySelectorAll('.vm-slot')) score.start(slot, { opacity: v });
 	}
 
 	/** A piece's or a line's outline, to draw. */
@@ -596,10 +601,33 @@ class Choreo {
 
 	build(): Timeline {
 		const at = starts();
-		this.score.tween(this.nodes.world, { opacity: 1 }, 0, 450, E.linear);
 		for (const c of CHAPTERS) this.chapter(c, at[c.n - 1]);
-		this.score.tween(this.nodes.world, { opacity: 0 }, TOTAL - END_FADE.duration, END_FADE.duration, E.out);
+		this.wrap();
 		return this.score.build(() => this.nodes.setCamera(this.cam));
+	}
+
+	/**
+	 * The loop's seam. With the finale still, everything chapter 1 does not show fades out as the camera zooms from
+	 * the whole map into chapter 1's frame: the other pieces and lines, the other workers' rings and the core's dashed
+	 * places. Both start on the same frame, and the fade runs ahead, so the zoom settles on Add(), the queue, the loop
+	 * and the worker alone. The event loop, dimmed since Stop(), comes back for chapter 1's worker. The last frame is
+	 * the loop's first.
+	 */
+	private wrap() {
+		const { score, nodes } = this;
+		const t = TOTAL - CAMERA;
+		score.tween(this.cam, { ...frame(REGIONS[0]) }, t, CAMERA, E.zoom);
+		const rings = Object.entries(RINGS).flatMap(([worker, places]) =>
+			places.flatMap((_, i) => {
+				const r = nodes.ring(worker, i);
+				return worker === 'core' ? [r.ghost] : [r.ring, r.ghost];
+			}),
+		);
+		const rest = [...PIECES, ...CONNS].filter((p) => p.chapter > 1).map((p) => nodes.piece(p.id));
+		for (const el of [...rest, ...rings]) {
+			if (score.at(el, 'opacity', t)[0] > 0) score.tween(el, { opacity: 0 }, t, CAMERA, E.fade);
+		}
+		score.tween(this.loop(), { opacity: 1 }, t + CAMERA / 2, CAMERA / 2, E.fade);
 	}
 
 	private chapter(c: Chapter, T: number) {
@@ -633,10 +661,14 @@ class Choreo {
 		agenda.run();
 	}
 
-	/** The chapter's new pieces switch on once the camera is there, with the idle rings its workers start with. */
+	/**
+	 * The chapter's new pieces switch on as the camera nears them, with the idle rings its workers start with.
+	 * Chapter 1's pieces are on from the start.
+	 */
 	private open(c: Chapter, t0: number) {
 		const { score, nodes } = this;
-		PIECES.filter((p) => p.chapter === c.n).forEach((p, i) => {
+		const switching = (chapter: number) => chapter === c.n && chapter > 1;
+		PIECES.filter((p) => switching(p.chapter)).forEach((p, i) => {
 			const g = nodes.piece(p.id);
 			const t = t0 + 40 * i;
 			if (p.kind === 'chip') {
@@ -656,7 +688,7 @@ class Choreo {
 				score.tween(slot, { opacity: 1 }, t + 200 + 40 * k, 300, E.fade);
 			});
 		});
-		CONNS.filter((l) => l.chapter === c.n).forEach((l, j) => {
+		CONNS.filter((l) => switching(l.chapter)).forEach((l, j) => {
 			const g = nodes.piece(l.id);
 			const t = t0 + 120 + 40 * j;
 			if (l.kind === 'line') score.tween(this.outline(g), { draw: [0, 1] }, t, DRAW, E.draw);

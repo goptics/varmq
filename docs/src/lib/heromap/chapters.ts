@@ -3,9 +3,10 @@
 // Every land, dispatch, take and ack comes out of the pool and store simulations (`pool.ts`, `stores.ts`),
 // so the map can only show what varmq does; the plans here choose when things happen and how long jobs run.
 // - Times are ms from the start of the chapter. The first 1200 ms are the camera move, and the pieces the
-//   chapter switches on draw in from 300 ms, as the view sweeps toward them; chapter 1, where the loop opens, has
-//   no move and draws in at once. A land is where a job's flight from Add() ends, so a chapter's first job lands
-//   at 1800 or later. Only chapter 2's TunePool(3) comes as early as 1300.
+//   chapter switches on draw in from 300 ms, as the view sweeps toward them. Chapter 1, where the loop opens, has
+//   no move: its pieces are on from the start, as the finale's last 1200 ms, a zoom into its frame, leave them. A
+//   land is where a job's flight from Add() ends, so a chapter's first job lands at 1800 or later. Only chapter
+//   2's TunePool(3) comes as early as 1300.
 // - Job ids are unique across the loop: the renderer makes one element per id, and a store job's record
 //   shares its job's id. Each subscriber makes its own job from a published value, `<value>-<worker>`.
 
@@ -354,12 +355,13 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
-	// and then its goroutines go. Nothing waits in its queue at the stop.
+	// and then its goroutines go. Nothing waits in its queue at the stop. Once the map is still, from 7800 ms, the
+	// camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
 	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
-			duration: 8000,
+			duration: 9000,
 			captions: [
 				{ at: 300, until: 3800, text: 'One worker model, from memory to *Redis*' },
 				{ at: 4300, until: 7500, text: '*Stop()* lets running jobs finish' },
