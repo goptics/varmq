@@ -101,13 +101,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-
-      # warm-playground.ts relies on Node's built-in TypeScript stripping.
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
       - name: Wait for the site and bench-log to be live
         run: |
           # Live means HTTP 200 exactly, not just a non-error status.
@@ -126,6 +119,3 @@ jobs:
           done
           echo "site did not come up within 5 minutes" >&2
           exit 1
-
-      - name: Warm the Go Playground cache
-        run: node docs/scripts/warm-playground.ts
