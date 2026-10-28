@@ -3,6 +3,7 @@
 // scripts to play back; nothing here knows about drawing. The jobs stand for slow ones: a goroutine below
 // the limit is always worth starting (`worthSpawning`) and, above a limit of 1, a hand-off is one job
 // (`batchBudget`). There is no idle expiry, and the pool keeps one goroutine idle (`numMinIdleWorkers`).
+// Restart starts a stopped worker again (`Start`): one idle goroutine, and an event loop that takes up what waited.
 // A job is done `work` ms after it is dispatched: the animation flies it to its ring first and runs the
 // ring's progress from arrival to done.
 
@@ -20,7 +21,7 @@ export interface JobSpec {
 }
 
 export type ControlSpec =
-	| { at: number; op: 'pause' | 'resume' | 'stop' }
+	| { at: number; op: 'pause' | 'resume' | 'stop' | 'restart' }
 	| { at: number; op: 'tune'; to: number };
 
 export interface PoolPlan {
@@ -52,7 +53,7 @@ export type PoolEvent =
 	| { at: number; type: 'done'; job: string; ring: number }
 	| { at: number; type: 'idle'; ring: number }
 	| { at: number; type: 'exit'; ring: number }
-	| { at: number; type: 'control'; op: 'pause' | 'resume' | 'stop' | 'tune'; to?: number };
+	| { at: number; type: 'control'; op: 'pause' | 'resume' | 'stop' | 'restart' | 'tune'; to?: number };
 
 /**
  * The pool after an event. `busy` ascends. `idle` is the pool's stack, so the ring that went idle last is at
@@ -125,6 +126,7 @@ function track(plan: PoolPlan) {
 				break;
 			case 'control':
 				if (e.op === 'tune' && e.to !== undefined) pool.limit = e.to;
+				if (e.op === 'restart') pool.idle.push(0); // `Start` leaves one goroutine idle; nothing runs at a restart
 				break;
 		}
 	}
@@ -225,11 +227,15 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 		// pausing (ErrWorkerPausing), TunePool unless it is active, and TunePool to a limit that is not higher, as the
 		// same one is refused (ErrSameConcurrency) and lowering it is not modelled (it would also stop idle
 		// goroutines). The others varmq refuses or ignores (Pause or Resume after Stop, a second Stop, Resume while
-		// not paused) are not checked: a plan must not make them.
+		// not paused) are not checked: a plan must not make them. Restart is modelled only on a worker that has
+		// stopped, with nothing running: varmq's own wait for that is not drawn.
 		if (c.op === 'resume' && paused && pool.busy.length > 0) {
 			throw new Error(
 				`resume: ${pool.busy.length} job(s) still run at ${now} ms, and a pausing worker cannot resume`,
 			);
+		}
+		if (c.op === 'restart' && (!stopped || pool.busy.length > 0)) {
+			throw new Error(`restart: the worker has not stopped at ${now} ms, and only a stopped one is restarted here`);
 		}
 		if (c.op === 'tune' && (paused || stopped)) {
 			throw new Error(
@@ -242,14 +248,12 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 			);
 		}
 
-		emit(
-			c.op === 'tune'
-				? { at: now, type: 'control', op: 'tune', to: c.to }
-				: { at: now, type: 'control', op: c.op },
-		);
+		if (c.op === 'tune') emit({ at: now, type: 'control', op: 'tune', to: c.to });
+		else emit({ at: now, type: 'control', op: c.op });
 		if (c.op === 'pause') paused = true;
 		if (c.op === 'resume') paused = false;
-		if (c.op === 'resume' || c.op === 'tune') timer(now + plan.wake, wake);
+		if (c.op === 'restart') stopped = paused = false;
+		if (c.op === 'resume' || c.op === 'tune' || c.op === 'restart') timer(now + plan.wake, wake);
 		if (c.op === 'stop') {
 			stopped = true;
 			// With no job running, `Wait` returns at once and the idle goroutines go now. Otherwise they wait

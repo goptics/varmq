@@ -9,6 +9,8 @@ varmq-map {
 	--vm-caption: #cfd8e3;
 	--vm-green: #44bf9e;
 	--vm-red: #ff6b6b;
+	--vm-sqlite: #4aa8e8;
+	--vm-redis: #ff4438;
 	--vm-glow: url(#vm-glow);
 	--vm-job: #f2b33d;
 	--vm-job-edge: #f2b33d;
@@ -41,7 +43,6 @@ varmq-map {
 	--vm-program: rgba(150, 175, 200, 0.03);
 	--vm-program-edge: rgba(150, 175, 200, 0.4);
 	--vm-line: rgba(150, 175, 200, 0.35);
-	--vm-notify: rgba(167, 139, 250, 0.35);
 	--vm-ack: rgba(68, 191, 158, 0.3);
 	--vm-button: rgba(6, 8, 12, 0.6);
 	--vm-button-edge: rgba(150, 175, 200, 0.3);
@@ -57,6 +58,8 @@ varmq-map {
 	--vm-caption: #1f2937;
 	--vm-green: #0f7a5c;
 	--vm-red: #c62828;
+	--vm-sqlite: #0f80cc;
+	--vm-redis: #dc382d;
 	--vm-glow: none;
 	--vm-job: #e09b0c;
 	--vm-job-edge: #b7791f;
@@ -88,7 +91,6 @@ varmq-map {
 	--vm-program: rgba(71, 85, 105, 0.03);
 	--vm-program-edge: rgba(71, 85, 105, 0.45);
 	--vm-line: rgba(71, 85, 105, 0.45);
-	--vm-notify: rgba(124, 58, 237, 0.45);
 	--vm-ack: rgba(46, 156, 127, 0.55);
 	--vm-button: rgba(255, 255, 255, 0.75);
 	--vm-button-edge: rgba(71, 85, 105, 0.3);
@@ -134,7 +136,20 @@ varmq-map .vm-edge-head {
 	stop-opacity: var(--vm-lane-head);
 }
 
-/* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. */
+/* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. A store's
+   logo, before its label, hides and shows with it. */
+varmq-map .vm-logo {
+	fill-opacity: var(--vm-label, 1);
+}
+
+varmq-map .vm-logo-sqlite {
+	fill: var(--vm-sqlite);
+}
+
+varmq-map .vm-logo-redis {
+	fill: var(--vm-redis);
+}
+
 varmq-map :is(.vm-label, .vm-text, .vm-num) {
 	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
 	font-weight: 600;
@@ -250,11 +265,6 @@ varmq-map .vm-conn > .vm-shape {
 	stroke-width: 1;
 }
 
-varmq-map .vm-notify > .vm-shape {
-	stroke: var(--vm-notify);
-	stroke-dasharray: 2 3;
-}
-
 varmq-map .vm-ack > .vm-shape {
 	stroke: var(--vm-ack);
 	stroke-dasharray: 2 3;
@@ -361,6 +371,15 @@ varmq-map .vm-w > span {
 	display: inline-block;
 }
 
+/* A caption's last word and the word that takes its place share a box, stacked. */
+varmq-map .vm-w.vm-swap {
+	display: inline-grid;
+}
+
+varmq-map .vm-swap > span {
+	grid-area: 1 / 1;
+}
+
 varmq-map .vm-caption em {
 	font-style: normal;
 	color: var(--vm-green);
@@ -369,6 +388,14 @@ varmq-map .vm-caption em {
 varmq-map .vm-caption b {
 	font-weight: inherit;
 	color: var(--vm-red);
+}
+
+varmq-map .vm-caption .vm-brand-sqlite {
+	color: var(--vm-sqlite);
+}
+
+varmq-map .vm-caption .vm-brand-redis {
+	color: var(--vm-redis);
 }
 
 /* Forced colours paint a backplate behind each line's text, and the lines share one cell, so the hidden lines'
@@ -380,7 +407,7 @@ varmq-map .vm-caption b {
 		color: CanvasText;
 	}
 
-	varmq-map .vm-caption :is(em, b) {
+	varmq-map .vm-caption :is(em, b, [class^='vm-brand-']) {
 		color: CanvasText;
 	}
 }

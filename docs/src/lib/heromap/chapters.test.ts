@@ -16,8 +16,9 @@ describe('chapters', () => {
 	it('carry the agreed captions', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
-		assert.equal(plain(CHAPTERS[9].captions[1].text), 'Stop() lets running jobs finish');
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 20);
+		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
+		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 22);
 	});
 	it('run about 85 seconds', () => {
 		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
@@ -30,10 +31,10 @@ describe('chapters', () => {
 	it('chapter 1 never has more than one job waiting at a dispatch', () => {
 		for (const d of dispatches(part(1, 'pool', 'core'))) assert.ok(d.waiting <= 0, String(d.at));
 	});
-	it('chapter 2 opens with TunePool(3), stays under 2 × 3 waiting, and ends with one idle goroutine', () => {
+	it('chapter 2 opens with TunePool(5), grows to 5 goroutines, and ends with one idle', () => {
 		const p = part(2, 'pool', 'core');
-		assert.deepEqual(p.plan.controls[0], { at: 1300, op: 'tune', to: 3 });
-		for (const d of dispatches(p)) assert.ok(d.waiting + 1 < 6, String(d.at));
+		assert.deepEqual(p.plan.controls[0], { at: 1300, op: 'tune', to: 5 });
+		assert.equal(Math.max(...poolStates(p.plan, p.events).map(s => s.busy.length)), 5);
 		assert.equal(endState(p.plan, p.events).idle.length, 1);
 	});
 	it('the core worker starts each chapter where the last one left it', () => {
@@ -61,11 +62,16 @@ describe('chapters', () => {
 	it('chapter 8 never holds more than 4 in flight', () => {
 		for (const s of trayStates(part(8, 'redis').events)) assert.ok(s.tray.filter(Boolean).length <= 4);
 	});
-	it('chapter 9 starts nothing while paused and reaches 5 busy after TunePool(5)', () => {
+	it('chapter 9 starts nothing while paused or stopped, empties the pool at the stop, and runs what waited after Restart', () => {
 		const p = part(9, 'pool', 'core');
-		const pause = p.plan.controls.find(c => c.op === 'pause').at, resume = p.plan.controls.find(c => c.op === 'resume').at;
-		assert.ok(dispatches(p).every(d => d.at < pause || d.at >= resume));
-		assert.equal(Math.max(...poolStates(p.plan, p.events).map(s => s.busy.length)), 5);
+		const at = op => p.plan.controls.find(c => c.op === op).at;
+		const [pause, resume, stop, restart] = ['pause', 'resume', 'stop', 'restart'].map(at);
+		assert.ok(dispatches(p).every(d => d.at < pause || (d.at >= resume && d.at < stop) || d.at >= restart));
+		// The stop lets the running jobs finish, then every goroutine goes before the restart.
+		const states = poolStates(p.plan, p.events);
+		assert.ok(states.some(s => s.at > stop && s.at < restart && s.busy.length === 0 && s.idle.length === 0));
+		// The job due at the stop and the two added while stopped run after the restart.
+		assert.deepEqual(dispatches(p).filter(d => d.at >= restart).map(d => d.job), ['k4', 'k5', 'k6']);
 	});
 	it('chapter 10 ends with Stop and no goroutine left on the core worker', () => {
 		const p = part(10, 'pool', 'core');
@@ -94,7 +100,12 @@ describe('chapter rules', () => {
 			assert.ok(cap.at >= 0 && cap.until - cap.at >= 1400, `chapter ${c.n}: ${cap.text}`);
 			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
 			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
-			for (const mark of ['*', '!']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
+			for (const mark of ['*', '!', '#']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
+			// A swap waits for every word to have risen, and its roll (420 ms) is over before the line leaves.
+			if (cap.swap) {
+				assert.ok(cap.at + 55 * (words - 1) + 520 <= cap.swap.at, `chapter ${c.n}: ${cap.text}`);
+				assert.ok(cap.swap.at + 420 <= cap.until, `chapter ${c.n}: ${cap.text}`);
+			}
 		});
 	});
 	it('show the finale\'s first caption, fully risen, in the still frame', () => {
@@ -102,6 +113,8 @@ describe('chapter rules', () => {
 		const cap = CHAPTERS[9].captions[0], words = plain(cap.text).split(' ').length;
 		assert.ok(starts()[9] + cap.at + 55 * (words - 1) + 520 <= STATIC_AT, cap.text);
 		assert.ok(STATIC_AT < starts()[9] + cap.until);
+		// The still frame shows the caption's own words, so it comes before the swap.
+		assert.ok(STATIC_AT < starts()[9] + cap.swap.at);
 	});
 	it('start nothing before the camera has arrived', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) assert.ok(p.events[0].at >= 1300, `chapter ${c.n} ${p.kind}`);
@@ -161,8 +174,8 @@ describe('chapter rules', () => {
 				assert.ok(w.limit <= places && w.idle.every(i => i < places), `chapter ${c.n}: ${w.id}`);
 			}
 		}
-		// The TunePool(3) chip takes the place of the tune control that chapter 9 switches on.
-		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-tune', label: 'TunePool(3)', at: 1300, until: 2500 }]);
+		// The TunePool(5) chip takes the place of the Restart() control that chapter 9 switches on.
+		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-restart', label: 'TunePool(5)', at: 1300, until: 2500 }]);
 		assert.ok(CHAPTERS.flatMap(c => c.chips ?? []).every(chip => piece[chip.id]?.kind === 'chip'));
 	});
 	it('give the core and the second worker a copy of every published value, as it is published', () => {
@@ -187,14 +200,25 @@ describe('chapter rules', () => {
 		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
 		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
 	});
-	it('chapter 7 tells the store fixture\'s story, and shows the store alone before the restart', () => {
+	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
 		// s0 and s2 run when the program dies, and the restart puts them back ahead of s3
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['s0', 's2']);
 		assert.deepEqual(queueStates(ev)[index('requeue')].order, ['s0', 's2', 's3']);
-		// The program stage has faded by the crash + 1350, and only the store and its two records hold the frame
-		// until the restart, for about 1.2 s.
+		// The program stays down, its box red and its card empty, long enough to read the caption about it.
 		assert.ok(ev[index('restart')].at - ev[index('crash')].at >= 2600);
+	});
+	it('chapter 8 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {
+		const ev = part(8, 'redis').events, index = type => ev.findIndex(e => e.type === type);
+		assert.deepEqual(ev[index('crash')], { at: 4600, type: 'crash', consumer: 'b' });
+		// B's two jobs and C's two are in flight when B dies, and C finishes its own before B's come back.
+		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['r0', 'r1', 'r2', 'r3']);
+		assert.ok(ev.filter(e => e.type === 'ack' && ['r2', 'r3'].includes(e.job)).every(e => e.at < ev[index('requeue')].at));
+		assert.deepEqual(queueStates(ev)[index('requeue')].order, ['r0', 'r1']);
+		// One wake, to C, which takes both at once.
+		const after = ev.slice(index('requeue'));
+		assert.deepEqual(after.filter(e => e.type === 'notify').map(e => e.consumer), ['c']);
+		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[7720, 'r0', 'c'], [7720, 'r1', 'c']]);
 	});
 	it('run each store worker as a pool, ending every chapter with one idle goroutine', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
@@ -213,10 +237,17 @@ describe('chapter rules', () => {
 			'11200 spawn sqlite 1', // the requeue's claim takes two again
 			'16200 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
 		]);
-		assert.deepEqual(changes(8, 'redis'), ['3160 spawn b 1', '3400 spawn c 1', '9420 exit c 0', '9920 exit b 0']);
+		assert.deepEqual(changes(8, 'redis'), [
+			'2920 spawn b 1', '3120 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
+			'4600 exit b 0', '4600 exit b 1', // program B dies with both
+			'7070 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
+			'7720 spawn c 0', // woken for B's jobs, C pulls both
+			'9800 spawn b 0', // B restarts with one
+			'10770 exit c 1',
+		]);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
 		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);
-		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[1], [1]]);
+		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[0], [0]]);
 	});
 	it('hold no more records in flight than busy rings, but for a dead program\'s, until the requeue', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {

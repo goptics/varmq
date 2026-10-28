@@ -15,11 +15,13 @@
 //   one statement (`dispatchCredit`). Rows come out by their integer id, which is write order. Opening the queue sets
 //   every `processing` row that was never acked back to `pending` (`requeueNoAck`); claims take the lowest
 //   ids, so those rows sort ahead of every row still waiting, and among themselves in write order.
-// - redisq v1.4.0: an add pushes the job on a list and publishes a notification that every consumer gets.
-//   A woken worker pulls one job per credit, and a job one consumer has taken is not in the list for
-//   another. Which consumer wins a job is a race on the Redis server; here the woken consumers take in
-//   turn, one job each, as a stand-in for it. A job whose process died is requeued only once its
-//   visibility timeout (five minutes by default) has passed, so there is no crash in the Redis story.
+// - redisq: an add pushes the job on a list and wakes only idle consumers, one per job waiting that no wake
+//   is on its way for. A woken worker pulls one job per credit in one pop (`DequeueBatchWithAckIds`), and a
+//   job one consumer has taken is not in the list for another. A pop that fills the worker's credit leaves it
+//   pulling again as each ack frees a ring, with no wake; one that comes back short leaves it idle, waiting
+//   for a wake. When a consumer's program dies, its jobs stay in flight until Redis takes it for dead (its
+//   wake-up channel gone, about five seconds later); then the others' sweep puts them back at the front of the
+//   queue and wakes a consumer for them.
 // A job runs `takeTravel` after its take (the copy's flight to the ring) and is done `work` ms later; the
 // animation runs the ring's progress from arrival to done. Its ack lands `ackTravel` after that. The tray
 // has five slots, and a record holds the lowest free one from its take until its ack, so a store's workers'
@@ -66,6 +68,10 @@ export interface RedisPlan {
 	notifyTravel: number; // ms from a land to the notification reaching a consumer
 	takeTravel: number;
 	ackTravel: number;
+	// One consumer's program dies at `at`, its jobs running. `backAfter` later the others' sweep puts its jobs back
+	// and wakes a consumer for them, and the program restarts at `restartAt`. A job's run after it is put back takes
+	// its `rework`, or its `work` again.
+	crash?: { consumer: string; at: number; backAfter: number; restartAt: number; rework: Record<string, number> };
 }
 
 // A job starts running takeTravel after its take (the copy's flight to the ring):
@@ -81,8 +87,8 @@ export type StoreEvent =
 	| { at: number; type: 'ack'; job: string; tray: number }
 	// The goroutine stops: just after its ack, as `freePoolNode` decides, or when its program dies.
 	| { at: number; type: 'exit'; consumer: string; ring: number }
-	| { at: number; type: 'crash' }
-	| { at: number; type: 'restart' }
+	| { at: number; type: 'crash'; consumer?: string } // SQLite's program dies, or a Redis consumer's
+	| { at: number; type: 'restart'; consumer?: string }
 	| { at: number; type: 'requeue'; jobs: string[] }; // the records in flight, in write order, to the head
 
 /** A worker's goroutines: the busy rings, each with the job it holds from its take until its ack, and the idle ones. */
@@ -335,47 +341,92 @@ export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 }
 
 /**
- * Program A adds, Redis holds the one queue, and each consumer program has a worker. A land notifies
- * every consumer. A consumer that is woken, by a notify or by the ack of one of its jobs, pulls one job
- * per credit, and the consumers woken together take in turn. It refuses more rings than the tray has
- * slots.
+ * Program A adds, Redis holds the one queue, and each consumer program has a worker. A land wakes idle
+ * consumers, in the plan's order, one per job waiting that no wake is on its way for; every consumer is idle
+ * after `Start()`. A woken worker pulls one job per credit in one pop. After a full pop, each ack has its worker
+ * pull again; a short pop leaves it idle until a wake. With a crash in the plan, the consumer's program dies with
+ * its goroutines, its records stay in flight until they are put back at the front, in the order it took them,
+ * with a wake for them, and it restarts with one goroutine and pulls at once, as binding a queue does. It refuses
+ * more rings than the tray has slots, and a crash while one of the program's acks is on its way.
  */
 export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 	const rings = plan.consumers.reduce((n, c) => n + c.limit, 0);
 	if (rings > SLOTS) throw tooManyRings(rings);
 
-	const { store, emit, timer, credit, take, run } = engine(plan);
+	const { store, events, emit, timer, credit, take, run } = engine(plan);
 	const work = new Map(plan.jobs.map((j) => [j.id, j.work]));
 	const crew: Worker[] = plan.consumers.map((c) => ({ id: c.id, limit: c.limit, deaths: 0 }));
-	const woken = new Set<Worker>(); // the consumers with something to act on since the last pull
-	let turn = 0; // the consumer whose turn comes next
+	const waiting = new Set(crew); // the workers waiting for a wake, until it arrives
+	const idle = new Set(crew); // the consumers Redis may wake: waiting, with no wake on its way to them
+	const taker = new Map<string, Worker>(); // who took each job last
+	let waking = 0; // wakes on their way
 
-	// The woken consumers take the head of the queue in turn, one job each, and skip one with no credit.
-	const deal = (now: number) => {
-		for (;;) {
-			const order = [...crew.slice(turn), ...crew.slice(0, turn)];
-			const w = order.find((c) => woken.has(c) && credit(c) > 0);
-			if (!w || store.queue.length === 0) break;
-			const job = store.queue[0];
-			take(now, w, job, work.get(job)!, (at) => wake(at, w));
-			turn = (crew.indexOf(w) + 1) % crew.length;
+	// One pop: a job per credit from the head of the queue. A short one leaves the worker waiting for a wake.
+	const pull = (now: number, w: Worker) => {
+		const jobs = store.queue.slice(0, credit(w));
+		if (jobs.length < credit(w)) {
+			waiting.add(w);
+			idle.add(w);
 		}
-		woken.clear();
-	};
-	const wake = (now: number, w: Worker) => {
-		woken.add(w);
-		timer(now, deal);
+		for (const job of jobs) {
+			const rerun = taker.has(job); // taken before: put back after the crash, so it runs its `rework`
+			taker.set(job, w);
+			const duration = (rerun ? plan.crash?.rework[job] : undefined) ?? work.get(job)!;
+			take(now, w, job, duration, (at) => {
+				if (!waiting.has(w)) timer(at, (t) => pull(t, w));
+			});
+		}
 	};
 
+	// Redis wakes idle consumers, one per job waiting that no wake is on its way for.
+	const wake = (now: number) => {
+		for (const w of crew) {
+			if (!idle.has(w) || waking >= store.queue.length) continue;
+			idle.delete(w);
+			waking++;
+			timer(now + plan.notifyTravel, (at) => {
+				waking--;
+				waiting.delete(w);
+				emit({ at, type: 'notify', consumer: w.id });
+				pull(at, w);
+			});
+		}
+	};
+
+	const crash = plan.crash;
+	if (crash) {
+		const w = crew.find((c) => c.id === crash.consumer);
+		if (!w) throw new Error(`crash: there is no consumer ${crash.consumer}`);
+		const held = () => [...taker].filter(([job, by]) => by === w && store.tray.includes(job)).map(([job]) => job);
+		timer(crash.at, (now) => {
+			// A job whose function has returned and whose ack is still on its way: the story cannot say if it landed.
+			const acking = held().find((job) => events.some((e) => e.type === 'done' && e.job === job));
+			if (acking) throw new Error(`crash: the ack of ${acking} is on its way at ${now} ms, unclear if it landed`);
+			w.deaths++;
+			waiting.delete(w);
+			idle.delete(w);
+			emit({ at: now, type: 'crash', consumer: w.id });
+			// Its goroutines die with it, busy and idle.
+			const r = store.rings!.get(w.id)!;
+			for (const ring of [...r.busy.keys(), ...r.idle].sort((a, b) => a - b)) {
+				emit({ at: now, type: 'exit', consumer: w.id, ring });
+			}
+		});
+		timer(crash.at + crash.backAfter, (now) => {
+			const jobs = held();
+			emit({ at: now, type: 'requeue', jobs });
+			wake(now);
+		});
+		timer(crash.restartAt, (now) => {
+			emit({ at: now, type: 'restart', consumer: w.id });
+			emit({ at: now, type: 'spawn', consumer: w.id, ring: 0 }); // `Start()`
+			pull(now, w);
+		});
+	}
 	for (const j of plan.jobs) {
 		timer(j.at + plan.landAfter, (now) => {
 			emit({ at: now, type: 'land', job: j.id });
-			for (const w of crew) {
-				timer(now + plan.notifyTravel, (at) => {
-					emit({ at, type: 'notify', consumer: w.id });
-					wake(at, w);
-				});
-			}
+			wake(now);
 		});
 	}
 

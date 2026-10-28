@@ -22,8 +22,10 @@ export const RING_R = 11;
 
 const MARGIN = 20; // what `frame` leaves around a box on every side
 const MAX_ZOOM = 1.1;
-const LABEL_HIDDEN_PX = 6.5; // a label this small on screen is hidden...
-const LABEL_SHOWN_PX = 7; // ...and one this big is fully shown
+// A label this small on screen is hidden, and one this big fully shown: wide enough apart that a zoom across them
+// fades labels in or out over a few hundred ms. Hidden still covers the finale's labels, at most 5.56 px.
+const LABEL_HIDDEN_PX = 5.75;
+const LABEL_SHOWN_PX = 7;
 
 /** Centre of slot `k` in the lane at `laneX`. Slot 0 is the head, on the right. */
 export function slotX(laneX: number, k: number): number {
@@ -39,9 +41,9 @@ export type PieceKind = 'program' | 'store' | 'lane' | 'tray' | 'card' | 'loop' 
 
 /**
  * Something drawn on the map. It switches on in `chapter` (1 to 9) and stays on. `parent` names the
- * piece whose box it sits inside. `label` is its text, one 14-unit line: inside a chip; below the loop,
- * centred and 6 units clear of it; and above anything else, starting at its left edge and 6 units
- * clear of its top.
+ * piece whose box it sits inside. `label` is its text, one 14-unit line (two for the loop, split at a
+ * newline): inside a chip; below the loop, centred and 6 units clear of it; and above anything else,
+ * starting at its left edge and 6 units clear of its top.
  */
 export interface Piece {
 	id: string;
@@ -60,7 +62,7 @@ export interface Conn {
 	id: string;
 	d: string;
 	chapter: number;
-	kind: 'line' | 'notify' | 'ack';
+	kind: 'line' | 'ack';
 	label?: { text: string; x: number; y: number };
 }
 
@@ -75,7 +77,7 @@ export const PIECES: Piece[] = [
 	{ id: 'add', kind: 'chip', chapter: 1, box: chip(96, 390, 68), label: 'Add()' },
 	{ id: 'queue', kind: 'lane', chapter: 1, box: lane(190, 368), label: 'QUEUE' },
 	// The loop is a circle of radius 26 centred on (520, 390); its box is the square around it.
-	{ id: 'loop', kind: 'loop', chapter: 1, box: rect(494, 364, 52, 52), label: 'LOOP' },
+	{ id: 'loop', kind: 'loop', chapter: 1, box: rect(494, 364, 52, 52), label: 'EVENT\nLOOP' },
 	{ id: 'core', kind: 'card', chapter: 1, box: rect(570, 340, 200, 100), label: 'WORKER' },
 
 	// 3. Results and errors: a worker of its own, because a result worker cannot subscribe to a topic.
@@ -85,10 +87,12 @@ export const PIECES: Piece[] = [
 	{ id: 'r-value', kind: 'chip', chapter: 3, box: chip(1280, 354, 60), label: 'value' },
 	{ id: 'r-error', kind: 'chip', chapter: 3, box: chip(1280, 426, 60), label: 'error' },
 
-	// 4. Priority, above the main row.
+	// 4. Priority, above the main row. Every queue has an Add() of its own, as each queue handle does.
+	{ id: 'p-add', kind: 'chip', chapter: 4, box: chip(96, 312, 68), label: 'Add()' },
 	{ id: 'prio', kind: 'lane', chapter: 4, box: lane(190, 290), label: 'PRIORITY QUEUE' },
 
-	// 5. Many queues: a third lane below the main row, and the strategy chip on the line into the loop.
+	// 5. Many queues: a third lane below the main row with its Add(), and the strategy chip on the line into the loop.
+	{ id: 'c-add', kind: 'chip', chapter: 5, box: chip(96, 468, 68), label: 'Add()' },
 	{ id: 'queue-c', kind: 'lane', chapter: 5, box: lane(190, 446), label: 'QUEUE' },
 	{ id: 'strategy', kind: 'chip', chapter: 5, box: chip(380, 390, 92), label: 'RoundRobin' },
 
@@ -102,7 +106,7 @@ export const PIECES: Piece[] = [
 	{ id: 's-prog', kind: 'program', chapter: 7, box: rect(60, 580, 520, 140), label: 'PROGRAM' },
 	{ id: 's-add', kind: 'chip', chapter: 7, box: chip(88, 650, 68), label: 'Add()', parent: 's-prog' },
 	{ id: 'sqlite', kind: 'card', chapter: 7, box: rect(360, 610, 200, 80), label: 'WORKER', parent: 's-prog' },
-	{ id: 's-store', kind: 'store', chapter: 7, box: rect(220, 762, 210, 162), label: 'JOBS.DB · SQLITE' },
+	{ id: 's-store', kind: 'store', chapter: 7, box: rect(220, 762, 210, 162), label: 'SQLITE · JOBS.DB' },
 	{ id: 's-queue', kind: 'lane', chapter: 7, box: lane(240, 790), label: 'QUEUE', parent: 's-store' },
 	{ id: 's-tray', kind: 'tray', chapter: 7, box: lane(240, 864), label: 'IN FLIGHT', parent: 's-store' },
 
@@ -121,19 +125,20 @@ export const PIECES: Piece[] = [
 	// 9. Control: two rows of two above the core's card, inside its x span (570 to 770).
 	{ id: 'ctl-pause', kind: 'chip', chapter: 9, box: chip(570, 254, 70), label: 'Pause()' },
 	{ id: 'ctl-resume', kind: 'chip', chapter: 9, box: chip(648, 254, 78), label: 'Resume()' },
-	{ id: 'ctl-tune', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'TunePool(5)' },
+	{ id: 'ctl-restart', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'Restart()' },
 	{ id: 'ctl-stop', kind: 'chip', chapter: 9, box: chip(678, 290, 64), label: 'Stop()' },
 ];
 
 // Each line stops 2 units short of the pieces it joins. Where lines split or join, the shorter one runs
-// only as far as the other, so no stretch is drawn twice. The two notify lines are the exception: each
-// runs the whole way from the store.
+// only as far as the other, so no stretch is drawn twice.
 export const CONNS: Conn[] = [
 	// The core. Every queue's line ends at the event loop, the topic's included.
 	{ id: 'add-to-queue', kind: 'line', chapter: 1, d: 'M166 390H188' },
 	{ id: 'queue-to-loop', kind: 'line', chapter: 1, d: 'M362 390H492' },
 	{ id: 'loop-to-core', kind: 'line', chapter: 1, d: 'M548 390H568' },
+	{ id: 'p-add-to-prio', kind: 'line', chapter: 4, d: 'M166 312H188' },
 	{ id: 'prio-to-loop', kind: 'line', chapter: 4, d: 'M362 312H430L492 384' },
+	{ id: 'c-add-to-queue-c', kind: 'line', chapter: 5, d: 'M166 468H188' },
 	{ id: 'queue-c-to-loop', kind: 'line', chapter: 5, d: 'M362 468H430L492 396' },
 	{ id: 'publish-to-topic', kind: 'line', chapter: 6, d: 'M166 180H188' },
 	{ id: 'topic-to-second', kind: 'line', chapter: 6, d: 'M362 172H568' },
@@ -156,12 +161,10 @@ export const CONNS: Conn[] = [
 		label: { text: 'ACK', x: 548, y: 802 }, // right of the line, where the mockup has it
 	},
 
-	// Redis. Program A adds, Redis notifies B and C, each takes from the queue and acks to the tray.
+	// Redis. Program A adds, Redis wakes B and C down the lines they pull jobs through, and each acks to the tray.
 	{ id: 'a-add-to-r-queue2', kind: 'line', chapter: 8, d: 'M771 730H867V702H888' },
 	{ id: 'r-queue2-to-redis-b', kind: 'line', chapter: 8, d: 'M1062 702H1095V660H1128' },
 	{ id: 'r-queue2-to-redis-c', kind: 'line', chapter: 8, d: 'M1095 702V830H1128' },
-	{ id: 'r-store-to-redis-b', kind: 'notify', chapter: 8, d: 'M1082 672H1105V640H1128' },
-	{ id: 'r-store-to-redis-c', kind: 'notify', chapter: 8, d: 'M1082 672H1105V815H1128' },
 	{ id: 'redis-b-to-r-tray', kind: 'ack', chapter: 8, d: 'M1128 680H1087V776H1062' },
 	{ id: 'redis-c-to-r-tray', kind: 'ack', chapter: 8, d: 'M1128 845H1087V776' },
 ];
@@ -223,17 +226,17 @@ const upTo = (box: Box, y: number): Box => rect(box.x, y, box.w, box.y + box.h -
 /** `REGIONS[n - 1]` is what the camera frames in chapter n. The last one is the whole world. */
 export const REGIONS: Box[] = [
 	around('add', 'queue', 'loop', 'core'), // 1. One worker
-	around('queue', 'loop', 'core', 'ctl-tune'), // 2. The pool, with room for the TunePool(3) chip above the card
+	around('queue', 'loop', 'core', 'ctl-restart'), // 2. The pool, with room for the TunePool(5) chip above the card
 	around('r-add', 'r-queue', 'result', 'r-value', 'r-error'), // 3. Results and errors
-	around('prio', 'loop', 'core'), // 4. Priority
-	around('prio', 'queue-c', 'strategy', 'loop', 'core'), // 5. Many queues, one worker
+	around('p-add', 'prio', 'loop', 'core'), // 4. Priority
+	around('p-add', 'c-add', 'prio', 'queue-c', 'strategy', 'loop', 'core'), // 5. Many queues, one worker
 	around('publish', 'topic', 'second', 'core'), // 6. Topics
 	around('s-prog', 's-store'), // 7. SQLite
 	around('a-prog', 'b-prog', 'c-prog', 'r-store'), // 8. Redis
 	// 9. Control, with the queue where jobs wait, and the topic and the second worker, which are on by then. The box
 	// reaches up to y 36, so the camera sits at y 238: the SQLite program below is out of view, its label too, which
 	// at y 282 still showed through the top of the caption band, where the band is not yet opaque.
-	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-tune', 'ctl-stop', 'topic', 'second'), 36),
+	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-restart', 'ctl-stop', 'topic', 'second'), 36),
 	union(PIECES.map((p) => p.box)), // 10. Everything together
 ];
 
@@ -243,7 +246,7 @@ export function frame(box: Box): Camera {
 	return { x: box.x + box.w / 2, y: box.y + box.h / 2, s };
 }
 
-/** 0 while a label would be under 6.5 px on screen, 1 from 7 px, and linear between. */
+/** 0 while a label would be under 5.75 px on screen, 1 from 7 px, and linear between. */
 export function labelOpacity(s: number): number {
 	const t = (LABEL_PX * s - LABEL_HIDDEN_PX) / (LABEL_SHOWN_PX - LABEL_HIDDEN_PX);
 	return Math.min(1, Math.max(0, t));

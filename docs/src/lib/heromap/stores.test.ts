@@ -4,7 +4,7 @@ import { queueStates, simulateRedis, simulateSqlite, storeEnd, trayStates } from
 
 const sqlite = { limit: 2, idle: [0], jobs: ['s0', 's1', 's2', 's3'].map((id, i) => ({ id, at: 300 + 260 * i, work: [4200, 1050, 3000, 1100][i] })),
 	firstClaim: 2300, crashAt: 6600, restartAt: 8000, requeueAfter: 650, rework: { s0: 1700, s2: 1200, s3: 1100 }, takeTravel: 720, ackTravel: 780 };
-const redis = { consumers: [{ id: 'b', limit: 2, idle: [0] }, { id: 'c', limit: 2, idle: [0] }], jobs: [0, 1, 2, 3, 4, 5].map(i => ({ id: `r${i}`, at: 300 + 240 * i, work: [2200, 1900, 2500, 2100, 1700, 1900][i] })),
+const redis = { consumers: [{ id: 'b', limit: 2, idle: [0] }, { id: 'c', limit: 2, idle: [0] }], jobs: [0, 1, 2, 3, 4, 5].map(i => ({ id: `r${i}`, at: [300, 500, 700, 900, 1300, 1500][i], work: [2200, 1900, 2500, 1900, 1700, 1900][i] })),
 	landAfter: 700, notifyTravel: 420, takeTravel: 720, ackTravel: 730 };
 const takes = ev => ev.filter(e => e.type === 'take');
 
@@ -36,11 +36,12 @@ describe('redis', () => {
 	it('gives each job to exactly one consumer', () => {
 		assert.deepEqual(takes(ev).map(e => e.job).sort(), ['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
 	});
-	it('notifies every consumer of every land', () => {
-		assert.equal(ev.filter(e => e.type === 'notify').length, 6 * 2);
+	it('wakes each idle consumer once, and nothing else', () => {
+		assert.deepEqual(ev.filter(e => e.type === 'notify').map(e => e.consumer), ['b', 'c']);
 	});
-	it('alternates the first four takes between b and c', () => {
-		assert.deepEqual(takes(ev).slice(0, 4).map(e => e.consumer), ['b', 'c', 'b', 'c']);
+	it('has a woken consumer pull a job for each free ring in one pop', () => {
+		assert.deepEqual(takes(ev).slice(0, 4).map(e => [e.at, e.job, e.consumer]),
+			[[1420, 'r0', 'b'], [1420, 'r1', 'b'], [1620, 'r2', 'c'], [1620, 'r3', 'c']]);
 	});
 });
 
@@ -189,45 +190,63 @@ describe('sqlite rules', () => {
 describe('redis rules', () => {
 	it('plays the fixture out exactly', () => {
 		assert.deepEqual(show(simulateRedis(redis)), [
-			// Each job lands 700 after its add and is announced 420 later, to b and then to c. At 1420 both are woken and take in turn.
-			'1000 land r0', '1240 land r1',
-			'1420 notify b', '1420 notify c', '1420 take r0 b ring 0 tray 0', '1420 take r1 c ring 0 tray 1',
-			// Each consumer starts with one goroutine, and starts a second for its second job.
-			'1480 land r2', '1660 notify b', '1660 notify c', '1660 spawn b ring 1', '1660 take r2 b ring 1 tray 2',
-			'1720 land r3', '1900 notify b', '1900 notify c', '1900 spawn c ring 1', '1900 take r3 c ring 1 tray 3',
-			// All four rings are busy, so r4 and r5 wait in the queue through their notifies.
-			'1960 land r4', '2140 notify b', '2140 notify c', '2200 land r5',
-			'2380 notify b', '2380 notify c', '2620 notify b', '2620 notify c',
-			// The first ack to land is c's, and only the consumer whose ring it frees pulls.
-			'4040 done r1 c ring 0', '4340 done r0 b ring 0', '4720 done r3 c ring 1',
-			'4770 ack r1 tray 1', '4770 take r4 c ring 0 tray 1', '4880 done r2 b ring 1',
-			'5070 ack r0 tray 0', '5070 take r5 b ring 0 tray 0', '5450 ack r3 tray 3', '5610 ack r2 tray 2',
+			// Each job lands 700 after its add. r0 wakes b, the first idle consumer, and r1 wakes c; with both woken, the
+			// jobs after them wake no one. A wake arrives 420 after its land.
+			'1000 land r0', '1200 land r1', '1400 land r2',
+			// A woken consumer pulls a job per free ring in one pop, starting its second goroutine for the second job.
+			'1420 notify b', '1420 take r0 b ring 0 tray 0', '1420 spawn b ring 1', '1420 take r1 b ring 1 tray 1',
+			'1600 land r3',
+			'1620 notify c', '1620 take r2 c ring 0 tray 2', '1620 spawn c ring 1', '1620 take r3 c ring 1 tray 3',
+			// All four rings are busy, so r4 and r5 wait. Both pops were full, so each ack has its consumer pull again,
+			// with no wake.
+			'2000 land r4', '2200 land r5',
+			'4040 done r1 b ring 1', '4240 done r3 c ring 1', '4340 done r0 b ring 0',
+			'4770 ack r1 tray 1', '4770 take r4 b ring 1 tray 1', '4840 done r2 c ring 0', '4970 ack r3 tray 3',
+			'4970 take r5 c ring 1 tray 3',
+			// Their next pulls find nothing, and leave them idle.
+			'5070 ack r0 tray 0', '5570 ack r2 tray 2',
 			// Once nothing waits, a goroutine finishing while the other is idle exits.
-			'7190 done r4 c ring 0', '7690 done r5 b ring 0', '7920 ack r4 tray 1', '7920 exit c ring 0',
-			'8420 ack r5 tray 0', '8420 exit b ring 0',
+			'7190 done r4 b ring 1', '7590 done r5 c ring 1', '7920 ack r4 tray 1', '7920 exit b ring 1',
+			'8320 ack r5 tray 3', '8320 exit c ring 1',
 		]);
 	});
-	it('deals to the woken consumers in turn and skips one with no free ring', () => {
-		// b has one ring and c has two: b takes j0, c takes j1, and b has no ring left for j2
-		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }, { id: 'c', limit: 2, idle: [0] }], jobs: burst(['j0', 'j1', 'j2'], 0, 1000) }));
-		assert.deepEqual(show(takes(ev)), ['200 take j0 b ring 0 tray 0', '200 take j1 c ring 0 tray 1', '200 take j2 c ring 1 tray 2']);
+	it('sends no wake for a job that one is already on its way for', () => {
+		const ev = simulateRedis(rd({ jobs: [{ id: 'j0', at: 0, work: 500 }] }));
+		assert.deepEqual(show(ev.filter(e => e.type === 'notify')), ['200 notify b']);
 	});
-	it('keeps the turn between notifies, so jobs that arrive one at a time alternate too', () => {
-		const jobs = [0, 1, 2, 3].map(i => ({ id: `j${i}`, at: 1000 * i, work: 9000 }));
-		assert.deepEqual(takes(simulateRedis(rd({ jobs }))).map(e => [e.at, e.job, e.consumer, e.ring]),
-			[[200, 'j0', 'b', 0], [1200, 'j1', 'c', 0], [2200, 'j2', 'b', 1], [3200, 'j3', 'c', 1]]);
-	});
-	it('wakes only the consumer whose ack landed, even before the notify of a job that landed meanwhile arrives', () => {
-		// j1 lands at 900 and is announced at 1200. b's ack of j0 lands at 1000, and b takes j1 then: c has a free ring and the
-		// turn, but nothing has woken it.
-		const jobs = [{ id: 'j0', at: 0, work: 500 }, { id: 'j1', at: 800, work: 500 }];
-		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }, { id: 'c', limit: 1, idle: [0] }], jobs, notifyTravel: 300 }));
+	it('has a consumer whose pop came back short wait for a wake, and not pull on its acks', () => {
+		// b pops j0 alone with two rings free, so it waits. j1 lands at 750 and wakes it, and the wake arrives at 1050:
+		// b's ack of j0 at 1000 does not pull j1.
+		const jobs = [{ id: 'j0', at: 0, work: 500 }, { id: 'j1', at: 650, work: 500 }];
+		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 2, idle: [0] }], jobs, notifyTravel: 300 }));
 		assert.deepEqual(show(ev), [
-			'100 land j0', '400 notify b', '400 notify c', '400 take j0 b ring 0 tray 0',
-			'900 land j1', '950 done j0 b ring 0', '1000 ack j0 tray 0', '1000 take j1 b ring 0 tray 0',
-			'1200 notify b', '1200 notify c', // they find the queue empty
-			'1550 done j1 b ring 0', '1600 ack j1 tray 0',
+			'100 land j0', '400 notify b', '400 take j0 b ring 0 tray 0',
+			'750 land j1', '950 done j0 b ring 0', '1000 ack j0 tray 0', '1050 notify b', '1050 take j1 b ring 0 tray 0',
+			'1600 done j1 b ring 0', '1650 ack j1 tray 0',
 		]);
+	});
+	it('has a consumer whose pop was full pull again on its ack, with no wake', () => {
+		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }], jobs: burst(['j0', 'j1'], 0, 500) }));
+		assert.deepEqual(show(ev.filter(e => e.type === 'notify' || e.type === 'take')), [
+			'200 notify b', '200 take j0 b ring 0 tray 0', '800 take j1 b ring 0 tray 0']);
+	});
+	it('puts a dead consumer\'s jobs back at the front, and wakes an idle one for them', () => {
+		// b dies running j0; c is idle by then, and takes j0 when the sweep puts it back. b restarts with nothing to take.
+		const jobs = [{ id: 'j0', at: 0, work: 5000 }, { id: 'j1', at: 10, work: 300 }];
+		const crash = { consumer: 'b', at: 1000, backAfter: 500, restartAt: 3000, rework: { j0: 400 } };
+		const ev = simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }, { id: 'c', limit: 1, idle: [0] }], jobs, crash }));
+		assert.deepEqual(show(ev), [
+			'100 land j0', '110 land j1', '200 notify b', '200 take j0 b ring 0 tray 0', '210 notify c', '210 take j1 c ring 0 tray 1',
+			'560 done j1 c ring 0', '610 ack j1 tray 1',
+			'1000 crash b', '1000 exit b ring 0', // its record stays in flight
+			'1500 requeue j0', '1600 notify c', '1600 take j0 c ring 0 tray 0', '2050 done j0 c ring 0', '2100 ack j0 tray 0',
+			'3000 restart b', '3000 spawn b ring 0',
+		]);
+	});
+	it('refuses a consumer crash while one of its acks is on its way', () => {
+		const crash = { consumer: 'b', at: 600, backAfter: 500, restartAt: 3000, rework: {} };
+		const ev = () => simulateRedis(rd({ consumers: [{ id: 'b', limit: 1, idle: [0] }], jobs: [{ id: 'j0', at: 0, work: 300 }], crash }));
+		assert.throws(ev, /^Error: crash: the ack of j0/);
 	});
 	it('takes again on a ring only after its ack has landed', () => {
 		const ev = simulateRedis(redis);
