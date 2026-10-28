@@ -1346,6 +1346,63 @@ func TestWorkerLifecycle(t *testing.T) {
 		}
 	})
 
+	// A Pause and Resume landing between reserve's count and its status read
+	// leave the worker Idle with jobs counted; a second Pause then goes
+	// straight to Paused without looking at them. Only repeated cycles hit it.
+	t.Run("No job starts while Paused across Pause and Resume cycles", func(t *testing.T) {
+		const cycles = 200_000
+		var w *worker[int, iJob[int]]
+		var pausedFlag atomic.Bool
+		var whilePaused, afterPaused atomic.Int64
+		w = newWorker(func(j iJob[int]) {
+			if w.IsPaused() {
+				whilePaused.Add(1)
+			}
+			if pausedFlag.Load() {
+				afterPaused.Add(1)
+			}
+		}, 2)
+		q := newQueue(w, queues.NewQueue[any]())
+
+		stop := make(chan struct{})
+		addDone := make(chan struct{})
+		go func() {
+			defer close(addDone)
+			for i := 0; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if q.Len() < 16 {
+					q.Add(i)
+				}
+			}
+		}()
+
+		for c := range cycles {
+			for end := time.Now().Add(time.Duration(c%4) * time.Microsecond); time.Now().Before(end); {
+			}
+			if w.Pause() == nil && w.IsPaused() {
+				pausedFlag.Store(true)
+				pausedFlag.Store(false)
+			}
+			_ = w.Resume()
+			// A Pause that returned Pausing: wait for Paused, then Resume.
+			if !w.IsActive() {
+				w.WaitUntilPaused()
+				_ = w.Resume()
+			}
+		}
+		close(stop)
+		<-addDone
+		w.Wait()
+		w.Stop()
+
+		assert.Zero(t, whilePaused.Load(), "jobs started while Paused")
+		assert.Zero(t, afterPaused.Load(), "jobs started after Pause returned Paused")
+	})
+
 	t.Run("Pause transitions to pausing then paused when in-flight job completes", func(t *testing.T) {
 		blockCh := make(chan struct{})
 		w := newWorker(func(j iJob[string]) {

@@ -217,19 +217,30 @@ func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) 
 	return
 }
 
-// reserve counts n jobs as processing, moves an Idle worker to Running, and
-// reports whether it is still active; if not, the caller releases the n with
-// finishJobs and starts nothing. The count must come first: a Pause that sees
-// Running with nothing processing goes straight to Paused, so it either sees
-// the count and only reaches Pausing, or halts the worker before the check.
+// reserve counts n jobs as processing and reports whether the worker is
+// Running, moving an Idle one there itself; if not, the caller releases the n
+// with finishJobs and starts nothing. The count must come first, and only
+// Running may pass: Pause checks the count only on Running, and sends Idle
+// straight to Paused. A Running worker therefore has its count seen and only
+// reaches Pausing; an Idle one that passed could be Paused, Resumed to Idle and
+// Paused again with the jobs unseen.
 func (w *worker[T, JobType]) reserve(n uint32) bool {
 	w.curProcessing.Add(n)
-	// Load first: a failed CAS still dirties the line workers read per job.
-	if w.status.Load() == idle {
-		w.status.CompareAndSwap(idle, running)
-	}
 
-	return w.IsActive()
+	for {
+		// Load first: a failed CAS still dirties the line workers read per job.
+		switch w.status.Load() {
+		case running:
+			return true
+		case idle:
+			if w.status.CompareAndSwap(idle, running) {
+				return true
+			}
+			// Lost the CAS: the status just changed, read it again.
+		default:
+			return false
+		}
+	}
 }
 
 // finishJobs takes m jobs off the processing count without w.mx unless they
