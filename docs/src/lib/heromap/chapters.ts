@@ -355,17 +355,15 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
-	// and then its goroutines go. Nothing waits in its queue at the stop. Once the map is still, from 7800 ms, the
-	// camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
+	// and then its goroutines go. Nothing waits in its queue at the stop. The one caption stays up until the map is
+	// still; the stop only winds it down. From 7800 ms the camera zooms into chapter 1's frame as everything else
+	// fades, and the loop starts over.
 	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
 			duration: 9000,
-			captions: [
-				{ at: 300, until: 3800, text: 'One worker model, from memory to *Redis*' },
-				{ at: 4300, until: 7500, text: '*Stop()* lets running jobs finish' },
-			],
+			captions: [{ at: 300, until: 7500, text: 'One worker model, from memory to *Redis*' }],
 			published,
 			parts: [
 				pool(carry, 'core', {

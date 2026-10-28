@@ -16,8 +16,8 @@ describe('chapters', () => {
 	it('carry the agreed captions', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
-		assert.equal(plain(CHAPTERS[9].captions[1].text), 'Stop() lets running jobs finish');
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 20);
+		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to Redis']);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 19);
 	});
 	it('run about 85 seconds', () => {
 		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
