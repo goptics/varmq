@@ -1,17 +1,23 @@
 ---
-import SceneFrame from './SceneFrame.astro';
+import '../../styles/guides-b.css';
+import Scene from '../ui/Scene.astro';
+import CallStrip from './CallStrip.astro';
+import LoopButtons from './LoopButtons.astro';
 
-const code = `worker := varmq.NewErrWorker(process, 2)
+const program = `worker := varmq.NewErrWorker(process, 2)
 queue := worker.BindQueue()
 m := worker.Metrics()`;
+const hint = '// add jobs, pause, purge or reset: the counters move, and the call shows here';
+
+const describe = `A simulation of one error worker. Each job takes 2.2 seconds. The four counters of Metrics() move as jobs run: Submitted counts each job the queue accepted, Completed counts each job that ran, and Successful and Failed split those. The line below them checks Submitted == NumPending + NumProcessing + Completed. It holds on an idle or paused worker. It does not hold after Purge, after Reset in the middle of a run, or at limit 1 while a goroutine works through a batch. The scene says which case it is.`;
 ---
 
-<SceneFrame scene="metrics" title="Metrics()" code={code} hint="// add jobs, pause, purge or reset: the counters move, and the call shows here">
-	<Fragment slot="stats">
+<Scene id="gb-metrics" title="Metrics()" describe={describe} class="gb">
+	<dl class="sframe__stats" slot="stats">
 		<div><dt>Status</dt><dd data-stat="status">Idle</dd></div>
 		<div><dt>NumPending</dt><dd data-stat="pending">0</dd></div>
 		<div><dt>NumProcessing</dt><dd data-stat="processing">0</dd></div>
-	</Fragment>
+	</dl>
 
 	<div aria-hidden="true">
 		<div data-pool></div>
@@ -31,28 +37,26 @@ m := worker.Metrics()`;
 		<p class="gb-eq__why" data-why>The equation is for a worker with nothing running.</p>
 	</div>
 
-	<Fragment slot="controls">
-		<button type="button" class="gb-btn gb-btn--primary" data-act="add">Add job</button>
-		<button type="button" class="gb-btn" data-act="fail">Add job that fails</button>
-		<button type="button" class="gb-btn" data-act="add5">Add 5</button>
-		<button type="button" class="gb-btn" data-act="pause-toggle">Pause()</button>
-		<button type="button" class="gb-btn" data-act="purge">Purge()</button>
-		<button type="button" class="gb-btn" data-act="reset-metrics">Reset()</button>
-		<div class="gb-seg" role="radiogroup" aria-label="Concurrency" data-limit>
-			<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="1">limit 1</button>
-			<button type="button" class="gb-btn" role="radio" aria-checked="true" tabindex="0" data-value="2">limit 2</button>
-		</div>
+	<Fragment slot="call">
+		<CallStrip program={program} hint={hint} />
 	</Fragment>
 
-	<Fragment slot="alt">
-		A simulation of one error worker. Each job takes 2.2 seconds. The four counters of <code>Metrics()</code> move as
-		jobs run: <code>Submitted</code> counts each job the queue accepted, <code>Completed</code> counts each job that ran,
-		and <code>Successful</code> and <code>Failed</code> split those. The line below them checks <code>Submitted ==
-		NumPending + NumProcessing + Completed</code>. It holds on an idle or paused worker. It does not hold after
-		<code>Purge</code>, after <code>Reset</code> in the middle of a run, or at limit 1 while a goroutine works through a
-		batch. The scene says which case it is.
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-act="add">Add job</button>
+		<button type="button" class="pbtn" data-act="fail">Add job that fails</button>
+		<button type="button" class="pbtn" data-act="add5">Add 5</button>
+		<button type="button" class="pbtn" data-act="pause-toggle">Pause()</button>
+		<button type="button" class="pbtn" data-act="purge">Purge()</button>
+		<button type="button" class="pbtn" data-act="reset-metrics">Reset()</button>
+		<div class="seg" role="radiogroup" aria-label="Concurrency" data-limit>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="1">limit 1</button>
+			<button type="button" role="radio" aria-checked="true" tabindex="0" data-key="2">limit 2</button>
+		</div>
+		<LoopButtons />
 	</Fragment>
-</SceneFrame>
+
+	<p class="sframe__note" slot="note">Each job takes 2.2 s. The scene says which case the equation hits.</p>
+</Scene>
 
 <script>
 	import './metrics.ts';

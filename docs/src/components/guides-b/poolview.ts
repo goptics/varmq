@@ -73,21 +73,21 @@ export class PoolView {
 		this.root.classList.add('gb-pool');
 		this.root.innerHTML = `
 			<div class="gb-col gb-col--queue">
-				<span class="gb-label">queue <b data-q-len></b></span>
+				<span class="slabel">queue <b data-q-len></b></span>
 				<div class="gb-jobs" data-queue></div>
 				<div data-parked-wrap hidden>
-					<span class="gb-label gb-label--sub">parked on the worker</span>
+					<span class="slabel gb-sub">parked on the worker</span>
 					<div class="gb-jobs" data-parked></div>
 				</div>
 			</div>
 			<div class="gb-col gb-col--lanes">
-				<span class="gb-label">${this.o.laneLabel}</span>
+				<span class="slabel">${this.o.laneLabel}</span>
 				<div class="gb-lanes" data-lanes></div>
 			</div>
 			${
 				this.o.showDone
 					? `<div class="gb-col gb-col--out">
-				<span class="gb-label">done</span>
+				<span class="slabel">done</span>
 				<div class="gb-dots" data-dots></div>
 				<p class="gb-tally" data-tally></p>
 				${

@@ -2,8 +2,9 @@
 // three jobs and arms calls that block until the model says they return.
 
 import { WorkerSim, type Status } from './sim';
-import { highlightGo } from './go';
-import { announcer, caller, clock, esc, qs, radios, reducedMotion, sec } from './scene';
+import { reducedMotion, setCall, tabs } from '../ui/dom';
+import { escapeHtml as esc, highlightGo } from '../ui/go';
+import { announcer, caller, clock, qs, sec } from './scene';
 
 type Kind =
 	| 'Wait'
@@ -95,13 +96,13 @@ worker.WaitUntilIdle() // waits for Start and a drain`,
 	},
 };
 
-document.querySelectorAll<HTMLElement>('[data-scene="waiting"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-waiting"]').forEach(init);
 
 function init(root: HTMLElement) {
 	const tlEl = qs(root, '[data-timeline]');
 	const logEl = qs(root, '[data-log]');
-	const statsEl = qs(root, '.gb-stats');
-	const codeEl = qs(root, '.gb-gocode code');
+	const statsEl = qs(root, '.sframe__stats');
+	const codeEl = qs(root, '[data-code]');
 	const callEl = qs(root, '[data-call]');
 	const say = caller(root);
 	const live = announcer(root);
@@ -143,7 +144,7 @@ function init(root: HTMLElement) {
 		});
 		logEl.replaceChildren();
 		codeEl.innerHTML = highlightGo(c.code);
-		callEl.textContent = c.hint;
+		setCall(callEl, c.hint);
 		resumeBtn.hidden = c.button !== 'resume';
 		startBtn.hidden = c.button !== 'start';
 		sig = '';
@@ -318,7 +319,7 @@ function init(root: HTMLElement) {
 		render();
 	};
 
-	radios(qs(root, '[data-case]'), (v) => load(v));
+	tabs(qs(root, '[data-case]'), (v) => load(v));
 
 	root.addEventListener('click', (e) => {
 		const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');

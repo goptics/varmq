@@ -3,14 +3,15 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { announcer, caller, clock, qs, qsa, reducedMotion, setText } from './scene';
+import { reducedMotion } from '../ui/dom';
+import { announcer, caller, clock, qs, qsa, setText } from './scene';
 
 const DUR = 2400;
 const ARRIVE = 700;
 const WINDOW = 8000;
 const SCALE = 5.5; // jobs per second at the right end of the meter
 
-qsa<HTMLElement>(document, '[data-scene="concurrency"]').forEach(init);
+qsa<HTMLElement>(document, '[data-scene="gb-concurrency"]').forEach(init);
 
 function init(root: HTMLElement) {
 	const sim = new WorkerSim({ limit: 3 });

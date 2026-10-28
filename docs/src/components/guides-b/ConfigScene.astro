@@ -1,15 +1,22 @@
 ---
-import SceneFrame from './SceneFrame.astro';
+import '../../styles/guides-b.css';
+import Scene from '../ui/Scene.astro';
+import CallStrip from './CallStrip.astro';
+
+const program = 'worker := varmq.NewWorker(process)';
+const hint = '// switch an option on: the call builds itself here';
+
+const describe = `An option explorer. Tick an option and the NewWorker call below it grows to include it. The result list says what the worker gets: its concurrency, whether it starts, how many idle goroutines it keeps, and what the error handler, the context and the other options do. An option that has no effect, such as a retention time on a worker with no name, is marked.`;
 ---
 
-<SceneFrame scene="config" title="Option explorer" loops={false} code="worker := varmq.NewWorker(process)" hint="// switch an option on: the call builds itself here">
+<Scene id="gb-config" title="Option explorer" describe={describe} class="gb">
 	<div class="gb-cfg">
 		<div>
-			<span class="gb-label" style="padding:0">Worker function and options</span>
-			<div class="gb-seg" role="radiogroup" aria-label="Constructor" data-ctor style="margin-top:10px">
-				<button type="button" class="gb-btn" role="radio" aria-checked="true" tabindex="0" data-value="NewWorker">NewWorker</button>
-				<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="NewErrWorker">NewErrWorker</button>
-				<button type="button" class="gb-btn" role="radio" aria-checked="false" tabindex="-1" data-value="NewResultWorker">NewResultWorker</button>
+			<span class="slabel">Worker function and options</span>
+			<div class="seg" role="radiogroup" aria-label="Constructor" data-ctor>
+				<button type="button" role="radio" aria-checked="true" tabindex="0" data-key="NewWorker">NewWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="NewErrWorker">NewErrWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="NewResultWorker">NewResultWorker</button>
 			</div>
 			<ul class="gb-opts" data-opts>
 				<li class="gb-opt" data-row="defaults" data-off="true">
@@ -73,23 +80,24 @@ import SceneFrame from './SceneFrame.astro';
 			</ul>
 		</div>
 		<div>
-			<span class="gb-label" style="padding:0">What the worker gets</span>
+			<span class="slabel">What the worker gets</span>
 			<dl class="gb-res" data-res></dl>
 		</div>
 	</div>
 
-	<Fragment slot="controls">
-		<button type="button" class="gb-btn" data-act="clear">Clear all</button>
-		<span class="gb-note">Defaults come from <code>defaultConfig</code> in config.go.</span>
+	<Fragment slot="call">
+		<CallStrip program={program} hint={hint} />
 	</Fragment>
 
-	<Fragment slot="alt">
-		An option explorer. Tick an option and the <code>NewWorker</code> call below it grows to include it. The result
-		list says what the worker gets: its concurrency, whether it starts, how many idle goroutines it keeps, and
-		what the error handler, the context and the other options do. An option that has no effect, such as a retention
-		time on a worker with no name, is marked.
+	<Fragment slot="controls">
+		<button type="button" class="pbtn" data-act="clear">Clear all</button>
 	</Fragment>
-</SceneFrame>
+
+	<p class="sframe__note" slot="note">
+		Defaults come from <code>defaultConfig</code> in config.go. An option that has no effect, such as a retention time
+		on a worker with no name, is marked.
+	</p>
+</Scene>
 
 <script>
 	import './config.ts';

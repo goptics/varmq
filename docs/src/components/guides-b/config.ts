@@ -1,18 +1,19 @@
 // Option explorer: the reader ticks options and the page builds the NewWorker call
 // and says what the worker gets. Defaults and rules are the ones in config.go.
 
-import { highlightGo } from './go';
-import { caller, qs, qsa, radios } from './scene';
+import { tabs } from '../ui/dom';
+import { highlightGo } from '../ui/go';
+import { caller, qs, qsa } from './scene';
 
 type Ctor = 'NewWorker' | 'NewErrWorker' | 'NewResultWorker';
 const FUNC: Record<Ctor, string> = { NewWorker: 'process', NewErrWorker: 'send', NewResultWorker: 'build' };
 
-document.querySelectorAll<HTMLElement>('[data-scene="config"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-config"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let ctor: Ctor = 'NewWorker';
 	const say = caller(root);
-	const codeEl = qs(root, '.gb-gocode code');
+	const codeEl = qs(root, '[data-code]');
 	const resEl = qs(root, '[data-res]');
 	const opts = qsa<HTMLInputElement>(root, '[data-opt]');
 	const on = (k: string) => qs<HTMLInputElement>(root, `[data-opt="${k}"]`).checked;
@@ -111,7 +112,7 @@ function init(root: HTMLElement) {
 		}
 		update();
 	});
-	radios(qs(root, '[data-ctor]'), (v) => {
+	tabs(qs(root, '[data-ctor]'), (v) => {
 		ctor = v as Ctor;
 		say(`varmq.${ctor}(...) // the options are the same for all three`);
 		update();

@@ -1,14 +1,11 @@
-// Shared behavior for the guide scenes: a clock with a pause button, radio groups,
-// a polite live region, and small DOM helpers. Each scene owns one root element.
+// Behavior that belongs to the guide scenes: a frame clock with a pause button, a polite live region
+// that does not repeat itself, the line that shows the last Go call, and small DOM helpers.
+// Motion preference, the element builder, tabs and timers come from `../ui/dom`.
 
-export const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+import { reducedMotion, setCall } from '../ui/dom';
 
 export const qs = <T extends HTMLElement>(root: ParentNode, sel: string) => root.querySelector<T>(sel)!;
 export const qsa = <T extends HTMLElement>(root: ParentNode, sel: string) => Array.from(root.querySelectorAll<T>(sel));
-
-export function esc(s: string) {
-	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 /** Seconds with one decimal: 2400 -> "2.4 s". */
 export const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -75,43 +72,6 @@ export function clock(root: HTMLElement, tick: (dt: number) => void, opts: { spe
 	};
 }
 
-/** A radio group of buttons with roving tabindex and arrow keys. */
-export function radios(group: HTMLElement, onChange: (value: string) => void) {
-	const items = qsa<HTMLButtonElement>(group, '[role="radio"]');
-	const select = (item: HTMLElement, focus = false, notify = true) => {
-		for (const i of items) {
-			const on = i === item;
-			i.setAttribute('aria-checked', String(on));
-			i.tabIndex = on ? 0 : -1;
-		}
-		if (focus) item.focus();
-		if (notify) onChange(item.dataset.value ?? '');
-	};
-	group.addEventListener('click', (e) => {
-		const item = (e.target as HTMLElement).closest<HTMLElement>('[role="radio"]');
-		if (item && group.contains(item) && !(item as HTMLButtonElement).disabled) select(item);
-	});
-	group.addEventListener('keydown', (e) => {
-		const i = items.indexOf(document.activeElement as HTMLButtonElement);
-		if (i < 0) return;
-		let next = -1;
-		if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % items.length;
-		else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + items.length) % items.length;
-		else if (e.key === 'Home') next = 0;
-		else if (e.key === 'End') next = items.length - 1;
-		if (next >= 0) {
-			e.preventDefault();
-			select(items[next], true);
-		}
-	});
-	return {
-		set(value: string, notify = false) {
-			const item = items.find((i) => i.dataset.value === value);
-			if (item) select(item, false, notify);
-		},
-	};
-}
-
 /** A polite live region that does not repeat the same message and waits between messages. */
 export function announcer(root: HTMLElement) {
 	const el = root.querySelector<HTMLElement>('[data-live]');
@@ -126,12 +86,12 @@ export function announcer(root: HTMLElement) {
 	};
 }
 
-/** The line under the scene that shows the Go call a button made, with a short flash. */
+/** The line under the stage that shows the Go call the last button made, with a short flash. */
 export function caller(root: HTMLElement) {
 	const el = root.querySelector<HTMLElement>('[data-call]');
 	return (text: string) => {
 		if (!el) return;
-		el.textContent = text;
+		setCall(el, text);
 		el.classList.remove('is-new');
 		void el.offsetWidth;
 		el.classList.add('is-new');

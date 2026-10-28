@@ -3,11 +3,12 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { announcer, caller, clock, qs, radios, setText } from './scene';
+import { tabs } from '../ui/dom';
+import { announcer, caller, clock, qs, setText } from './scene';
 
 const DUR = 2200;
 
-document.querySelectorAll<HTMLElement>('[data-scene="metrics"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-metrics"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let limit = 2;
@@ -83,7 +84,7 @@ function init(root: HTMLElement) {
 		render();
 	});
 
-	radios(qs(root, '[data-limit]'), (v) => {
+	tabs(qs(root, '[data-limit]'), (v) => {
 		limit = Number(v);
 		rebuild();
 		say(`varmq.NewErrWorker(process, ${limit}) // a new worker, counters at 0`);

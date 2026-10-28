@@ -1,8 +1,8 @@
 // Argument order: NewWorker, NewErrWorker and NewResultWorker read config ...any by type,
 // from left to right (mergeConfigs in config.go). The last argument that sets a value wins.
 
-import { highlightGo } from './go';
-import { caller, esc, qs } from './scene';
+import { escapeHtml as esc, highlightGo } from '../ui/go';
+import { caller, qs } from './scene';
 
 type Kind = 'int' | 'conc' | 'string' | 'name' | 'autorun' | 'other';
 
@@ -24,7 +24,7 @@ const START: Arg[] = [
 	{ id: 'g', src: 'varmq.WithAutoRun(false)', kind: 'autorun', value: false, on: false },
 ];
 
-document.querySelectorAll<HTMLElement>('[data-scene="args"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-args"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let args: Arg[] = START.map((a) => ({ ...a }));
@@ -32,7 +32,7 @@ function init(root: HTMLElement) {
 	const listEl = qs(root, '[data-args]');
 	const traceEl = qs(root, '[data-trace]');
 	const resEl = qs(root, '[data-res]');
-	const codeEl = qs(root, '.gb-gocode code');
+	const codeEl = qs(root, '[data-code]');
 	let focusId = '';
 
 	const render = () => {
@@ -42,8 +42,8 @@ function init(root: HTMLElement) {
 					<input type="checkbox" ${a.on ? 'checked' : ''} aria-label="Include ${esc(a.src)}" />
 					<code>${esc(a.src)}</code>
 					<span class="gb-arg__move">
-						<button type="button" class="gb-btn" data-move="-1" aria-label="Move ${esc(a.src)} earlier" ${i === 0 ? 'disabled' : ''}>Up</button>
-						<button type="button" class="gb-btn" data-move="1" aria-label="Move ${esc(a.src)} later" ${i === args.length - 1 ? 'disabled' : ''}>Down</button>
+						<button type="button" class="pbtn" data-move="-1" aria-label="Move ${esc(a.src)} earlier" ${i === 0 ? 'disabled' : ''}>Up</button>
+						<button type="button" class="pbtn" data-move="1" aria-label="Move ${esc(a.src)} later" ${i === args.length - 1 ? 'disabled' : ''}>Down</button>
 					</span>
 				</li>`,
 			)

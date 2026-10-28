@@ -4,13 +4,14 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { highlightGo } from './go';
-import { announcer, caller, clock, qs, qsa, radios, setText } from './scene';
+import { tabs } from '../ui/dom';
+import { highlightGo } from '../ui/go';
+import { announcer, caller, clock, qs, setText } from './scene';
 
 const DUR = 4000;
 const TIMEOUT = 6000;
 
-document.querySelectorAll<HTMLElement>('[data-scene="context"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-context"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let made: 'cancel' | 'timeout' = 'cancel';
@@ -19,7 +20,7 @@ function init(root: HTMLElement) {
 	const view = new PoolView(qs(root, '[data-pool]'), sim, { maxLanes: 3, legend: ['ok', 'early'] });
 	const say = caller(root);
 	const live = announcer(root);
-	const codeEl = qs(root, '.gb-gocode code');
+	const codeEl = qs(root, '[data-code]');
 	const stat = (k: string) => qs(root, `[data-stat="${k}"]`);
 	const kv = (k: string) => qs(root, `[data-kv="${k}"]`);
 	const watchBtn = qs<HTMLButtonElement>(root, '[data-act="watch"]');
@@ -95,7 +96,7 @@ worker = varmq.NewWorker(func(j varmq.Job[int]) {
 		render();
 	});
 
-	radios(qs(root, '[data-made]'), (v) => {
+	tabs(qs(root, '[data-made]'), (v) => {
 		made = v as 'cancel' | 'timeout';
 		reset();
 		say(made === 'cancel' ? 'context.WithCancel(...) // you call cancel()' : 'context.WithTimeout(..., 6*time.Second) // the deadline cancels it');

@@ -2,8 +2,9 @@
 // Handle: Err() or Result(). Channel: Errs(), room for one. Handler: WithErrHandler.
 
 import { WorkerSim } from './sim';
-import { highlightGo } from './go';
-import { announcer, caller, clock, esc, qs, radios, reducedMotion, setText } from './scene';
+import { reducedMotion, tabs } from '../ui/dom';
+import { escapeHtml as esc, highlightGo } from '../ui/go';
+import { announcer, caller, clock, qs, setText } from './scene';
 
 type Type = 'plain' | 'err' | 'result';
 type Outcome = 'ok' | 'error' | 'panic';
@@ -11,7 +12,7 @@ type Outcome = 'ok' | 'error' | 'panic';
 const NAME: Record<Type, string> = { plain: 'worker', err: 'err-worker', result: 'result-worker' };
 const CTOR: Record<Type, string> = { plain: 'NewWorker', err: 'NewErrWorker', result: 'NewResultWorker' };
 
-document.querySelectorAll<HTMLElement>('[data-scene="errors"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-errors"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let type: Type = 'err';
@@ -26,7 +27,7 @@ function init(root: HTMLElement) {
 
 	const say = caller(root);
 	const live = announcer(root);
-	const codeEl = qs(root, '.gb-gocode code');
+	const codeEl = qs(root, '[data-code]');
 	const stat = (k: string) => qs(root, `[data-stat="${k}"]`);
 	const handlesEl = qs(root, '[data-handles]');
 	const handlerEl = qs(root, '[data-handler]');
@@ -35,19 +36,19 @@ function init(root: HTMLElement) {
 	const noteEl = qs(root, '[data-reader-note]');
 	const handleName = qs(root, '[data-handle-name]');
 	const readerBtn = qs<HTMLButtonElement>(root, '[data-act="reader"]');
-	const typeRadios = radios(qs(root, '[data-type]'), (v) => {
+	tabs(qs(root, '[data-type]'), (v) => {
 		type = v as Type;
-		const errBtn = qs<HTMLButtonElement>(root, '[data-outcome] [data-value="error"]');
+		const errBtn = qs<HTMLButtonElement>(root, '[data-outcome] [data-key="error"]');
 		errBtn.disabled = type === 'plain';
 		errBtn.title = type === 'plain' ? 'A plain worker function returns nothing, so it cannot return an error.' : '';
 		if (type === 'plain' && outcome === 'error') {
 			outcome = 'panic';
-			outcomeRadios.set('panic');
+			outcomeTabs.select('panic');
 		}
 		reset();
 		say(`varmq.${CTOR[type]}(...) // a new worker, counters at 0`);
 	});
-	const outcomeRadios = radios(qs(root, '[data-outcome]'), (v) => {
+	const outcomeTabs = tabs(qs(root, '[data-outcome]'), (v) => {
 		outcome = v as Outcome;
 		code();
 		say(
@@ -195,7 +196,6 @@ function init(root: HTMLElement) {
 		clk.wake();
 	});
 
-	typeRadios.set('err');
 	code();
 	render();
 }

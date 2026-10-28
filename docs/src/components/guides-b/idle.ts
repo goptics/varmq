@@ -3,13 +3,14 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { highlightGo } from './go';
-import { announcer, caller, clock, qs, radios, setText } from './scene';
+import { tabs } from '../ui/dom';
+import { highlightGo } from '../ui/go';
+import { announcer, caller, clock, qs, setText } from './scene';
 
 const DUR = 1600;
 const EXPIRY = 4000;
 
-document.querySelectorAll<HTMLElement>('[data-scene="idle"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="gb-idle"]').forEach(init);
 
 function init(root: HTMLElement) {
 	let limit = 6;
@@ -19,7 +20,7 @@ function init(root: HTMLElement) {
 	const view = new PoolView(qs(root, '[data-pool]'), sim, { showDone: false });
 	const say = caller(root);
 	const live = announcer(root);
-	const codeEl = qs(root, '.gb-gocode code');
+	const codeEl = qs(root, '[data-code]');
 	const limitIn = qs<HTMLInputElement>(root, '[data-limit]');
 	const limitOut = qs(root, '[data-limit-out]');
 	const expiryBtn = qs<HTMLButtonElement>(root, '[data-act="expiry"]');
@@ -69,7 +70,7 @@ function init(root: HTMLElement) {
 		say(`varmq.NewWorker(process, ${limit}) // a new worker, 1 idle goroutine`);
 	});
 
-	radios(qs(root, '[data-ratio]'), (v) => {
+	tabs(qs(root, '[data-ratio]'), (v) => {
 		ratio = Number(v);
 		rebuild();
 		say(

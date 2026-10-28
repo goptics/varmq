@@ -1,26 +1,15 @@
 /* Scenes for the worker pool guides (concurrency, configuration, context, errors, metrics, waiting).
-   Every value comes from tokens.css. Names start with `gb-`. A scene is a dark panel in both themes,
-   so only the caption under it follows the page color. */
+   The frame, buttons, tabs, fields and the Go strip are the shared ones in ui.css (`.sframe`, `.pbtn`,
+   `.seg`, `.sfield`, `.gocode`, `.call`). This file keeps what only these scenes draw. Names start with `gb-`.
+   Every value comes from tokens.css. The scene root carries `gb` next to `sframe`. */
 
-@import './tokens.css';
-
-.gb {
+.gb > .sframe__stage {
 	--local-pad: 14px;
-	container-type: inline-size;
-	margin: 1.75rem 0 2rem;
+	padding: 0;
+	min-width: 0;
 }
 
-.gb *,
-.gb *::before,
-.gb *::after {
-	box-sizing: border-box;
-}
-
-.gb ::selection {
-	background: color-mix(in srgb, var(--brand) 38%, transparent);
-	color: inherit;
-}
-
+/* A flex or grid row that has `hidden` still needs to disappear. */
 .gb [hidden] {
 	display: none !important;
 }
@@ -30,292 +19,25 @@
 	height: 0;
 }
 
-.gb-sr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-	border: 0;
-}
-
-/* ---- Frame ---- */
-
-.gb-frame {
-	font-family: var(--mono);
-	background: var(--panel);
-	color: var(--panel-ink);
-	border: 1px solid var(--panel-rule);
-	border-radius: 16px;
-	overflow: hidden;
-	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 70%, transparent);
-	accent-color: var(--brand);
-}
-
-.gb :focus-visible {
-	outline: 2px solid var(--panel-accent);
-	outline-offset: 3px;
-	border-radius: 4px;
-}
-
-.gb-bar {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: space-between;
-	align-items: center;
-	gap: 8px 24px;
-	padding: 12px var(--local-pad);
-	border-bottom: 1px solid var(--panel-rule);
-	font-size: 0.75rem;
-	line-height: 1.2;
-}
-
-.gb-title {
-	margin: 0;
-	font-size: inherit;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
-
-.gb-title b {
-	color: var(--panel-accent);
-	font-weight: 500;
-}
-
-.gb-stats {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 20px;
-	margin: 0;
-}
-
-.gb-stats div {
-	display: flex;
-	gap: 7px;
-}
-
-.gb-stats dt {
-	color: var(--panel-ink-2);
-}
-
-.gb-stats dd {
-	margin: 0;
-	min-width: 2ch;
-	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-}
-
-.gb-stats dd[data-warn='true'] {
+.gb .sframe__stats dd[data-warn='true'] {
 	color: var(--amber);
 }
 
-.gb-stage {
-	min-width: 0;
+.gb-sub {
+	padding-top: 14px;
 }
 
-/* ---- Controls ---- */
-
-.gb-controls {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	padding: 12px var(--local-pad);
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-}
-
-.gb-controls:empty {
-	display: none;
-}
-
-.gb-btn {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--panel-ink) 6%, transparent);
+.gb .slabel b {
+	margin-left: 4px;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	text-transform: none;
 	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
-}
-
-.gb-btn:hover {
-	background: color-mix(in srgb, var(--panel-ink) 13%, transparent);
-}
-
-.gb-btn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
-
-.gb-btn--primary:hover {
-	background: color-mix(in srgb, var(--brand) 82%, var(--panel-ink));
-}
-
-.gb-btn[aria-pressed='true']:not([data-act='pause']) {
-	background: color-mix(in srgb, var(--brand) 22%, transparent);
-	border-color: var(--brand);
-}
-
-.gb-btn[disabled] {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-
-.gb-btn--danger {
-	border-color: color-mix(in srgb, var(--danger) 55%, var(--panel-rule));
-}
-
-/* A group of options where one is on. */
-.gb-seg {
-	display: inline-flex;
-	flex-wrap: wrap;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	overflow: hidden;
-}
-
-.gb-seg .gb-btn {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-}
-
-.gb-seg .gb-btn + .gb-btn {
-	border-left: 1px solid var(--panel-rule);
-}
-
-.gb-seg .gb-btn[aria-checked='true'] {
-	background: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
-
-.gb-field {
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
-	min-height: 40px;
-	padding: 0 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	font-size: 0.8125rem;
-	color: var(--panel-ink-2);
-}
-
-.gb-field input[type='range'] {
-	width: clamp(110px, 22cqi, 190px);
-	margin: 0;
-	height: 24px;
-}
-
-.gb-field output {
-	min-width: 2.2ch;
 	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-	font-weight: 600;
 }
 
-.gb-field input[type='number'],
-.gb-field input[type='text'],
-.gb-field select {
-	min-height: 32px;
-	padding: 0 8px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
-	background: var(--panel);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-}
-
-.gb-field input[type='number'] {
-	width: 6ch;
-}
-
-.gb-field input[type='text'] {
-	width: 11ch;
-}
-
-.gb-note {
-	margin-left: auto;
-	font-size: 0.6875rem;
-	color: var(--panel-ink-2);
-}
-
-/* ---- Code strip ---- */
-
-.gb-code {
-	padding: 14px 16px 16px;
-	border-top: 1px solid var(--panel-rule);
-	background: color-mix(in srgb, var(--panel) 72%, black);
-	font: 400 0.8125rem/1.65 var(--mono);
-	overflow-x: auto;
-}
-
-.gb-gocode {
-	margin: 0;
-	padding: 0;
-	font: inherit;
-	color: var(--panel-ink);
-	background: none;
-	border: 0;
-	overflow-x: auto;
-}
-
-.gb-gocode code,
-.gb-call {
-	font: inherit;
-	background: none;
-	padding: 0;
-}
-
-.gb-code .tk-k { color: var(--tk-k); }
-.gb-code .tk-s { color: var(--tk-s); }
-.gb-code .tk-c { color: var(--tk-c); }
-.gb-code .tk-n { color: var(--tk-n); }
-.gb-code .tk-f { color: var(--tk-f); }
-.gb-code .tk-t { color: var(--tk-t); }
-.gb-code .tk-b { color: var(--tk-b); }
-
-.gb-call {
-	display: block;
-	margin-top: 4px;
-	padding-left: 10px;
-	border-left: 2px solid var(--panel-accent);
-	color: var(--panel-accent);
-	min-height: 1.65em;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-
-.gb-call.is-new {
-	animation: gb-flash 0.7s var(--ease);
-}
-
-@keyframes gb-flash {
-	from {
-		background: color-mix(in srgb, var(--brand) 30%, transparent);
-	}
-}
-
-/* ---- Caption: the text alternative, on the page color ---- */
-
-.gb-cap {
-	margin: 0.75rem 0 0;
-	font-size: 0.875rem;
-	line-height: 1.5;
-	color: inherit;
-	opacity: 0.82;
-	max-width: 68ch;
+.gb-col .slabel {
+	padding-inline: var(--local-pad);
 }
 
 /* ---- Pool: queue, lanes, done ---- */
@@ -333,28 +55,6 @@
 
 .gb-col + .gb-col {
 	border-left: 1px solid var(--panel-rule);
-}
-
-.gb-label {
-	display: block;
-	padding: 0 var(--local-pad) 10px;
-	font-size: 0.6875rem;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
-
-.gb-label b {
-	margin-left: 4px;
-	font-weight: 500;
-	letter-spacing: 0.02em;
-	text-transform: none;
-	color: var(--panel-ink);
-	font-variant-numeric: tabular-nums;
-}
-
-.gb-label--sub {
-	padding-top: 14px;
 }
 
 .gb-jobs {
@@ -380,7 +80,7 @@
 	min-width: 36px;
 	height: 28px;
 	padding: 0 4px;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -439,8 +139,8 @@
 .gb-lane__track {
 	position: relative;
 	height: 30px;
-	border-radius: 7px;
-	background: color-mix(in srgb, var(--panel-ink) 5%, transparent);
+	border-radius: 8px;
+	background: var(--panel-fill);
 	border: 1px solid transparent;
 	overflow: hidden;
 }
@@ -468,7 +168,7 @@
 .gb-lane__fill {
 	position: absolute;
 	inset: 0;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: color-mix(in srgb, var(--brand) 26%, transparent);
 	transform-origin: left center;
 	transform: scaleX(var(--p, 0));
@@ -531,8 +231,8 @@
 
 .gb-dots i {
 	aspect-ratio: 1;
-	border-radius: 2px;
-	background: color-mix(in srgb, var(--panel-ink) 7%, transparent);
+	border-radius: 4px;
+	background: var(--panel-fill);
 }
 
 .gb-dots i.ok {
@@ -576,21 +276,21 @@
 	border-top: 1px solid var(--panel-rule);
 }
 
-.gb-meter .gb-label {
-	padding: 0;
+.gb-meter .slabel {
+	margin: 0;
 }
 
 .gb-meter__track {
 	position: relative;
 	height: 12px;
-	border-radius: 6px;
-	background: color-mix(in srgb, var(--panel-ink) 7%, transparent);
+	border-radius: 4px;
+	background: var(--panel-fill);
 }
 
 .gb-meter__fill {
 	position: absolute;
 	inset: 0;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: var(--brand);
 	transform-origin: left center;
 	transform: scaleX(var(--f, 0));
@@ -628,7 +328,7 @@
 
 /* ---- Narrow containers ---- */
 
-@container (max-width: 640px) {
+@container sframe (max-width: 640px) {
 	.gb-pool {
 		grid-template-columns: minmax(0, 1fr);
 		min-height: 0;
@@ -644,14 +344,10 @@
 		grid-template-columns: repeat(18, 1fr);
 		max-width: none;
 	}
-	.gb-note {
-		margin-left: 0;
-		flex-basis: 100%;
-	}
 }
 
-@container (max-width: 420px) {
-	.gb {
+@container sframe (max-width: 420px) {
+	.gb > .sframe__stage {
 		--local-pad: 12px;
 	}
 	.gb-lane {
@@ -664,24 +360,17 @@
 	.gb-lane__held:empty {
 		display: none;
 	}
-	.gb-field {
+	.gb .sfield {
 		flex: 1 1 100%;
 	}
-	.gb-field input[type='range'] {
+	.gb .sfield input[type='range'] {
 		flex: 1;
 		width: auto;
 	}
 }
 
-@media (pointer: coarse) {
-	.gb-btn {
-		min-height: 44px;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.gb-lane[data-s='busy'] .gb-lane__job,
-	.gb-call.is-new {
+	.gb-lane[data-s='busy'] .gb-lane__job {
 		animation: none;
 	}
 	.gb-meter__fill,
@@ -710,8 +399,8 @@
 	flex: none;
 	width: 10px;
 	height: 10px;
-	border-radius: 2px;
-	background: color-mix(in srgb, var(--panel-ink) 7%, transparent);
+	border-radius: 4px;
+	background: var(--panel-fill);
 }
 
 .gb-legend i.ok { background: var(--brand); }
@@ -876,8 +565,8 @@
 .gb-tl__track {
 	position: relative;
 	height: 24px;
-	border-radius: 5px;
-	background: color-mix(in srgb, var(--panel-ink) 5%, transparent);
+	border-radius: 4px;
+	background: var(--panel-fill);
 	overflow: hidden;
 }
 
@@ -897,7 +586,7 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.gb-tl__seg[data-status='Idle'] { background: color-mix(in srgb, var(--panel-ink) 9%, transparent); color: var(--panel-ink-2); }
+.gb-tl__seg[data-status='Idle'] { background: var(--panel-fill-2); color: var(--panel-ink-2); }
 .gb-tl__seg[data-status='Running'] { background: color-mix(in srgb, var(--brand) 34%, transparent); }
 .gb-tl__seg[data-status='Pausing'] { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--amber) 42%, transparent) 0 4px, transparent 4px 8px); }
 .gb-tl__seg[data-status='Paused'] { background: color-mix(in srgb, var(--amber) 38%, transparent); }
@@ -981,8 +670,8 @@
 	color: var(--amber);
 }
 
-@container (max-width: 560px) {
-	.gb {
+@container sframe (max-width: 560px) {
+	.gb > .sframe__stage {
 		--local-label: 100%;
 	}
 	.gb-tl__axis {
@@ -1020,11 +709,11 @@
 	padding-right: var(--local-pad);
 }
 
-.gb-box > p.gb-label {
-	padding-bottom: 10px;
+.gb-box > .slabel {
+	margin-bottom: 10px;
 }
 
-.gb-box > p.gb-label b {
+.gb-box > .slabel b {
 	margin-left: 6px;
 	text-transform: none;
 	letter-spacing: 0;
@@ -1123,7 +812,7 @@
 	color: var(--panel-ink-2);
 }
 
-@container (max-width: 640px) {
+@container sframe (max-width: 640px) {
 	.gb-boxes {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -1152,6 +841,10 @@
 	border-left: 1px solid var(--panel-rule);
 }
 
+.gb .gb-res--after {
+	margin-top: 14px;
+}
+
 .gb-opts {
 	display: grid;
 	gap: 2px;
@@ -1173,15 +866,17 @@
 }
 
 .gb-opt:hover {
-	background: color-mix(in srgb, var(--panel-ink) 5%, transparent);
+	background: var(--panel-fill);
 }
 
-.gb-opt input[type='checkbox'] {
+.gb-opt input[type='checkbox'],
+.gb-arg input[type='checkbox'] {
 	flex: none;
 	width: 18px;
 	height: 18px;
 	margin: 0;
 	cursor: pointer;
+	accent-color: var(--brand);
 }
 
 .gb-opt label {
@@ -1192,13 +887,6 @@
 	min-height: 32px;
 }
 
-.gb-opt code {
-	font: inherit;
-	background: none;
-	padding: 0;
-	color: var(--panel-ink);
-}
-
 .gb-opt .gb-opt__args {
 	display: inline-flex;
 	flex-wrap: wrap;
@@ -1207,16 +895,18 @@
 	color: var(--panel-ink-2);
 }
 
-.gb-opt input[type='number'],
-.gb-opt input[type='text'],
-.gb-opt select {
+/* Compact fields in a row of options: the shared field look at a smaller size. */
+.gb .gb-opt input[type='number'],
+.gb .gb-opt input[type='text'],
+.gb .gb-opt select {
 	min-height: 30px;
 	padding: 0 6px;
 	border: 1px solid var(--panel-rule);
 	border-radius: 4px;
-	background: var(--panel);
+	background: var(--panel-2);
 	color: var(--panel-ink);
 	font: 500 0.75rem/1 var(--mono);
+	color-scheme: dark;
 }
 
 .gb-opt input[type='number'] {
@@ -1293,17 +983,7 @@
 	border-style: dashed;
 }
 
-.gb-arg input[type='checkbox'] {
-	width: 18px;
-	height: 18px;
-	margin: 0;
-	cursor: pointer;
-}
-
 .gb-arg code {
-	font: inherit;
-	background: none;
-	padding: 0;
 	color: var(--panel-ink);
 	overflow-wrap: anywhere;
 }
@@ -1313,7 +993,7 @@
 	gap: 4px;
 }
 
-.gb-arg__move .gb-btn {
+.gb-arg__move .pbtn {
 	min-height: 32px;
 	min-width: 32px;
 	padding: 4px 8px;
@@ -1354,7 +1034,7 @@
 	color: var(--panel-ink);
 }
 
-@container (max-width: 640px) {
+@container sframe (max-width: 640px) {
 	.gb-cfg {
 		grid-template-columns: minmax(0, 1fr);
 	}
