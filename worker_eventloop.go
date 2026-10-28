@@ -102,11 +102,6 @@ func batchBudget(jobNanos int64, alive int) int {
 // jobs it holds. Jobs are counted before dequeuing so Wait never sees an
 // empty queue and zero processing while one is in flight.
 func (w *worker[T, JobType]) processNextJob() (bool, error) {
-	// Load first: a failed CAS still dirties the line workers read per job.
-	if w.status.Load() == idle {
-		w.status.CompareAndSwap(idle, running)
-	}
-
 	m := w.manager()
 	node, k := w.planBatch(m)
 	if node == nil {
@@ -114,7 +109,12 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	}
 
 	w.busyWorkers.Add(1)
-	w.curProcessing.Add(uint32(k))
+	if !w.reserve(uint32(k)) {
+		w.pool.PushNode(node)
+		w.busyWorkers.Add(^uint32(0))
+		w.finishJobs(uint32(k))
+		return false, nil
+	}
 
 	buf := node.Value.Batch(k)
 
@@ -215,6 +215,32 @@ func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) 
 	}
 
 	return
+}
+
+// reserve counts n jobs as processing and reports whether the worker is
+// Running, moving an Idle one there itself; if not, the caller releases the n
+// with finishJobs and starts nothing. The count must come first, and only
+// Running may pass: Pause checks the count only on Running, and sends Idle
+// straight to Paused. A Running worker therefore has its count seen and only
+// reaches Pausing; an Idle one that passed could be Paused, Resumed to Idle and
+// Paused again with the jobs unseen.
+func (w *worker[T, JobType]) reserve(n uint32) bool {
+	w.curProcessing.Add(n)
+
+	for {
+		// Load first: a failed CAS still dirties the line workers read per job.
+		switch w.status.Load() {
+		case running:
+			return true
+		case idle:
+			if w.status.CompareAndSwap(idle, running) {
+				return true
+			}
+			// Lost the CAS: the status just changed, read it again.
+		default:
+			return false
+		}
+	}
 }
 
 // finishJobs takes m jobs off the processing count without w.mx unless they

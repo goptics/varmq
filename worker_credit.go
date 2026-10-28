@@ -16,8 +16,8 @@ const maxCredit = 64
 // counts a batch, so Wait never sees zero processing while a pop is in
 // flight. The order also closes a race with Pause: a worker whose last job
 // finishes after the reserve stays Running, one that went Idle first is set
-// back to Running unless a Pause got in, and a Pause that got in first is
-// seen by the IsActive check, which releases the credit and pops nothing.
+// back to Running unless a Pause got in, and a worker that is not Running by
+// then makes reserve fail, which releases the credit and pops nothing.
 func (w *worker[T, JobType]) dispatchCredit(cm *creditManager[JobType]) {
 	src := cm.cs
 	if !w.IsActive() {
@@ -37,11 +37,7 @@ func (w *worker[T, JobType]) dispatchCredit(cm *creditManager[JobType]) {
 	credit := min(free, maxCredit)
 
 	cm.unspent.Store(int64(credit)) // first: NumPending subtracts it from the reserve below
-	w.curProcessing.Add(uint32(credit))
-	if w.status.Load() == idle {
-		w.status.CompareAndSwap(idle, running)
-	}
-	if !w.IsActive() {
+	if !w.reserve(uint32(credit)) {
 		cm.unspent.Store(0)
 		w.finishJobs(uint32(credit))
 		return

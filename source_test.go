@@ -523,6 +523,7 @@ func TestMaxBatch(t *testing.T) {
 				}
 				w.bind(tc.q, 1)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 				assert.Equal(t, tc.leftInQueue, tc.q.Len(), "jobs left in storage")
 				assert.Equal(t, 4, w.NumPending(), "not started, in storage or in a batch")
