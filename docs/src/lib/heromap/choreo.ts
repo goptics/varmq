@@ -472,7 +472,8 @@ class Choreo {
 		this.nodes = nodes;
 		this.page = page;
 		this.score = new Score(TOTAL, page);
-		this.cam = { ...frame(REGIONS[REGIONS.length - 1]) };
+		// The loop opens on chapter 1's frame: from the finale's, the move in would cross an empty map.
+		this.cam = { ...frame(REGIONS[0]) };
 		this.declareStarts();
 	}
 
@@ -586,8 +587,10 @@ class Choreo {
 
 	private chapter(c: Chapter, T: number) {
 		const { score } = this;
-		score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, CAMERA, E.move);
-		this.open(c, T + CAMERA);
+		// Chapter 1 has no camera move: the camera starts on its frame, so its pieces draw in at once.
+		const move = c.n === 1 ? 0 : CAMERA;
+		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
+		this.open(c, T + move);
 		this.captions(c, T);
 		for (const chip of c.chips ?? []) {
 			const g = this.nodes.piece(`${chip.id}@${c.n}`);
