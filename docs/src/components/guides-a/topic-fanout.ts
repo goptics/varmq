@@ -1,6 +1,7 @@
 // Scene: a topic with two subscribed workers. Publish stores one copy of the payload in a shared log.
 // Each worker reads the log at its own position and makes its own job of every payload.
-import { caption, chip, flip, h, q, reduced, say, stepper, Timers } from './kit';
+import { caption, chip, flip, q, say, stepper } from './kit';
+import { h, reducedMotion, Timers } from '../ui/dom';
 import { Topic, type TopicSub } from './model';
 
 const JOB_MS: Record<string, number> = { email: 1500, stock: 700 };
@@ -148,7 +149,7 @@ function init(root: HTMLElement) {
 			pubEl.dataset.tone = 'ok';
 			whyEl.textContent = `Order ${r.n} is in the log once. Each running worker reads it and makes its own job.`;
 			say(root, `Publish returned true for order ${r.n}.`);
-			if (reduced()) {
+			if (reducedMotion()) {
 				drainAll();
 				render();
 			} else {
@@ -226,7 +227,7 @@ function init(root: HTMLElement) {
 	const intro = () => {
 		if (touched) return;
 		publish();
-		if (reduced()) {
+		if (reducedMotion()) {
 			for (const c of cards) {
 				c.done += c.sub.jobs.length + (c.running !== null ? 1 : 0);
 				c.sub.jobs = [];
@@ -251,4 +252,4 @@ function init(root: HTMLElement) {
 	io.observe(root);
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="topic-fanout"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="topic-fanout"]').forEach(init);

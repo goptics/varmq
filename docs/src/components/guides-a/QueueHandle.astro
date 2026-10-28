@@ -1,16 +1,12 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'A queue with a capacity, and the calls that work on its handle. Add returns a handle and true while there is room, and nil and false when the queue is full or closed. Len counts the jobs that wait in the queue. IsFull compares Len with the capacity. A started worker takes the waiting jobs into a batch, so the queue has room again. Purge closes every waiting job. Close stops the queue taking jobs, and the jobs inside still run.';
 ---
 
-<Frame
-	scene="queue-handle"
-	label="A bounded queue and its handle: Add, Len, IsFull, Purge and Close"
-	cap={'queue := worker.BindQueue(varmq.WithQueueCapacity(2))'}
-	alt={alt}
->
+<Scene id="queue-handle" title="Queue handle" call={'queue := worker.BindQueue(varmq.WithQueueCapacity(2))'} describe={describe} class="ga">
 	<div class="ga-cols ga-cols--2">
 		<section class="ga-panel" aria-label="The queue and its worker">
 			<p class="ga-label">
@@ -39,7 +35,7 @@ const alt =
 				<dt>IsFull()</dt>
 				<dd data-full>false</dd>
 				<dt>Add()</dt>
-				<dd data-add data-tone="dim">not called</dd>
+				<dd data-add-result data-tone="dim">not called</dd>
 			</dl>
 			<p class="ga-note" data-why></p>
 			<p class="ga-label">
@@ -59,8 +55,8 @@ const alt =
 
 	<Fragment slot="controls">
 		<span class="ga-field">
-			<span>capacity</span>
-			<span class="ga-step" data-cap-step>
+			<span class="slabel">capacity</span>
+			<span class="stepper" data-cap-step>
 				<button type="button" class="pbtn" data-dec aria-label="Lower the capacity">−</button>
 				<output data-val>2</output>
 				<button type="button" class="pbtn" data-inc aria-label="Raise the capacity">+</button>
@@ -69,11 +65,11 @@ const alt =
 		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
 		<button type="button" class="pbtn" data-purge>Purge()</button>
 		<button type="button" class="pbtn" data-close>Close()</button>
-		<span class="ga-grow"></span>
+		<span class="sframe__spacer"></span>
 		<button type="button" class="pbtn" data-start>Start worker</button>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './queue-handle';

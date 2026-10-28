@@ -1,7 +1,8 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'A topic with two subscribed workers, email and stock. Publish stores each payload once in a shared log. Each worker reads the log at its own position and makes its own job from every payload, so one Publish gives two jobs. A paused worker reads nothing, so the log keeps every payload until that worker reads it. An unsubscribed worker gets no more payloads, and its unread payloads are dropped. A worker that subscribes later gets only the payloads published after it subscribed. With a topic capacity, Publish returns false when the slowest subscription has that many unread payloads.';
 
 const subs = [
@@ -10,12 +11,7 @@ const subs = [
 ];
 ---
 
-<Frame
-	scene="topic-fanout"
-	label="One Publish gives every subscribed worker its own job"
-	cap={'topic := varmq.NewTopic[Order]()'}
-	alt={alt}
->
+<Scene id="topic-fanout" title="Topic fan-out" call={'topic := varmq.NewTopic[Order]()'} describe={describe} class="ga">
 	<div class="ga-cols ga-cols--2">
 		<section class="ga-panel" aria-label="The topic">
 			<h3>topic</h3>
@@ -63,17 +59,17 @@ const subs = [
 	<Fragment slot="controls">
 		<button type="button" class="pbtn pbtn--primary" data-publish>Publish(order)</button>
 		<span class="ga-field">
-			<span>capacity</span>
-			<span class="ga-step" data-cap-step>
+			<span class="slabel">capacity</span>
+			<span class="stepper" data-cap-step>
 				<button type="button" class="pbtn" data-dec aria-label="Lower the topic capacity">−</button>
 				<output data-val>no limit</output>
 				<button type="button" class="pbtn" data-inc aria-label="Raise the topic capacity">+</button>
 			</span>
 		</span>
-		<span class="ga-grow"></span>
+		<span class="sframe__spacer"></span>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './topic-fanout';

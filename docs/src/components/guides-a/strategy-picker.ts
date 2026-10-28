@@ -1,6 +1,7 @@
 // Scene: one worker, three queues, four strategies. The worker takes one job at a time, as varmq does
 // when two or more queues are bound, and picks the queue again for every job.
-import { caption, chip, flip, h, q, reduced, say, tabs, Timers } from './kit';
+import { caption, chip, flip, q, say } from './kit';
+import { h, reducedMotion, tabs, Timers } from '../ui/dom';
 import { pick, type StrategyName } from './model';
 
 const STEP_MS = 1200;
@@ -116,7 +117,7 @@ function init(root: HTMLElement) {
 		}
 		stepBtn.disabled = !next;
 		playBtn.disabled = !next && !playing;
-		playBtn.textContent = reduced() ? 'Run all' : playing ? 'Pause' : 'Play';
+		playBtn.textContent = reducedMotion() ? 'Run all' : playing ? 'Pause' : 'Play';
 	};
 	const render = () => flip(root, paint);
 
@@ -146,7 +147,7 @@ function init(root: HTMLElement) {
 		render();
 	});
 	playBtn.addEventListener('click', () => {
-		if (reduced()) {
+		if (reducedMotion()) {
 			while (step());
 			render();
 			return;
@@ -168,13 +169,16 @@ function init(root: HTMLElement) {
 		}),
 	);
 
-	tabs(q(root, '[role="tablist"]'), (k) => {
-		panel.setAttribute('aria-labelledby', `ga-strat-tab-${k}`);
-		if (k !== strategy || !queues.length) reset(k as StrategyName);
-	});
+	tabs(
+		q(root, '[role="tablist"]'),
+		(k) => {
+			if (k !== strategy || !queues.length) reset(k as StrategyName);
+		},
+		{ shared: panel },
+	);
 
 	reset('Priority');
 	root.dataset.ready = '';
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="strategy-picker"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="strategy-picker"]').forEach(init);

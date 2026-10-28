@@ -2,7 +2,8 @@
 // queue refuses an item that repeats an ID in the queue, or does not fit. Add tells you which item.
 // AddAll skips it and does not say which. The worker has concurrency 3, so results arrive in the
 // order the jobs finish, not in the order of the slice.
-import { caption, flip, h, q, reduced, say, tabs, Timers } from './kit';
+import { caption, flip, q, say } from './kit';
+import { h, reducedMotion, tabs, Timers } from '../ui/dom';
 
 const CONCURRENCY = 3;
 const DURATIONS = [700, 1100, 1500, 1900];
@@ -167,7 +168,7 @@ function init(root: HTMLElement) {
 		});
 		phase = 'running';
 		caption(root, 'worker.Start()');
-		if (reduced()) {
+		if (reducedMotion()) {
 			for (const p of [...plan].sort((a, b) => a.end - b.end)) {
 				status[p.i] = 'Finished';
 				arrived.push(p.i);
@@ -205,4 +206,4 @@ function init(root: HTMLElement) {
 	root.dataset.ready = '';
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="add-all-compare"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="add-all-compare"]').forEach(init);

@@ -1,7 +1,8 @@
 // Scene: job IDs and the in-queue check. The worker does not start by itself, so the jobs wait in the
 // queue. The queue refuses a second given ID while the first job is in the queue, and frees the ID
 // when a worker takes the job or when Purge removes it.
-import { caption, flip, h, q, reduced, say, tabs, Timers } from './kit';
+import { caption, flip, q, say } from './kit';
+import { h, reducedMotion, tabs, Timers } from '../ui/dom';
 import { IdQueue, type IdJob } from './model';
 
 const RUN_MS = 2600;
@@ -112,7 +113,7 @@ function init(root: HTMLElement) {
 			running = null;
 			render();
 		};
-		if (reduced()) done();
+		if (reducedMotion()) done();
 		else timers.after(RUN_MS, done);
 	});
 
@@ -163,4 +164,4 @@ function init(root: HTMLElement) {
 	root.dataset.ready = '';
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="job-id-dedup"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="job-id-dedup"]').forEach(init);

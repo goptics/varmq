@@ -1,16 +1,12 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'Two queues get the same jobs. The first-in first-out queue lets the jobs leave in the order they were added. The priority queue lets the lowest priority number leave first, and keeps the add order for equal numbers. Example: report 10, alert 1 and digest 10 leave the first queue as report, alert, digest, and the priority queue as alert, report, digest.';
 ---
 
-<Frame
-	scene="queue-order"
-	label="First-in first-out queue next to a priority queue"
-	cap={'queue.Add("report")   pq.Add("report", 10)'}
-	alt={alt}
->
+<Scene id="queue-order" title="Queue order" call={'queue.Add("report")   pq.Add("report", 10)'} describe={describe} class="ga">
 	<div class="ga-cols ga-cols--2">
 		{
 			[
@@ -47,8 +43,8 @@ const alt =
 
 	<Fragment slot="controls">
 		<span class="ga-field">
-			<span>priority</span>
-			<span class="ga-step" data-prio>
+			<span class="slabel">priority</span>
+			<span class="stepper" data-prio>
 				<button type="button" class="pbtn" data-dec aria-label="Lower the priority number">−</button>
 				<output data-val>10</output>
 				<button type="button" class="pbtn" data-inc aria-label="Raise the priority number">+</button>
@@ -56,11 +52,11 @@ const alt =
 		</span>
 		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
 		<button type="button" class="pbtn" data-example>Load the example</button>
-		<span class="ga-grow"></span>
+		<span class="sframe__spacer"></span>
 		<button type="button" class="pbtn" data-start>Start worker</button>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './queue-order';

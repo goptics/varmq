@@ -1,7 +1,8 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'A queue whose worker has not started. Add a job with the ID refresh, then add another job with the same ID: the second Add returns nil and false, because a job with that ID is still in the queue. AddAll prefixes the ID with g:, so an AddAll item with the ID refresh does not collide. Two jobs with no ID are both stored, and a generated ID is not checked. The queue frees an ID when a worker takes the job or when Purge removes it, and then the same ID can be used again, even while the first job runs.';
 
 const ids = [
@@ -11,12 +12,7 @@ const ids = [
 ];
 ---
 
-<Frame
-	scene="job-id-dedup"
-	label="Add the same job ID twice and see what the queue does"
-	cap={'queue.Add("job 1", varmq.WithJobId("refresh"))'}
-	alt={alt}
->
+<Scene id="job-id-dedup" title="Job IDs" call={'queue.Add("job 1", varmq.WithJobId("refresh"))'} describe={describe} class="ga">
 	<div class="ga-cols ga-cols--2">
 		<section class="ga-panel" aria-label="The queue">
 			<p class="ga-label">
@@ -65,12 +61,12 @@ const ids = [
 		</div>
 		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
 		<button type="button" class="pbtn" data-gen-toggle aria-pressed="false">Generator</button>
-		<span class="ga-grow"></span>
+		<span class="sframe__spacer"></span>
 		<button type="button" class="pbtn" data-take>Worker takes a job</button>
 		<button type="button" class="pbtn" data-purge>Purge()</button>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './job-id-dedup';

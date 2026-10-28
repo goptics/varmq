@@ -1,228 +1,27 @@
-/* Scenes for the guides queues, strategies, topics, worker-types, job-ids, adding-many and function-helpers.
-   The scenes are dark panels in both themes (docs/DESIGN.md), so they read only the panel and signal tokens.
-   Class names follow the reference page (/alt/) and sit under `.ga`, so a shared stylesheet can replace them later. */
-
-@import './tokens.css';
-
-/* tokens.css sets color-scheme for the whole page. Hand it back to the docs theme. */
-:root {
-	color-scheme: revert-layer;
-}
+/* Scene parts for the guides queues, strategies, topics, worker-types, job-ids, adding-many and function-helpers.
+   The frame, buttons, tabs, stepper, code tokens and the call strip come from ui.css (`Scene.astro`).
+   This file holds only what the scenes draw: rails, lanes, job chips, panels, readouts and code lines.
+   The scenes are dark panels in both themes (docs/DESIGN.md), so they read only the panel and signal tokens. */
 
 .ga {
-	--local-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
-	--local-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
 	--local-hole: color-mix(in srgb, var(--panel-ink) 26%, transparent);
-	--local-tk-k: color-mix(in srgb, var(--danger) 62%, var(--cobalt));
 }
 
-/* ---- Scene frame ---- */
-
-.ga-frame {
-	container-type: inline-size;
-	margin: 1.75rem 0;
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-	background: var(--panel);
-	color: var(--panel-ink);
-	font-family: var(--mono);
-	font-size: 0.8125rem;
-	line-height: 1.45;
-	overflow: hidden;
-}
-
-.ga-frame *,
-.ga-frame *::before,
-.ga-frame *::after {
-	box-sizing: border-box;
-}
-
-.ga-frame :where(p, ul, ol, dl, dd, figure, h3) {
-	margin: 0;
-	padding: 0;
-}
-
-.ga-frame :where(ul, ol) {
-	list-style: none;
-}
-
-.ga-cap {
-	display: flex;
-	align-items: baseline;
-	gap: 12px;
-	padding: 10px 14px;
-	border-bottom: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-	color: var(--panel-ink-2);
-	font-size: 0.75rem;
-	min-width: 0;
-}
-
-.ga-cap__tag {
-	flex: none;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	font-size: 0.6875rem;
-}
-
-.ga-cap code {
-	min-width: 0;
-	overflow-wrap: anywhere;
-	background: none;
-	border: 0;
-	padding: 0;
-	color: var(--panel-ink);
-	font: inherit;
-}
-
-.ga-stage {
-	display: grid;
-	gap: 18px;
-	padding: 16px 14px 18px;
-}
-
-.ga-controls {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px 10px;
-	padding: 12px 14px;
-	border-top: 1px solid var(--panel-rule);
-	background: var(--panel-2);
-}
-
-.ga-frame:not([data-ready]) .ga-controls {
+/* Without the script the controls do nothing, so the scene hides them. */
+.ga:not([data-ready]) .sframe__controls {
 	display: none;
 }
 
-.ga-sr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-}
-
-.ga-grow {
-	flex: 1 1 auto;
-}
-
-/* ---- Focus, buttons, tabs, stepper ---- */
-
-.ga :focus-visible {
-	outline: 2px solid var(--panel-accent);
-	outline-offset: 3px;
-	border-radius: 4px;
-}
-
-.ga .pbtn {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--local-fill);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1 var(--mono);
-	cursor: pointer;
-	transition: background-color 0.15s;
-}
-
-.ga .pbtn:hover:not([disabled]) {
-	background: var(--local-fill-2);
-}
-
-.ga .pbtn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
-	font-weight: 600;
-}
-
-.ga .pbtn--primary:hover:not([disabled]) {
-	background: color-mix(in srgb, var(--brand) 84%, var(--panel-ink));
-}
-
-.ga .pbtn[disabled] {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-
-.ga .pbtn[aria-pressed='true'],
-.ga .pbtn[aria-pressed='true']:hover:not([disabled]) {
-	background: var(--panel-ink);
-	border-color: var(--panel-ink);
-	color: var(--panel);
-}
-
-.ga .seg {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
-	background: transparent;
-}
-
-.ga .seg [role='tab'],
-.ga .seg [role='radio'] {
-	min-height: 40px;
-	padding: 8px 14px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--panel-ink-2);
-	font: 600 0.8125rem/1 var(--mono);
-	cursor: pointer;
-}
-
-.ga .seg [role='tab']:hover,
-.ga .seg [role='radio']:hover {
-	background: var(--local-fill-2);
-}
-
-.ga .seg [aria-selected='true'],
-.ga .seg [aria-checked='true'] {
-	background: var(--panel-ink);
-	color: var(--panel);
-}
+/* ---- Fields in the controls ---- */
 
 .ga-field {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	color: var(--panel-ink-2);
 }
 
-.ga-field > span {
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	font-size: 0.6875rem;
-}
-
-.ga-step {
-	display: inline-flex;
-	align-items: center;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	overflow: hidden;
-}
-
-.ga-step .pbtn {
-	min-width: 40px;
-	padding-inline: 0;
-	border: 0;
-	border-radius: 0;
-}
-
-.ga-step output {
-	min-width: 4.5ch;
-	padding: 0 8px;
-	text-align: center;
-	color: var(--panel-ink);
-	font-variant-numeric: tabular-nums;
+.ga-field > .slabel {
+	margin-bottom: 0;
 }
 
 /* ---- Jobs, rails, workers ---- */
@@ -234,7 +33,7 @@
 	min-width: 56px;
 	height: 30px;
 	padding: 0 10px;
-	border-radius: 6px;
+	border-radius: 4px;
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -264,7 +63,7 @@
 }
 
 .ga .chip.is-dim {
-	background: var(--local-fill-2);
+	background: var(--panel-fill-2);
 	color: var(--panel-ink-2);
 	text-decoration: line-through;
 	text-decoration-thickness: 1px;
@@ -296,7 +95,7 @@
 	min-height: 60px;
 	padding: 16px 12px;
 	border-radius: 8px;
-	background: var(--local-fill);
+	background: var(--panel-fill);
 }
 
 /* The sprocket holes of continuous-feed paper. */
@@ -399,8 +198,8 @@
 	gap: 8px;
 	min-height: 40px;
 	padding: 4px;
-	border-radius: 7px;
-	background: var(--local-fill);
+	border-radius: 8px;
+	background: var(--panel-fill);
 }
 
 .ga .lane[data-off] .lane__track {
@@ -412,13 +211,19 @@
 	opacity: 0.55;
 }
 
-.ga-arrow {
-	color: var(--panel-ink-2);
-	text-align: center;
-	line-height: 1;
+/* ---- Layout inside a frame ---- */
+
+.ga-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 14px;
+	align-items: center;
 }
 
-/* ---- Layout inside a frame ---- */
+.ga-stack {
+	display: grid;
+	gap: 18px;
+}
 
 .ga-cols {
 	display: grid;
@@ -426,12 +231,9 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
-@container (min-width: 640px) {
+@container sframe (min-width: 640px) {
 	.ga-cols--2 {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-	.ga-cols--3 {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 	.ga-span {
 		grid-column: 1 / -1;
@@ -484,8 +286,7 @@
 	font-weight: 500;
 }
 
-.ga-panel > h3,
-.ga-title {
+.ga-panel > h3 {
 	margin: 0 0 8px;
 	color: var(--panel-ink);
 	font: 600 0.75rem/1.3 var(--mono);
@@ -518,6 +319,7 @@
 	gap: 6px;
 }
 
+/* Small buttons in a panel head. */
 .ga-head .pbtn {
 	min-height: 32px;
 	padding: 6px 10px;
@@ -541,7 +343,7 @@
 .ga .pip {
 	width: 12px;
 	height: 4px;
-	border-radius: 2px;
+	border-radius: 4px;
 	background: color-mix(in srgb, var(--brand-ink) 28%, transparent);
 }
 
@@ -552,13 +354,6 @@
 .ga .pip[data-s='na'] {
 	background: transparent;
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 45%, transparent);
-}
-
-.ga-toolbar {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px 14px;
-	align-items: center;
 }
 
 .ga-methods {
@@ -588,8 +383,8 @@
 	align-items: center;
 	gap: 4px 10px;
 	padding: 6px 8px;
-	border-radius: 6px;
-	background: var(--local-fill);
+	border-radius: 4px;
+	background: var(--panel-fill);
 	overflow-wrap: anywhere;
 }
 
@@ -605,11 +400,6 @@
 
 .ga-rows li[data-tone='dim'] {
 	color: var(--panel-ink-2);
-}
-
-.ga-stack {
-	display: grid;
-	gap: 18px;
 }
 
 .ga-queues {
@@ -685,8 +475,8 @@
 	grid-template-columns: minmax(0, 1fr) auto;
 	gap: 4px 12px;
 	padding: 6px 8px;
-	border-radius: 6px;
-	background: var(--local-fill);
+	border-radius: 4px;
+	background: var(--panel-fill);
 	overflow-wrap: anywhere;
 }
 
@@ -703,7 +493,7 @@
 	color: var(--amber);
 }
 
-/* ---- Go code inside a scene ---- */
+/* ---- Go code inside a scene: one line at a time can light up ---- */
 
 .ga-code {
 	margin: 0;
@@ -712,6 +502,7 @@
 	border-radius: 8px;
 	background: var(--panel-2);
 	border: 1px solid var(--panel-rule);
+	color: var(--panel-ink);
 	font: 400 0.75rem/1.7 var(--mono);
 	tab-size: 4;
 }
@@ -719,11 +510,6 @@
 .ga-code code {
 	display: block;
 	min-width: max-content;
-	background: none;
-	border: 0;
-	padding: 0;
-	color: var(--panel-ink);
-	font: inherit;
 }
 
 .ga-line {
@@ -743,34 +529,12 @@
 	opacity: 0.4;
 }
 
-.ga .tk-k { color: var(--local-tk-k); }
-.ga .tk-s { color: var(--amber); }
-.ga .tk-n { color: var(--amber); }
-.ga .tk-c { color: var(--panel-ink-2); font-style: italic; }
-.ga .tk-f { color: var(--panel-accent); }
-.ga .tk-t { color: var(--cobalt); }
-.ga .tk-b { color: var(--cobalt); }
-
 /* ---- Phones ---- */
 
-@container (max-width: 480px) {
-	.ga-stage {
-		padding-inline: 10px;
-	}
-	.ga-controls {
-		padding-inline: 10px;
-	}
+@container sframe (max-width: 480px) {
 	.ga .lane {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 4px;
-	}
-}
-
-@media (pointer: coarse) {
-	.ga .pbtn,
-	.ga .seg [role='tab'],
-	.ga .seg [role='radio'] {
-		min-height: 44px;
 	}
 }
 

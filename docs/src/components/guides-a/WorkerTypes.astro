@@ -1,7 +1,8 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'The three worker constructors side by side, on the same function that parses a string with strconv.Atoi. Pick a constructor and a job. NewWorker takes a function with no return value, so Add returns a handle with nothing to read, and a failure shows only if the function panics. NewErrWorker takes a function that returns an error, so Add returns a handle with Err. NewResultWorker returns a value and an error, so the handle has Result. A returned error and a panic also reach the worker Errs channel. For the input "42" there is no error. For "forty-two" Atoi fails. For "boom" the function panics.';
 
 const types = [
@@ -16,12 +17,7 @@ const inputs = [
 ];
 ---
 
-<Frame
-	scene="worker-types"
-	label="NewWorker, NewErrWorker and NewResultWorker side by side"
-	cap={'queue.Add("42")'}
-	alt={alt}
->
+<Scene id="worker-types" title="Worker types" call={'queue.Add("42")'} describe={describe} class="ga">
 	<div class="ga-stack">
 		<div class="ga-toolbar">
 			<div class="seg" role="tablist" aria-label="Worker constructor">
@@ -95,7 +91,7 @@ const inputs = [
 	<Fragment slot="controls">
 		<button type="button" class="pbtn pbtn--primary" data-add>Add the job</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './worker-types';

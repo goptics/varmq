@@ -1,6 +1,7 @@
 // Scene: the three worker constructors on the same function. The reader picks a constructor and a job,
 // and sees what the function returns, what Add hands back, and what the reader can read afterwards.
-import { caption, codeLines, h, q, reduced, say, tabs, Timers } from './kit';
+import { caption, codeLines, q, say } from './kit';
+import { h, reducedMotion, tabs, Timers } from '../ui/dom';
 
 type Kind = 'plain' | 'err' | 'result';
 type Input = '42' | 'forty-two' | 'boom';
@@ -143,7 +144,7 @@ function init(root: HTMLElement) {
 	const run = (animated: boolean) => {
 		timers.clear();
 		caption(root, `job, ok := queue.Add("${input}")`);
-		if (!animated || reduced()) {
+		if (!animated || reducedMotion()) {
 			paint(3);
 			announce();
 			return;
@@ -155,11 +156,14 @@ function init(root: HTMLElement) {
 	};
 
 	const panel = el('[data-panel]');
-	tabs(q(root, '[role="tablist"]'), (k) => {
-		kind = k as Kind;
-		panel.setAttribute('aria-labelledby', `ga-wt-tab-${k}`);
-		run(false);
-	});
+	tabs(
+		q(root, '[role="tablist"]'),
+		(k) => {
+			kind = k as Kind;
+			run(false);
+		},
+		{ shared: panel },
+	);
 	tabs(q(root, '[role="radiogroup"]'), (k) => {
 		input = k as Input;
 		run(false);
@@ -171,4 +175,4 @@ function init(root: HTMLElement) {
 	root.dataset.ready = '';
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="worker-types"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="worker-types"]').forEach(init);

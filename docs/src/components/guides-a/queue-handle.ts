@@ -1,7 +1,8 @@
 // Scene: a bounded queue and its handle. Add refuses a job when the queue is full or closed. Len and
 // IsFull read the queue. A started worker takes the waiting jobs into a batch, and the batch is
 // outside the queue. Purge closes every job that has not started. Close stops the queue taking jobs.
-import { caption, chip, flip, h, q, reduced, say, stepper, Timers } from './kit';
+import { caption, chip, flip, q, say, stepper } from './kit';
+import { h, reducedMotion, Timers } from '../ui/dom';
 
 const RUN_MS = 900;
 const CLOSE_MS = 350;
@@ -24,7 +25,7 @@ function init(root: HTMLElement) {
 		ran: rail('[data-ran]'),
 		len: rail('[data-len]'),
 		full: rail('[data-full]'),
-		add: rail('[data-add]'),
+		add: rail('[data-add-result]'),
 		why: rail('[data-why]'),
 		state: rail('[data-state]'),
 	};
@@ -88,8 +89,8 @@ function init(root: HTMLElement) {
 		els.full.dataset.tone = isFull() ? 'warn' : '';
 		els.state.textContent = isClosed ? 'closed' : capacity > 0 ? `capacity ${capacity}` : 'no limit';
 		els.state.className = `ga-tag${isClosed ? ' ga-tag--bad' : ''}`;
-		startBtn.textContent = reduced() ? 'Run all' : started ? 'Worker started' : 'Start worker';
-		startBtn.disabled = started && !reduced();
+		startBtn.textContent = reducedMotion() ? 'Run all' : started ? 'Worker started' : 'Start worker';
+		startBtn.disabled = started && !reducedMotion();
 		closeBtn.disabled = isClosed;
 	};
 	const render = () => flip(root, paint);
@@ -158,7 +159,7 @@ function init(root: HTMLElement) {
 		queue.push(j);
 		caption(root, `queue.Add("${label}")`);
 		result(`job ${j.n}, true`, 'ok', `There is room: ${capacity > 0 ? `${queue.length} of ${capacity} places are taken.` : 'the queue has no limit.'}`);
-		if (started && reduced()) drain();
+		if (started && reducedMotion()) drain();
 		else if (started) advance();
 		render();
 		schedule();
@@ -186,7 +187,7 @@ function init(root: HTMLElement) {
 	startBtn.addEventListener('click', () => {
 		started = true;
 		caption(root, 'worker.Start()');
-		if (reduced()) {
+		if (reducedMotion()) {
 			drain();
 			render();
 			say(root, 'The worker ran every job.');
@@ -221,4 +222,4 @@ function init(root: HTMLElement) {
 	paint();
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="queue-handle"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="queue-handle"]').forEach(init);

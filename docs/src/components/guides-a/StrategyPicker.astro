@@ -1,57 +1,57 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'One worker has three queues: alerts with rank 1 and 2 jobs, reports with rank 2 and 1 job, and emails with no rank and 3 jobs. Pick a strategy and take jobs one at a time to see which queue gives each job. With Priority the order is alert, alert, report, email, email, email. With RoundRobin it is alert, report, email, alert, email, email. With MaxLen it is email, alert, email, alert, report, email. With MinLen it is report, alert, alert, email, email, email.';
 
 const strategies = ['Priority', 'RoundRobin', 'MaxLen', 'MinLen'];
 ---
 
-<Frame
-	scene="strategy-picker"
-	label="Which queue gives the next job, for each strategy"
-	cap={'worker := varmq.NewWorker(process, 1)   // Priority, the default'}
-	alt={alt}
->
-	<div class="seg" role="tablist" aria-label="Strategy">
-		{
-			strategies.map((s, i) => (
-				<button
-					type="button"
-					role="tab"
-					id={`ga-strat-tab-${s}`}
-					data-key={s}
-					aria-selected={i === 0 ? 'true' : 'false'}
-					aria-controls="ga-strat-panel"
-					tabindex={i === 0 ? 0 : -1}
-				>
-					{s}
-				</button>
-			))
-		}
-	</div>
-
-	<div role="tabpanel" id="ga-strat-panel" aria-labelledby="ga-strat-tab-Priority" class="ga-stack" data-panel>
-		<div class="ga-queues" data-queues></div>
-		<div>
-			<p class="ga-label"><strong>The worker took, in order</strong><span data-count>0 of 6 jobs</span></p>
-			<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs in the order the worker took them" data-order>
-				<span class="ga-hint" aria-hidden="true">nothing yet</span>
+<Scene id="strategy-picker" title="Strategy picker" call={'worker := varmq.NewWorker(process, 1)   // Priority, the default'} describe={describe} class="ga">
+	<div class="ga-stack">
+		<div class="ga-toolbar">
+			<div class="seg" role="tablist" aria-label="Strategy">
+				{
+					strategies.map((s, i) => (
+						<button
+							type="button"
+							role="tab"
+							id={`ga-strat-tab-${s}`}
+							data-key={s}
+							aria-selected={i === 0 ? 'true' : 'false'}
+							aria-controls="ga-strat-panel"
+							tabindex={i === 0 ? 0 : -1}
+						>
+							{s}
+						</button>
+					))
+				}
 			</div>
 		</div>
-		<p class="ga-note ga-why" data-why></p>
+
+		<div role="tabpanel" id="ga-strat-panel" aria-labelledby="ga-strat-tab-Priority" class="ga-stack" data-panel>
+			<div class="ga-queues" data-queues></div>
+			<div>
+				<p class="ga-label"><strong>The worker took, in order</strong><span data-count>0 of 6 jobs</span></p>
+				<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs in the order the worker took them" data-order>
+					<span class="ga-hint" aria-hidden="true">nothing yet</span>
+				</div>
+			</div>
+			<p class="ga-note ga-why" data-why></p>
+		</div>
 	</div>
 
 	<Fragment slot="controls">
 		<button type="button" class="pbtn pbtn--primary" data-step>Take next job</button>
 		<button type="button" class="pbtn" data-play>Play</button>
-		<span class="ga-grow"></span>
+		<span class="sframe__spacer"></span>
 		<button type="button" class="pbtn" data-add="alerts">+ alert</button>
 		<button type="button" class="pbtn" data-add="reports">+ report</button>
 		<button type="button" class="pbtn" data-add="emails">+ email</button>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './strategy-picker';

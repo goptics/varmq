@@ -1,6 +1,7 @@
 // Scene: a first-in first-out queue next to a priority queue. The same jobs go into both, a worker
 // with concurrency 1 takes them one at a time, and each queue shows the order they leave in.
-import { caption, chip, flip, q, reduced, say, stepper, Timers } from './kit';
+import { caption, chip, flip, q, say, stepper } from './kit';
+import { reducedMotion, Timers } from '../ui/dom';
 import { nextRanked } from './model';
 
 const NAMES = ['report', 'alert', 'digest', 'invoice', 'backup', 'export', 'sync', 'email'];
@@ -91,7 +92,8 @@ function init(root: HTMLElement) {
 			});
 			s.len.textContent = `${s.queue.length} ${s.queue.length === 1 ? 'job' : 'jobs'}`;
 		}
-		startBtn.textContent = reduced() ? 'Run all' : !started ? 'Start worker' : paused ? 'Resume worker' : 'Pause worker';
+		startBtn.textContent = reducedMotion() ? 'Run all' : !started ? 'Start worker' : paused ? 'Resume worker' : 'Pause worker';
+		startBtn.disabled = started && !paused && !reducedMotion() && !busy() && !sides.some((s) => s.queue.length); // nothing to pause
 	};
 	const render = () => flip(root, paint);
 
@@ -147,7 +149,7 @@ function init(root: HTMLElement) {
 		seq++;
 		for (const s of sides) s.queue.push({ name, priority, seq });
 		caption(root, `queue.Add("${name}")   pq.Add("${name}", ${priority})`);
-		if (started && reduced()) drain();
+		if (started && reducedMotion()) drain();
 		else if (started && !paused) {
 			for (const s of sides) take(s);
 			render();
@@ -181,7 +183,7 @@ function init(root: HTMLElement) {
 		names = 3;
 	});
 	startBtn.addEventListener('click', () => {
-		if (reduced()) {
+		if (reducedMotion()) {
 			started = true;
 			drain();
 			say(root, 'Everything ran. The first queue ran the jobs in add order. The priority queue ran the lowest number first.');
@@ -204,4 +206,4 @@ function init(root: HTMLElement) {
 	paint();
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="queue-order"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="queue-order"]').forEach(init);

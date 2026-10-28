@@ -1,7 +1,8 @@
 ---
-import Frame from './Frame.astro';
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
 
-const alt =
+const describe =
 	'What each function helper wraps. Func, ErrFunc and ResultFunc each return a ready-made worker function. The worker function reads the job data, which is your closure, and calls it. If the closure is nil, Func panics, and the worker recovers the panic and reports it on Errs. ErrFunc returns an error, which Err returns. ResultFunc returns the zero value and an error, which Result returns. Pick a helper and a closure to see which lines of the helper run.';
 
 const helpers = [
@@ -16,12 +17,7 @@ const closures = [
 ];
 ---
 
-<Frame
-	scene="helper-wrap"
-	label="What Func, ErrFunc and ResultFunc wrap"
-	cap={'queue := varmq.NewWorker(varmq.Func(), 1).BindQueue()'}
-	alt={alt}
->
+<Scene id="helper-wrap" title="Function helpers" call={'queue := varmq.NewWorker(varmq.Func(), 1).BindQueue()'} describe={describe} class="ga">
 	<div class="ga-stack">
 		<div class="ga-toolbar">
 			<div class="seg" role="tablist" aria-label="Helper">
@@ -82,7 +78,7 @@ const closures = [
 	<Fragment slot="controls">
 		<button type="button" class="pbtn pbtn--primary" data-add>Add the closure</button>
 	</Fragment>
-</Frame>
+</Scene>
 
 <script>
 	import './helper-wrap';

@@ -1,6 +1,7 @@
 // Scene: what Func, ErrFunc and ResultFunc wrap. The reader adds a closure, and the scene walks the lines
 // of the worker function that the helper returns (main.go in the library), then shows what the reader gets.
-import { caption, codeLines, q, reduced, say, tabs, Timers } from './kit';
+import { caption, codeLines, q, say } from './kit';
+import { reducedMotion, tabs, Timers } from '../ui/dom';
 
 type Helper = 'func' | 'err' | 'result';
 type Closure = 'works' | 'fails' | 'nil';
@@ -155,7 +156,7 @@ function init(root: HTMLElement) {
 		timers.clear();
 		caption(root, WORKER[helper]);
 		const path = closure === 'nil' ? PATH[helper].nil : PATH[helper].ok;
-		if (!animated || reduced()) {
+		if (!animated || reducedMotion()) {
 			paint(path.length, 3);
 			announce();
 			return;
@@ -169,11 +170,14 @@ function init(root: HTMLElement) {
 	};
 
 	const panel = el('[data-panel]');
-	tabs(q(root, '[role="tablist"]'), (k) => {
-		helper = k as Helper;
-		panel.setAttribute('aria-labelledby', `ga-fh-tab-${k}`);
-		run(false);
-	});
+	tabs(
+		q(root, '[role="tablist"]'),
+		(k) => {
+			helper = k as Helper;
+			run(false);
+		},
+		{ shared: panel },
+	);
 	tabs(q(root, '[role="radiogroup"]'), (k) => {
 		closure = k as Closure;
 		run(false);
@@ -185,4 +189,4 @@ function init(root: HTMLElement) {
 	root.dataset.ready = '';
 }
 
-document.querySelectorAll<HTMLElement>('[data-ga="helper-wrap"]').forEach(init);
+document.querySelectorAll<HTMLElement>('[data-scene="helper-wrap"]').forEach(init);
