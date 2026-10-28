@@ -1,0 +1,16 @@
+---
+// The home page hero. The banner matches the landing page at /alt/. The hero itself stays Starlight's.
+import Default from '@astrojs/starlight/components/Hero.astro';
+
+// Starlight draws the 404 page with the hero too.
+const { id } = Astro.locals.starlightRoute.entry;
+const notFound = id === '404' || id.endsWith('/404');
+---
+
+<p class="shell-banner">
+	<span class="shell-banner__id">{notFound ? 'JOB 404' : 'JOB 00'}</span>
+	<span class="shell-banner__label">{notFound ? 'Not found' : 'VarMQ docs'}</span>
+	<span class="shell-banner__rule" aria-hidden="true"></span>
+	{!notFound && <span class="shell-banner__meta">queue + worker pool</span>}
+</p>
+<Default {...Astro.props}><slot /></Default>

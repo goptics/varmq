@@ -1,0 +1,17 @@
+---
+// The docs follow the system color scheme, like the tokens in src/styles/tokens.css. There is no theme
+// picker, so a theme that an old picker stored in localStorage must not win. Starlight's own utilities
+// (`light:sl-hidden` on the logo) read `data-theme`, so keep it in step with the system value.
+---
+
+<script is:inline>
+	window.StarlightThemeProvider = (() => {
+		const query = window.matchMedia('(prefers-color-scheme: light)');
+		const apply = () => {
+			document.documentElement.dataset.theme = query.matches ? 'light' : 'dark';
+		};
+		apply();
+		query.addEventListener('change', apply);
+		return { updatePickers() {} };
+	})();
+</script>

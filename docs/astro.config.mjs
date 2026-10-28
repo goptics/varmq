@@ -1,7 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightThemeRapide from 'starlight-theme-rapide';
 
 // https://astro.build/config
 export default defineConfig({
@@ -43,7 +42,15 @@ export default defineConfig({
 				baseUrl: 'https://github.com/goptics/varmq/edit/main/docs/',
 			},
 			lastUpdated: true,
-			plugins: [starlightThemeRapide()],
+			customCss: ['./src/styles/tokens.css', './src/styles/docs-theme.css'],
+			components: {
+				Head: './src/components/shell/Head.astro',
+				ThemeProvider: './src/components/shell/ThemeProvider.astro',
+				ThemeSelect: './src/components/shell/ThemeSelect.astro',
+				PageTitle: './src/components/shell/PageTitle.astro',
+				Hero: './src/components/shell/Hero.astro',
+				Footer: './src/components/shell/Footer.astro',
+			},
 		}),
 	],
 });
