@@ -142,13 +142,13 @@
 		}
 
 		resized(width: number) {
-			if (!this.nodes && width > 0) this.draw(); // the square is shown now, after a resize past 50rem
+			if (!this.nodes && width > 0) this.draw(); // the square is shown now, after a resize past 1090 px
 			this.nodes?.setWidth(width);
 			this.load();
 			this.update();
 		}
 
-		/** Connected, and with a width: the square is hidden below 50rem. */
+		/** Connected, and with a width: the square is hidden below 1090 px. */
 		shown() {
 			return this.isConnected && this.clientWidth > 0;
 		}
@@ -226,22 +226,14 @@
 		aspect-ratio: 1;
 	}
 
-	/* On a phone the square would push the title and Get started down: leave it out, below Starlight's own 50rem.
-	   max-width rather than range syntax, and the map itself hidden as well, for browsers without either or :has(). */
-	@media (max-width: 49.99rem) {
+	/* Below 1090 px (68.125rem) the map is left out and the hero is Starlight's own. Chapter 6's text needs a 366 px
+	   square to stay at 7 px, and Starlight's 7fr 4fr hero gives it that from 1090 px even with a classic 15 px
+	   scrollbar, which narrows the page but not the width media queries see: the square is 373 px there, 368 px with
+	   the scrollbar (scene.test.ts). The map itself is hidden as well, for browsers without :has(). */
+	@media (max-width: 68.12rem) {
 		varmq-map,
 		.hero > .hero-html:has(> varmq-map) {
 			display: none;
-		}
-	}
-
-	/* Below 69rem Starlight's 7fr 4fr hero leaves the square too narrow for the chapters' text (chapter 6's needs a
-	   366 px square to stay at 7 px), so there the hero splits in halves. The square is then 372 px at 50rem and 378 px
-	   at 69rem (scene.test.ts). 7fr 4fr reaches 366 px at 67rem, but a classic scrollbar narrows the page by 15 px
-	   without narrowing the width media queries see: 69rem leaves room for it. */
-	@media (min-width: 50rem) and (max-width: 68.99rem) {
-		.hero:has(> .hero-html > varmq-map) {
-			grid-template-columns: 1fr 1fr;
 		}
 	}
 </style>
