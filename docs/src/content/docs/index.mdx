@@ -39,12 +39,6 @@ A worker with the default concurrency of 1 runs two jobs, one after the other. P
 
 <GoPlay example="quick-start" />
 
-## How it works
-
-A worker owns your function and a concurrency limit. Each `Add` puts a job in a queue and returns at once. The worker's event loop hands waiting jobs to free goroutines, starts more while jobs wait, and lets them exit when the queue drains. [How it works](/concepts/how-it-works/) goes through it step by step.
-
-![A varmq worker pool with concurrency 4: six Add calls produce one wake-up, the event loop dispatches four jobs to four goroutines, two jobs wait, and the pool shrinks back to one idle goroutine](../../../../assets/diagrams/varmq-worker-pool.svg)
-
 ## What you get
 
 <CardGrid>
