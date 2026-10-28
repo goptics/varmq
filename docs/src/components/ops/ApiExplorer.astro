@@ -1,0 +1,99 @@
+---
+// REST API explorer. It sends requests to a model of varmq.Handler that runs in the page: no server,
+// no network. The model is in api-model.ts and matches the real handler.
+import Scene from './Scene.astro';
+
+const groups = [
+	{
+		title: 'Read',
+		items: [
+			['GET', '/varmq/health', 'health'],
+			['GET', '/varmq/workers', 'workers'],
+			['GET', '/varmq/workers/email-sender', 'workers/{name}'],
+		],
+	},
+	{
+		title: 'Control',
+		items: [
+			['PATCH', '/varmq/workers/email-sender/actions/pause', 'pause'],
+			['PATCH', '/varmq/workers/email-sender/actions/resume', 'resume'],
+			['PATCH', '/varmq/workers/email-sender/actions/restart', 'restart'],
+			['PATCH', '/varmq/workers/email-sender/actions/start', 'start'],
+			['PATCH', '/varmq/workers/email-sender/actions/stop', 'stop'],
+		],
+	},
+	{
+		title: 'Tune',
+		items: [
+			['PATCH', '/varmq/workers/email-sender/config/concurrency/4', 'concurrency 4'],
+			['PATCH', '/varmq/workers/email-sender/config/concurrency/0', 'concurrency 0'],
+		],
+	},
+	{
+		title: 'Mistakes',
+		items: [
+			['PATCH', '/varmq/workers/email-sender/actions/dance', 'unknown action'],
+			['GET', '/varmq/workers/ghost', 'unknown worker'],
+			['POST', '/varmq/health', 'wrong method'],
+			['GET', '/varmq/nope', 'unknown path'],
+		],
+	},
+];
+
+const alt =
+	'An API explorer for varmq’s REST handler, mounted at /varmq. It runs a model of the handler in the page and calls no server. ' +
+	'Two workers are registered: email-sender and image-processor. Pick a request or type one, then press Send. The reply shows the status line, the headers varmq sets and the body, with a sentence that says why. ' +
+	'Control requests change the worker, and the worker cards above the reply show the new status. A pause on a running worker makes it Pausing until its running jobs end. Use Let running jobs finish to let time pass. ' +
+	'Some requests fail on purpose: resume on a Pausing worker is a 500, start on a running worker is a 409, and an unknown action is a 400.';
+---
+
+<Scene id="api" label="API explorer" call="curl -i localhost:8080/varmq/workers" alt={alt}>
+	<div class="api" data-api>
+		<div class="api__workers" data-workers role="list" aria-label="Registered workers"></div>
+
+		<div class="api__req">
+			{
+				groups.map((g) => (
+					<div class="api__group" role="group" aria-label={g.title}>
+						<span class="api__gtitle">{g.title}</span>
+						{g.items.map(([m, p, label]) => (
+							<button type="button" class="api__chip" data-method={m} data-path={p}>
+								<b>{m}</b> {label}
+							</button>
+						))}
+					</div>
+				))
+			}
+			<form class="api__form" data-form autocomplete="off">
+				<label class="ops-sr" for="api-method">Method</label>
+				<select id="api-method" class="api__method" data-method-input>
+					<option>GET</option>
+					<option>PATCH</option>
+					<option>POST</option>
+					<option>DELETE</option>
+				</select>
+				<label class="ops-sr" for="api-path">Path</label>
+				<input id="api-path" class="api__path" data-path-input type="text" spellcheck="false" value="/varmq/workers" />
+				<button type="submit" class="ops-pbtn ops-pbtn--primary">Send</button>
+			</form>
+		</div>
+
+		<div class="api__res" aria-live="polite" aria-atomic="true">
+			<div class="api__status" data-status></div>
+			<pre class="api__wire" data-wire></pre>
+			<p class="api__why" data-why></p>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="ops-pbtn" data-act="tick">Let running jobs finish</button>
+		<button type="button" class="ops-pbtn" data-act="add">Add 10 jobs to email-sender</button>
+		<button type="button" class="ops-pbtn" data-act="copy" data-label="Copy as curl">Copy as curl</button>
+		<label class="ops-check"><input type="checkbox" data-pretty checked /> Pretty-print JSON</label>
+		<button type="button" class="ops-pbtn" data-act="reset">Reset workers</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './api';
+</script>
