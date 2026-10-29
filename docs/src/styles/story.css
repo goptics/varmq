@@ -670,7 +670,7 @@
 	}
 }
 
-@container (max-height: 20rem) {
+@container (max-height: 20.6rem) {
 	.st-lede {
 		display: none;
 	}
@@ -708,8 +708,9 @@
 	}
 }
 
-/* Portrait below desktop: the map on top, the step under it. The step keeps 20rem, and the map takes the rest,
-   between 30% and 40% of the stage's height, and no wider than the screen. */
+/* Portrait below desktop: the map on top, the intro or the step under it. The text keeps 22rem, room for the intro with
+   its lede, and the map takes the rest, between 30% and 40% of the stage's height, and no wider than the screen.
+   The map has one size for the intro and every step, so nothing moves when the story starts. */
 @media (max-width: 1023px) and (orientation: portrait) {
 	.st-stage {
 		grid-template-columns: minmax(0, 1fr);
@@ -724,23 +725,13 @@
 	}
 
 	.st-frame {
-		width: min(100%, calc(clamp(30svh, var(--st-h) - 18px - 20rem, 40svh) * 400 / 344));
+		width: min(100%, calc(clamp(30svh, var(--st-h) - 18px - 22rem, 40svh) * 400 / 344));
 		margin: 0 auto;
 	}
 
 	.st-text {
 		grid-row: 2;
 		padding: 4px var(--gutter) 12px;
-	}
-
-	/* The intro has the stage to itself: the map comes in with step 1. */
-	.st[data-at='intro'] .st-map {
-		display: none;
-	}
-
-	.st[data-at='intro'] .st-text {
-		grid-row: 1 / -1;
-		padding-block: 16px;
 	}
 
 	.st-intro,

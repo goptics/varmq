@@ -409,7 +409,8 @@ site-search button > kbd {
 	}
 }
 
-.content-panel h1#_top {
+/* Kept to one class's weight, so a page that sets its own title (the home page's story) can. */
+.content-panel :where(h1#_top) {
 	margin-top: 0;
 	color: var(--ink);
 	font-family: var(--display);
