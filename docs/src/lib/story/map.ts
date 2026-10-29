@@ -6,8 +6,11 @@ import { REGIONS, frame } from '../heromap/scene.ts';
 export interface MapHandle {
 	/** Shows the map at time `t` of its loop, and holds it there. */
 	seek(t: number): void;
-	/** Plays the loop from `from` for `ms` at its own pace, then holds at the end. */
-	play(from: number, ms: number): void;
+	/**
+	 * Plays the loop from `from` for `ms` at its own pace, then holds at the end. Given `again`, it holds the end that
+	 * many ms and plays the stretch over, until told otherwise.
+	 */
+	play(from: number, ms: number, again?: number): void;
 }
 
 const wrap = (t: number) => ((t % TOTAL) + TOTAL) % TOTAL;
@@ -36,26 +39,35 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		onTime(t);
 	};
 
-	const play = (from: number, ms: number) => {
+	const play = (from: number, ms: number, again?: number) => {
 		cancelAnimationFrame(frameId);
 		const tl = timeline;
 		if (!tl) {
 			// Not loaded yet: play once it is.
 			t = wrap(from);
-			pending = () => play(from, ms);
+			pending = () => play(from, ms, again);
 			return;
 		}
 		pending = undefined;
 		tl.seek(wrap(from)).play();
-		const begun = performance.now();
+		let begun = performance.now();
+		let last = begun;
 		const tick = () => {
-			if (performance.now() - begun >= ms) {
+			const now = performance.now();
+			// It stops a frame or two short of the end, where every step's map is already still, rather than a frame past
+			// it: past the end the next stretch has begun (the finale's fade, say), and the seek back from there flickers.
+			// Two frames, as the timeline's clock can run a frame ahead of this one.
+			const ending = now + 2 * (now - last) - begun >= ms;
+			last = now;
+			if (!tl.paused && ending) {
 				t = wrap(from + ms);
 				tl.pause().seek(t);
 				onTime(t);
-				return;
-			}
-			onTime(tl.iterationCurrentTime);
+				if (again === undefined) return;
+			} else if (tl.paused && now - begun >= ms + again!) {
+				begun = last = now;
+				tl.seek(wrap(from)).play();
+			} else if (!tl.paused) onTime(tl.iterationCurrentTime);
 			frameId = requestAnimationFrame(tick);
 		};
 		frameId = requestAnimationFrame(tick);

@@ -137,8 +137,8 @@ const map = mountMap($('varmq-map'), (t) => {
 });
 
 /**
- * Shows the intro, beside the whole map. The map runs once as in the last step, from where its camera has pulled back,
- * and holds once it is still; each return to the intro runs it again. Under reduced motion it stands still.
+ * Shows the intro, beside the whole map. The map runs as in the last step, from where its camera has pulled back, holds
+ * a moment once it is still, and runs again, until the reader scrolls on. Under reduced motion it stands still.
  */
 function showIntro() {
 	step = -1;
@@ -148,7 +148,7 @@ function showIntro() {
 	stepView.hidden = true;
 	const last = STEPS[STEPS.length - 1];
 	if (reduce.matches) map.seek(STATIC_AT);
-	else map.play(STATIC_AT, last.from + last.ms - STATIC_AT);
+	else map.play(STATIC_AT, last.from + last.ms - STATIC_AT, 1500);
 }
 
 /** Shows step k: its text, its code, and its chapter playing on the map, or its last frame under reduced motion. */
