@@ -9,7 +9,7 @@ A page explains by showing: each claim is a small working scene placed next to t
 
 ## Tokens
 
-Use only the variables in `src/styles/tokens.css`. Never write a hex color in a page. Light and dark follow `prefers-color-scheme` only. There is no theme toggle.
+Use only the variables in `src/styles/tokens.css`. Never write a hex color in a page. The reader picks Light, Dark or System in the header's theme switch. System follows `prefers-color-scheme`. The tokens switch on `:root[data-theme='dark']`. Starlight's ThemeProvider sets `data-theme` before the first paint, and so does an inline script in the head of `/alt/`. Both read the same stored choice, so it carries from page to page.
 
 | Role | Variables |
 |---|---|
@@ -53,13 +53,16 @@ Every component has one look. Use the shared piece. Do not write a second copy i
 | Button | `.pbtn`; `--primary` (brand), `--danger` (red outline), `--paper` (on paper, outside a panel); `aria-pressed` for a toggle. Pause and replay controls use `.pbtn`. `.stepper` for a number stepper. A touch target is 44 px on a coarse pointer. | `ui.css` |
 | Segmented tabs | `.seg` with `role="tablist"` + `role="tab"`, or `role="radiogroup"` + `role="radio"`; `data-key` per item. Arrow keys, Home, End. | `ui.css`; `tabs()` in `ui/dom.ts` |
 | Field | `.sfield` (slider, number, text); a bare `select` inside `.sframe` is styled. | `ui.css` |
-| Code card | `.code` (+ `.code--dark`), `.code__head` with file name and `.copy` button, then `pre`. `[data-copy]` buttons are served by one handler; `copyText()` copies a computed string. | `ui.css`; `copyButtons()`, `copyText()` in `ui/dom.ts` |
+| Code card | `.code` (+ `.code--dark`), `.code__head` with file name and `.copy` button, then `pre`. `[data-copy]` buttons are served by one handler; `copyText()` copies a computed string. Expressive Code also names each line of a doc code block `.code`, so the card rule skips those. | `ui.css`; `copyButtons()`, `copyText()` in `ui/dom.ts` |
 | Go syntax | `highlightGo`, `highlightShell`, `highlightJson` return `tk-*` spans. | `components/ui/go.ts` |
 | Doc code block | Expressive Code theme `varmq-panel`. Same tokens as the code card. | `ec.config.mjs`, `docs-theme.css` |
 | Lane | Label, bar track, value, and a "× VarMQ" ratio. The VarMQ lane uses `--brand`. | `.rlane` (`alt.css`, `bench.css`); scene lanes stay local (`.llane`, `.gb-*`) |
 | Callout | Card with an `--amber` rule for results against VarMQ and a `--brand` rule for tips. Starlight asides, `.bboard` and the matrix notes use it. | `docs-theme.css` |
 | Tear line | Dashed rule with "tear here" between the last section and the closing call to action. | `.shell-tear`, `.tear` |
 | Status bar | Landing page only. | `components/alt/StatusBar.astro` |
+| Theme switch | Three native radios: Light, Dark, System. The choice is stored under `starlight-theme` (`''` for System). It sits in the header, and in the phone header on `/`, which has no sidebar menu. | `components/ui/ThemeSwitch.astro`, `ui.css` (`.tswitch`) |
+| Main action | `.btn` with `--primary` or `--ghost`, for a page's own call to action on paper (the landing pages). Scene controls stay `.pbtn`. | `ui.css` |
+| Install box | The `go get` commands in tabs: varmq, then varmq with redisq or sqliteq. | `components/ui/Install.astro`, `ui.css` (`.install`) |
 
 Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area folder. They read only tokens.
 
@@ -88,11 +91,36 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 
 | Type | Used by | Rule |
 |---|---|---|
-| Landing | `/alt/`, `/` | Full width, paper stripes. `/alt/` has the status bar. `/` keeps the Starlight header and its hero map. |
+| Landing | `/alt/`, `/` | Full width. `/alt/` has paper stripes and the status bar. `/` keeps the Starlight header and opens on the story (below), then keeps the 44rem reading column for the rest of the page. |
 | Article | `start`, `concepts`, `guides`, `persistence`, `operations` | Starlight layout restyled by the shell theme. One banner, then the article. Add a scene where a scene explains faster than text. |
 | Reference | `reference/comparison` | Dense tables and a feature matrix that the reader can filter. |
 | Data | `reference/benchmarks` | Explorer and score board on dark panels, raw-data links, and the callout for results against VarMQ. Data comes from a committed snapshot (`components/bench/data.json`, checked by `scripts/bench-data.mjs`). |
 | 404 | `/404` | Banner `JOB 404`, one sentence, the footer links. |
+
+## The home page story
+
+`/` opens on varmq's story (`components/Story.astro`, `lib/story/`, `styles/story.css`):
+
+- **The stage.** It is pinned under the header, with the text on the left and the map on the right. The text column is a size container, so it sets itself by the room it has. On portrait screens below 1024 px the map sits on top and the text below.
+- **The intro.** It comes first: the h1 and the lede (the hero fields of `index.mdx`), the install box, Get started and GitHub, and the whole map standing still. On portrait screens the intro has the stage to itself, and the map comes in with step 1.
+- **The steps.** Each scroll plays one of ten steps: its chapter of the map, once, at the map's own pace. The one code block morphs into the code behind that chapter and lights the lines each caption is about. The code block is a dark panel in both themes, highlighted at build time with the same theme as the doc code blocks (`ec.config.mjs`).
+- **Captions.** A caption is a button. It plays its step again from that caption.
+- **Snapping.** The page snaps one step at a time only while the reader is in the story. One wheel turn is one step, and a free-spinning wheel keeps stepping. Past the last step the wheel and the keys leave the story, and below it the page scrolls normally. A scroll that ends half-way between the last step and the content goes on to whichever it was heading for.
+- **Reduced motion.** Each step shows its last frame.
+- **Checks.** Check every step at the 18 viewport sizes in `home-stage-fit-testing`, both themes. Test the wheel inside the page, not through CDP events alone.
+
+### The map's two palettes
+
+The map keeps its own palette (`lib/heromap/map.css`), in both themes:
+
+- **Dark.** The map's original palette, which is not to be changed: amber jobs, green goroutines, a violet event loop, red failures, SQLite blue and Redis red.
+- **Light.** The same hues, made dark enough to read on `--paper`:
+  - Every stroke and every text colour has an OKLCH lightness of 0.50 to 0.56, the same as the page's own on-paper colours (`--accent-text`, the `--tk-*` values). At equal lightness no hue looks heavier than another, and each has at least 4.5:1 against `--paper`.
+  - Fills use the same hues at a lightness of about 0.96.
+  - The greys come from the page's green-tinted inks (`--ink-3`, `--ink`) rather than a cool grey, so the map matches the paper around it.
+  - A job keeps the dark map's amber (`#f2b036`) with a darker edge (`#a26500`), which gives the square its 3:1 against the paper.
+  - The light palette uses tokens where the page has one: `--accent-text` for green, `--tk-s` for the amber text, and `--ink-3` for labels and lines.
+- **Where it lives.** The palette is set on `:root`, so the story's text beside the map uses the same red, SQLite blue and Redis red (`--vm-*-text`).
 
 ## Adding a page or a component
 
@@ -104,10 +132,10 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 
 ## Decisions and known gaps
 
-- Theme: the tokens follow `prefers-color-scheme` only. The shell has no toggle. `starlight-theme-rapide` is removed.
+- Theme: Light, Dark or System, from the header's switch; System follows `prefers-color-scheme`. `starlight-theme-rapide` is removed.
 - The Go call strip sits under the stage in every scene (it sat on top in two areas).
 - Selected tab = `--panel-ink` fill on a dark panel, `--ink` on paper. The brand fill is for primary buttons only.
-- The hero map on `/` (`src/lib/heromap/map.css`) keeps its own `--vm-*` palette. Its hex values are not tokens yet.
+- The map on `/` (`src/lib/heromap/map.css`) keeps its own `--vm-*` palette (see "The map's two palettes"). The dark palette's hex values and the light palette's amber, violet, red and blue are not tokens.
 - Scene chips and lanes (`.ljob`, `.llane`, `.ga-*`, `.gb-*`, `.ops-job`) are still local. They read tokens, but each area has its own markup.
 - The `/alt/` pool keeps its own frame (`.pool`); it is not a `.sframe`.
 - `GoPlay.astro` uses Starlight `--sl-*` variables, which the shell maps to the tokens. Its buttons are `.pbtn`.
