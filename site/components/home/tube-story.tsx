@@ -39,6 +39,8 @@ function Lit({ lines }: { lines: number[] }) {
 export function TubeStory({ hero, steps, code, text }: { hero: ReactNode; steps: StoryStep[]; code: CodeSteps; text: ReactNode }) {
 	const root = useRef<HTMLElement>(null);
 	const map = useRef<TubeMapHandle>(null);
+	const wideCode = useRef<HTMLDivElement>(null);
+	const phoneCode = useRef<HTMLDivElement>(null);
 	const [step, setStep] = useState(0); // 0 is the hero; k is chapter k
 	const [caption, setCaption] = useState(0);
 	const current = useRef(0);
@@ -125,6 +127,34 @@ export function TubeStory({ hero, steps, code, text }: { hero: ReactNode; steps:
 	const now = step > 0 ? steps[step - 1] : undefined;
 	const at = Math.max(0, step - 1);
 
+	// Short of room, the code block shows only some of its lines. Keep the lit ones in view, with the line above them
+	// for context when it fits: now, again once the morph has settled at its new height, and when the screen turns.
+	useEffect(() => {
+		if (!now) return;
+		const follow = () => {
+			const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+			for (const [el, lines] of [
+				[wideCode.current, now.lines.wide[caption]],
+				[phoneCode.current, now.lines.phone[caption]],
+			] as const) {
+				if (!el?.offsetHeight || !lines?.length) continue;
+				const style = getComputedStyle(el);
+				const lh = parseFloat(style.getPropertyValue('--hp-lh'));
+				const shows = (el.clientHeight - 2 * parseFloat(style.getPropertyValue('--hp-pad'))) / lh;
+				const first = Math.min(...lines);
+				const context = Math.max(...lines) - first + 1 < shows ? 1 : 0;
+				el.scrollTo({ top: (first - 1 - context) * lh, behavior });
+			}
+		};
+		follow();
+		const settled = setTimeout(follow, MORPH.duration);
+		addEventListener('resize', follow);
+		return () => {
+			clearTimeout(settled);
+			removeEventListener('resize', follow);
+		};
+	}, [now, caption]);
+
 	return (
 		<section ref={root} className="hp-story" aria-label="How a job goes through varmq">
 			{/* The whole story as text, for screen readers: the stage only ever shows one step. */}
@@ -153,11 +183,11 @@ export function TubeStory({ hero, steps, code, text }: { hero: ReactNode; steps:
 								</li>
 							))}
 						</ol>
-						<div className="hp-morph hp-morph-wide">
+						<div ref={wideCode} className="hp-morph hp-morph-wide">
 							<Lit lines={now?.lines.wide[caption] ?? []} />
 							<ShikiMagicMovePrecompiled steps={code.wide} step={at} options={MORPH} />
 						</div>
-						<div className="hp-morph hp-morph-phone">
+						<div ref={phoneCode} className="hp-morph hp-morph-phone">
 							<Lit lines={now?.lines.phone[caption] ?? []} />
 							<ShikiMagicMovePrecompiled steps={code.phone} step={at} options={MORPH} />
 						</div>

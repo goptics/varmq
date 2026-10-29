@@ -152,19 +152,25 @@ body:has(.hp-home) {
 	align-self: start;
 	display: grid;
 	grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+	grid-template-rows: minmax(0, 1fr);
 	column-gap: var(--hp-gap);
 	align-items: center;
 	width: 100%;
 	max-width: var(--hp-max);
 	height: var(--hp-step);
 	margin: 0 auto;
-	padding: 0 var(--hp-gutter);
+	padding: min(12px, 2svh) var(--hp-gutter);
 }
 
-/* The hero and the step share one place on the stage: one fades out as the other comes in. */
+/* The hero and the step share one place on the stage: one fades out as the other comes in. The place is a size
+   container, so the text sets itself by the room it has rather than by the screen. Neither panel grows past it: a
+   step short of room gives up lines of its code block, which keeps the lit ones in view. */
 .hp-stage-text {
 	display: grid;
+	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+	height: 100%;
 	min-width: 0;
+	container-type: size;
 }
 
 .hp-hero-panel,
@@ -172,6 +178,7 @@ body:has(.hp-home) {
 	grid-area: 1 / 1;
 	align-self: center;
 	min-width: 0;
+	max-height: 100%;
 	transition:
 		opacity 420ms var(--hp-ease),
 		translate 420ms var(--hp-ease),
@@ -187,6 +194,11 @@ body:has(.hp-home) {
 		opacity 240ms var(--hp-ease),
 		translate 240ms var(--hp-ease),
 		visibility 0s 240ms;
+}
+
+.hp-step-panel {
+	display: flex;
+	flex-direction: column;
 }
 
 .hp-stage-map {
@@ -254,11 +266,13 @@ body:has(.hp-home) {
 	box-shadow: 0 6px 18px -8px rgba(5, 20, 14, 0.7);
 }
 
+/* The command is as large as its slot allows, so its 31 columns, padding and button fit the width there is: cqi is the
+   stage's text place in the hero, and the close section's width in the close. */
 .hp-send code {
 	min-width: 0;
-	padding: 12px 16px;
+	padding: 12px 14px;
 	overflow-x: auto;
-	font-size: 0.9375rem;
+	font-size: clamp(0.6875rem, 5.3cqi - 4.5px, 0.9375rem);
 	white-space: nowrap;
 }
 
@@ -360,11 +374,13 @@ body:has(.hp-home) {
 }
 
 /* The one code block: a cream label whose code morphs from step to step, with the lines each caption is about lit
-   behind the text. */
+   behind the text. It is the part of a step that gives way when room runs short, down to three lines. */
 .hp-morph {
 	--hp-lh: 23px;
 	--hp-pad: 16px;
 	position: relative;
+	flex: 0 1 auto;
+	min-height: calc(2 * var(--hp-pad) + 3 * var(--hp-lh));
 	overflow: hidden;
 	border-radius: 6px;
 	background: var(--hp-cream);
@@ -385,6 +401,30 @@ body:has(.hp-home) {
 	tab-size: 4;
 	--smm-duration: 700ms;
 	--smm-easing: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A block short of room fades at its cut edges, so a half line reads as more code rather than a break. Where all the
+   code fits, the fades lie over its padding and show nothing. */
+.hp-morph::before,
+.hp-morph::after {
+	content: '';
+	position: sticky;
+	z-index: 2;
+	display: block;
+	height: var(--hp-pad);
+	pointer-events: none;
+}
+
+.hp-morph::before {
+	top: 0;
+	margin-bottom: calc(-1 * var(--hp-pad));
+	background: linear-gradient(var(--hp-cream), transparent);
+}
+
+.hp-morph::after {
+	bottom: 0;
+	margin-top: calc(-1 * var(--hp-pad));
+	background: linear-gradient(transparent, var(--hp-cream));
 }
 
 .hp-lit i {
@@ -607,6 +647,7 @@ body:has(.hp-home) {
 
 .hp-close {
 	padding-bottom: 72px;
+	container-type: inline-size;
 }
 
 .hp-footer {
@@ -680,35 +721,27 @@ body:has(.hp-home) {
 	fill: var(--hp-lamp);
 }
 
-/* Narrow screens: the map on top across the screen, the step under it with only its current caption. */
-@media (max-width: 1023px) {
-	.hp-stage {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto minmax(0, 1fr);
-		align-items: start;
-		padding: 0;
+/* The stage's text place, by the room it has. A narrow one takes the phone cut of the code, which breaks the long
+   lines, and sets the hero and the step a size down. */
+@container (max-width: 29rem) {
+	.hp-morph-wide {
+		display: none;
 	}
 
-	.hp-stage-map {
-		grid-row: 1;
-		padding: 6px 0 10px;
+	.hp-morph-phone {
+		display: block;
+		--hp-lh: 18px;
+		--hp-pad: 12px;
 	}
 
-	.hp-stage-map varmq-map {
-		width: min(100vw, 46svh);
-		margin: 0 auto;
+	.hp-morph-phone pre {
+		padding: var(--hp-pad) 14px;
+		font-size: 12px;
+		tab-size: 2;
 	}
+}
 
-	.hp-stage-text {
-		grid-row: 2;
-		padding: 4px var(--hp-gutter) 0;
-	}
-
-	.hp-hero-panel,
-	.hp-step-panel {
-		align-self: start;
-	}
-
+@container (max-width: 25rem) {
 	.hp-hero-logo {
 		margin-bottom: 14px;
 	}
@@ -726,11 +759,6 @@ body:has(.hp-home) {
 		margin-top: 18px;
 	}
 
-	.hp-send code {
-		padding: 12px;
-		font-size: 0.8125rem;
-	}
-
 	.hp-step-title {
 		margin-bottom: 8px;
 		font-size: 1.625rem;
@@ -741,31 +769,121 @@ body:has(.hp-home) {
 		font-size: 1rem;
 	}
 
-	.hp-notes-live li:not([data-on]) {
-		display: none;
-	}
-
-	.hp-morph-wide {
-		display: none;
-	}
-
-	.hp-morph-phone {
-		display: block;
-		--hp-lh: 18px;
-		--hp-pad: 12px;
-	}
-
-	.hp-morph-phone pre {
-		padding: var(--hp-pad) 14px;
-		font-size: 12px;
-		tab-size: 2;
-	}
-
 	.hp-source {
 		margin-top: 8px;
 		font-size: 0.8125rem;
 	}
+}
 
+/* Narrower still, as on a 320px phone: the code a size down, so its 40 columns still fit. */
+@container (max-width: 19rem) {
+	.hp-morph-phone {
+		--hp-lh: 17px;
+		--hp-pad: 10px;
+	}
+
+	.hp-morph-phone pre {
+		padding: var(--hp-pad) 10px;
+		font-size: 11px;
+	}
+}
+
+/* A short place shows only the lit caption. The step's captions share one cell, as tall as the longest of them, so the
+   code block holds still while they change. */
+@container (max-height: 34rem) {
+	.hp-notes-live {
+		display: grid;
+	}
+
+	.hp-notes-live li {
+		grid-area: 1 / 1;
+	}
+
+	.hp-notes-live li:not([data-on]) {
+		visibility: hidden;
+	}
+}
+
+/* A very short one, as on a phone held sideways: the hero drops its hint, and both close up. */
+@container (max-height: 21rem) {
+	.hp-hero-logo {
+		margin-bottom: 10px;
+	}
+
+	.hp-hero-logo img {
+		width: 160px;
+	}
+
+	.hp-hero-pitch {
+		margin-bottom: 14px;
+	}
+
+	.hp-hero-links {
+		margin-top: 12px;
+	}
+
+	.hp-hero-hint {
+		display: none;
+	}
+
+	.hp-count {
+		margin-bottom: 2px;
+	}
+
+	.hp-step-title {
+		margin-bottom: 6px;
+		font-size: 1.375rem;
+	}
+
+	.hp-notes-live {
+		margin-bottom: 8px;
+	}
+
+	.hp-source {
+		margin-top: 6px;
+	}
+}
+
+/* Portrait below desktop: the map on top, the text under it. The text keeps 20rem, and the map takes the rest,
+   between 36% and 46% of the screen's height, and no wider than the screen. */
+@media (max-width: 1023px) and (orientation: portrait) {
+	.hp-stage {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+		align-items: start;
+		padding: 0;
+	}
+
+	.hp-stage-map {
+		grid-row: 1;
+		padding: 6px 0 10px;
+	}
+
+	.hp-stage-map varmq-map {
+		width: clamp(36svh, 100svh - var(--hp-nav) - 16px - 20rem, min(100%, 46svh));
+		margin: 0 auto;
+	}
+
+	.hp-stage-text {
+		grid-row: 2;
+		padding: 4px var(--hp-gutter) 12px;
+	}
+
+	.hp-hero-panel,
+	.hp-step-panel {
+		align-self: start;
+	}
+}
+
+/* Landscape below desktop, as at 200% zoom or on a phone held sideways: still side by side, the text at least 18rem
+   wide. */
+@media (max-width: 1023px) and (orientation: landscape) {
+	.hp-stage {
+		grid-template-columns: minmax(18rem, 1fr) minmax(0, 1fr);
+	}
+}
+
+@media (max-width: 1023px) {
 	.hp-plates {
 		grid-template-columns: minmax(0, 1fr);
 	}
