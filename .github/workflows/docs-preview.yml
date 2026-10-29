@@ -1,12 +1,9 @@
 name: Docs Preview
 
-# Deploys the site that the Docs workflow built for a pull request to its own
-# Cloudflare Worker, varmq-docs-pr-<number>, and deletes that Worker when the
-# pull request closes.
-#
-# Both triggers run this file from main, with the Cloudflare secrets, even for
-# pull requests from forks. So no step checks out or runs the pull request's
-# code: its site arrives as built files, which are only uploaded.
+# Deploys the site the Docs workflow built for a pull request to the Worker
+# varmq-docs-pr-<number>, and deletes that Worker when the pull request closes.
+# Both triggers run main's copy of this file with the Cloudflare secrets, even
+# for forks, so no step may check out or run the pull request's code.
 on:
   workflow_run:
     workflows: [Docs]
@@ -28,34 +25,29 @@ jobs:
       actions: read # the Docs run's site artifact
       contents: read
       pull-requests: write # the preview comment
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
+      # A fork's run carries no PR number, so look for the open PR whose head
+      # is the commit Docs built. None means the PR has closed or moved on to
+      # a newer commit, whose own Docs run deploys.
       - name: Find the pull request
         id: pr
+        if: github.event_name == 'workflow_run'
         env:
-          CLOSED_PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          if [[ -n $CLOSED_PR ]]; then
-            echo "number=$CLOSED_PR" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # A fork's run carries no PR number, so look for the open PR whose
-          # head is the commit Docs built. None means the PR has closed or
-          # moved on to a newer commit, whose own Docs run deploys.
           # ponytail: reads the 100 newest open PRs; paginate if that is ever too few.
           number=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
             --jq 'first(.[] | select(.head.sha == env.HEAD_SHA)) | .number')
           echo "number=$number" >>"$GITHUB_OUTPUT"
 
       # main's Worker config, never the pull request's.
-      - if: github.event_name == 'workflow_run' && steps.pr.outputs.number
+      - if: steps.pr.outputs.number
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - if: github.event_name == 'workflow_run' && steps.pr.outputs.number
+      - if: steps.pr.outputs.number
         uses: actions/download-artifact@v8
         with:
           name: site-docs
@@ -65,7 +57,7 @@ jobs:
 
       - name: Deploy
         id: deploy
-        if: github.event_name == 'workflow_run' && steps.pr.outputs.number
+        if: steps.pr.outputs.number
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -73,9 +65,10 @@ jobs:
           command: deploy --config docs/wrangler.jsonc --name varmq-docs-pr-${{ steps.pr.outputs.number }}
 
       - name: Post the preview URL, or delete the preview of a closed PR
-        if: steps.pr.outputs.number
+        if: github.event.pull_request.number || steps.pr.outputs.number
         env:
-          PR: ${{ steps.pr.outputs.number }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || steps.pr.outputs.number }}
           URL: ${{ steps.deploy.outputs.deployment-url }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -95,10 +88,7 @@ jobs:
             res=$(curl -sS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/services/varmq-docs-pr-$PR?force=true")
             # The codes wrangler reads as "no such Worker": this PR never had a preview.
-            if ! jq -e '.success or any(.errors[]; .code == 10007 or .code == 10090)' <<<"$res" >/dev/null; then
-              echo "$res" >&2
-              exit 1
-            fi
+            jq -e '.success or any(.errors[]; .code == 10007 or .code == 10090)' <<<"$res" >/dev/null || { echo "$res" >&2; exit 1; }
             [[ -n $id ]] || exit 0
             body="Docs preview deleted, since this pull request is closed."
           fi
