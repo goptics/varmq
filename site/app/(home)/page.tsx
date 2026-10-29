@@ -1,9 +1,10 @@
 import { Check, Minus } from 'lucide-react';
+import { Fragment } from 'react';
 import { CopyCommand } from '@/components/home/copy-command';
-import { TubeRun, type RunStation } from '@/components/home/tube-run';
-import { CHAPTERS, starts } from '@/lib/heromap/chapters.ts';
+import { TubeStory, type StoryStep } from '@/components/home/tube-story';
+import { CHAPTERS, TOTAL, plain, starts } from '@/lib/heromap/chapters.ts';
 import { LOGOS } from '@/lib/heromap/render.ts';
-import { highlight } from '@/lib/home/highlight.ts';
+import { codeSteps } from '@/lib/home/compile.ts';
 import { marks } from '@/lib/home/marks.tsx';
 import {
 	BENCHMARKS,
@@ -23,8 +24,10 @@ import { gitConfig, installCommand, quickStartUrl } from '@/lib/shared';
 
 const GITHUB = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
 const PKG = 'https://pkg.go.dev/github.com/goptics/varmq';
-// The finale's stretch stops before its zoom back into station 1, on the whole map.
-const FINALE_LENGTH = 7000;
+// Step 1 also plays the zoom from the whole map into chapter 1, which closes the loop; the finale stops on the whole
+// map, before that zoom.
+const ZOOM_IN = 1200;
+const FINALE = 7000;
 
 const n = (x: number) => x.toLocaleString('en-US');
 
@@ -36,9 +39,12 @@ function Logo({ id }: { id: 's-store' | 'r-store' }) {
 	);
 }
 
+const has = (mark: Mark) => (typeof mark === 'string' ? mark === 'yes' : mark.yes);
+const noteOf = (mark: Mark) => (typeof mark === 'string' ? undefined : mark.note);
+
 function Cell({ mark }: { mark: Mark }) {
-	const yes = typeof mark === 'string' ? mark === 'yes' : mark.yes;
-	const note = typeof mark === 'string' ? undefined : mark.note;
+	const yes = has(mark);
+	const note = noteOf(mark);
 	return (
 		<td data-yes={yes}>
 			<span className="hp-mark">
@@ -49,45 +55,53 @@ function Cell({ mark }: { mark: Mark }) {
 	);
 }
 
-async function stations(): Promise<RunStation[]> {
+const captionText = (c: (typeof CHAPTERS)[number]['captions'][number]) => (c.swap ? `${c.text} to ${c.swap.text}` : c.text);
+
+/** Each chapter as a step of the story: its stretch of the loop, its captions' times, and the code lines they light. */
+function story(): StoryStep[] {
 	const begin = starts();
-	return Promise.all(
-		CHAPTERS.map(async (chapter, i) => {
-			const station = STATIONS[i];
-			const last = i === CHAPTERS.length - 1;
-			const html = await highlight(station.code, station.lines);
-			return {
-				start: begin[i],
-				end: begin[i] + (last ? FINALE_LENGTH : chapter.duration),
-				steps: chapter.captions.map(({ at, until }) => ({ at, until })),
-				content: (
-					<>
-						<h2 className="hp-station-title">
-							<span className="hp-station-no">{chapter.n}</span>
-							{chapter.title}
-						</h2>
-						<ol className="hp-steps">
-							{chapter.captions.map((caption, j) => (
-								<li key={j}>{marks(caption.swap ? `${caption.text} to ${caption.swap.text}` : caption.text)}</li>
-							))}
-						</ol>
-						<figure className="hp-label">
-							<div dangerouslySetInnerHTML={{ __html: html }} />
-							<figcaption>
-								Full program: <a href={station.source.href}>{station.source.label}</a>
-							</figcaption>
-						</figure>
-					</>
-				),
-			};
-		}),
+	return CHAPTERS.map((chapter, i) => {
+		const station = STATIONS[i];
+		const lead = i === 0 ? ZOOM_IN : 0;
+		return {
+			from: i === 0 ? TOTAL - ZOOM_IN : begin[i],
+			ms: lead + (i === CHAPTERS.length - 1 ? FINALE : chapter.duration),
+			captions: chapter.captions.map((c) => lead + c.at),
+			lines: { wide: station.lines, phone: station.phone?.lines ?? station.lines },
+			title: chapter.title,
+			notes: chapter.captions.map((c) => marks(captionText(c))),
+			source: (
+				<>
+					Full program: <a href={station.source.href}>{station.source.label}</a>
+				</>
+			),
+		};
+	});
+}
+
+/** The story as text: each step's title, captions and code, in order. */
+function storyText() {
+	return (
+		<ol>
+			{CHAPTERS.map((chapter, i) => (
+				<li key={i}>
+					<h2>{chapter.title}</h2>
+					<p>{chapter.captions.map((c) => plain(captionText(c))).join('. ')}.</p>
+					<pre>
+						<code>{STATIONS[i].code}</code>
+					</pre>
+				</li>
+			))}
+		</ol>
 	);
 }
 
 export default async function HomePage() {
 	const hero = (
 		<header className="hp-hero">
-			<h1 className="hp-hero-name">VarMQ</h1>
+			<h1 className="hp-hero-logo">
+				<img src="/logo-dark.svg" alt="VarMQ" width={432} height={112} />
+			</h1>
 			<p className="hp-hero-pitch">
 				A typed worker pool and message queue for Go. One worker model, from memory to SQLite to Redis.
 			</p>
@@ -98,13 +112,13 @@ export default async function HomePage() {
 				</a>
 				<a href={GITHUB}>GitHub</a>
 			</p>
-			<p className="hp-hero-hint">Scroll, and each step below runs on the map.</p>
+			<p className="hp-hero-hint">Scroll, and each scroll runs the next step on the map.</p>
 		</header>
 	);
 
 	return (
 		<main className="hp-page">
-			<TubeRun hero={hero} stations={await stations()} />
+			<TubeStory hero={hero} steps={story()} code={await codeSteps()} text={storyText()} />
 
 			<section className="hp-section" aria-labelledby="hp-compare">
 				<h2 id="hp-compare" className="hp-section-title">
@@ -113,7 +127,7 @@ export default async function HomePage() {
 				<p className="hp-section-lead">
 					Against the other Go worker pools, checked against each package&apos;s source in October 2026.
 				</p>
-				<div className="hp-table-wrap">
+				<div className="hp-table-wrap hp-features-wrap">
 					<table className="hp-table hp-features">
 						<thead>
 							<tr>
@@ -137,6 +151,39 @@ export default async function HomePage() {
 						</tbody>
 					</table>
 				</div>
+				{/* Narrow screens: each feature with the other pools that have it, instead of eight columns. */}
+				<ul className="hp-features-list">
+					{FEATURES.map((row) => {
+						const others = POOLS.slice(1).flatMap((pool, i) =>
+							has(row.marks[i + 1]) ? [{ pool, note: noteOf(row.marks[i + 1]) }] : [],
+						);
+						const noted = POOLS.slice(1).flatMap((pool, i) =>
+							!has(row.marks[i + 1]) && noteOf(row.marks[i + 1]) ? [{ pool, note: noteOf(row.marks[i + 1]) }] : [],
+						);
+						return (
+							<li key={row.feature}>
+								<span className="hp-feature">{row.feature}</span>
+								<span className="hp-also">
+									{others.length === 0
+										? 'Only VarMQ'
+										: others.map((o, i) => (
+												<Fragment key={o.pool}>
+													{i === 0 ? 'Also ' : ', '}
+													{o.pool}
+													{o.note && <sup>{o.note}</sup>}
+												</Fragment>
+											))}
+									{noted.map((o) => (
+										<Fragment key={o.pool}>
+											; not {o.pool}
+											<sup>{o.note}</sup>
+										</Fragment>
+									))}
+								</span>
+							</li>
+						);
+					})}
+				</ul>
 				<ol className="hp-notes">
 					{FEATURE_NOTES.map((note) => (
 						<li key={note}>{note}</li>

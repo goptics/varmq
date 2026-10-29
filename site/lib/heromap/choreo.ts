@@ -595,6 +595,7 @@ export class Choreo {
 		const el = this.nodes.record(id);
 		this.score.start(el, { pos: [0, 0], opacity: 0, scale: 1 });
 		this.score.start(this.fill(el), { fillOpacity: 1 });
+		for (const tag of el.querySelectorAll('.vm-tag')) this.score.start(tag, { opacity: 0 });
 		const sq = { id, family: id, els: [el] };
 		this.bodies.add(sq);
 		return sq;
@@ -1061,6 +1062,12 @@ export class Choreo {
 						const drop = from.x === to.x ? [to] : [pt(from.x, queue.gap), pt(to.x, queue.gap), to];
 						score.move(rec, drop, at, DROP, E.leave);
 						score.tween(this.fill(rec), { fillOpacity: 0 }, at + 150, 350, E.fade);
+						// Redis keeps the record until the ack, tagged with the consumer that took it.
+						if (part.kind === 'redis') {
+							const tag = rec.querySelector(`.vm-tag-${e.consumer}`)!;
+							score.start(tag, { opacity: 0 });
+							score.tween(tag, { opacity: 1 }, at + 150, 350, E.fade);
+						}
 						// A copy comes out where the queue's line leaves the store, one copy at a time, and flies to its ring.
 						const copy = copies.get(e.job)!.els;
 						owners.set(e.job, consumer(e.consumer));
@@ -1130,6 +1137,7 @@ export class Choreo {
 			const p = score.pos(rec.els[0], start);
 			score.move(rec.els[0], [pt(p.x, queue.gap), pt(to.x, queue.gap), to], start, REQUEUE, E.move);
 			score.tween(this.fill(rec.els[0]), { fillOpacity: 1 }, start + 150, 350, E.fade);
+			for (const tag of rec.els[0].querySelectorAll('.vm-tag')) score.tween(tag, { opacity: 0 }, start, 150, E.fade);
 		}
 		for (const [id, held] of queue.held) {
 			const k = after.indexOf(id);

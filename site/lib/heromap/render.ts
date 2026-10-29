@@ -280,6 +280,8 @@ function square(world: SVGGElement, attrs: Attrs): SVGGElement {
 function played() {
 	const jobs = new Map<string, number | undefined>();
 	const records = new Set<string>();
+	// A Redis record in flight shows which consumer holds it, so it has a tag for each consumer that can.
+	const holders = new Map<string, string[]>();
 	for (const chapter of CHAPTERS) {
 		for (const value of chapter.published ?? []) jobs.set(value.id, undefined);
 		for (const part of chapter.parts) {
@@ -290,10 +292,11 @@ function played() {
 			for (const job of part.plan.jobs) {
 				jobs.set(job.id, undefined);
 				records.add(job.id);
+				if (part.kind === 'redis') holders.set(job.id, workers(part.plan).map((w) => w.id));
 			}
 		}
 	}
-	return { jobs, records };
+	return { jobs, records, holders };
 }
 
 /**
@@ -371,9 +374,16 @@ export function renderMap(host: HTMLElement): MapNodes {
 	}
 
 	// Records under the jobs, which fly over everything.
-	const { jobs: ids, records: recordIds } = played();
+	const { jobs: ids, records: recordIds, holders } = played();
 	const records = new Map<string, SVGGElement>();
-	for (const id of recordIds) records.set(id, square(world, { class: 'vm-record', 'data-record': id }));
+	for (const id of recordIds) {
+		const record = square(world, { class: 'vm-record', 'data-record': id });
+		for (const who of holders.get(id) ?? []) {
+			const centre = { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central', opacity: 0 };
+			add(record, 'text', { class: `vm-tag vm-tag-${who}`, ...centre }, who.toUpperCase());
+		}
+		records.set(id, record);
+	}
 	const jobs = new Map<string, SVGGElement[]>();
 	for (const [id, priority] of ids) {
 		const t2 = square(world, { class: 'vm-job vm-trail vm-t2', 'data-job': id });

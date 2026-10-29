@@ -1,11 +1,14 @@
-// The home page's story: one station per chapter of the map (chapters.ts), each with the varmq code behind it.
-// `lines[i]` lists the 1-based lines that chapter's caption i is about, so the code lights up in step with the map.
-// The excerpts follow the runnable programs in docs/examples and the SQLite and Redis pages, with the numbers the
-// map shows; stations.test.ts checks each varmq, sqliteq and redisq name in them against the package and the docs.
+// The home page's story: one step per chapter of the map (chapters.ts), each with the varmq code behind it, which the
+// page's one code block morphs into as the map zooms to that chapter. `lines[i]` lists the 1-based lines chapter
+// caption i is about, so the code lights up in step with the map. The excerpts follow the runnable programs in
+// docs/examples and the SQLite and Redis pages, with the numbers the map shows. `code` fits 56 columns (a tab is 4);
+// where it is wider than 40 (a tab is 2), the width of the code on a phone, `phone` is the same code broken to fit.
+// stations.test.ts checks the widths, the line lists, and each varmq, sqliteq and redisq name.
 
 export interface Station {
 	code: string;
 	lines: number[][];
+	phone?: { code: string; lines: number[][] };
 	/** The full program the excerpt comes from. */
 	source: { label: string; href: string };
 }
@@ -23,10 +26,24 @@ queue.Add(1)
 queue.Add(2)
 queue.Add(3)`,
 		lines: [[6, 7, 8]],
+		phone: {
+			code: `worker := varmq.NewWorker(
+	func(j varmq.Job[int]) {
+		fmt.Println(j.Data())
+	},
+)
+queue := worker.BindQueue()
+
+queue.Add(1)
+queue.Add(2)
+queue.Add(3)`,
+			lines: [[8, 9, 10]],
+		},
 		source: { label: 'quick-start', href: `${EXAMPLES}/quick-start` },
 	},
 	{
-		code: `worker := varmq.NewWorker(process) // one goroutine
+		code: `// one goroutine to start
+worker := varmq.NewWorker(process)
 queue := worker.BindQueue()
 
 worker.TunePool(5)
@@ -34,32 +51,34 @@ for i := range 5 {
 	queue.Add(i)
 }`,
 		lines: [
-			[4, 5, 6, 7],
-			[1, 4],
+			[5, 6, 7, 8],
+			[2, 5],
 		],
 		source: { label: 'concurrency-tunepool', href: `${EXAMPLES}/concurrency-tunepool` },
 	},
 	{
-		code: `worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
-	return strconv.Atoi(j.Data())
-})
+		code: `// atoi parses the job's string
+worker := varmq.NewResultWorker(atoi)
 queue := worker.BindQueue()
 
-for _, s := range []string{"42", "forty-two"} {
-	job, _ := queue.Add(s)
-	n, err := job.Result() // 42 <nil>, then 0 and an error
-}`,
-		lines: [[2, 7, 8]],
+job, _ := queue.Add("42")
+n, err := job.Result() // 42 <nil>
+
+job, _ = queue.Add("forty-two")
+n, err = job.Result() // 0, an error`,
+		lines: [[6, 9]],
 		source: { label: 'worker-types-result', href: `${EXAMPLES}/worker-types-result` },
 	},
 	{
 		code: `queue := worker.BindPriorityQueue()
 
-for _, p := range []int{5, 2, 8, 1, 3} {
-	queue.Add(fmt.Sprint("job ", p), p)
-}
-// taken in the order 1, 2, 3, 5, 8`,
-		lines: [[4, 6]],
+queue.Add("five", 5)
+queue.Add("two", 2)
+queue.Add("eight", 8)
+queue.Add("one", 1)
+queue.Add("three", 3)
+// they run 1, 2, 3, 5, 8`,
+		lines: [[6, 8]],
 		source: { label: 'queues-priority', href: `${EXAMPLES}/queues-priority` },
 	},
 	{
@@ -78,7 +97,7 @@ batch := worker.BindQueue()`,
 worker.WithTopic(topic)
 another.WithTopic(topic)
 
-topic.Publish(1) // each worker gets its own job
+topic.Publish(1) // a job for each
 topic.Publish(2)`,
 		lines: [[6, 7]],
 		source: { label: 'topic-subscribe', href: `${EXAMPLES}/topic-subscribe` },
@@ -107,15 +126,38 @@ producer.Add("job 1")
 worker := varmq.NewWorker(process, 2)
 worker.WithDistributedQueue(dq)`,
 		lines: [[1, 2], [5, 6], [], [10], [9, 10]],
+		phone: {
+			code: `rdb := redisq.New(
+	"redis://localhost:6379",
+)
+dq := rdb.NewDistributedQueue("jobs")
+
+// program A adds
+q := varmq.NewDistributedQueue[string](
+	dq,
+)
+q.Add("job 1")
+
+// programs B and C run the jobs
+worker := varmq.NewWorker(process, 2)
+worker.WithDistributedQueue(dq)`,
+			lines: [[1, 2, 3, 4], [7, 8, 9, 10], [], [14], [13, 14]],
+		},
 		source: { label: 'the Redis page', href: 'https://varmq.goptics.org/persistence/redis/' },
 	},
 	{
 		code: `worker.Pause()
 worker.Resume()
 
-worker.Stop()    // running jobs finish, waiting ones stay
-worker.Restart() // and the waiting jobs run`,
-		lines: [[1, 2], [4], [5]],
+// running jobs finish, waiting stay
+worker.Stop()
+// the waiting jobs run
+worker.Restart()`,
+		lines: [
+			[1, 2],
+			[4, 5],
+			[6, 7],
+		],
 		source: { label: 'lifecycle-restart', href: `${EXAMPLES}/lifecycle-restart` },
 	},
 	{
@@ -125,6 +167,17 @@ worker.BindQueue()              // memory
 worker.WithPersistentQueue(pq)  // SQLite
 worker.WithDistributedQueue(dq) // Redis`,
 		lines: [[1, 3, 4, 5]],
+		phone: {
+			code: `worker := varmq.NewWorker(process)
+
+// memory
+worker.BindQueue()
+// SQLite
+worker.WithPersistentQueue(pq)
+// Redis
+worker.WithDistributedQueue(dq)`,
+			lines: [[1, 3, 4, 5, 6, 7, 8]],
+		},
 		source: { label: 'workers-and-queues', href: `${EXAMPLES}/workers-and-queues` },
 	},
 ];

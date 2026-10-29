@@ -171,6 +171,15 @@ varmq-map .vm-text {
 	fill: var(--vm-chip-ink);
 }
 
+/* A Redis record in flight shows the consumer holding it, B or C, until the ack or the requeue. */
+varmq-map .vm-tag {
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 12px;
+	font-weight: 700;
+	fill: var(--vm-chip-ink);
+	fill-opacity: var(--vm-label, 1);
+}
+
 varmq-map .vm-num {
 	font-size: 13px;
 	font-weight: 700;
