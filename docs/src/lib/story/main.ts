@@ -191,28 +191,21 @@ const top = () => track.getBoundingClientRect().top + scrollY - parseFloat(getCo
 const position = () => (scrollY - top()) / height();
 const nearest = () => Math.min(COUNT - 1, Math.max(0, Math.round(position())));
 
-/**
- * The page snaps only while the reader is in the story. Past the last step it scrolls freely, and it snaps again once
- * the reader comes back above it. Between the two it keeps what it had.
- */
-function snapping(on?: boolean) {
-	const p = position();
-	on ??= p < COUNT - 1 - SLACK ? true : p > COUNT - 1 + SLACK ? false : document.documentElement.classList.contains('st-snap');
-	document.documentElement.classList.toggle('st-snap', on);
-}
-
-/** The position a wheel scroll is heading to, until it gets there, so a turn made on the way goes on from it. */
+/** The position a wheel or key scroll is heading to, until it gets there, so a turn made on the way goes on from it. */
 let target = -1;
 
-/** Which way the page last moved: 1 down, -1 up. */
-let way = 0;
-let lastY = scrollY;
+/**
+ * The page snaps only while the reader is in the story above its last step. From the last step down it scrolls as
+ * usual, but for the way back up from there into the story.
+ */
+function snapping(on?: boolean) {
+	on ??= position() < COUNT - 1 - SLACK || (target >= 0 && target < COUNT - 1);
+	document.documentElement.classList.toggle('st-snap', on);
+}
 
 let frameId = 0;
 const tick = () => {
 	frameId = 0;
-	if (scrollY !== lastY) way = Math.sign(scrollY - lastY);
-	lastY = scrollY;
 	snapping();
 	const k = nearest();
 	if (k !== at) {
@@ -232,64 +225,51 @@ addEventListener('resize', () => {
 });
 tick();
 
-/** Leaves the story downward: snapping stops first, so the page can scroll past the last step at all. */
-function leave() {
-	snapping(false);
-	target = -1;
-	scrollTo({ top: top() + COUNT * height(), behavior: motion() });
+/** Scrolls to snap position k, snapping on the way if k is in the story above its last step. */
+function go(k: number) {
+	target = k;
+	snapping();
+	scrollTo({ top: top() + k * height(), behavior: motion() });
 }
 
 // Keyboard and touch scroll natively and snap a step at a time. The wheel is taken over, so that one turn is one step
-// (wheel.ts): snapping alone lets a short notch fall back to where it was. At the last step, the wheel and the keys
-// that scroll down leave the story.
+// (wheel.ts): snapping alone lets a short notch fall back to where it was. From the last step down, the page scrolls as
+// usual with every input; on the way back up, the story takes over again at the last step.
 const turn = wheelSteps();
 addEventListener(
 	'wheel',
 	(e) => {
 		if (e.ctrlKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
 		const p = position();
-		// Below the last step, the page is the reader's to scroll, except for the turn back up into the story.
-		const below = p > COUNT - 1 + SLACK;
-		if (below && !(e.deltaY < 0 && p <= COUNT + SLACK)) return;
-		const from = target >= 0 ? target : below ? COUNT : nearest();
-		const next = from + Math.sign(e.deltaY);
+		const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+		// From the last step down, the wheel is the reader's, both ways, until a turn up would pass the last step.
+		if (p >= COUNT - 1 - SLACK && (delta > 0 || p + delta / height() > COUNT - 1 + SLACK)) return;
+		const from = target >= 0 ? target : p > COUNT - 1 + SLACK ? COUNT : nearest();
+		const next = from + Math.sign(delta);
 		if (next < 0) return;
 		e.preventDefault();
-		if (!turn(e.timeStamp, e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1))) return;
-		if (next >= COUNT) return leave();
-		snapping(true);
-		target = next;
-		scrollTo({ top: top() + next * height(), behavior: motion() });
+		// A turn down on the way to the last step waits until the page is there.
+		if (turn(e.timeStamp, delta) && next < COUNT) go(next);
 	},
 	{ passive: false },
 );
-// A scroll that ends between the last step and the page below it, with the stage half gone, goes on to the one it was
-// heading for.
+// A scroll that stops short of where it was heading, as when the reader takes over, heads nowhere any more.
 addEventListener('scrollend', () => {
 	target = -1;
-	const p = position();
-	if (p <= COUNT - 1 + SLACK || p >= COUNT - SLACK) return;
-	if (way < 0) snapping(true);
-	scrollTo({ top: top() + (way < 0 ? COUNT - 1 : COUNT) * height(), behavior: motion() });
+	snapping();
 });
-// End goes to the foot of the page, so it stops the snapping first. The keys that scroll down leave the story at its
-// last step, and the keys that scroll up, just below it, go back to the last step, as the wheel does.
+// End goes to the foot of the page, so it stops the snapping first. From the last step down the keys scroll as usual,
+// but the keys that scroll up go to the last step from just below it, and from it to the step before, as the wheel
+// does.
 addEventListener('keydown', (e) => {
 	if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
 	const on = e.target as Element;
 	if (on.closest('input, textarea, select, [contenteditable]')) return;
 	if (e.key === 'End') return snapping(false);
 	if (e.key === ' ' && on.closest('button, a')) return;
-	const down = e.key === 'ArrowDown' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey);
 	const up = e.key === 'ArrowUp' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey);
 	const p = position();
-	if (down && Math.abs(p - (COUNT - 1)) <= SLACK) {
-		e.preventDefault();
-		leave();
-	} else if (up && p > COUNT - 1 + SLACK && p <= COUNT + SLACK) {
-		e.preventDefault();
-		snapping(true);
-		target = COUNT - 1;
-		scrollTo({ top: top() + (COUNT - 1) * height(), behavior: motion() });
-	}
+	if (!up || p < COUNT - 1 - SLACK || p > COUNT + SLACK) return;
+	e.preventDefault();
+	go(p > COUNT - 1 + SLACK ? COUNT - 1 : COUNT - 2);
 });

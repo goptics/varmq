@@ -20,7 +20,7 @@ This file reviews it, and records what the branch `docs/new-site` changes on top
   - The page snaps only while the reader is in the story. Below it the page scrolls normally.
   - The rest of the home page shares the story's frame, so their edges line up. Each section is a row with its heading and lead in the story's text column and the rest in the map's:
     - Try it: five runnable programs in tabs. The old "Try it" and "A closer look" sections are merged.
-    - Where jobs live.
+    - Where jobs live: a lead, then the three stores as link cards led by their icons (a memory stick, and Redis's and SQLite's logos).
     - Performance.
     - Next.
   - "What you get" is removed: its six cards repeated what the story now shows.
@@ -164,7 +164,7 @@ These are matters of taste, not bugs:
   - Tested with wheel events at real timing inside the page, with trusted wheel and key input from the browser protocol, and with touch drags.
   - A notch, a flick or a swipe moves one step, and a free-spinning wheel keeps stepping.
   - A free spin recorded from an MX Master on Linux replays through every step. Before, it stopped after four: the story measured the wheel's speed per event, and Chrome sends the notches it holds back during a step's first frames as one event (`lib/story/wheel.ts`, with tests).
-  - The story can be left and re-entered by wheel, keys and touch.
+  - From the last step down the page scrolls normally, by wheel, keys and touch; on the way back up it stops at the last step, and the story takes over again from there.
 - Reduced motion: each step shows its last frame, and nothing animates.
 - The design detector reports nothing on the home page.
 - The theme switch stores the choice, the choice carries to `/alt/`, and System follows the operating system while the page is open.

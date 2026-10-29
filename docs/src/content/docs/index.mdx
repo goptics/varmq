@@ -18,6 +18,7 @@ hero:
 
 import { Card, CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 import GoPlay from '../../components/GoPlay.astro';
+import StoreCard from '../../components/StoreCard.astro';
 
 {/* Each section is a row on the story's two columns (styles/story.css): its heading and lead, then the rest. */}
 
@@ -65,24 +66,14 @@ Each tab is a full program. Press Run to run it in the Go Playground, or edit it
 
 ## Where jobs live
 
+A worker runs its jobs the same way wherever the queue keeps them. Memory is built in. The redisq and sqliteq adapters keep jobs in Redis or SQLite, so they survive a restart, and Redis lets several programs share one queue.
+
 </div>
 
 <CardGrid>
-	<LinkCard
-		title="In memory"
-		description="Built in. Plain and priority queues, and topics."
-		href="/guides/queues/"
-	/>
-	<LinkCard
-		title="Redis"
-		description="redisq gives persistent and distributed queues."
-		href="/persistence/redis/"
-	/>
-	<LinkCard
-		title="SQLite"
-		description="sqliteq keeps persistent queues in local files."
-		href="/persistence/sqlite/"
-	/>
+	<StoreCard store="memory" title="In memory" description="Built in. Plain and priority queues, and topics." href="/guides/queues/" />
+	<StoreCard store="redis" title="Redis" description="redisq gives persistent and distributed queues." href="/persistence/redis/" />
+	<StoreCard store="sqlite" title="SQLite" description="sqliteq keeps persistent queues in local files." href="/persistence/sqlite/" />
 </CardGrid>
 
 </section>

@@ -62,6 +62,25 @@
 	}
 }
 
+/* A store's icon leads its link card's title (components/StoreCard.astro), in the map's colour for it: the brand's green
+   for memory, SQLite's blue, Redis's red. */
+.store-icon {
+	display: inline-block;
+	width: 1.25em;
+	height: 1.25em;
+	margin-right: 0.5em;
+	vertical-align: -0.28em;
+	fill: var(--brand);
+}
+
+.store-icon--sqlite {
+	fill: var(--vm-sqlite);
+}
+
+.store-icon--redis {
+	fill: var(--vm-redis);
+}
+
 /* The footer keeps the rows' columns: its links under the headings, its note under the rest. */
 @media (min-width: 72rem) {
 	:root:has(.st) .shell-foot__in {
