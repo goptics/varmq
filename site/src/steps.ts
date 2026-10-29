@@ -14,6 +14,8 @@ export interface Step {
 	ms: number;
 	/** When each of its captions starts, in ms from `from`. */
 	captions: number[];
+	/** The code each caption shows, as its place in the compiled list (`compile.ts`): the same in both cuts. */
+	code: number[];
 	/** The code lines each caption lights, and how many lines the code has, in each cut. */
 	lines: Record<Cut, number[][]>;
 	count: Record<Cut, number>;
@@ -42,6 +44,9 @@ export function marks(text: string): string {
 		.join('');
 }
 
+// Where each station's first code sits in the compiled list, which holds every station's code and then its `then`.
+const firsts = STATIONS.map((_, i) => STATIONS.slice(0, i).reduce((n, s) => n + 1 + (s.then?.length ?? 0), 0));
+
 /** Each chapter as a step of the story: its stretch of the loop, its captions' times, and the code lines they light. */
 export const STEPS: Step[] = CHAPTERS.map((chapter, i) => {
 	const station = STATIONS[i];
@@ -51,6 +56,7 @@ export const STEPS: Step[] = CHAPTERS.map((chapter, i) => {
 		from: i === 0 ? TOTAL - ZOOM_IN : starts()[i],
 		ms: lead + chapter.duration - (i === CHAPTERS.length - 1 ? ZOOM_IN : 0),
 		captions: chapter.captions.map((c) => lead + c.at),
+		code: chapter.captions.map((_, c) => firsts[i] + Math.min(c, station.then?.length ?? 0)),
 		lines: { wide: station.lines, phone: phone.lines },
 		count: { wide: station.code.split('\n').length, phone: phone.code.split('\n').length },
 		title: chapter.title,

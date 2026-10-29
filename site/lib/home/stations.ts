@@ -9,11 +9,23 @@ export interface Station {
 	code: string;
 	lines: number[][];
 	phone?: { code: string; lines: number[][] };
+	/** Where the code changes within the step: the code from each later caption on, `then[i]` from caption i + 1,
+	 * with its phone version where the station has one. It keeps the station's lines, so `lines` holds for it. */
+	then?: { code: string; phone?: string }[];
 	/** The full program the excerpt comes from. */
 	source: { label: string; href: string };
 }
 
 const EXAMPLES = 'https://github.com/goptics/varmq/tree/main/docs/examples';
+
+// Chapter 5 runs one burst per strategy, and its code names each in turn in the one line that sets it. The third
+// queue's priority decides only the Priority burst, but it is bound that way throughout.
+const strategy = (name: string, phone = false) => `worker := varmq.NewWorker(process,
+	varmq.WithStrategy(varmq.${name}),
+)
+queue := worker.BindQueue()
+urgent := worker.BindPriorityQueue()
+${phone ? 'batch := worker.BindQueue(\n\tvarmq.WithQueuePriority(1),\n)' : 'batch := worker.BindQueue(varmq.WithQueuePriority(1))'}`;
 
 export const STATIONS: Station[] = [
 	{
@@ -82,14 +94,11 @@ queue.Add("three", 3)
 		source: { label: 'queues-priority', href: `${EXAMPLES}/queues-priority` },
 	},
 	{
-		code: `worker := varmq.NewWorker(process,
-	varmq.WithStrategy(varmq.RoundRobin),
-)
-queue := worker.BindQueue()
-urgent := worker.BindPriorityQueue()
-batch := worker.BindQueue()`,
-		lines: [[2, 4, 6]],
-		source: { label: 'strategies-round-robin', href: `${EXAMPLES}/strategies-round-robin` },
+		code: strategy('Priority'),
+		lines: [[2, 6], [2], [2], [2]],
+		phone: { code: strategy('Priority', true), lines: [[2, 6, 7, 8], [2], [2], [2]] },
+		then: ['MaxLen', 'MinLen', 'RoundRobin'].map((name) => ({ code: strategy(name), phone: strategy(name, true) })),
+		source: { label: 'the strategies guide', href: 'https://varmq.goptics.org/guides/strategies/' },
 	},
 	{
 		code: `topic := varmq.NewTopic[int]()

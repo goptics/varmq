@@ -18,6 +18,9 @@ const pages = ['sqlite', 'redis']
 // Each station's code as a phone shows it: its phone version where it has one.
 const onPhone = (s: (typeof STATIONS)[number]) => s.phone ?? { code: s.code, lines: s.lines };
 const width = (line: string, tab: number) => line.replaceAll('\t', ' '.repeat(tab)).length;
+// Every code a station shows, wide and on a phone: its own, then each it changes to within the step.
+const wide = (s: (typeof STATIONS)[number]) => [s.code, ...(s.then ?? []).map((t) => t.code)];
+const narrow = (s: (typeof STATIONS)[number]) => [onPhone(s).code, ...(s.then ?? []).map((t) => t.phone ?? t.code)];
 
 describe('home stations', () => {
 	it('has a station per chapter and a line list per caption, in both versions', () => {
@@ -28,13 +31,16 @@ describe('home stations', () => {
 				assert.equal(v.lines.length, CHAPTERS[i].captions.length, `station ${i + 1}`);
 				for (const n of v.lines.flat()) assert.ok(n >= 1 && n <= lines, `station ${i + 1} line ${n}`);
 			}
+			// A code it changes to keeps the lines, so the line lists hold for it, and it changes at most once a caption.
+			for (const codes of [wide(s), narrow(s)]) for (const code of codes) assert.equal(code.split('\n').length, codes[0].split('\n').length, `station ${i + 1}`);
+			assert.ok((s.then?.length ?? 0) < CHAPTERS[i].captions.length, `station ${i + 1}`);
 		});
 	});
 
 	it('fits 56 columns wide and 40 on a phone, and has a phone version only where it needs one', () => {
 		for (const [i, s] of STATIONS.entries()) {
-			for (const line of s.code.split('\n')) assert.ok(width(line, 4) <= 56, `station ${i + 1}: ${line}`);
-			for (const line of onPhone(s).code.split('\n')) assert.ok(width(line, 2) <= 40, `station ${i + 1} on a phone: ${line}`);
+			for (const line of wide(s).join('\n').split('\n')) assert.ok(width(line, 4) <= 56, `station ${i + 1}: ${line}`);
+			for (const line of narrow(s).join('\n').split('\n')) assert.ok(width(line, 2) <= 40, `station ${i + 1} on a phone: ${line}`);
 			const fits = s.code.split('\n').every((line) => width(line, 2) <= 40);
 			assert.equal(!!s.phone, !fits, `station ${i + 1}: a phone version ${fits ? 'it does not need' : 'is missing'}`);
 		}
@@ -42,7 +48,8 @@ describe('home stations', () => {
 
 	it('only calls names that varmq exports, or that the persistence pages use', () => {
 		for (const [i, station] of STATIONS.entries()) {
-			for (const s of [station, onPhone(station)]) {
+			for (const code of [...wide(station), ...narrow(station)]) {
+				const s = { code };
 				for (const [, pkg, name] of s.code.matchAll(/\b(varmq|sqliteq|redisq)\.\s*([A-Z]\w*)/g)) {
 					const found = pkg === 'varmq' ? new RegExp(`^(func|type|const|var)\\b.*\\b${name}\\b|^\\t${name}\\b`, 'm').test(go) : pages.includes(`${pkg}.${name}(`);
 					assert.ok(found, `station ${i + 1}: ${pkg}.${name}`);

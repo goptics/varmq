@@ -32,6 +32,8 @@ interface Code {
 	renderer: MagicMoveRenderer;
 	steps: KeyedTokensInfo[];
 	previous: KeyedTokensInfo;
+	/** The compiled code it shows. */
+	at: number;
 	/** One per line, over the code: lit or plain. */
 	rows: HTMLElement[];
 }
@@ -46,13 +48,14 @@ function codeBlock(selector: string, cut: Cut): Code {
 		return row;
 	});
 	el.querySelector('.rows')!.append(...rows);
-	return { el, cut, renderer, steps: CODE[cut], previous: toKeyedTokens('', []), rows };
+	return { el, cut, renderer, steps: CODE[cut], previous: toKeyedTokens('', []), rows, at: -1 };
 }
 
-/** Moves a code block to step k's code: a morph, or at once on the first show and under reduced motion. */
+/** Moves a code block to compiled code k: a morph, or at once on the first show and under reduced motion. */
 function morph(code: Code, k: number, animate: boolean) {
 	const { from, to } = syncTokenKeys(code.previous, code.steps[k], MORPH);
 	code.previous = to;
+	code.at = k;
 	if (!animate) return code.renderer.replace(to);
 	code.renderer.replace(from);
 	void code.renderer.render(to);
@@ -108,6 +111,8 @@ function setCaption(i: number) {
 		if (n !== i) (li as HTMLElement).style.setProperty('--p', n < i ? '1' : '0');
 	});
 	for (const code of codes) {
+		// A step's code may change with its caption, as chapter 5's names each strategy in turn.
+		if (STEPS[step].code[i] !== code.at) morph(code, STEPS[step].code[i], !reduce.matches);
 		light(code, STEPS[step], i);
 		follow(code, STEPS[step], i);
 	}
@@ -138,7 +143,7 @@ function show(k: number) {
 	notes.innerHTML = s.notes.map((note) => `<li>${POINT}${note}</li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
-	for (const code of codes) morph(code, k, !first && !reduce.matches);
+	for (const code of codes) morph(code, s.code[0], !first && !reduce.matches);
 	setCaption(0);
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
