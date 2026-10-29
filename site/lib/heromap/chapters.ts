@@ -54,8 +54,10 @@ export interface Chapter {
 	parts: Part[];
 	published?: { id: string; at: number }[]; // values published to the topic: one square in its lane each
 	// Transient chips. `id` names the piece whose place a chip takes: chapter 2's TunePool(5) sits where Restart()
-	// switches on in chapter 9.
-	chips?: { id: string; label: string; at: number; until: number }[];
+	// switches on in chapter 9. A chip pops in, or with `fade` takes the place of the chip before it at once while
+	// its name fades in, as chapter 5's strategy names take over from each other; one that leaves under another is
+	// not seen to.
+	chips?: { id: string; label: string; at: number; until: number; fade?: boolean }[];
 }
 
 type PoolPart = Extract<Part, { kind: 'pool' }>;
@@ -252,12 +254,14 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				{ at: 7100, until: 10000, text: '*MinLen* takes from the shortest queue' },
 				{ at: 10500, until: 15000, text: '*RoundRobin* takes from each queue in turn' },
 			],
-			// The other strategies' names cover the RoundRobin chip in turn, each popping in over the last before it
-			// leaves; the first pops no later than the chip itself, so the chip never shows beneath it.
+			// Each strategy's name takes the chip in turn. Priority pops in with the chip, and no later, so the chip's own
+			// RoundRobin never shows beneath it; each after it covers the one before and fades its name in. RoundRobin
+			// does too, and gives way to the chip's own, the same, as the chapter ends.
 			chips: [
 				{ id: 'strategy', label: 'Priority', at: 300, until: 4300 },
-				{ id: 'strategy', label: 'MaxLen', at: 3700, until: 7700 },
-				{ id: 'strategy', label: 'MinLen', at: 7100, until: 10500 },
+				{ id: 'strategy', label: 'MaxLen', at: 3700, until: 7700, fade: true },
+				{ id: 'strategy', label: 'MinLen', at: 7100, until: 11100, fade: true },
+				{ id: 'strategy', label: 'RoundRobin', at: 10500, until: 15800, fade: true },
 			],
 			parts: [
 				pool(carry, 'core', {

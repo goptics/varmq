@@ -44,6 +44,7 @@ const OPENS = 300;
 const DRAW = 650; // a solid outline drawing in
 const POP = 600; // a chip or a ring popping in
 const FADE = 500; // a dashed part fading in
+const SWAP = 350; // a chip's name fading in where the one before was (Chapter.chips)
 const LABEL = 400; // a label fading in
 const ADD_FLIGHT = 600; // the longest flight from Add() or Publish() into a lane
 const QUICK = 250; // the shortest
@@ -505,7 +506,14 @@ export class Choreo {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
 		for (const p of PIECES) this.declarePiece(p.id, p.kind, p.chapter === 1);
-		for (const c of CHAPTERS) for (const [i, chip] of (c.chips ?? []).entries()) this.declarePiece(chipKey(c.n, i, chip.id), 'chip', false);
+		for (const c of CHAPTERS) {
+			for (const [i, chip] of (c.chips ?? []).entries()) {
+				const key = chipKey(c.n, i, chip.id);
+				this.declarePiece(key, 'chip', false);
+				// A chip that takes another's place fades its name in (see `chapter`).
+				if (chip.fade) for (const label of this.labels(nodes.piece(key))) score.start(label, { opacity: 1 });
+			}
+		}
 		for (const c of CONNS) {
 			const g = nodes.piece(c.id);
 			const on = c.chapter === 1;
@@ -661,7 +669,15 @@ export class Choreo {
 		this.captions(c, T);
 		for (const [i, chip] of (c.chips ?? []).entries()) {
 			const g = this.nodes.piece(chipKey(c.n, i, chip.id));
-			score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
+			if (chip.fade) {
+				// It takes the place at once, covering the chip before, and only its name fades in: the chip holds
+				// still, and two names never show at once.
+				score.set(g, { opacity: 1, scale: 1 }, T + chip.at);
+				for (const label of this.labels(g)) {
+					score.set(label, { opacity: 0 }, T + chip.at);
+					score.tween(label, { opacity: 1 }, T + chip.at, SWAP, E.fade);
+				}
+			} else score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
 			score.tween(g, { opacity: 0, scale: 0 }, T + chip.until, 300, E.out);
 		}
 

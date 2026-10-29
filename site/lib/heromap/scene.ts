@@ -91,10 +91,11 @@ export const PIECES: Piece[] = [
 	{ id: 'p-add', kind: 'chip', chapter: 4, box: chip(96, 312, 68), label: 'Add()' },
 	{ id: 'prio', kind: 'lane', chapter: 4, box: lane(190, 290), label: 'PRIORITY QUEUE' },
 
-	// 5. Many queues: a third lane below the main row with its Add(), and the strategy chip on the line into the loop.
+	// 5. Many queues: a third lane below the main row with its Add(), and the strategy chip under the event loop, which
+	// picks between them by it. There no line runs through it, and every queue's jobs come by it alike.
 	{ id: 'c-add', kind: 'chip', chapter: 5, box: chip(96, 468, 68), label: 'Add()' },
 	{ id: 'queue-c', kind: 'lane', chapter: 5, box: lane(190, 446), label: 'QUEUE' },
-	{ id: 'strategy', kind: 'chip', chapter: 5, box: chip(380, 390, 92), label: 'RoundRobin' },
+	{ id: 'strategy', kind: 'chip', chapter: 5, box: chip(474, 478, 92), label: 'RoundRobin' },
 
 	// 6. Topics: Publish() fills the topic lane, which feeds the core's loop and a second worker.
 	{ id: 'publish', kind: 'chip', chapter: 6, box: chip(79, 180, 85), label: 'Publish()' },
