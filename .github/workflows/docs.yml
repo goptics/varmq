@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      - "site/**"
       # Pages embed the README's diagrams from here.
       - "assets/diagrams/**"
       - ".github/workflows/docs.yml"
@@ -37,6 +38,35 @@ jobs:
 
       - run: go test ./...
         working-directory: docs/examples
+
+  # The Fumadocs site in site/ that will replace docs/. Pull requests build it so it
+  # stays green; nothing publishes it until the content moves over.
+  site:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: site/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: site
+
+      - run: pnpm types:check
+        working-directory: site
+
+      - run: pnpm build
+        working-directory: site
 
   build:
     runs-on: ubuntu-latest
