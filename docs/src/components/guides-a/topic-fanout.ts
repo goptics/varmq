@@ -119,9 +119,13 @@ function init(root: HTMLElement) {
 	};
 	const render = () => flip(root, paint);
 
-	// A running worker starts the next job on its own. A paused one starts none.
+	// Each worker has concurrency 1. When its goroutine is free it reads every unread payload as one
+	// batch (topic.drain takes nothing while jobs it took earlier still wait), then runs the batch in
+	// order. A busy worker reads nothing, so new payloads stay unread. A paused one starts nothing.
 	const pump = (c: Card) => {
-		if (c.running !== null || c.sub.paused || !c.sub.jobs.length) return;
+		if (c.running !== null || c.sub.paused) return;
+		topic.drain(c.sub);
+		if (!c.sub.jobs.length) return;
 		c.running = c.sub.jobs.shift()!;
 		const n = c.running;
 		timers.after(JOB_MS[c.sub.name], () => {
@@ -134,11 +138,8 @@ function init(root: HTMLElement) {
 		});
 	};
 
-	const drainAll = () => {
-		for (const c of cards) {
-			topic.drain(c.sub);
-			pump(c);
-		}
+	const pumpAll = () => {
+		for (const c of cards) pump(c);
 	};
 
 	const publish = (): boolean => {
@@ -147,15 +148,15 @@ function init(root: HTMLElement) {
 			caption(root, `topic.Publish(order${r.n})   // true`);
 			pubEl.textContent = 'true';
 			pubEl.dataset.tone = 'ok';
-			whyEl.textContent = `Order ${r.n} is in the log once. Each running worker reads it and makes its own job.`;
+			whyEl.textContent = `Order ${r.n} is in the log once. A worker whose goroutine is free reads it and makes its own job. A busy worker leaves it unread until its batch ends.`;
 			say(root, `Publish returned true for order ${r.n}.`);
 			if (reducedMotion()) {
-				drainAll();
+				pumpAll();
 				render();
 			} else {
 				render();
 				timers.after(READ_DELAY, () => {
-					drainAll();
+					pumpAll();
 					render();
 				});
 			}
@@ -183,12 +184,9 @@ function init(root: HTMLElement) {
 			touched = true;
 			card.sub.paused = !card.sub.paused;
 			caption(root, card.sub.paused ? `${card.sub.name}.Pause()` : `${card.sub.name}.Resume()`);
-			if (!card.sub.paused) {
-				topic.drain(card.sub);
-				pump(card);
-			}
+			if (!card.sub.paused) pump(card); // the jobs it had taken run first, then it reads what is unread
 			render();
-			say(root, `The ${card.sub.name} worker is ${card.sub.paused ? 'paused. It reads nothing.' : 'running. It reads what is unread.'}`);
+			say(root, `The ${card.sub.name} worker is ${card.sub.paused ? 'paused. Its running job finishes, and it reads nothing.' : 'running. It runs the jobs it had taken, then reads what is unread.'}`);
 		} else if (card && t.closest('[data-sub-toggle]')) {
 			touched = true;
 			if (card.sub.subscribed) {
@@ -197,7 +195,7 @@ function init(root: HTMLElement) {
 				whyEl.textContent = 'Unsubscribed: the worker gets nothing more and drops what it had not read. A job it already took still runs.';
 			} else {
 				topic.subscribe(card.sub);
-				topic.drain(card.sub);
+				pump(card);
 				caption(root, `${card.sub.name}.WithTopic(topic)`);
 				whyEl.textContent = 'Subscribed again: this worker gets only the payloads published from now on.';
 			}
@@ -217,7 +215,7 @@ function init(root: HTMLElement) {
 		makeCards();
 		pubEl.textContent = 'not called';
 		pubEl.dataset.tone = 'dim';
-		whyEl.textContent = 'Publish an order. Then pause the email worker and publish again to see the log keep payloads.';
+		whyEl.textContent = 'Publish an order. Publish again while the slow email worker is busy, or pause it, to see the log keep payloads.';
 		caption(root, capacity > 0 ? `topic := varmq.NewTopic[Order](varmq.WithTopicCapacity(${capacity}))` : FIRST_CAP);
 		paint();
 		say(root, 'Reset.');

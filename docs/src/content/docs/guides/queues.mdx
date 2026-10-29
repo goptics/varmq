@@ -24,7 +24,7 @@ import QueueHandle from '../../../components/guides-a/QueueHandle.astro';
 
 The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so all three jobs wait until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). `alert` runs first although it was added second, and `report` runs before `digest` because they share a priority and `report` was added first.
 
-Add jobs to both queues below, then start the worker. The rail shows the order the jobs leave in.
+Each queue below has its own worker. Add jobs to both queues, then start the workers. The rail shows the order the jobs leave in.
 
 <QueueOrder />
 

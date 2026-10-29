@@ -54,8 +54,10 @@ export class Timers {
 
 /**
  * Segmented tabs (`role="tab"`, with panels) or radios (`role="radio"`, a plain choice). Roving tabindex;
- * arrow keys, Home and End move the choice. `on` runs on every change with the item's `data-key`.
- * `opts.shared` is one panel that stays visible and points at the active tab.
+ * arrow keys, Home and End move the choice and skip a disabled item (`disabled` or `aria-disabled="true"`).
+ * Up and Down move it only in a radio group or a list with `aria-orientation="vertical"`, so a
+ * horizontal tab list leaves them to scroll the page. `on` runs on every change with the item's
+ * `data-key`. `opts.shared` is one panel that stays visible and points at the active tab.
  */
 export function tabs(list: HTMLElement, on?: (key: string, item: HTMLElement) => void, opts: { shared?: HTMLElement } = {}) {
 	const sel = '[role="tab"], [role="radio"]';
@@ -80,25 +82,36 @@ export function tabs(list: HTMLElement, on?: (key: string, item: HTMLElement) =>
 		on?.(item.dataset.key ?? '', item);
 	};
 
+	const off = (it: HTMLElement) => it.hasAttribute('disabled') || it.getAttribute('aria-disabled') === 'true';
+	const vertical = () => list.getAttribute('role') === 'radiogroup' || list.getAttribute('aria-orientation') === 'vertical';
+
 	list.addEventListener('click', (e) => {
 		const it = (e.target as HTMLElement).closest<HTMLElement>(sel);
-		if (it && list.contains(it)) select(it);
+		if (it && list.contains(it) && !off(it)) select(it);
 	});
 
 	list.addEventListener('keydown', (e) => {
 		const all = items();
+		const n = all.length;
 		const i = all.indexOf(document.activeElement as HTMLElement);
 		if (i < 0) return;
-		let next = -1;
-		if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % all.length;
-		else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + all.length) % all.length;
-		else if (e.key === 'Home') next = 0;
-		else if (e.key === 'End') next = all.length - 1;
-		if (next >= 0) {
-			e.preventDefault();
-			e.stopPropagation(); // a scene that listens for arrows must not also step
-			select(all[next], true);
-		}
+		// The first item that is not disabled among `count` items from `from`, going `dir`, wrapping.
+		const find = (from: number, dir: 1 | -1, count: number) => {
+			for (let k = 0; k < count; k++) {
+				const j = (((from + dir * k) % n) + n) % n;
+				if (!off(all[j])) return j;
+			}
+			return -1;
+		};
+		let next: number;
+		if (e.key === 'ArrowRight' || (e.key === 'ArrowDown' && vertical())) next = find(i + 1, 1, n - 1);
+		else if (e.key === 'ArrowLeft' || (e.key === 'ArrowUp' && vertical())) next = find(i - 1, -1, n - 1);
+		else if (e.key === 'Home') next = find(0, 1, n);
+		else if (e.key === 'End') next = find(n - 1, -1, n);
+		else return;
+		e.preventDefault();
+		e.stopPropagation(); // a scene that listens for arrows must not also step
+		if (next >= 0) select(all[next], true);
 	});
 
 	return { select: (key: string) => { const it = items().find((x) => x.dataset.key === key); if (it) select(it); } };

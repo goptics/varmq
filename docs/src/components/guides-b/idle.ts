@@ -3,9 +3,9 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { tabs } from '../ui/dom';
+import { reducedMotion, tabs } from '../ui/dom';
 import { highlightGo } from '../ui/go';
-import { announcer, caller, clock, qs, setText } from './scene';
+import { announcer, caller, clock, qs, setText, settle } from './scene';
 
 const DUR = 1600;
 const EXPIRY = 4000;
@@ -58,9 +58,24 @@ function init(root: HTMLElement) {
 		render();
 	};
 
+	// Says how many goroutines stay once the burst is over: checked once a second of model time.
+	let lastIdle = -1;
+	let since = 0;
+	const announceIdle = () => {
+		if (sim.numProcessing() === 0 && sim.numIdleWorkers() !== lastIdle) {
+			lastIdle = sim.numIdleWorkers();
+			live(`${lastIdle} idle ${lastIdle === 1 ? 'goroutine' : 'goroutines'} in the pool.`);
+		}
+	};
+
 	const clk = clock(root, (dt) => {
 		sim.advance(dt);
 		render();
+		since += dt;
+		if (since >= 1000) {
+			since = 0;
+			announceIdle();
+		}
 	});
 
 	limitIn.addEventListener('input', () => {
@@ -92,19 +107,16 @@ function init(root: HTMLElement) {
 		} else if (btn.dataset.act === 'burst') {
 			for (let i = 0; i < limit; i++) sim.add({ dur: DUR });
 			say(`queue.Add(...) // ${limit} jobs, one for each slot`);
-			live(`${limit} jobs added.`);
+			if (reducedMotion()) {
+				// The clock stands still: show the pool after the burst, and after the sweeps if a timer is set.
+				settle((ms) => sim.advance(ms), () => sim.moving() || (sim.expiry > 0 && sim.numIdleWorkers() > sim.minIdle()));
+				lastIdle = sim.numIdleWorkers();
+				live(`${limit} jobs ran. ${lastIdle} idle ${lastIdle === 1 ? 'goroutine stays' : 'goroutines stay'} in the pool.`);
+			} else live(`${limit} jobs added.`);
 			clk.wake();
 			render();
 		}
 	});
-
-	let lastIdle = -1;
-	setInterval(() => {
-		if (sim.numProcessing() === 0 && sim.numIdleWorkers() !== lastIdle) {
-			lastIdle = sim.numIdleWorkers();
-			live(`${lastIdle} idle ${lastIdle === 1 ? 'goroutine' : 'goroutines'} in the pool.`);
-		}
-	}, 1000);
 
 	code();
 	render();

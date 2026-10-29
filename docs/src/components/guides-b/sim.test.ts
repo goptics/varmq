@@ -181,3 +181,23 @@ test('an expiry timer removes goroutines idle longer than the duration, down to 
 	w.advance(3000);
 	assert.equal(w.numIdleWorkers(), 1);
 });
+
+test('moving() is true while jobs run or wait, or a stop is under way, and false once the worker settles', () => {
+	const w = new WorkerSim({ limit: 2 });
+	assert.equal(w.moving(), false);
+	for (let i = 0; i < 3; i++) w.add({ dur: 1000 });
+	assert.equal(w.moving(), true);
+	w.advance(2100);
+	assert.equal(w.moving(), false);
+	assert.equal(w.status, 'Idle');
+	w.add({ dur: 1000 });
+	w.add({ dur: 1000 });
+	w.add({ dur: 1000 });
+	w.stop();
+	assert.equal(w.moving(), true);
+	w.advance(1100);
+	assert.equal(w.status, 'Stopped');
+	// One job is still in the queue, but a stopped worker takes nothing: nothing moves.
+	assert.equal(w.queueLen(), 1);
+	assert.equal(w.moving(), false);
+});

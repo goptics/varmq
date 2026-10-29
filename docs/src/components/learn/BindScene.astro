@@ -125,8 +125,10 @@ const { id = 'bind' } = Astro.props;
 			const many = 'With more than one queue bound, the worker hands out jobs one at a time, so the strategy picks every single job.';
 			switch (strategy) {
 				case 'Priority': {
-					const tied = queues.every((x) => x.priority === queues[0].priority);
-					return `${many} Priority takes the first queue in the list that has a job. The list is sorted by priority number, lowest first. ${tied ? 'No queue has a number here, so they tie and the queue bound first goes first.' : 'A queue without a number comes after every queue that has one.'}`;
+					const p = queues[0].priority;
+					const tied = queues.every((x) => x.priority === p);
+					const tie = p === null ? 'No queue has a number here, so they tie and the queue bound first goes first.' : `Every queue has the number ${p}, so they tie and the queue bound first goes first.`;
+					return `${many} Priority takes the first queue in the list that has a job. The list is sorted by priority number, lowest first. ${tied ? tie : 'A queue without a number comes after every queue that has one.'}`;
 				}
 				case 'RoundRobin':
 					return `${many} RoundRobin takes one job from each queue in turn.`;

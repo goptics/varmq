@@ -2,6 +2,14 @@
 // above it, so a scene never shows a result that varmq cannot produce. model.test.ts checks the
 // outputs that the guide pages print.
 
+// ---- worker_eventloop.go: the batch a free goroutine takes ----
+
+/**
+ * maxBatch. A worker with concurrency 1 hands its one goroutine everything that waits in a FIFO queue
+ * or a topic, up to this many jobs, in one batch, and takes nothing more until the batch ends.
+ */
+export const MAX_BATCH = 32;
+
 // ---- source_manager.go and internal/helpers/manager.go: which queue gives the next job ----
 
 export type StrategyName = 'Priority' | 'RoundRobin' | 'MaxLen' | 'MinLen';
@@ -140,11 +148,14 @@ export class IdQueue {
 		return { ok: true, job, id, discarded };
 	}
 
-	/** A worker takes the first job. The queue frees its ID. */
-	take(): IdJob | undefined {
-		const job = this.queue.shift();
-		if (job?.given) this.held.delete(job.id);
-		return job;
+	/**
+	 * A free worker with concurrency 1 takes every waiting job, up to maxBatch, into one batch. Each job
+	 * leaves the queue, so the queue frees each ID at once.
+	 */
+	takeBatch(): IdJob[] {
+		const batch = this.queue.splice(0, MAX_BATCH);
+		for (const job of batch) if (job.given) this.held.delete(job.id);
+		return batch;
 	}
 
 	/** Purge removes every job and frees every ID. */
@@ -165,7 +176,7 @@ export interface TopicSub {
 	/** The first payload this subscription receives. */
 	from: number;
 	read: Set<number>;
-	/** Payloads that the worker took and made a job of. */
+	/** Payloads that the worker took and made a job of, and has not started: its batch, or what a pause parked. */
 	jobs: number[];
 }
 
@@ -197,10 +208,14 @@ export class Topic {
 		return { ok: true, n };
 	}
 
-	/** A running worker reads every unread payload and makes its own job of each. A paused one reads nothing. */
-	drain(s: TopicSub): number[] {
-		if (!s.subscribed || s.paused) return [];
-		const taken = this.unread(s);
+	/**
+	 * A worker with concurrency 1 reads the log only when its goroutine is free: it then takes every unread
+	 * payload, up to maxBatch, as one batch and makes its own job of each. A worker that runs a job
+	 * (`busy`) or still holds jobs it took, and a paused one, read nothing: their payloads stay unread.
+	 */
+	drain(s: TopicSub, busy = false): number[] {
+		if (!s.subscribed || s.paused || busy || s.jobs.length > 0) return [];
+		const taken = this.unread(s).slice(0, MAX_BATCH);
 		for (const n of taken) {
 			s.read.add(n);
 			s.jobs.push(n);

@@ -88,7 +88,7 @@ function init(root: HTMLElement) {
 			h.text = failed ? `Result() → (0, ${errText(id, o)})` : `Result() → (${id * 2}, nil)`;
 		} else {
 			h.state = failed ? 'fail' : 'ok';
-			h.text = failed ? 'no handle: the panic went to Errs() and the handler' : 'no handle';
+			h.text = failed ? 'the handle has no Err(): the panic went to Errs() and the handler' : 'the handle has no Err()';
 		}
 		if (failed) {
 			sendError(errText(id, o));
@@ -108,12 +108,12 @@ function init(root: HTMLElement) {
 			type === 'plain' ? 'func(j varmq.Job[int])' : type === 'err' ? 'func(j varmq.Job[int]) error' : 'func(j varmq.Job[int]) (int, error)';
 		const use =
 			type === 'plain'
-				? 'queue.Add(1) // true: no handle'
+				? 'queue.Add(1) // a handle and true; the handle has no Err()'
 				: type === 'err'
 					? 'job, _ := queue.Add(1)\nerr := job.Err()'
 					: 'job, _ := queue.Add(1)\nres, err := job.Result()';
 		codeEl.innerHTML = highlightGo(
-			`worker := varmq.${CTOR[type]}(${sig} {\n${body()}\n}, "mailer", varmq.WithErrHandler(func(w varmq.Worker, err error) {\n\tlog.Printf("%s: %v", w.Name(), err)\n}))\nqueue := worker.BindQueue()\n${use}`,
+			`worker := varmq.${CTOR[type]}(${sig} {\n${body()}\n}, 2, "mailer", varmq.WithErrHandler(func(w varmq.Worker, err error) {\n\tlog.Printf("%s: %v", w.Name(), err)\n}))\nqueue := worker.BindQueue()\n${use}`,
 		);
 	}
 
@@ -131,7 +131,7 @@ function init(root: HTMLElement) {
 		setText(stat('completed'), String(m.completed));
 		setText(stat('successful'), String(m.successful));
 		setText(stat('failed'), String(m.failed));
-		setText(handleName, type === 'plain' ? 'none' : type === 'err' ? 'Err()' : 'Result()');
+		setText(handleName, type === 'plain' ? 'no Err()' : type === 'err' ? 'Err()' : 'Result()');
 		handlesEl.innerHTML = handles
 			.map((h) => `<li data-state="${h.state}"><span class="gb-job" data-state="${h.state}">${h.id}</span><span>${esc(h.text)}</span></li>`)
 			.join('');
@@ -174,7 +174,7 @@ function init(root: HTMLElement) {
 		if (act === 'add' || act === 'add3') {
 			const n = act === 'add' ? 1 : 3;
 			for (let i = 0; i < n; i++) addJob();
-			say(type === 'plain' ? 'queue.Add(n) // true' : `queue.Add(n) // returns a handle and true${n > 1 ? ', 3 times' : ''}`);
+			say(`queue.Add(n) // returns a handle and true${n > 1 ? ', 3 times' : ''}${type === 'plain' ? '; the handle has no Err()' : ''}`);
 			if (reducedMotion()) {
 				sim.advance(20000);
 				readerTick();

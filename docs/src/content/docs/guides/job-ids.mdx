@@ -54,7 +54,7 @@ The second `Add` with the ID `refresh` is refused and returns no handle, so `ref
 
 That suits work where many callers ask for the same thing, and one waiting job is enough.
 
-Try it below. The worker has not started, so the jobs wait in the queue. Add the same ID twice, then let the worker take a job and add that ID again.
+Try it below. The worker has not started, so the jobs wait in the queue. Add the same ID twice, then start the worker and add that ID again: the worker took the waiting jobs out of the queue in one batch, so the ID is free while they run.
 
 <JobIdDedup />
 

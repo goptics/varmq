@@ -87,6 +87,7 @@ const stages = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
 		let ran = false; // the function ran (as opposed to a close before it ran)
 		let failed = false;
 		let busy = false;
+		let run = 0; // bumped by reset, so a close that was pending for the old job does not touch the new one
 		let call = '';
 		let readout = '';
 
@@ -138,6 +139,7 @@ const stages = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
 		};
 
 		const reset = () => {
+			run++;
 			status = 'Created';
 			ran = false;
 			failed = false;
@@ -148,6 +150,7 @@ const stages = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
 		};
 
 		const finish = async (withError: boolean) => {
+			const mine = run;
 			busy = true;
 			failed = withError;
 			ran = true;
@@ -161,6 +164,7 @@ const stages = ['Created', 'Queued', 'Processing', 'Finished', 'Closed'];
 			readout = 'Your function returned. The job is Finished for an instant, then the worker closes it.';
 			render();
 			await sleep(700);
+			if (mine !== run) return;
 			status = 'Closed';
 			busy = false;
 			call = '// the worker closed the job: Wait, Err and Result are released';

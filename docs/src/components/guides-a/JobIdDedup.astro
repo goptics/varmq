@@ -3,7 +3,7 @@ import '../../styles/guides-a.css';
 import Scene from '../ui/Scene.astro';
 
 const describe =
-	'A queue whose worker has not started. Add a job with the ID refresh, then add another job with the same ID: the second Add returns nil and false, because a job with that ID is still in the queue. AddAll prefixes the ID with g:, so an AddAll item with the ID refresh does not collide. Two jobs with no ID are both stored, and a generated ID is not checked. The queue frees an ID when a worker takes the job or when Purge removes it, and then the same ID can be used again, even while the first job runs.';
+	'A queue whose worker, with concurrency 1, has not started. Add a job with the ID refresh, then add another job with the same ID: the second Add returns nil and false, because a job with that ID is still in the queue. AddAll prefixes the ID with g:, so an AddAll item with the ID refresh does not collide. An AddAll item that repeats an ID is skipped, and the group it returns has NumPending 0. Two jobs with no ID are both stored, and a generated ID is not checked. Start the worker: it takes every waiting job, up to 32, into one batch, so the queue frees all their IDs and the same IDs can be used again while the jobs run. While the batch runs, new jobs wait in the queue and hold their IDs. Purge removes the waiting jobs and frees their IDs, and closes the jobs of the batch that have not started.';
 
 const ids = [
 	['', 'no ID'],
@@ -25,8 +25,14 @@ const ids = [
 			<div class="lane">
 				<span class="lane__id">worker</span>
 				<div class="lane__track" role="list" aria-label="Running job" data-run>
-					<span class="ga-hint" aria-hidden="true">idle</span>
+					<span class="ga-hint" aria-hidden="true">not started</span>
 				</div>
+			</div>
+			<p class="ga-label">
+				<strong>Taken into a batch</strong><span>not in the queue, ID free</span>
+			</p>
+			<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs the worker took into a batch" data-batch>
+				<span class="ga-hint" aria-hidden="true">none</span>
 			</div>
 			<p class="ga-label">
 				<strong>IDs the queue holds</strong><span>a repeat of these is refused</span>
@@ -62,7 +68,7 @@ const ids = [
 		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
 		<button type="button" class="pbtn" data-gen-toggle aria-pressed="false">Generator</button>
 		<span class="sframe__spacer"></span>
-		<button type="button" class="pbtn" data-take>Worker takes a job</button>
+		<button type="button" class="pbtn" data-start>Start worker</button>
 		<button type="button" class="pbtn" data-purge>Purge()</button>
 		<button type="button" class="pbtn" data-reset>Reset</button>
 	</Fragment>

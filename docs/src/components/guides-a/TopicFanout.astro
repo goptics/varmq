@@ -3,7 +3,7 @@ import '../../styles/guides-a.css';
 import Scene from '../ui/Scene.astro';
 
 const describe =
-	'A topic with two subscribed workers, email and stock. Publish stores each payload once in a shared log. Each worker reads the log at its own position and makes its own job from every payload, so one Publish gives two jobs. A paused worker reads nothing, so the log keeps every payload until that worker reads it. An unsubscribed worker gets no more payloads, and its unread payloads are dropped. A worker that subscribes later gets only the payloads published after it subscribed. With a topic capacity, Publish returns false when the slowest subscription has that many unread payloads.';
+	'A topic with two subscribed workers, email and stock. Publish stores each payload once in a shared log. Each worker reads the log at its own position and makes its own job from every payload, so one Publish gives two jobs. Each worker has concurrency 1: it reads the log only when its goroutine is free, and then takes every unread payload as one batch. A busy or paused worker reads nothing, so the log keeps every payload until that worker reads it. An unsubscribed worker gets no more payloads, and its unread payloads are dropped. A worker that subscribes later gets only the payloads published after it subscribed. With a topic capacity, Publish returns false when the slowest subscription has that many unread payloads.';
 
 const subs = [
 	{ name: 'email', tone: 'amber', note: 'a slow worker' },

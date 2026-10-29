@@ -11,6 +11,14 @@ export const qsa = <T extends HTMLElement>(root: ParentNode, sel: string) => Arr
 export const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
 /**
+ * With reduced motion a press shows its end state: `advance` moves the model 100 ms at a time until
+ * `moving` says nothing more happens on its own, for at most `limit` ms of model time.
+ */
+export function settle(advance: (ms: number) => void, moving: () => boolean, limit = 120_000) {
+	for (let t = 0; t < limit && moving(); t += 100) advance(100);
+}
+
+/**
  * A frame clock. It calls tick(dtMs) while it runs and the scene is on screen.
  * The pause button toggles it. With reduced motion it starts paused, and step() moves it by hand.
  */

@@ -4,10 +4,10 @@ import Scene from '../ui/Scene.astro';
 import CallStrip from './CallStrip.astro';
 import LoopButtons from './LoopButtons.astro';
 
-const program = `worker := varmq.NewErrWorker(process, "mailer")`;
+const program = `worker := varmq.NewErrWorker(process, 2, "mailer")`;
 const hint = '// add a job: the call it makes and what it returns show here';
 
-const describe = `A simulation of a worker named mailer with a limit of 2. Pick a worker type and what its function does, then add jobs. A failure is reported in up to three places. The job handle of an error or result worker gets the error. A plain worker has no handle. The Errs() channel has room for one error, so when it is full the next error is dropped and counted. The error handler runs for every failure, including the dropped ones. A result worker returns the zero result when the function fails, even if the function also returned a value. The counters at the top are the four counters of Metrics().`;
+const describe = `A simulation of a worker named mailer with a limit of 2. Pick a worker type and what its function does, then add jobs. A failure is reported in up to three places. The job handle of an error or result worker gets the error. A plain worker's handle has no Err(), so a panic reaches only Errs() and the handler. The Errs() channel has room for one error, so when it is full the next error is dropped and counted. The error handler runs for every failure, including the dropped ones. A result worker returns the zero result when the function fails, even if the function also returned a value. The counters at the top are the four counters of Metrics().`;
 ---
 
 <Scene id="gb-errors" title="Where a failure goes" describe={describe} class="gb">

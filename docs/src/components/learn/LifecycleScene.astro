@@ -100,11 +100,11 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 	tag="state diagram"
 	class="learn"
 	call={"worker := varmq.NewWorker(process, varmq.WithAutoRun(false))\nqueue := worker.BindQueue() // then three Add calls"}
-	describe="The seven worker states as a diagram: Initiated, Idle, Running, Pausing, Paused, Stopping and Stopped. Idle and Running swap on their own as jobs start and finish. Start, Pause, Resume, Stop and Restart move the worker between states. Click a state to see what it means, which Is-methods answer yes for it, and what each method returns from it. The buttons under the diagram call the methods on a live worker model that has three queued jobs and runs one job at a time. A job that is running must finish before Pausing becomes Paused or Stopping becomes Stopped."
+	describe="The seven worker states as a diagram: Initiated, Idle, Running, Pausing, Paused, Stopping and Stopped. Idle and Running swap on their own as jobs start and finish. Start, Pause, Resume, Stop and Restart move the worker between states. Click a state to see what it means, which Is-methods answer yes for it, and what each method returns from it. The buttons under the diagram call the methods on a live worker model that has three queued jobs and runs one job at a time. With concurrency 1, a worker whose goroutine is free takes every waiting job into one batch and stays Running until the batch ends. A job that is running must finish before Pausing becomes Paused or Stopping becomes Stopped. Then the jobs of the batch that have not started are parked on the worker, and they run first after Resume or Restart."
 >
 	<dl class="sframe__stats" slot="stats">
 		<div><dt>Status()</dt><dd data-stat="status">Initiated</dd></div>
-		<div><dt>queued</dt><dd data-stat="queued">3</dd></div>
+		<div><dt>waiting</dt><dd data-stat="waiting">3</dd></div>
 		<div><dt>running</dt><dd data-stat="running">0</dd></div>
 		<div><dt>done</dt><dd data-stat="done">0</dd></div>
 	</dl>
@@ -148,6 +148,8 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		<div class="lc__jobs" aria-hidden="true">
 			<span class="slabel">queue</span> <span class="lstrip" data-queue></span>
 			<span class="slabel">running</span> <span class="lstrip" data-run></span>
+			<span class="slabel">batch</span> <span class="lstrip" data-batch></span>
+			<span class="slabel">parked</span> <span class="lstrip" data-parked></span>
 			<span class="slabel">done</span> <span class="lstrip" data-done></span>
 		</div>
 
@@ -184,7 +186,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 	</Fragment>
 
 	<p class="sframe__note" slot="note">
-		The worker has concurrency 1 and <code>WithAutoRun(false)</code>. Pause and Stop never interrupt a running job, so press Finish to let it end. A model of the library, not a benchmark.
+		The worker has concurrency 1 and <code>WithAutoRun(false)</code>, so it takes every waiting job, up to 32, into one batch. Pause and Stop never interrupt a running job, so press Finish to let it end. The rest of the batch is then parked on the worker, outside the queue. A model of the library, not a benchmark.
 	</p>
 </Scene>
 
@@ -203,7 +205,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		Pausing: 'Pause was called while jobs were running. They finish, and the worker takes no new ones.',
 		Paused: 'No job is running and none will start until Resume.',
 		Stopping: 'Stop was called. Running jobs finish, then the worker’s goroutines are removed.',
-		Stopped: 'The event loop has ended and the goroutines are gone. Jobs still in the queue stay there.',
+		Stopped: 'The event loop has ended and the goroutines are gone. Jobs still in the queue stay there, and parked jobs stay parked.',
 	};
 
 	const IS: Record<S, string[]> = {
@@ -254,6 +256,10 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		let s: S;
 		let queued: number[];
 		let runningJob: number | null;
+		/** Jobs the goroutine took with the running one and has not started. They are not in the queue. */
+		let batch: number[];
+		/** The unstarted rest of a batch, set aside by Pause or Stop. They go out first, in order. */
+		let parked: number[];
 		let done: number[];
 		let nextJob: number;
 		let restartPending: boolean;
@@ -272,16 +278,25 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 			});
 		};
 
-		const pull = (): boolean => {
-			if ((s === 'Idle' || s === 'Running') && runningJob === null && queued.length > 0) {
-				runningJob = queued.shift()!;
-				if (s === 'Idle') {
-					s = 'Running';
-					hot('idle-run');
-				}
-				return true;
-			}
-			return false;
+		// Concurrency 1 (planBatch in worker_eventloop.go): an active worker whose goroutine is free hands it
+		// every waiting job, up to 32, in one batch, parked jobs first. Returns the log line, or '' when
+		// nothing starts.
+		const pull = (): string => {
+			if ((s !== 'Idle' && s !== 'Running') || runningJob !== null || batch.length) return '';
+			const fromPark = parked.length > 0;
+			const from = fromPark ? parked : queued;
+			if (!from.length) return '';
+			const taken = from.splice(0, 32);
+			runningJob = taken.shift()!;
+			batch = taken;
+			s = 'Running';
+			hot('idle-run');
+			const what = batch.length ? `${fromPark ? 'the parked jobs' : 'jobs'} ${[runningJob, ...batch].join(', ')} in one batch` : `${fromPark ? 'parked ' : ''}job ${runningJob}`;
+			return `The worker takes ${what}. Idle → Running: job ${runningJob} starts.`;
+		};
+		const take = () => {
+			const took = pull();
+			if (took) log.unshift(took);
 		};
 
 		const toStopped = () => {
@@ -293,7 +308,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				s = 'Idle';
 				log.unshift('Restart() continues: Stopped → Idle.');
 				hot('stopping-stopped', 'start-stopped');
-				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				take();
 			}
 		};
 
@@ -303,11 +318,23 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 			done.push(job);
 			runningJob = null;
 			log.unshift(`Job ${job} finishes.`);
+			if (batch.length && s === 'Running') {
+				// The goroutine goes on with its batch. The count of jobs taken stays above 0, so the worker stays Running.
+				runningJob = batch.shift()!;
+				log.unshift(`Job ${runningJob} starts from the batch. The worker stays Running.`);
+				return;
+			}
+			if (batch.length) {
+				// Pausing or Stopping: the unstarted rest of the batch is parked on the worker (worker_pool.go).
+				log.unshift(`Job${batch.length === 1 ? '' : 's'} ${batch.join(', ')} ${batch.length === 1 ? 'is' : 'are'} parked on the worker.`);
+				parked.push(...batch);
+				batch = [];
+			}
 			if (s === 'Running') {
 				s = 'Idle';
 				hot('run-idle');
 				log.unshift('Running → Idle: no job is running.');
-				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				take();
 			} else if (s === 'Pausing') {
 				s = 'Paused';
 				hot('pausing-paused');
@@ -330,6 +357,14 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		};
 
 		const call = (m: M) => {
+			if (m === 'Restart' && restartPending) {
+				// worker_lifecycle.go: both calls wait for Stopped. The one that finds the worker started by the other returns ErrRunningWorker.
+				setCall(q('[data-call]'), 'err := worker.Restart() // blocks too; one of the two calls returns ErrRunningWorker');
+				log.unshift('A second Restart() waits for Stopped too. One of the two calls starts the worker, and the other returns ErrRunningWorker.');
+				hot();
+				selected = s;
+				return render();
+			}
 			const o = outcome(s, m, runningJob !== null);
 			const from = s;
 			const errText = o.err ?? 'nil';
@@ -343,7 +378,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 					s = 'Idle';
 					hot('start-stopped');
 					log.unshift('Already stopped, so Start follows at once: Stopped → Idle.');
-					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+					take();
 				} else if (runningJob === null) {
 					s = 'Stopping';
 					restartPending = true;
@@ -360,14 +395,14 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				if (m === 'Start') {
 					hot(from === 'Initiated' ? 'start-init' : 'start-stopped');
 					log.unshift(`${from} → Idle.`);
-					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+					take();
 				} else if (m === 'Pause') {
 					hot(from === 'Idle' ? 'pause-idle' : 'pause-run');
 					log.unshift(`${from} → ${s}${s === 'Pausing' ? '. The running job finishes, and no new job starts.' : '.'}`);
 				} else if (m === 'Resume') {
 					hot('resume');
 					log.unshift('Paused → Idle.');
-					if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+					take();
 				} else if (m === 'Stop') {
 					hot('stop');
 					log.unshift(`${from} → Stopping.`);
@@ -393,11 +428,13 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 
 			// Counts and chips.
 			q('[data-stat="status"]').textContent = s;
-			q('[data-stat="queued"]').textContent = String(queued.length);
+			q('[data-stat="waiting"]').textContent = String(queued.length + batch.length + parked.length);
 			q('[data-stat="running"]').textContent = runningJob === null ? '0' : '1';
 			q('[data-stat="done"]').textContent = String(done.length);
 			q('[data-queue]').innerHTML = queued.length ? queued.map((n) => chip(n)).join('') : '<span class="lempty">none</span>';
 			q('[data-run]').innerHTML = runningJob === null ? '<span class="lempty">none</span>' : chip(runningJob);
+			q('[data-batch]').innerHTML = batch.length ? batch.map((n) => chip(n)).join('') : '<span class="lempty">none</span>';
+			q('[data-parked]').innerHTML = parked.length ? parked.map((n) => chip(n)).join('') : '<span class="lempty">none</span>';
 			q('[data-done]').innerHTML = done.length ? done.map((n) => chip(n, 'ljob--done')).join('') : '<span class="lempty">none</span>';
 
 			// Detail of the selected state.
@@ -436,6 +473,8 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 			s = 'Initiated';
 			queued = [1, 2, 3];
 			runningJob = null;
+			batch = [];
+			parked = [];
 			done = [];
 			nextJob = 4;
 			restartPending = false;
@@ -461,7 +500,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				queued.push(nextJob++);
 				log.unshift(`Add: job ${nextJob - 1} joins the queue.`);
 				setCall(q('[data-call]'), `queue.Add(${nextJob - 1})`);
-				if (pull()) log.unshift(`Idle → Running: job ${runningJob} starts.`);
+				take();
 				render();
 			} else if (a.dataset.act === 'finish') {
 				finish();

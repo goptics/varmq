@@ -25,7 +25,7 @@ A worker can have several sources bound to it: queues, priority queues and [topi
 worker := varmq.NewWorker(process, 2, varmq.WithStrategy(varmq.RoundRobin))
 ```
 
-Pick a strategy below and take jobs one at a time. The queues start with 2 alerts, 1 report and 3 emails, the same as the programs on this page. Before each job, the scene says which queue the strategy chooses and why. Picking another strategy starts a new worker, because a worker keeps its strategy.
+Pick a strategy below and take jobs one at a time. The queues start with 2 alerts, 1 report and 3 emails, the same as the RoundRobin and length programs below. Before each job, the scene says which queue the strategy chooses and why. Picking another strategy starts a new worker, because a worker keeps its strategy.
 
 <StrategyPicker />
 

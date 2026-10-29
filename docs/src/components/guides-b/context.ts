@@ -4,9 +4,9 @@
 
 import { WorkerSim } from './sim';
 import { PoolView } from './poolview';
-import { tabs } from '../ui/dom';
+import { reducedMotion, tabs } from '../ui/dom';
 import { highlightGo } from '../ui/go';
-import { announcer, caller, clock, qs, setText } from './scene';
+import { announcer, caller, clock, qs, setText, settle } from './scene';
 
 const DUR = 4000;
 const TIMEOUT = 6000;
@@ -87,12 +87,16 @@ worker = varmq.NewWorker(func(j varmq.Job[int]) {
 		render();
 	};
 
-	const clk = clock(root, (dt) => {
+	const step = (dt: number) => {
 		sim.advance(dt);
 		if (made === 'timeout' && !sim.userCtx && sim.now >= TIMEOUT) {
 			sim.cancelUser('deadline');
 			say('// the deadline passed: the context is done, the worker follows');
 		}
+	};
+
+	const clk = clock(root, (dt) => {
+		step(dt);
 		render();
 	});
 
@@ -144,6 +148,8 @@ worker = varmq.NewWorker(func(j varmq.Job[int]) {
 			reset();
 			say('// a new worker with five jobs');
 		}
+		// With reduced motion the clock stands still, so a call shows where the worker ends up.
+		if (reducedMotion() && act !== 'watch' && act !== 'reset') settle(step, () => sim.moving());
 		render();
 		clk.wake();
 	});

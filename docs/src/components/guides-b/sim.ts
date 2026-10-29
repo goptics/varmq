@@ -312,6 +312,11 @@ export class WorkerSim {
 
 	// ---- time ----
 
+	/** True while the model still changes without a call: a job runs, jobs wait for a free goroutine, or a stop is under way. */
+	moving(): boolean {
+		return this.busy() > 0 || this.status === 'Stopping' || (this.isActive() && this.queue.length + this.parked.length > 0);
+	}
+
 	advance(ms: number) {
 		let left = ms;
 		while (left > 0) {

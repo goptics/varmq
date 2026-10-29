@@ -92,7 +92,7 @@ function init(root: HTMLElement) {
 			});
 			s.len.textContent = `${s.queue.length} ${s.queue.length === 1 ? 'job' : 'jobs'}`;
 		}
-		startBtn.textContent = reducedMotion() ? 'Run all' : !started ? 'Start worker' : paused ? 'Resume worker' : 'Pause worker';
+		startBtn.textContent = reducedMotion() ? 'Run all' : !started ? 'Start workers' : paused ? 'Resume workers' : 'Pause workers';
 		startBtn.disabled = started && !paused && !reducedMotion() && !busy() && !sides.some((s) => s.queue.length); // nothing to pause
 	};
 	const render = () => flip(root, paint);
@@ -197,7 +197,7 @@ function init(root: HTMLElement) {
 			paused = true;
 			caption(root, 'worker.Pause()');
 			paint();
-			say(root, 'Worker paused. Jobs that run now finish. No new job starts.');
+			say(root, 'Both workers paused. Jobs that run now finish. No new job starts.');
 		}
 	});
 	q(root, '[data-reset]').addEventListener('click', reset);
