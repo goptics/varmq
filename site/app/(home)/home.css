@@ -1,0 +1,819 @@
+/* The home page: a pneumatic tube station. Bottle-green enamel owns the page, brass draws every tube, cream card
+   labels carry copy and code, an amber lamp marks what runs. It keeps these colours in both themes. Page classes are
+   hp-*; the map's own (lib/heromap/map.css) are vm-*, recoloured here through its variables. */
+
+.hp-home {
+	--hp-enamel: #163a2e;
+	--hp-enamel-deep: #0f2a21;
+	--hp-enamel-raised: #1c4637;
+	--hp-brass: #c8a15a;
+	--hp-brass-dark: #8a6a2f;
+	--hp-cream: #efe6cf;
+	--hp-cream-quiet: #b9cbbd;
+	--hp-ink: #1d1912;
+	--hp-rush: #e2614c;
+	--hp-lamp: #f2b544;
+
+	--hp-nav: 56px;
+	--hp-max: 1320px;
+	--hp-gutter: clamp(16px, 4vw, 48px);
+	--hp-gap: clamp(24px, 4vw, 72px);
+	--hp-tube: 6px;
+	--hp-rail: 44px; /* the tube's lane at the text column's left */
+	--hp-per-s: 100px; /* a second of the map's loop, in scroll */
+	--hp-map: min(calc((min(100vw, var(--hp-max)) - 2 * var(--hp-gutter) - var(--hp-gap)) * 0.54), calc(100svh - var(--hp-nav) - 64px));
+	--hp-read: calc(var(--hp-nav) + (100svh - var(--hp-nav) - var(--hp-map)) / 2);
+
+	/* Fumadocs' tokens, so its nav sits in the same enamel. */
+	--color-fd-background: var(--hp-enamel);
+	--color-fd-foreground: var(--hp-cream);
+	--color-fd-muted: var(--hp-enamel-raised);
+	--color-fd-muted-foreground: var(--hp-cream-quiet);
+	--color-fd-popover: var(--hp-enamel-deep);
+	--color-fd-popover-foreground: var(--hp-cream);
+	--color-fd-card: var(--hp-enamel-raised);
+	--color-fd-card-foreground: var(--hp-cream);
+	--color-fd-border: rgba(200, 161, 90, 0.28);
+	--color-fd-primary: var(--hp-lamp);
+	--color-fd-primary-foreground: var(--hp-ink);
+	--color-fd-secondary: var(--hp-enamel-raised);
+	--color-fd-secondary-foreground: var(--hp-cream);
+	--color-fd-accent: var(--hp-enamel-raised);
+	--color-fd-accent-foreground: var(--hp-cream);
+	--color-fd-ring: var(--hp-lamp);
+
+	min-height: 100svh;
+	background: var(--hp-enamel);
+	color: var(--hp-cream);
+	font-family: var(--hp-font-copy), system-ui, sans-serif;
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	caret-color: var(--hp-lamp);
+	accent-color: var(--hp-lamp);
+	scrollbar-color: var(--hp-brass-dark) var(--hp-enamel-deep);
+	-webkit-font-smoothing: antialiased;
+}
+
+html:has(.hp-home),
+body:has(.hp-home) {
+	background: #163a2e;
+	scrollbar-color: #8a6a2f #0f2a21;
+}
+
+.hp-home ::selection {
+	background: var(--hp-lamp);
+	color: var(--hp-ink);
+}
+
+.hp-home :focus-visible {
+	outline: 2px solid var(--hp-lamp);
+	outline-offset: 3px;
+	border-radius: 2px;
+}
+
+.hp-home a {
+	color: inherit;
+	text-decoration-color: var(--hp-brass);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.22em;
+}
+
+.hp-home a:hover {
+	text-decoration-color: var(--hp-lamp);
+}
+
+.hp-home code {
+	font-family: var(--hp-font-code), ui-monospace, monospace;
+	font-size: 0.9em;
+}
+
+.hp-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* The page: one column of stations down the main tube, which runs along the text's left edge. Fumadocs' home layout
+   does not stretch it, so it is given the width, or its widest code line would set it. */
+.hp-page {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	max-width: var(--hp-max);
+	margin: 0 auto;
+	padding: 0 var(--hp-gutter);
+}
+
+
+/* The main tube, one brass pipe: it leaves the hero's send slot, runs down the stations and the sections, and ends at
+   the closing station. Each container draws its own length at the rail's centre. */
+.hp-run-stations,
+.hp-section {
+	position: relative;
+}
+
+.hp-hero .hp-send::before,
+.hp-hero .hp-send::after,
+.hp-run-stations::before,
+.hp-section::before {
+	content: '';
+	position: absolute;
+	background: var(--hp-brass);
+	box-shadow:
+		inset 1px 0 0 var(--hp-brass-dark),
+		inset -1px 0 0 var(--hp-brass-dark);
+}
+
+.hp-run-stations::before,
+.hp-section::before {
+	top: 0;
+	bottom: 0;
+	left: calc((var(--hp-rail) - var(--hp-tube)) / 2);
+	width: var(--hp-tube);
+}
+
+.hp-close::before {
+	bottom: auto;
+	height: calc(96px + 0.45 * clamp(2.25rem, 4vw, 3rem));
+}
+
+.hp-hero .hp-send {
+	position: relative;
+}
+
+.hp-hero .hp-send::before {
+	top: calc(50% - var(--hp-tube) / 2);
+	right: calc(100% + 2px);
+	width: calc(var(--hp-rail) / 2 + var(--hp-tube) / 2 - 2px);
+	height: var(--hp-tube);
+	box-shadow:
+		inset 0 1px 0 var(--hp-brass-dark),
+		inset 0 -1px 0 var(--hp-brass-dark);
+}
+
+.hp-hero .hp-send::after {
+	top: calc(50% - var(--hp-tube) / 2);
+	left: calc(-1 * (var(--hp-rail) + var(--hp-tube)) / 2 - 2px);
+	width: var(--hp-tube);
+	height: 100vh;
+}
+
+/* The hero and the story share one runway: text on the left, the map pinned on the right. */
+.hp-run {
+	display: grid;
+	grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+	grid-template-rows: auto auto;
+	column-gap: var(--hp-gap);
+}
+
+.hp-readline {
+	position: fixed;
+	top: var(--hp-read);
+	left: 0;
+	width: 0;
+	height: 0;
+}
+
+.hp-run-hero {
+	grid-column: 1;
+	grid-row: 1;
+	overflow: clip; /* the tube leaving the send slot stops at the hero's foot */
+	min-height: calc(100svh - var(--hp-nav));
+	display: flex;
+	align-items: center;
+}
+
+.hp-run-map {
+	grid-column: 2;
+	grid-row: 1 / span 2;
+}
+
+.hp-run-pin {
+	position: sticky;
+	top: var(--hp-read);
+	width: var(--hp-map);
+	margin-left: auto;
+}
+
+.hp-run-pin varmq-map {
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+}
+
+.hp-run-stations {
+	grid-column: 1;
+	grid-row: 2;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* A station holds its text at the reading line while its stretch of the map plays: the block under the text is that
+   stretch, in scroll. It sits inside the station's content box, where the sticky text can travel, not in padding. */
+.hp-station {
+	padding-left: var(--hp-rail);
+}
+
+.hp-station::after {
+	content: '';
+	display: block;
+	height: calc(var(--hp-dur) * var(--hp-per-s));
+}
+
+.hp-station-body {
+	position: sticky;
+	top: var(--hp-read);
+	padding-bottom: 48px;
+	opacity: 0.42;
+	transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hp-station[data-on] .hp-station-body {
+	opacity: 1;
+}
+
+/* The hero. */
+.hp-hero {
+	min-width: 0;
+	width: 100%;
+	padding: 48px 0 48px var(--hp-rail);
+	max-width: 36rem;
+}
+
+.hp-hero-name {
+	margin: 0 0 0.12em -0.04em;
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 700;
+	font-size: clamp(4rem, 9vw, 6rem);
+	line-height: 0.9;
+	letter-spacing: 0.01em;
+	text-transform: uppercase;
+	color: var(--hp-cream);
+}
+
+.hp-hero-pitch {
+	margin: 0 0 32px;
+	max-width: 30ch;
+	font-size: clamp(1.25rem, 2vw, 1.5rem);
+	line-height: 1.4;
+	font-weight: 500;
+	text-wrap: balance;
+}
+
+.hp-hero-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 28px;
+	margin: 20px 0 0;
+	font-weight: 600;
+}
+
+.hp-hero-links .hp-go {
+	color: var(--hp-lamp);
+}
+
+.hp-hero-hint {
+	margin: 48px 0 0;
+	color: var(--hp-cream-quiet);
+	font-size: 0.9375rem;
+}
+
+/* The send slot: the install command on a brass-rimmed card, with its copy button. */
+.hp-send {
+	display: inline-flex;
+	align-items: stretch;
+	max-width: 100%;
+	border: 2px solid var(--hp-brass);
+	border-radius: 8px;
+	background: var(--hp-cream);
+	color: var(--hp-ink);
+	box-shadow: 0 6px 18px -8px rgba(5, 20, 14, 0.7);
+}
+
+.hp-send code {
+	min-width: 0;
+	padding: 12px 16px;
+	overflow-x: auto;
+	font-size: 0.9375rem;
+	white-space: nowrap;
+}
+
+.hp-send code::selection {
+	background: var(--hp-lamp);
+}
+
+.hp-send button {
+	display: grid;
+	place-items: center;
+	padding: 0 14px;
+	border: 0;
+	border-left: 1px solid var(--hp-brass-dark);
+	background: transparent;
+	color: var(--hp-ink);
+	cursor: pointer;
+}
+
+.hp-send button:hover {
+	background: rgba(242, 181, 68, 0.35);
+}
+
+.hp-send button svg {
+	width: 18px;
+	height: 18px;
+}
+
+/* A station's heading, its lamp on the tube, its steps and its code. */
+.hp-station-title {
+	position: relative;
+	margin: 0 0 16px;
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 600;
+	font-size: 1.875rem;
+	line-height: 1.1;
+	letter-spacing: 0.01em;
+	text-transform: uppercase;
+}
+
+.hp-station-no {
+	position: absolute;
+	top: 50%;
+	left: calc(-1 * var(--hp-rail) + var(--hp-rail) / 2);
+	width: 28px;
+	height: 28px;
+	translate: -50% -50%;
+	display: grid;
+	place-items: center;
+	border: 3px solid var(--hp-brass);
+	border-radius: 50%;
+	background: var(--hp-enamel-deep);
+	color: var(--hp-cream);
+	font-size: 0.875rem;
+	font-weight: 700;
+	font-variant-numeric: lining-nums tabular-nums;
+	transition: background-color 240ms cubic-bezier(0.16, 1, 0.3, 1), color 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hp-station[data-on] .hp-station-no {
+	background: var(--hp-lamp);
+	color: var(--hp-ink);
+}
+
+.hp-steps {
+	margin: 0 0 20px;
+	padding: 0;
+	list-style: none;
+	font-size: 1.125rem;
+	font-weight: 500;
+}
+
+.hp-steps li {
+	position: relative;
+	padding-left: 24px;
+	color: var(--hp-cream-quiet);
+	transition: color 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hp-steps li::before {
+	content: '';
+	position: absolute;
+	top: 0.5em;
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border: 2px solid var(--hp-brass);
+	border-radius: 50%;
+	transition: background-color 240ms cubic-bezier(0.16, 1, 0.3, 1), border-color 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hp-steps em {
+	font-style: normal;
+	color: var(--hp-cream);
+	font-weight: 600;
+}
+
+.hp-fail {
+	color: var(--hp-rush);
+	font-weight: 700;
+}
+
+.hp-brand-sqlite {
+	color: #79c0f2;
+	font-weight: 600;
+}
+
+.hp-brand-redis {
+	color: #ff8576;
+	font-weight: 600;
+}
+
+/* The docket: code on a cream card label. Lines for the step on the map are lit with the lamp's amber. */
+.hp-label {
+	margin: 0;
+	border-radius: 6px;
+	background: var(--hp-cream);
+	color: var(--hp-ink);
+	box-shadow: 0 8px 22px -12px rgba(5, 20, 14, 0.8);
+}
+
+.hp-code {
+	margin: 0;
+	padding: 14px 0;
+	overflow-x: auto;
+	font-family: var(--hp-font-code), ui-monospace, monospace;
+	font-size: 0.875rem;
+	line-height: 1.65;
+	tab-size: 4;
+}
+
+.hp-code code {
+	font-size: inherit;
+}
+
+.hp-code .line {
+	display: inline-block;
+	min-width: 100%;
+	padding: 0 18px;
+	transition: background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hp-label figcaption {
+	padding: 10px 18px 12px;
+	border-top: 1px dashed var(--hp-brass-dark);
+	font-size: 0.875rem;
+	color: #4a4436;
+}
+
+.hp-label figcaption a {
+	text-decoration-color: var(--hp-brass-dark);
+}
+
+.hp-station[data-step='0'] .hp-steps li:nth-child(1),
+.hp-station[data-step='1'] .hp-steps li:nth-child(2),
+.hp-station[data-step='2'] .hp-steps li:nth-child(3),
+.hp-station[data-step='3'] .hp-steps li:nth-child(4),
+.hp-station[data-step='4'] .hp-steps li:nth-child(5),
+.hp-station[data-step='5'] .hp-steps li:nth-child(6) {
+	color: var(--hp-cream);
+}
+
+.hp-station[data-step='0'] .hp-steps li:nth-child(1)::before,
+.hp-station[data-step='1'] .hp-steps li:nth-child(2)::before,
+.hp-station[data-step='2'] .hp-steps li:nth-child(3)::before,
+.hp-station[data-step='3'] .hp-steps li:nth-child(4)::before,
+.hp-station[data-step='4'] .hp-steps li:nth-child(5)::before,
+.hp-station[data-step='5'] .hp-steps li:nth-child(6)::before {
+	border-color: var(--hp-lamp);
+	background: var(--hp-lamp);
+}
+
+.hp-station[data-step='0'] .line[data-steps~='0'],
+.hp-station[data-step='1'] .line[data-steps~='1'],
+.hp-station[data-step='2'] .line[data-steps~='2'],
+.hp-station[data-step='3'] .line[data-steps~='3'],
+.hp-station[data-step='4'] .line[data-steps~='4'],
+.hp-station[data-step='5'] .line[data-steps~='5'] {
+	background: rgba(242, 181, 68, 0.42);
+}
+
+/* The sections after the story: further stations on the same tube. */
+.hp-section {
+	position: relative;
+	padding: 96px 0 40px var(--hp-rail);
+}
+
+.hp-section-title {
+	position: relative;
+	margin: 0 0 12px;
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 700;
+	font-size: clamp(2.25rem, 4vw, 3rem);
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+.hp-section-title::before {
+	content: '';
+	position: absolute;
+	top: 0.45em;
+	left: calc(-1 * var(--hp-rail) / 2);
+	width: 22px;
+	height: 22px;
+	translate: -50% -50%;
+	border: 3px solid var(--hp-brass);
+	border-radius: 50%;
+	background: var(--hp-enamel-deep);
+}
+
+.hp-section-lead {
+	margin: 0 0 28px;
+	max-width: 68ch;
+	color: var(--hp-cream-quiet);
+}
+
+.hp-sub-title {
+	margin: 64px 0 8px;
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 600;
+	font-size: 1.75rem;
+	text-transform: uppercase;
+}
+
+.hp-table-wrap {
+	overflow-x: auto;
+	border-radius: 6px;
+}
+
+.hp-table {
+	width: 100%;
+	border-collapse: collapse;
+	background: var(--hp-cream);
+	color: var(--hp-ink);
+	font-size: 0.9375rem;
+	font-variant-numeric: lining-nums tabular-nums;
+}
+
+.hp-table th,
+.hp-table td {
+	padding: 10px 14px;
+	border-bottom: 1px solid #d8ccab;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.hp-table thead th {
+	background: var(--hp-enamel-deep);
+	color: var(--hp-cream);
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 600;
+	font-size: 0.9375rem;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	border-bottom: 2px solid var(--hp-brass);
+}
+
+.hp-table th[scope='row'],
+.hp-table thead th:first-child {
+	text-align: left;
+	font-weight: 600;
+}
+
+.hp-table tbody tr:last-child > * {
+	border-bottom: 0;
+}
+
+.hp-table tr[data-us] > * {
+	background: rgba(242, 181, 68, 0.38);
+}
+
+.hp-features td {
+	text-align: center;
+}
+
+.hp-mark {
+	display: inline-flex;
+	align-items: flex-start;
+	gap: 1px;
+}
+
+.hp-features td svg {
+	width: 18px;
+	height: 18px;
+	vertical-align: -3px;
+}
+
+.hp-features td[data-yes='true'] svg {
+	color: #17493a;
+	stroke-width: 3;
+}
+
+.hp-features td[data-yes='false'] svg {
+	color: #7a705b;
+}
+
+.hp-table sup {
+	margin-left: 2px;
+	font-size: 0.7em;
+	font-weight: 600;
+}
+
+.hp-notes {
+	margin: 12px 0 0;
+	padding-left: 1.4em;
+	list-style: decimal;
+	color: var(--hp-cream-quiet);
+	font-size: 0.875rem;
+}
+
+.hp-notes-text {
+	margin: 14px 0 0;
+	max-width: 80ch;
+	color: var(--hp-cream-quiet);
+	font-size: 0.9375rem;
+}
+
+.hp-plates {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
+	gap: 20px;
+	align-items: start;
+}
+
+.hp-plate {
+	padding: 22px 22px 18px;
+	border: 1px solid rgba(200, 161, 90, 0.45);
+	border-radius: 8px;
+	background: var(--hp-enamel-raised);
+}
+
+.hp-plate h3 {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 8px;
+	font-family: var(--hp-font-sign), sans-serif;
+	font-weight: 700;
+	font-size: 1.75rem;
+	text-transform: uppercase;
+}
+
+.hp-plate p {
+	margin: 0 0 16px;
+}
+
+.hp-logo {
+	width: 26px;
+	height: 26px;
+	flex: none;
+}
+
+.hp-logo-sqlite {
+	fill: #79c0f2;
+}
+
+.hp-logo-redis {
+	fill: #ff8576;
+}
+
+.hp-mini {
+	font-size: 0.875rem;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.hp-mini th,
+.hp-mini td {
+	padding: 8px 10px;
+}
+
+.hp-plate-note {
+	margin: 12px 0 0 !important;
+	color: var(--hp-cream-quiet);
+	font-size: 0.875rem;
+}
+
+.hp-close {
+	padding-bottom: 72px;
+}
+
+.hp-footer {
+	padding: 28px 0 40px var(--hp-rail);
+	border-top: 1px solid rgba(200, 161, 90, 0.28);
+	color: var(--hp-cream-quiet);
+	font-size: 0.9375rem;
+}
+
+/* The map, recoloured into the station: brass tubes and lanes, cream canisters, amber lamps for running goroutines.
+   Its captions stay hidden here, since each station's text says the same. */
+.hp-home varmq-map {
+	--vm-dot: rgba(200, 161, 90, 0.18);
+	--vm-ink: #c4d3c6;
+	--vm-caption: var(--hp-cream);
+	--vm-green: var(--hp-lamp);
+	--vm-red: #ef6a55;
+	--vm-sqlite: #79c0f2;
+	--vm-redis: #ff8576;
+	--vm-glow: none;
+	--vm-job: var(--hp-cream);
+	--vm-job-edge: var(--hp-brass);
+	--vm-job-ink: var(--hp-ink);
+	--vm-chip: var(--hp-enamel-deep);
+	--vm-chip-edge: var(--hp-brass);
+	--vm-chip-ink: var(--hp-cream);
+	--vm-value: #1d4a3b;
+	--vm-value-edge: var(--hp-lamp);
+	--vm-error: #3c1914;
+	--vm-error-edge: #ef6a55;
+	--vm-lane: rgba(200, 161, 90, 0.08);
+	--vm-lane-edge: var(--hp-brass);
+	--vm-lane-tail: 0.3;
+	--vm-lane-head: 1;
+	--vm-tray: rgba(200, 161, 90, 0.04);
+	--vm-tray-edge: rgba(200, 161, 90, 0.55);
+	--vm-slot: rgba(200, 161, 90, 0.3);
+	--vm-go: var(--hp-lamp);
+	--vm-go-fill: rgba(242, 181, 68, 0.16);
+	--vm-ghost: rgba(239, 230, 207, 0.32);
+	--vm-check: #fff4d9;
+	--vm-card: rgba(239, 230, 207, 0.04);
+	--vm-card-edge: rgba(239, 230, 207, 0.42);
+	--vm-loop: var(--hp-brass);
+	--vm-loop-fill: rgba(200, 161, 90, 0.14);
+	--vm-pulse: #e8c784;
+	--vm-store: rgba(200, 161, 90, 0.05);
+	--vm-store-edge: rgba(200, 161, 90, 0.75);
+	--vm-program: rgba(239, 230, 207, 0.03);
+	--vm-program-edge: rgba(239, 230, 207, 0.36);
+	--vm-line: rgba(200, 161, 90, 0.75);
+	--vm-ack: rgba(242, 181, 68, 0.5);
+	--sl-font-mono: var(--hp-font-sign);
+	--sl-color-bg: var(--hp-enamel);
+}
+
+.hp-home varmq-map .vm-caption {
+	display: none;
+}
+
+/* Narrow screens: the map pins under the nav once the hero has scrolled by, and each station shows its current
+   step under it. */
+@media (max-width: 1023px) {
+	.hp-home {
+		--hp-per-s: 80px;
+		--hp-map: min(calc(100vw - 2 * var(--hp-gutter)), 40svh);
+		--hp-read: calc(var(--hp-nav) + var(--hp-map) + 28px);
+		--hp-rail: 32px;
+	}
+
+	.hp-run {
+		display: block;
+	}
+
+	.hp-run-hero {
+		min-height: auto;
+		padding-top: 24px;
+	}
+
+	.hp-hero {
+		padding: 24px 0 32px var(--hp-rail);
+	}
+
+	.hp-run-map {
+		position: sticky;
+		top: var(--hp-nav);
+		z-index: 2;
+		margin: 0 calc(-1 * var(--hp-gutter));
+		padding: 8px var(--hp-gutter) 12px;
+		background: var(--hp-enamel);
+		box-shadow: 0 10px 14px -10px rgba(5, 20, 14, 0.9);
+	}
+
+	.hp-run-pin {
+		position: static;
+		margin: 0 auto;
+	}
+
+	.hp-station-body {
+		padding-bottom: 24px;
+	}
+
+	.hp-steps li {
+		display: none;
+	}
+
+	.hp-station[data-step='-1'] .hp-steps li:first-child,
+	.hp-station[data-step='0'] .hp-steps li:nth-child(1),
+	.hp-station[data-step='1'] .hp-steps li:nth-child(2),
+	.hp-station[data-step='2'] .hp-steps li:nth-child(3),
+	.hp-station[data-step='3'] .hp-steps li:nth-child(4),
+	.hp-station[data-step='4'] .hp-steps li:nth-child(5),
+	.hp-station[data-step='5'] .hp-steps li:nth-child(6) {
+		display: list-item;
+	}
+
+	.hp-station-title {
+		font-size: 1.5rem;
+	}
+
+	.hp-code {
+		font-size: 0.8125rem;
+	}
+
+	.hp-send code {
+		padding: 12px;
+		font-size: 0.8125rem;
+	}
+
+	.hp-plates {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hp-home *,
+	.hp-home *::before {
+		transition: none !important;
+	}
+}
