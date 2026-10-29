@@ -140,7 +140,7 @@ function show(k: number) {
 	const s = STEPS[k];
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
-	notes.innerHTML = s.notes.map((note) => `<li>${POINT}${note}</li>`).join('');
+	notes.innerHTML = s.notes.map((note, i) => `<li><button type="button" data-i="${i}">${POINT}${note}</button></li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
 	for (const code of codes) morph(code, s.code[0], !first && !reduce.matches);
@@ -151,6 +151,17 @@ function show(k: number) {
 	if (reduce.matches) map.seek(s.from + s.ms);
 	else map.play(s.from, s.ms);
 }
+
+// A caption is a button: it plays the step again from that caption to the step's end, and the code, the lit lines and
+// the points follow the map's clock there, as when the step first played. Under reduced motion it shows the caption's
+// last frame.
+notes.addEventListener('click', (e) => {
+	const i = Number((e.target as Element).closest('button')?.dataset.i);
+	if (step < 0 || Number.isNaN(i)) return;
+	const s = STEPS[step];
+	if (reduce.matches) map.seek(s.from + (s.captions[i + 1] ?? s.ms) - 1);
+	else map.play(s.from + s.captions[i], s.ms - s.captions[i]);
+});
 
 const height = () => (track.firstElementChild as HTMLElement).offsetHeight;
 const top = () => track.getBoundingClientRect().top + scrollY;

@@ -215,6 +215,27 @@ a:hover {
 	color: var(--fg);
 }
 
+/* Each caption plays the step again from it (main.ts). */
+.notes button {
+	display: block;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.notes button:hover {
+	color: var(--fg);
+}
+
+.notes button:hover .track {
+	stroke: var(--green);
+}
+
 /* Each caption's point is a ring, like a goroutine's on the map: its arc fills while the caption plays (main.ts sets
    --p from the map's clock), and once the caption is done the ring fills in and pulses, without the map's check. */
 .point {
