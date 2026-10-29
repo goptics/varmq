@@ -15,7 +15,7 @@ This file reviews it, and records what the branch `docs/new-site` changes on top
   - The tokens switch on `data-theme`, which is set before the first paint.
   - The home page has no sidebar menu, so on a phone its header shows the switch.
 - **The home page opens on varmq's story.** It replaces the old hero map.
-  - First an intro: the h1, the lede, the install box, Get started and GitHub, beside the whole map standing still.
+  - First an intro: the h1, the lede, the install box, Get started and GitHub, beside the whole map. The map runs once as in the last step, then holds; each return to the intro runs it again.
   - Then ten steps, one per scroll. Each step plays its chapter on the map, while one code block morphs into the code behind it and lights the lines each caption is about.
   - The page snaps only while the reader is in the story. Below it the page scrolls normally.
   - The rest of the home page shares the story's frame, so their edges line up. Each section is a row with its heading and lead in the story's text column and the rest in the map's:

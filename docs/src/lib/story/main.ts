@@ -7,10 +7,10 @@ import { mountMap } from './map.ts';
 import { STEPS, STORY_TEXT, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
 
-// The home page opens on the intro, beside the whole map standing still. From there the page snaps a step at a time:
-// each scroll brings the next step, which plays its chapter on the map once, at the map's own pace, while the one code
-// block morphs into that chapter's code and lights the lines each caption is about. Under reduced motion a step shows
-// its last frame. Past the last step the page scrolls on as usual, through the rest of the home page.
+// The home page opens on the intro, beside the whole map running as in the last step. From there the page snaps a step
+// at a time: each scroll brings the next step, which plays its chapter on the map once, at the map's own pace, while
+// the one code block morphs into that chapter's code and lights the lines each caption is about. Under reduced motion a
+// step shows its last frame. Past the last step the page scrolls on as usual, through the rest of the home page.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
 /** The snap positions: the intro, then one per step. */
@@ -136,14 +136,19 @@ const map = mountMap($('varmq-map'), (t) => {
 	li?.toggleAttribute('data-done', p >= 1);
 });
 
-/** Shows the intro, beside the whole map standing still. */
+/**
+ * Shows the intro, beside the whole map. The map runs once as in the last step, from where its camera has pulled back,
+ * and holds once it is still; each return to the intro runs it again. Under reduced motion it stands still.
+ */
 function showIntro() {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
 	intro.hidden = false;
 	stepView.hidden = true;
-	map.seek(STATIC_AT);
+	const last = STEPS[STEPS.length - 1];
+	if (reduce.matches) map.seek(STATIC_AT);
+	else map.play(STATIC_AT, last.from + last.ms - STATIC_AT);
 }
 
 /** Shows step k: its text, its code, and its chapter playing on the map, or its last frame under reduced motion. */
