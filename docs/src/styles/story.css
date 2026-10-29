@@ -375,6 +375,12 @@
 	transform: scale(1);
 }
 
+/* A finished ring is drawn whole. As a dash as long as the circle, its two ends meet at the top, and some browsers
+   draw the seam there as a notch. */
+.st-notes li[data-done] .st-arc {
+	stroke-dasharray: none;
+}
+
 .st-notes li[data-done] .st-point {
 	animation: st-pulse 520ms var(--ease);
 }
