@@ -94,12 +94,18 @@ let step = -1;
 let caption = -1;
 let settled = 0;
 
+/** A caption's point: a ring whose arc fills while the caption plays, and whose core shows once it is done. */
+const POINT =
+	'<svg class="point" viewBox="0 0 14 14" aria-hidden="true"><circle class="track" cx="7" cy="7" r="6"/>' +
+	'<circle class="arc" cx="7" cy="7" r="6" pathLength="1"/><circle class="core" cx="7" cy="7" r="3"/></svg>';
+
 function setCaption(i: number) {
 	if (i === caption) return;
 	caption = i;
 	[...notes.children].forEach((li, n) => {
 		li.toggleAttribute('data-on', n === i);
 		li.toggleAttribute('data-done', n < i);
+		if (n !== i) (li as HTMLElement).style.setProperty('--p', n < i ? '1' : '0');
 	});
 	for (const code of codes) {
 		light(code, STEPS[step], i);
@@ -111,7 +117,14 @@ const map = mountMap($('varmq-map'), (t) => {
 	if (step < 0) return;
 	const s = STEPS[step];
 	const local = (((t - s.from) % TOTAL) + TOTAL) % TOTAL;
-	setCaption(Math.max(0, s.captions.findLastIndex((at) => at <= local)));
+	const i = Math.max(0, s.captions.findLastIndex((at) => at <= local));
+	setCaption(i);
+	// The lit caption's ring fills from its start to the next caption's, or to the step's end, where it is done too.
+	const start = s.captions[i];
+	const p = Math.min(1, Math.max(0, (local - start) / ((s.captions[i + 1] ?? s.ms) - start)));
+	const li = notes.children[i] as HTMLElement | undefined;
+	li?.style.setProperty('--p', String(p));
+	li?.toggleAttribute('data-done', p >= 1);
 });
 
 /** Shows step k: its text, its code, and its chapter playing on the map, or its last frame under reduced motion. */
@@ -122,7 +135,7 @@ function show(k: number) {
 	const s = STEPS[k];
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
-	notes.innerHTML = s.notes.map((note) => `<li>${note}</li>`).join('');
+	notes.innerHTML = s.notes.map((note) => `<li>${POINT}${note}</li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
 	for (const code of codes) morph(code, k, !first && !reduce.matches);

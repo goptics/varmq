@@ -202,46 +202,76 @@ a:hover {
 
 .notes li {
 	position: relative;
-	padding-left: 24px;
+	padding-left: 26px;
 	color: var(--fg-quiet);
 	transition: color 240ms var(--ease);
 }
 
-.notes li::before {
-	content: '';
-	position: absolute;
-	top: calc(0.8em - 5.5px);
-	left: 2px;
-	width: 11px;
-	height: 11px;
-	border: 2px solid var(--ring);
-	border-radius: 50%;
-	transition:
-		background-color 240ms var(--ease),
-		border-color 240ms var(--ease);
+.notes li + li {
+	margin-top: 4px;
 }
 
 .notes li[data-on] {
 	color: var(--fg);
 }
 
-.notes li:is([data-on], [data-done])::before {
-	border-color: var(--green);
-	background: var(--green);
+/* Each caption's point is a ring, like a goroutine's on the map: its arc fills while the caption plays (main.ts sets
+   --p from the map's clock), and once the caption is done the ring fills in and pulses, without the map's check. */
+.point {
+	position: absolute;
+	top: calc(0.8em - 7px);
+	left: 1px;
+	width: 14px;
+	height: 14px;
+	overflow: visible;
 }
 
-.notes li[data-on]::before {
-	box-shadow: 0 0 0 4px rgba(68, 191, 158, 0.18);
+.point circle {
+	fill: none;
+	stroke-width: 2;
+	transform-box: fill-box;
+	transform-origin: center;
 }
 
-/* A line runs from each caption's point to the next, and fills as the step moves on, reaching the next point as it
-   lights. */
+.point .track {
+	stroke: var(--ring);
+}
+
+.point .arc {
+	stroke: var(--green);
+	stroke-dasharray: 1;
+	stroke-dashoffset: calc(1 - var(--p, 0));
+	transform: rotate(-90deg);
+}
+
+.point .core {
+	fill: var(--green);
+	stroke: none;
+	transform: scale(0);
+	transition: transform 300ms var(--ease);
+}
+
+.notes li[data-done] .core {
+	transform: scale(1);
+}
+
+.notes li[data-done] .point {
+	animation: pulse 520ms var(--ease);
+}
+
+@keyframes pulse {
+	27% {
+		transform: scale(1.22);
+	}
+}
+
+/* A line runs from each caption's point to the next, and fills once the caption is done. */
 .notes li:not(:last-child)::after {
 	content: '';
 	position: absolute;
-	top: calc(0.8em + 8.5px);
-	bottom: calc(8.5px - 0.8em);
-	left: 6.5px;
+	top: calc(0.8em + 10px);
+	bottom: calc(6px - 0.8em);
+	left: 7px;
 	width: 2px;
 	border-radius: 1px;
 	background-color: var(--ring);
@@ -253,10 +283,6 @@ a:hover {
 
 .notes li[data-done]::after {
 	background-size: 100% 100%;
-}
-
-.notes li[data-on]:not(:first-child)::before {
-	transition-delay: 280ms;
 }
 
 .notes em {
@@ -447,6 +473,10 @@ varmq-map .vm-caption {
 		grid-area: 1 / 1;
 	}
 
+	.notes li + li {
+		margin-top: 0;
+	}
+
 	.notes li:not([data-on]) {
 		visibility: hidden;
 	}
@@ -519,6 +549,7 @@ varmq-map .vm-caption {
 	*::before,
 	*::after {
 		transition: none !important;
+		animation: none !important;
 	}
 
 	.code pre {
