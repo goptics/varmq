@@ -333,9 +333,10 @@
 	border-radius: 4px;
 }
 
-/* Each caption's point is a ring, like a goroutine's on the map and in the logo's green: its arc fills while the
-   caption plays (main.ts sets --p from the map's clock), and once the caption is done the ring fills in and pulses.
-   It is drawn over the line, which runs into its stroke. */
+/* Each caption's point is a ring, like a goroutine's on the map and in the logo's green: its arc grows from the top
+   while the caption plays (main.ts sets --p from the map's clock), and once the caption is done the ring fills in and
+   pulses. It is drawn over the line, which runs into its stroke, and its middle is the page's, so the line's end stays
+   hidden while the ring pulses. */
 .st-point {
 	position: absolute;
 	z-index: 1;
@@ -354,13 +355,15 @@
 }
 
 .st-point .st-ring {
+	fill: var(--paper);
 	stroke: var(--rule);
 }
 
+/* A dash --p long, from the top: one not yet started draws nothing. A dash pushed back a whole circle instead ends
+   where it starts, and some browsers draw a sliver there. */
 .st-point .st-arc {
 	stroke: var(--brand);
-	stroke-dasharray: 1;
-	stroke-dashoffset: calc(1 - var(--p, 0));
+	stroke-dasharray: var(--p, 0) 2;
 	transform: rotate(-90deg);
 }
 
