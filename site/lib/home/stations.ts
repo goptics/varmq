@@ -19,13 +19,25 @@ export interface Station {
 const EXAMPLES = 'https://github.com/goptics/varmq/tree/main/docs/examples';
 
 // Chapter 5 runs one burst per strategy, and its code names each in turn in the one line that sets it. No queue is
-// bound with a priority, so Priority, the default, follows the order they are bound in.
-const strategy = (name: string) => `worker := varmq.NewWorker(process,
-	varmq.WithStrategy(varmq.${name}),
-)
+// bound with a priority, so they keep the order they are bound in, and Priority, the default, serves them by it:
+// while it plays, the comments rank them. A phone has no room for them beside the bindings, so they share a line
+// above them, which the other strategies leave blank.
+const strategy = (name: string, phone = false) => {
+	const ranked = name === 'Priority';
+	const bindings = phone
+		? `${ranked ? '// high, medium, low' : ''}
 queue := worker.BindQueue()
 urgent := worker.BindPriorityQueue()
-batch := worker.BindQueue()`;
+batch := worker.BindQueue()`
+		: `queue := worker.BindQueue()${ranked ? '          // high' : ''}
+urgent := worker.BindPriorityQueue()${ranked ? ' // medium' : ''}
+batch := worker.BindQueue()${ranked ? '          // low' : ''}`;
+	return `worker := varmq.NewWorker(
+	process,
+	varmq.WithStrategy(varmq.${name}),
+)
+${bindings}`;
+};
 
 export const STATIONS: Station[] = [
 	{
@@ -95,8 +107,9 @@ urgent.Add("three", 3)
 	},
 	{
 		code: strategy('Priority'),
-		lines: [[2, 4, 5, 6], [2], [2], [2]],
-		then: ['MaxLen', 'MinLen', 'RoundRobin'].map((name) => ({ code: strategy(name) })),
+		lines: [[3, 5, 6, 7], [3], [3], [3]],
+		phone: { code: strategy('Priority', true), lines: [[3, 5, 6, 7, 8], [3], [3], [3]] },
+		then: ['MaxLen', 'MinLen', 'RoundRobin'].map((name) => ({ code: strategy(name), phone: strategy(name, true) })),
 		source: { label: 'the strategies guide', href: 'https://varmq.goptics.org/guides/strategies/' },
 	},
 	{
