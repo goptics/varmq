@@ -622,6 +622,14 @@
 	color: var(--amber);
 }
 
+/* A VarMQ subject tied with another for the best value: neither side leads. The "=" carries the meaning. */
+.bcell.is-tie {
+	background: transparent;
+	border-color: var(--brand);
+	border-style: dashed;
+	color: var(--panel-ink);
+}
+
 .bcell:hover {
 	transform: translateY(-1px);
 }
@@ -673,6 +681,12 @@
 	background: var(--brand);
 	border-color: var(--brand);
 	color: var(--brand-ink);
+}
+
+.blegend .is-tie .blegend__code {
+	border-color: var(--brand);
+	border-style: dashed;
+	color: var(--panel-ink);
 }
 
 .bkey {
@@ -866,6 +880,15 @@
 .bboard .btable__t td,
 .bboard .btable__t tbody th {
 	vertical-align: middle;
+}
+
+/* The board's dataset names and rival lists wrap; its row names need no sticky width. */
+.bboard .btable__t tbody th {
+	min-width: 0;
+}
+
+.bboard .btable__t td.bwrap {
+	white-space: normal;
 }
 
 .bboard .n strong {

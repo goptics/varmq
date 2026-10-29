@@ -148,7 +148,7 @@ These use the namespace `foo_worker`. Change it to the namespace you pass to eac
 | How large is the backlog? | `foo_worker_waiting_total` |
 | Do jobs arrive faster than they finish? | `rate(foo_worker_submitted_total[5m]) - rate(foo_worker_completed_total[5m])` |
 
-The failure share is `NaN` while no job finishes. The last row is above 0 while jobs arrive faster than they finish. On a persistent or distributed queue it can mislead: `Submitted` does not count a job that another process added, and `Completed` can then be higher than `Submitted`. [The overview](/persistence/overview/#metrics) says what each counter counts there.
+The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row is above 0 while jobs arrive faster than they finish. On a persistent queue it can mislead: `Submitted` counts only this process's `Add` calls, so a job another process added is not counted, and `Completed` can then be higher than `Submitted`. On a distributed queue the counters may differ from what you expect. [The overview](/persistence/overview/#metrics) says what each counter counts there.
 
 ## What to watch for
 

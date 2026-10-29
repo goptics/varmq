@@ -19,13 +19,13 @@ const pkg = 'https://pkg.go.dev/github.com/goptics';
 export const redisSetup: SetupStep[] = [
 	{
 		title: 'Start Redis',
-		text: 'The repository’s <code>examples/compose.yml</code> starts Redis 7.2 on port 6375, and the programs on this page use that port.',
+		text: 'varmq’s repository has <code>examples/compose.yml</code>, which starts Redis 7.2 on port 6375. The programs on this page use that port.',
 		code: [
 			{
 				label: 'From a clone',
 				lang: 'bash',
 				code: 'docker compose -f examples/compose.yml up -d',
-				note: 'Run it from a clone of the repository.',
+				note: 'Run it from a clone of <a href="https://github.com/goptics/varmq">github.com/goptics/varmq</a>.',
 			},
 			{
 				label: 'Without a clone',

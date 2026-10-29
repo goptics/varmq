@@ -77,7 +77,7 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, N, N, N, N, N, N],
 		{
-			text: 'Redis only, through redisq. sqliteq provides persistent queues and has no distributed queue.',
+			text: 'Of the existing adapters, only redisq (Redis) provides one. sqliteq has no distributed queue. An adapter of your own can implement IDistributedQueue.',
 			href: '/persistence/sqlite/',
 			source: 'SQLite',
 		},
@@ -98,7 +98,7 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, Y, Y, N, N, ['No', 3], N],
 		{
-			text: 'Only on in-memory queues. redisq and sqliteq do not implement CapacitySetter, so Add is not refused on a persistent or distributed queue.',
+			text: 'Not with redisq or sqliteq. Neither implements CapacitySetter, so Add is not refused on their persistent or distributed queues. An adapter of your own can implement it.',
 			href: '/persistence/overview/#what-is-stored',
 			source: 'Persistence overview',
 		},

@@ -1,29 +1,9 @@
-// Redis scene. The rules come from the Redis page: one script moves a taken job from the queue to
-// <key>:nacked with a deadline in <key>:timeouts (visibility timeout, 5 minutes by default);
-// Acknowledge removes both; every queue object sweeps once a second and puts back jobs whose deadline
-// passed or whose holder's heartbeat is 30 seconds old; a distributed consumer is taken for dead
-// about six seconds after the crash; Close hands jobs back at once.
+// Redis scene: draws the keys of a queue named jobs. The state and the rules each button follows are in
+// redisflow-model.ts.
 
 import { h, setCall, tabs } from '../ui/dom';
-import { job } from './ops';
-
-type Mode = 'persistent' | 'dist';
-
-const VISIBILITY = 300; // seconds
-const HEARTBEAT = 30;
-const DIST_BACK = 6;
-
-interface State {
-	mode: Mode;
-	jobs: number[];
-	inflight: number | null;
-	closedUnder: boolean;
-	crashed: boolean;
-	t: number;
-	returned: boolean; // the sweep has put the job back
-	runs: Record<number, number>;
-	msg: string;
-}
+import { job, refocus } from './ops';
+import { DIST_BACK, HEARTBEAT, VISIBILITY, ack, close, fresh, kill, mmss, nacked, sweepIfDue, take, type Mode } from './redisflow-model';
 
 const root = document.querySelector<HTMLElement>('[data-rflow]');
 if (root) init(root);
@@ -41,22 +21,7 @@ function init(root: HTMLElement) {
 	const call = $('[data-call]');
 	const btn = (a: string) => $<HTMLButtonElement>(`[data-act="${a}"]`);
 
-	const fresh = (mode: Mode): State => ({
-		mode,
-		jobs: [7, 8, 9, 10],
-		inflight: null,
-		closedUnder: false,
-		crashed: false,
-		t: 0,
-		returned: false,
-		runs: {},
-		msg: 'Job 7 waits in jobs. Press Take a job to see what one script does to the keys.',
-	});
 	let s = fresh('persistent');
-
-	const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-	const threshold = () => (s.mode === 'dist' ? DIST_BACK : HEARTBEAT);
-	const held = () => s.inflight !== null && !s.closedUnder && !s.returned;
 
 	function key(name: string, kind: string, ...kids: (Node | null)[]) {
 		const body = h('div', { class: 'flow__val' }, ...kids.filter(Boolean));
@@ -81,13 +46,13 @@ function init(root: HTMLElement) {
 				: []),
 		);
 
-		const nacked = held() || (dead && s.inflight !== null && !s.returned);
+		const inNacked = nacked(s);
 		const remaining = Math.max(0, VISIBILITY - (dead ? s.t : 0));
 		const age = dead ? s.t : 0;
 		keys.replaceChildren(
 			key('jobs', 'list, front on the left', ...s.jobs.map((id, i) => job(id, s.returned && i === 0 ? 'is-back' : ''))),
-			key('jobs:nacked', 'hash', nacked && inN !== null ? entry(`ack-${inN}`, job(inN, dead ? 'is-orphan' : '')) : null),
-			key('jobs:timeouts', '', nacked && inN !== null ? entry(`ack-${inN}`, `deadline in ${mmss(remaining)}`) : null),
+			key('jobs:nacked', 'hash', inNacked && inN !== null ? entry(`ack-${inN}`, job(inN, dead ? 'is-orphan' : '')) : null),
+			key('jobs:timeouts', '', inNacked && inN !== null ? entry(`ack-${inN}`, `deadline in ${mmss(remaining)}`) : null),
 			key(
 				'jobs:heartbeats',
 				'',
@@ -110,7 +75,9 @@ function init(root: HTMLElement) {
 		setCall(
 			call,
 			s.crashed
-				? '// no Acknowledge was called: the entry stays in jobs:nacked'
+				? s.inflight === null
+					? '// the process died holding no job'
+					: '// no Acknowledge was called: the entry stays in jobs:nacked'
 				: s.closedUnder
 					? 'pq.Close()  // puts back every job this object took and did not acknowledge'
 					: s.inflight === null
@@ -124,65 +91,23 @@ function init(root: HTMLElement) {
 		out.replaceChildren(h('span', { text: s.msg }), ' ', tally && h('span', { class: 'ack__count', text: tally + '.' }));
 	}
 
-	function sweepIfDue() {
-		if (!s.crashed || s.inflight === null || s.returned) return;
-		if (s.t >= threshold()) {
-			s.returned = true;
-			s.jobs.unshift(s.inflight);
-			s.inflight = null;
-			s.crashed = false; // a consumer is alive again: the program restarted, or consumer B
-			s.msg =
-				s.mode === 'dist'
-					? 'About six seconds after the crash, Redis has dropped the dead consumer’s wake-up channel, and consumer B’s sweep puts job 7 back at the front of jobs and wakes a consumer for it.'
-					: `The restarted program has run for ${HEARTBEAT} seconds. A queue object’s sweep finds the dead object’s heartbeat that old, and puts job 7 back at the front of jobs. A job past its deadline comes back as soon as any queue object finds it, whichever comes first.`;
-		} else {
-			s.msg =
-				s.mode === 'dist'
-					? 'Job 7 is still in jobs:nacked. The other consumers wait for the dead one’s channel to go.'
-					: `Job 7 is still in jobs:nacked. The heartbeat is ${s.t} seconds old and the limit is ${HEARTBEAT}. The deadline is in ${mmss(Math.max(0, VISIBILITY - s.t))}.`;
-		}
-	}
-
 	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el || el.disabled) return;
+		const keyboard = el.matches(':focus-visible');
 		const act = el.dataset.act;
-		if (act === 'take') {
-			s.inflight = s.jobs.shift()!;
-			s.runs[s.inflight] = (s.runs[s.inflight] ?? 0) + 1;
-			s.returned = false;
-			s.closedUnder = false;
-			s.msg = `One script moved job ${s.inflight} from jobs to jobs:nacked under ack-${s.inflight}, and set its deadline in jobs:timeouts: Redis’s time plus the visibility timeout, 5 minutes by default.`;
-		} else if (act === 'ack') {
-			const id = s.inflight!;
-			if (s.closedUnder) {
-				s.msg = `Acknowledge returned false: the queue was closed, so the worker reports ErrAcknowledgeJob on Errs(). The function of job ${id} had run, and job ${id} is back in jobs, so it runs again.`;
-				s.inflight = null;
-				s.closedUnder = false;
-			} else {
-				s.msg = `Acknowledge removed the entry from jobs:nacked and from jobs:timeouts. Redis forgot job ${id}.`;
-				s.inflight = null;
-			}
-		} else if (act === 'kill') {
-			s.crashed = true;
-			s.t = 0;
-			s.msg =
-				s.inflight === null
-					? 'The process died while no job was running. Nothing is held. The jobs wait in jobs.'
-					: `The process died. Job ${s.inflight} stays in jobs:nacked with its deadline. Move the slider to move time forward.`;
-		} else if (act === 'close') {
-			s.closedUnder = true;
-			s.jobs.unshift(s.inflight!);
-			s.msg = `Close put job ${s.inflight} back at the front of jobs at once, while its function still runs. After Close, Acknowledge on that object returns false. Stop the worker before you close the queue.`;
-		} else if (act === 'reset') {
-			s = fresh(s.mode);
-		}
+		if (act === 'take') take(s);
+		else if (act === 'ack') ack(s);
+		else if (act === 'kill') kill(s);
+		else if (act === 'close') close(s);
+		else if (act === 'reset') s = fresh(s.mode);
 		render();
+		if (keyboard) refocus(figure, el);
 	});
 
 	slider.addEventListener('input', () => {
 		s.t = Number(slider.value);
-		sweepIfDue();
+		sweepIfDue(s);
 		render();
 	});
 

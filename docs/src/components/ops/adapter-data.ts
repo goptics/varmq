@@ -132,7 +132,7 @@ export const NODES: NodeDef[] = [
 		worker: [
 			'WithDistributedQueue calls Subscribe once, while binding, and passes the worker’s handler.',
 			'The worker acts on one action: "enqueued" wakes it to pull. Any other action is ignored.',
-			'There is no way to unsubscribe. The handler must not block.',
+			'There is no way to unsubscribe. varmq’s handler does not block, so the adapter can call it from any goroutine.',
 		],
 		by: ['redisq'],
 	},
@@ -269,6 +269,7 @@ export const NODES: NodeDef[] = [
 		adds: 'Optional addition to IAcknowledgeable, for storage that can take many jobs in one call.',
 		worker: [
 			'When the storage is the worker’s only source, one call per wake-up takes as many jobs as there are free slots, at most 64. The worker does not call Len between jobs.',
+			'Bound as a persistent queue, while it is the active worker’s only source and the worker last found it empty, the worker checks Len once a second. That is how it finds jobs another process added.',
 			'Every job a call took starts, even if a pause or a stop arrives. The jobs are unacknowledged, and holding them could let a visibility timeout hand them to another consumer.',
 			'Binding it signals the worker, because the storage may already hold jobs and no Add will announce them.',
 		],
@@ -329,7 +330,9 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 			text:
 				enqueue && c.dedup
 					? 'Add calls EnqueueOnce for a job with an ID. A retried Add stores the job once.'
-					: 'The ID goes into the stored JSON and nothing checks it. varmq does not deduplicate for you.',
+					: c.ack
+						? 'The ID goes into the stored JSON and nothing checks it. varmq does not deduplicate for you.'
+						: 'The job keeps its ID, and nothing checks it. varmq does not deduplicate for you.',
 		},
 		{
 			label: 'Taking a job',
@@ -351,12 +354,14 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 		},
 		{
 			label: 'Wake-ups',
-			on: c.sub,
+			on: c.sub || (c.ack && c.batch),
 			text: c.sub
 				? 'WithDistributedQueue calls Subscribe once. The adapter’s "enqueued" wakes the worker to pull.'
-				: c.ack
-					? 'The worker learns of jobs from its own process: an Add, a start or resume, or one of its jobs finishing.'
-					: 'The worker looks whenever its own process signals it.',
+				: c.ack && c.batch
+					? 'The worker learns of jobs from its own process: an Add, a start or resume, or one of its jobs finishing. While it is active, this storage is its only source and it last found it empty, it also checks Len once a second, so it finds jobs another process added.'
+					: c.ack
+						? 'The worker learns of jobs from its own process only: an Add, a start or resume, or one of its jobs finishing. A job another process adds waits until one of those happens.'
+						: 'The worker looks whenever its own process signals it.',
 		},
 		{
 			label: 'Capacity',

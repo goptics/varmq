@@ -4,7 +4,7 @@
 // queue, sqliteq sets every processing row back to pending, once per queue in each process.
 
 import { h, setCall } from '../ui/dom';
-import { job } from './ops';
+import { job, refocus } from './ops';
 
 type Status = 'pending' | 'processing' | 'completed';
 interface Row {
@@ -91,6 +91,7 @@ function init(root: HTMLElement) {
 	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el || el.disabled) return;
+		const keyboard = el.matches(':focus-visible');
 		const act = el.dataset.act;
 		if (act === 'take') {
 			const r = s.rows.find((x) => x.status === 'pending')!;
@@ -136,6 +137,7 @@ function init(root: HTMLElement) {
 			s = fresh();
 		}
 		render();
+		if (keyboard) refocus(figure, el);
 	});
 
 	render();

@@ -12,7 +12,7 @@ const modes = [
 	{ key: 'own', label: 'Your adapter' },
 ];
 const describe =
-	'A scene with one job, number 7, and three waiting jobs. The job goes through five steps: waiting, taken, running, returned and acknowledged. ' +
+	'A scene with one job, number 7, and three waiting jobs. The job goes through five steps: waiting, taken, running, returned and acknowledged. In memory the last step is done, because there is nothing to acknowledge. ' +
 	'You pick where the queue lives: in memory, in redisq on Redis as a persistent or distributed queue, in sqliteq, or in an adapter of your own. ' +
 	'Use Step to move the job on. Use Kill the process to stop the process at the current step. The scene then says what the storage holds and what that adapter does with a job that was taken and not acknowledged. ' +
 	'In memory, the job and the waiting jobs are lost. With redisq and sqliteq the job comes back and runs a second time. With your own adapter, the adapter decides.';

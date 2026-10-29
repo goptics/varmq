@@ -3,9 +3,8 @@
 // that was taken and not acknowledged is the adapter's choice (redisq, sqliteq, or your own).
 
 import { h, setCall, tabs } from '../ui/dom';
-import { job } from './ops';
-
-type Mode = 'memory' | 'redis' | 'dist' | 'sqlite' | 'own';
+import { stepsOf, type Mode } from './ack-data';
+import { job, refocus } from './ops';
 
 interface State {
 	mode: Mode;
@@ -21,20 +20,6 @@ interface State {
 	msg: string;
 }
 
-const STEPS = [
-	{ label: 'Waiting', sub: 'Add' },
-	{ label: 'Taken', sub: 'DequeueWithAckId' },
-	{ label: 'Running', sub: 'fn(job)' },
-	{ label: 'Returned', sub: 'Acknowledge' },
-	{ label: 'Acknowledged', sub: 'true' },
-];
-const CALLS = [
-	'queue.Add(job)  // stored as JSON in the storage',
-	'item, ok, ackID := q.DequeueWithAckId()',
-	'process(job)  // your function runs',
-	'q.Acknowledge(ackID)  // after the function returned',
-	'// Acknowledge returned true: the storage forgets the job',
-];
 const STORE_NAME: Record<Mode, string> = {
 	memory: 'Storage',
 	redis: 'Redis (redisq)',
@@ -89,7 +74,8 @@ function init(root: HTMLElement) {
 
 	function box(who: 'A' | 'B') {
 		const dead = who === 'A' && s.down;
-		const holds = s.stage >= 1 && s.stage <= 3 && s.runner === who && !(s.lost && !s.down);
+		// A job taken by a process that died is in the storage only: no live process holds it.
+		const holds = s.stage >= 1 && s.stage <= 3 && s.runner === who && !(s.lost && !s.down) && (!s.orphan || dead);
 		const state = dead ? 'died' : holds ? 'busy' : 'idle';
 		const head = h('div', { class: 'ack__head' }, h('span', { text: `process ${who}` }), h('b', { text: state }));
 		const slot = h('div', { class: 'ack__slot' });
@@ -138,8 +124,9 @@ function init(root: HTMLElement) {
 			);
 		}
 
+		const steps = stepsOf(s.mode);
 		stepsEl.replaceChildren(
-			...STEPS.map((st, i) =>
+			...steps.map((st, i) =>
 				h(
 					'li',
 					{ class: `ack__step${i < s.stage ? ' is-past' : ''}${i === s.stage && !s.lost ? ' is-now' : ''}`, ...(i === s.stage && !s.lost ? { 'aria-current': 'step' } : {}) },
@@ -171,7 +158,7 @@ function init(root: HTMLElement) {
 				lose.hidden = false;
 			}
 		}
-		setCall(call, s.down ? '// the process died: no Acknowledge was called' : CALLS[s.stage]);
+		setCall(call, !s.down ? steps[s.stage].call : persistent() ? '// the process died: no Acknowledge was called' : '// the process died, and the queue in memory with it');
 		out.innerHTML = '';
 		const counts = `Function of job 7: started ${s.started}×, returned ${s.returned}×.`;
 		out.append(h('span', { text: s.msg }), ' ', h('span', { class: 'ack__count', text: counts }));
@@ -191,8 +178,10 @@ function init(root: HTMLElement) {
 		} else if (s.stage === 3) {
 			s.returned += 1;
 			s.msg = panic.checked
-				? 'The function panicked. varmq recovers the panic, counts the job as failed and reports it. The next step still acknowledges the job.'
-				: 'The function returned. The worker closes the job, and closing it calls Acknowledge with ack-7.';
+				? `The function panicked. varmq recovers the panic, counts the job as failed and reports it. ${persistent() ? 'The next step still acknowledges the job.' : 'Then the worker closes the job.'}`
+				: persistent()
+					? 'The function returned. The worker closes the job, and closing it calls Acknowledge with ack-7.'
+					: 'The function returned. The worker closes the job. In memory there is nothing to acknowledge.';
 		} else if (s.stage === 4) {
 			s.msg = persistent()
 				? `Acknowledge returned true. The storage forgets job 7.${panic.checked ? ' varmq does not retry a job that failed.' : ''}`
@@ -205,7 +194,7 @@ function init(root: HTMLElement) {
 		if (s.down) return;
 		s.down = true;
 		s.crashStage = s.stage;
-		const at = STEPS[s.stage].label.toLowerCase();
+		const at = stepsOf(s.mode)[s.stage].label.toLowerCase();
 		if (!persistent()) {
 			const ran = s.stage >= 3;
 			s.lost = !ran;
@@ -213,8 +202,9 @@ function init(root: HTMLElement) {
 				? 'The process died after the function returned. Job 7 had run. Waiting jobs 8, 9 and 10 are lost with the queue.'
 				: `The process died at step ${s.stage + 1} (${at}). A queue in memory ends with the process, so job 7 is lost, and so are waiting jobs 8, 9 and 10.`;
 		} else {
-			if (s.mode === 'dist') s.runner = 'B';
 			s.orphan = s.stage >= 1 && s.stage <= 3;
+			// Process B carries on. A job A had taken reaches B only when it is put back (wait).
+			if (s.mode === 'dist' && !s.orphan) s.runner = 'B';
 			s.msg = [
 				'The process died while job 7 waited. It is still in storage, with 8, 9 and 10.',
 				'The process died after it took job 7. The storage holds job 7 as taken and not acknowledged.',
@@ -230,7 +220,7 @@ function init(root: HTMLElement) {
 	function restart() {
 		if (!s.down) return;
 		s.down = false;
-		if (s.runner === 'B') s.runner = 'A';
+		// A job process B runs stays with B: the restarted process A does not take it over.
 		if (!persistent()) {
 			s.stage = 0;
 			s.lost = true;
@@ -284,6 +274,7 @@ function init(root: HTMLElement) {
 	figure.addEventListener('click', (e) => {
 		const el = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
 		if (!el) return;
+		const keyboard = el.matches(':focus-visible');
 		const act = el.dataset.act;
 		if (act === 'step') step();
 		else if (act === 'kill') kill();
@@ -294,6 +285,7 @@ function init(root: HTMLElement) {
 			s = fresh(s.mode);
 			render();
 		}
+		if (keyboard) refocus(figure, el);
 	});
 
 	tabs(

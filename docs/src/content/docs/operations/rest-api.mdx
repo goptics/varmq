@@ -152,7 +152,7 @@ The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/v
 
 ### Try the routes
 
-The explorer below runs a model of the handler in the page. It calls no server. Its replies match the real handler: a Go program called `varmq.Handler("/varmq")` for each worker status and each route, and the model gives the same status code, body and headers. The two workers are the ones of the program above, with example numbers.
+The explorer below runs a model of the handler in the page. It calls no server. The model was checked against the real handler: a Go program called `varmq.Handler("/varmq")` for each worker status and each route, and for those requests the model gives the same status code, JSON and headers. It leaves out some of what `http.ServeMux` does by itself: it does not redirect `/varmq` to `/varmq/`, it does not clean a path such as `//`, and it does not show the newline that ends each real body. The two workers are the ones of the program above, with example numbers.
 
 Press **PATCH pause** on `email-sender`, then **PATCH resume**. A worker that is running jobs reads `Pausing`, and resume is refused until it reads `Paused`. Press **Let running jobs finish** to let time pass.
 

@@ -1,6 +1,5 @@
 ---
 // Who leads how many groups, for every dataset. The counts come from data.json through lib.ts. Nothing is typed by hand.
-import '../../styles/tokens.css';
 import '../../styles/bench.css';
 import raw from './data.json';
 import { currentMetric, defaultState, laneSet, lossCounts, lossesOf, label, scopeOf, viewById } from './lib.ts';
@@ -40,6 +39,7 @@ const rows = ROWS.map(([id, name, f, metric]) => {
 		groups: set.groups,
 		varmq: set.wins.varmq,
 		other: set.wins.other,
+		tied: set.wins.tied,
 		rivals: lossCounts(losses).slice(0, 3),
 		share: set.groups ? (100 * set.wins.varmq) / set.groups : 0,
 	};
@@ -50,7 +50,7 @@ const rows = ROWS.map(([id, name, f, metric]) => {
 	<div class="bboard__head">
 		<p>
 			A group is one case that every subject runs, for example <code>Sleep10ms</code> with 50K workers and one producer. A subject leads a group when it has the highest throughput, or the
-			lowest memory, WAL size or latency. VarMQ leads when any VarMQ subject does. The counts come from the rows in the data file.
+			lowest memory, WAL size or latency. VarMQ leads when any VarMQ subject does. When a VarMQ subject and another subject share the best value, the group is tied and neither side leads it. The counts come from the rows in the data file.
 		</p>
 	</div>
 	<div class="btable">
@@ -69,14 +69,14 @@ const rows = ROWS.map(([id, name, f, metric]) => {
 				{
 					rows.map((r) => (
 						<tr>
-							<th scope="row" style="min-width:0;white-space:normal">{r.name}</th>
-							<td style="text-align:left">{r.metric}</td>
+							<th scope="row">{r.name}</th>
+							<td>{r.metric}</td>
 							<td class="n">
-								<strong>{r.varmq.toLocaleString('en-US')}</strong> of {r.groups.toLocaleString('en-US')}
+								<strong>{r.varmq.toLocaleString('en-US')}</strong> of {r.groups.toLocaleString('en-US')}{r.tied > 0 && ` · ${r.tied.toLocaleString('en-US')} tied`}
 								<span class="bshare" style={`--w:${r.share.toFixed(1)}%`} aria-hidden="true" />
 							</td>
 							<td class={['n', r.other ? 'bamber' : ''].join(' ')}>{r.other.toLocaleString('en-US')}</td>
-							<td style="text-align:left;white-space:normal">
+							<td class="bwrap">
 								{r.rivals.length ? r.rivals.map((x, i) => (
 									<>
 										{i > 0 && ', '}

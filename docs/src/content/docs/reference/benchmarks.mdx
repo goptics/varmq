@@ -12,11 +12,11 @@ export const varmq = data.env.versions.find((v) => v.name === 'varmq').version;
 export const rows = data.datasets.reduce((n, d) => n + d.rowCount, 0).toLocaleString('en-US');
 export const repo = `https://github.com/${data.source.repo}`;
 
-This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every figure comes from one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>. The run is from {data.source.runDate}, with varmq {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
+This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every row on it is one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>, and every figure is read from those rows or averaged over them. The run is from {data.source.runDate}, with varmq {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
 
 ## Scoreboard
 
-The table counts how many groups VarMQ leads and how many another subject leads. Read the lines for memory next to the lines for throughput. VarMQ leads throughput in most pool groups and trails on memory.
+The table counts how many groups VarMQ leads, how many another subject leads, and how many are tied. Read the lines for memory next to the lines for throughput. Over the three pool files VarMQ leads throughput in most groups, but at 4 CPUs the buffered channel leads more of them than VarMQ does. VarMQ leads no pool group on memory.
 
 <Scoreboard />
 
@@ -28,8 +28,8 @@ Choose a dataset, then narrow it with the filters. The lanes show the mean of th
 
 ## How to read the numbers
 
-- **A row is one line of output.** A group is the rows that run one case with different subjects, for example `Sleep10ms` with 50K workers and one producer. A subject leads a group when its row is the best one.
-- **Two runs per row.** The files use `-benchtime=2x`, with no warm-up run. Absolute numbers change from run to run, so compare ratios inside one run.
+- **A row is one line of output.** A group is the rows that run one case with different subjects, for example `Sleep10ms` with 50K workers and one producer. A subject leads a group when its row is the best one. When a VarMQ subject and another subject share the best value, the group is tied: it counts for neither side, and the map marks it with “=”.
+- **Two iterations per row.** The files use `-benchtime=2x`, so each row covers two iterations, with no warm-up iteration. Absolute numbers change from run to run, so compare ratios inside one run.
 - **A lane is a mean.** When several groups are in scope, a lane is the arithmetic mean of that subject over them. A subject that misses some of the groups is left out, because its mean would cover other rows. Narrow the filters to see it.
 - **MB means 10^6 bytes.** Memory is the `B/op` column divided by one million. The charts at [benchmarks.goptics.org](https://benchmarks.goptics.org) divide by 2^20 and still print MB, so their memory figures are {(100 * (1 - 1e6 / 2 ** 20)).toFixed(1)} % smaller.
 - **Pool memory covers the whole process.** It counts every allocation during a run of 1M tasks. VarMQ's `Add` never blocks, so waiting tasks sit in an unbounded queue and use memory.

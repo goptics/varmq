@@ -1,7 +1,9 @@
 // A small model of varmq's REST handler (mux.go) and of the worker states it reaches (worker_lifecycle.go,
-// worker_state.go, worker_pool.go). It runs in the page, with no server. Every status code, body and
-// header below was checked against the real handler: a Go program called varmq.Handler("/varmq") for each
-// worker status and each route and printed the replies.
+// worker_state.go, worker_pool.go). It runs in the page, with no server. The status codes, JSON and
+// headers below were checked against the real handler: a Go program called varmq.Handler("/varmq") for
+// each worker status and each route and printed the replies. Some of what http.ServeMux does on its own
+// is left out: the redirect of /varmq to /varmq/, the cleaning of paths such as //, and the newline
+// after each body.
 
 export type Status = 'Idle' | 'Running' | 'Pausing' | 'Paused' | 'Stopping' | 'Stopped';
 
@@ -111,9 +113,23 @@ const ROUTES: { method: string; parts: string[] }[] = [
 	{ method: 'PATCH', parts: ['workers', '{name}', 'config', 'concurrency', '{number}'] },
 ];
 
+// A {name} part matches one segment that is not empty, as in ServeMux: /varmq/workers/ is no route.
 function match(parts: string[]) {
-	return ROUTES.filter((r) => r.parts.length === parts.length && r.parts.every((p, i) => p.startsWith('{') || p === parts[i]));
+	return ROUTES.filter((r) => r.parts.length === parts.length && r.parts.every((p, i) => (p.startsWith('{') ? parts[i] !== '' : p === parts[i])));
 }
+
+// strconv.Atoi on a 64-bit build: an optional sign, then digits, within int64.
+const INT_MIN = -(2n ** 63n);
+const INT_MAX = 2n ** 63n - 1n;
+const atoi = (s: string): number | null => {
+	if (!/^[+-]?\d+$/.test(s)) return null;
+	const n = BigInt(s);
+	return n < INT_MIN || n > INT_MAX ? null : Number(n);
+};
+
+/** withSafeConcurrency in config.go: below 1 is the CPU count, and the limit is clamped to MaxUint32. */
+const MAX_UINT32 = 4294967295;
+const safeConcurrency = (n: number) => (n < 1 ? CPU : Math.min(n, MAX_UINT32));
 
 /** Handle one request against the workers, the way varmq.Handler(PREFIX) does. Mutates the workers. */
 export function handle(workers: Map<string, Worker>, method: string, path: string): Reply {
@@ -171,7 +187,7 @@ export function handle(workers: Map<string, Worker>, method: string, path: strin
 				if (w.status === 'Stopped' || w.status === 'Stopping') return ok('Already stopping or stopped: Stop returns nil, so the reply is 200 and nothing changes.');
 				if (w.processing === 0) {
 					w.status = 'Stopped';
-					return ok('Nothing was running, so the worker is Stopped at once.');
+					return ok('Stop returns at once. Nothing was running, so the worker reads Stopped a moment later, when its event loop has stopped.');
 				}
 				w.status = 'Stopping';
 				return ok('Stop returns at once. The worker is Stopping until its running jobs end, then Stopped. Jobs that have not started stay queued.');
@@ -190,15 +206,23 @@ export function handle(workers: Map<string, Worker>, method: string, path: strin
 	}
 
 	// /workers/{name}/config/concurrency/{number}
-	if (!/^[+-]?\d+$/.test(parts[4])) return err(400, 'invalid concurrency value', 'The number does not parse as an integer, so varmq answers before it calls TunePool.');
+	const asked = atoi(parts[4]);
+	if (asked === null) return err(400, 'invalid concurrency value', 'The number is not an integer that fits in an int, so strconv.Atoi fails and varmq answers before it calls TunePool.');
 	if (!isActive(w)) return err(500, STATUS_ERR[w.status], `TunePool needs an active worker. On a ${w.status} one it returns ErrWorker${w.status}, a 500.`);
-	const asked = parseInt(parts[4], 10);
-	const safe = asked < 1 ? CPU : asked;
+	const safe = safeConcurrency(asked);
 	if (safe === w.concurrency) return err(409, 'worker already has the same concurrency', 'TunePool returns ErrSameConcurrency, one of the three errors that map to 409.');
 	const raised = safe > w.concurrency;
 	w.concurrency = safe;
 	if (raised) pull(w);
-	return ok(asked < 1 ? `A number below 1 becomes the CPU count (${CPU} on the machine that recorded this).` : raised ? 'The limit went up, so the worker takes more waiting jobs now.' : 'The limit went down. Jobs already running keep running.');
+	return ok(
+		asked < 1
+			? `A number below 1 becomes the CPU count (${CPU} on the machine that recorded this).`
+			: safe < asked
+				? `The limit went up. varmq clamps it to ${MAX_UINT32}, the largest uint32.`
+				: raised
+					? 'The limit went up, so the worker takes more waiting jobs now.'
+					: 'The limit went down. Jobs already running keep running.',
+	);
 }
 
 export const seed = (): Map<string, Worker> =>

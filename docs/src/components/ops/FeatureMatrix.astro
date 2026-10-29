@@ -12,7 +12,7 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 	<div class="mx__tools">
 		<div class="mx__field">
 			<label for="mx-q">Find a feature</label>
-			<input id="mx-q" type="search" placeholder="queue, retry, context" autocomplete="off" spellcheck="false" data-q />
+			<input id="mx-q" type="search" placeholder="queue, pause, context" autocomplete="off" spellcheck="false" data-q />
 		</div>
 		<div class="mx__set" role="group" aria-label="Group">
 			<span class="mx__legend" aria-hidden="true">Group</span>
@@ -39,7 +39,7 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 	<div class="mx__how">
 		<b>How to read it</b> Every row is a feature varmq has, so the varmq column reads Yes all the way down. The table does not list features that another library has and varmq lacks.
 		Where a varmq Yes has a limit, the row says so in amber, with the page of these docs that explains it. For speed, see the{' '}
-		<a href="https://github.com/goptics/benchmarks">benchmarks</a>.
+		<a href="/reference/benchmarks/">benchmarks</a>.
 	</div>
 
 	<table class="mx__table">

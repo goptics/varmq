@@ -13,6 +13,8 @@ import {
 	metricsFor,
 	normalize,
 	optionCounts,
+	outcomeOf,
+	ranked,
 	scopeOf,
 	toHash,
 	viewById,
@@ -153,7 +155,7 @@ describe('winners', () => {
 			const m = currentMetric(s);
 			const ls = laneSet(cells, m, s);
 			const losses = lossesOf(cells, m, s);
-			assert.equal(ls.wins.varmq + ls.wins.other, ls.groups, v.id);
+			assert.equal(ls.wins.varmq + ls.wins.other + ls.wins.tied, ls.groups, v.id);
 			assert.equal(losses.length, ls.wins.other, v.id);
 			for (const l of losses) assert.ok(l.ahead >= 1 && l.rank > 1, `${v.id} ${l.cell.g.id}`);
 		}
@@ -171,6 +173,30 @@ describe('winners', () => {
 		assert.equal(m.id, 'memory');
 		const ls = laneSet(scopeOf(data, s), m, s);
 		assert.ok(ls.lanes[0].value <= ls.lanes.at(-1)!.value);
+	});
+
+	it('count a tie for the best value as tied, not as a VarMQ lead', () => {
+		// SQLite DrainPrio at 10000 pages: VarMQ and Goqite both peak at 41.22 walMB, and VarMQ comes first in the file.
+		const s = state('sqlite', {}, { metric: 'wal' });
+		const cells = scopeOf(data, s);
+		const m = currentMetric(s);
+		const tie = cells.find((c) => c.g.id === 'SQLite/DrainPrio/ckpt10000')!;
+		assert.equal(outcomeOf(ranked(tie, m, s)), 'tie');
+		const ls = laneSet(cells, m, s);
+		assert.deepEqual(ls.wins, { varmq: 1, other: 6, tied: 1 });
+		assert.ok(!lossesOf(cells, m, s).some((l) => l.cell === tie), 'a tie is not a loss either');
+		assert.equal(ls.lanes.find((l) => l.subject === 'VarMQ')!.won, 1);
+		assert.equal(ls.lanes.find((l) => l.subject === 'Goqite')!.won, 6);
+		const out = renderAll(data, s);
+		assert.equal((out.map.match(/class="bcell is-tie"/g) ?? []).length, 1);
+		assert.match(out.losses, /VarMQ ties another subject for it in 1 group\./);
+	});
+
+	it('find no tie for the best throughput in the default view of each dataset', () => {
+		for (const v of VIEWS) {
+			const s = state(v.id);
+			assert.equal(laneSet(scopeOf(data, s), currentMetric(s), s).wins.tied, 0, v.id);
+		}
 	});
 });
 

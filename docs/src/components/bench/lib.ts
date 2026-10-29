@@ -366,12 +366,27 @@ export function ranked(c: Cell, m: Metric, state: State): Ranked[] {
 	return out.sort((a, b) => (m.better === 'high' ? b.value - a.value : a.value - b.value));
 }
 
+/** The rows that share the best value of a ranked group: one row, or every row of a tie. */
+export const leaders = (p: Ranked[]): Ranked[] => p.filter((r) => r.value === p[0].value);
+
+/**
+ * Who leads a ranked group. A tie for the best value between a VarMQ subject and another subject is its own
+ * outcome, not a lead for either. A tie between two VarMQ subjects is a VarMQ lead, and between two others
+ * a lead for another subject.
+ */
+export type Outcome = 'varmq' | 'other' | 'tie';
+export function outcomeOf(p: Ranked[]): Outcome {
+	const top = leaders(p);
+	const vq = top.filter((r) => isVarmq(r.subject)).length;
+	return vq === top.length ? 'varmq' : vq === 0 ? 'other' : 'tie';
+}
+
 export interface Lane {
 	subject: string;
 	value: number;
 	ratio: number;
+	/** Groups in scope in which this subject alone has the best row. A shared best value is no one's win. */
 	won: number;
-	/** Groups in scope in which this subject is the best row. */
 	of: number;
 }
 
@@ -381,7 +396,8 @@ export interface LaneSet {
 	groups: number;
 	/** Subjects that miss at least one group of the scope, with the number of groups they have. */
 	partial: { subject: string; n: number }[];
-	wins: { varmq: number; other: number };
+	/** Groups by outcome (outcomeOf): led by VarMQ, led by another subject, or tied between them. */
+	wins: { varmq: number; other: number; tied: number };
 }
 
 export function laneSet(cells: Cell[], m: Metric, state: State): LaneSet {
@@ -390,13 +406,19 @@ export function laneSet(cells: Cell[], m: Metric, state: State): LaneSet {
 	const count = new Map<string, number>();
 	const sum = new Map<string, number>();
 	const won = new Map<string, number>();
+	const wins = { varmq: 0, other: 0, tied: 0 };
 	for (const p of per) {
 		if (!p.length) continue;
 		for (const r of p) {
 			count.set(r.subject, (count.get(r.subject) ?? 0) + 1);
 			sum.set(r.subject, (sum.get(r.subject) ?? 0) + r.value);
 		}
-		won.set(p[0].subject, (won.get(p[0].subject) ?? 0) + 1);
+		const top = leaders(p);
+		if (top.length === 1) won.set(top[0].subject, (won.get(top[0].subject) ?? 0) + 1);
+		const o = outcomeOf(p);
+		if (o === 'varmq') wins.varmq++;
+		else if (o === 'other') wins.other++;
+		else wins.tied++;
 	}
 	const complete = [...count].filter(([, n]) => n === groups).map(([s]) => s);
 	const partial = [...count].filter(([, n]) => n < groups).map(([subject, n]) => ({ subject, n }));
@@ -410,17 +432,14 @@ export function laneSet(cells: Cell[], m: Metric, state: State): LaneSet {
 		won: won.get(subject) ?? 0,
 		of: groups,
 	}));
-	// Subjects that won a group but are not complete still count for the win totals below.
+	// Subjects that won a group but are not complete still count for the win totals above.
 	const order = new Map([...count.keys()].map((s, i) => [s, i]));
 	lanes.sort((a, b) =>
 		state.sort === 'name'
 			? a.subject.localeCompare(b.subject)
 			: (state.sort === 'best' ? 1 : -1) * (m.better === 'high' ? b.value - a.value : a.value - b.value) || order.get(a.subject)! - order.get(b.subject)!,
 	);
-	let varmq = 0;
-	let other = 0;
-	for (const [s, n] of won) (isVarmq(s) ? (varmq += n) : (other += n));
-	return { lanes, base, groups, partial, wins: { varmq, other } };
+	return { lanes, base, groups, partial, wins };
 }
 
 export interface Loss {
@@ -437,7 +456,8 @@ export function lossesOf(cells: Cell[], m: Metric, state: State): Loss[] {
 	const out: Loss[] = [];
 	for (const cell of cells) {
 		const p = ranked(cell, m, state);
-		if (!p.length || isVarmq(p[0].subject)) continue;
+		// A group VarMQ leads, or ties for the lead, is not a loss.
+		if (!p.length || outcomeOf(p) !== 'other') continue;
 		const i = p.findIndex((r) => isVarmq(r.subject));
 		if (i < 0) continue;
 		const winner = p[0];
@@ -461,7 +481,11 @@ export interface MapCell {
 	cell: Cell;
 	id: string;
 	winner: Ranked | null;
+	/** The rows that share the best value: the winner alone, or every row of a tie. */
+	leaders: Ranked[];
 	varmq: boolean;
+	/** A VarMQ subject ties another subject for the best value. */
+	tie: boolean;
 }
 
 export interface WinMap {
@@ -505,7 +529,8 @@ export function winMap(cells: Cell[], m: Metric, state: State): WinMap {
 		const ci = colGroups[gi].cols.findIndex((x) => x.key === a.col);
 		const ri = rowKeys.findIndex((x) => x.key === a.row);
 		const p = ranked(c, m, state);
-		rows[ri].cells[gi][ci] = { cell: c, id: cellId(c, multi), winner: p[0] ?? null, varmq: p.length > 0 && isVarmq(p[0].subject) };
+		const o = p.length ? outcomeOf(p) : null;
+		rows[ri].cells[gi][ci] = { cell: c, id: cellId(c, multi), winner: p[0] ?? null, leaders: p.length ? leaders(p) : [], varmq: o === 'varmq', tie: o === 'tie' };
 	}
 	return { corner: CORNER[cells[0]?.ds.suite ?? 'pool'], colGroups, rows };
 }

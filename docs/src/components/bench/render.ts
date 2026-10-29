@@ -15,6 +15,7 @@ import {
 	kindOf,
 	label,
 	laneSet,
+	leaders,
 	lossCounts,
 	lossesOf,
 	metricValue,
@@ -175,6 +176,7 @@ function renderMap(state: State, m: Metric, cells: Cell[]): Pick<Out, 'map' | 'l
 	const map = winMap(cells, m, state);
 	const multi = map.colGroups.length > 1;
 	const wins = new Map<string, number>();
+	let ties = 0;
 	let first = true;
 
 	const head1 = multi
@@ -193,14 +195,17 @@ function renderMap(state: State, m: Metric, cells: Cell[]): Pick<Out, 'map' | 'l
 						.map((mc) => {
 							if (!mc || !mc.winner) return `<td class="bmap__empty"></td>`;
 							const w = mc.winner.subject;
-							wins.set(w, (wins.get(w) ?? 0) + 1);
+							// A VarMQ subject tied with another for the best value leads for neither side (outcomeOf).
+							if (mc.tie) ties++;
+							else wins.set(w, (wins.get(w) ?? 0) + 1);
 							const p = ranked(mc.cell, m, state);
 							const vi = p.findIndex((r) => isVarmq(r.subject));
 							const where = `${groupLabel(mc.cell, multi)}`;
-							const text = `${where}: ${w} ${leadVerb(m)} ${fmt(mc.winner.value, m)} ${m.unit}.${vi > 0 ? ` VarMQ is ${vi + 1} of ${p.length}.` : ''}`;
+							const who = mc.leaders.length > 1 ? `${mc.leaders.map((r) => r.subject).join(' and ')} tie. Each` : w;
+							const text = `${where}: ${who} ${leadVerb(m)} ${fmt(mc.winner.value, m)} ${m.unit}.${!mc.tie && vi > 0 ? ` VarMQ is ${vi + 1} of ${p.length}.` : ''}`;
 							const tab = first ? 0 : -1;
 							first = false;
-							return `<td><button type="button" class="bcell ${mc.varmq ? 'is-varmq' : 'is-other'}" data-cell="${esc(mc.id)}" data-text="${esc(text)}" tabindex="${tab}" aria-pressed="false" aria-label="${esc(text)}">${esc(codeOf(w))}</button></td>`;
+							return `<td><button type="button" class="bcell ${mc.tie ? 'is-tie' : mc.varmq ? 'is-varmq' : 'is-other'}" data-cell="${esc(mc.id)}" data-text="${esc(text)}" tabindex="${tab}" aria-pressed="false" aria-label="${esc(text)}">${esc(mc.tie ? '=' : codeOf(w))}</button></td>`;
 						})
 						.join(''),
 				)
@@ -213,9 +218,10 @@ function renderMap(state: State, m: Metric, cells: Cell[]): Pick<Out, 'map' | 'l
 <p class="bmap__read" data-read aria-hidden="true">Hover or focus a square to read it. Press it to show that group in the lanes.</p>`;
 
 	const order = [...wins.keys()].sort((a, b) => Number(isVarmq(b)) - Number(isVarmq(a)) || wins.get(b)! - wins.get(a)! || a.localeCompare(b));
-	const legend = `<ul class="blegend" aria-label="Fastest subject, with the number of groups it leads">${order
+	const tie = ties ? `<li class="is-tie"><span class="blegend__code">=</span><span>VarMQ tied with another</span><strong>${ties.toLocaleString('en-US')}</strong></li>` : '';
+	const legend = `<ul class="blegend" aria-label="Who leads, with the number of groups each leads">${order
 		.map((s) => `<li class="${isVarmq(s) ? 'is-varmq' : 'is-other'}"><span class="blegend__code">${esc(codeOf(s))}</span><span>${esc(label(s))}</span><strong>${wins.get(s)!.toLocaleString('en-US')}</strong></li>`)
-		.join('')}</ul>`;
+		.join('')}${tie}</ul>`;
 	return { map: table, legend };
 }
 
@@ -229,15 +235,17 @@ function renderLosses(data: Data, state: State, m: Metric, cells: Cell[], multi:
 	const best = m.better === 'high' ? 'fastest' : 'lowest';
 	const noun = m.id === 'rate' ? 'throughput' : m.id === 'memory' ? 'memory use' : m.id === 'wal' ? 'WAL size' : `${m.label.toLowerCase()} latency`;
 
+	const tied = set.wins.tied ? ` VarMQ ties another subject for it in ${plural(set.wins.tied, 'group')}.` : '';
 	if (!losses.length) {
+		const where = set.wins.varmq === groups ? `every one of the <strong>${plural(groups, 'group')}</strong>` : `<strong>${set.wins.varmq.toLocaleString('en-US')}</strong> of ${plural(groups, 'group')}`;
 		return {
-			losses: `<p class="bloss__lead">VarMQ has the ${best} ${noun} in ${set.wins.varmq === groups ? 'every one of the' : ''} <strong>${plural(groups, 'group')}</strong> in this scope.</p>`,
+			losses: `<p class="bloss__lead">VarMQ has the ${best} ${noun} in ${where} in this scope.${tied}</p>`,
 			lossesSummary: '',
 			lossesBody: '',
 		};
 	}
 	const counts = lossCounts(losses);
-	const lead = `<p class="bloss__lead">Another subject has the ${best} ${noun} in <strong>${plural(losses.length, 'group')}</strong> of ${groups.toLocaleString('en-US')}. VarMQ has it in <strong>${set.wins.varmq.toLocaleString('en-US')}</strong>.</p>
+	const lead = `<p class="bloss__lead">Another subject has the ${best} ${noun} in <strong>${plural(losses.length, 'group')}</strong> of ${groups.toLocaleString('en-US')}. VarMQ has it in <strong>${set.wins.varmq.toLocaleString('en-US')}</strong>.${tied}</p>
 <ul class="bloss__counts">${counts.map((c) => `<li><strong>${esc(label(c.subject))}</strong> <span>${plural(c.n, 'group')}</span></li>`).join('')}</ul>`;
 
 	const rows = losses
@@ -268,12 +276,14 @@ function renderRows(data: Data, state: State, m: Metric, cells: Cell[], multi: b
 	const body = cells
 		.map((c) => {
 			const p = ranked(c, m, state);
+			// Every row of a tie for the best value is marked.
+			const top = new Set(p.length ? leaders(p).map((r) => r.subject) : []);
 			const vals = new Map(c.g.rows.map((r) => [r[0], metricValue(c.ds, c.g, r, m)]));
 			const tds = subjects
 				.map((s) => {
 					const v = vals.get(s);
 					if (v === undefined) return `<td class="n bmiss"><span aria-hidden="true">–</span><span class="sr-only">not run</span></td>`;
-					const best = p[0]?.subject === s;
+					const best = top.has(s);
 					return `<td class="n${best ? ' is-best' : ''}">${fmt(v, m)}${best ? '<span class="sr-only"> (best)</span>' : ''}</td>`;
 				})
 				.join('');

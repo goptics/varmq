@@ -2,7 +2,6 @@
 // The benchmark explorer. Every figure comes from data.json (scripts/bench-data.mjs, from the raw
 // `go test -bench` files). The build renders each view in its default state, so the page is complete
 // without JavaScript. explorer.ts then adds the switcher, the filters and the interactive charts.
-import '../../styles/tokens.css';
 import '../../styles/bench.css';
 import raw from './data.json';
 import { PRESETS, VIEWS, activeFilters, chartUrl, currentMetric, defaultState, filterDefs, lossesOf, metricsFor, optionCounts, rawTreeUrl, scopeOf, sourcesOf, blobUrl } from './lib.ts';
@@ -150,7 +149,7 @@ const panels = VIEWS.map((view, i) => {
 								{p.versions.map((v) => (
 									<tr>
 										<th scope="row">{v.url ? <a href={v.url}>{v.label}</a> : v.label}</th>
-										<td style="text-align:left">{v.version}</td>
+										<td>{v.version}</td>
 									</tr>
 								))}
 							</tbody>
@@ -231,7 +230,7 @@ const panels = VIEWS.map((view, i) => {
 						<span>one square = one group of rows</span>
 					</div>
 					<p class="bkey">
-						A filled green square: a VarMQ subject leads the group. An outlined amber square: another subject leads, and its code is in the square. Press a square to see that group in the lanes above.
+						A filled green square: a VarMQ subject leads the group. An outlined amber square: another subject leads, and its code is in the square. A dashed square with “=”: a VarMQ subject and another subject share the best value, so neither leads. Press a square to see that group in the lanes above.
 					</p>
 					<div data-out="map" set:html={p.out.map} />
 					<div data-out="legend" set:html={p.out.legend} />

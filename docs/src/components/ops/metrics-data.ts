@@ -121,7 +121,7 @@ export const METRICS: Metric[] = [
 		from: 'Worker.NumConcurrency',
 		href: doc + 'Worker.NumConcurrency',
 		meaning: 'The concurrency limit. It changes when you call TunePool, or when a request changes it through the REST API.',
-		queries: [{ q: 'foo_worker_workers_processing / foo_worker_workers_concurrency', says: 'How full the pool is: 1 means every slot runs a job.' }],
+		queries: [{ q: 'foo_worker_workers_processing / foo_worker_workers_concurrency', says: 'How full the pool is: 1 means every slot runs a job. It can read above 1 just after TunePool lowers the limit.' }],
 	},
 	{
 		key: 'idle',
@@ -140,7 +140,7 @@ export const METRICS: Metric[] = [
 		help: 'Jobs being processed right now',
 		from: 'Worker.NumProcessing',
 		href: doc + 'Worker.NumProcessing',
-		meaning: 'Jobs being processed right now. It never exceeds the concurrency limit.',
+		meaning: 'Jobs being processed right now. It stays at or below the concurrency limit, except just after TunePool lowers the limit, while the jobs already running finish.',
 		queries: [
 			{ q: 'foo_worker_workers_processing', says: 'Jobs that run now.' },
 			{ q: 'max_over_time(foo_worker_workers_processing[1h])', says: 'The most jobs that ran at once in the last hour.' },
