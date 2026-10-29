@@ -134,7 +134,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// is busy. A burst would be handed over as one batch.
 	(carry) => ({
 		title: 'One worker',
-		duration: 8000,
+		duration: 8300,
 		captions: [{ at: 300, until: 7400, text: '*Add()* puts jobs in a queue' }],
 		parts: [
 			pool(carry, 'core', {
@@ -180,7 +180,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 3. A result worker of its own, beside the core: the core has to stay a plain worker to take a topic.
 	(carry) => ({
 		title: 'Results and errors',
-		duration: 6000,
+		duration: 6200,
 		captions: [{ at: 300, until: 5400, text: 'Jobs hand back a *value* or an *error*' }],
 		parts: [
 			{
@@ -252,7 +252,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		];
 		return {
 			title: 'Topics',
-			duration: 6000,
+			duration: 6200,
 			captions: [{ at: 300, until: 5400, text: '*Publish* once, every subscriber gets a copy' }],
 			published,
 			parts: [
@@ -272,7 +272,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// down 2600 ms, its box red and its card empty.
 	(carry) => ({
 		title: 'SQLite',
-		duration: 17000,
+		duration: 17200,
 		captions: [
 			{ at: 300, until: 1700, text: 'SQLite keeps the *queue* in a file' },
 			{ at: 2200, until: 3700, text: '*Add()* writes each job to jobs.db' },

@@ -24,9 +24,10 @@ describe('chapters', () => {
 		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
 		assert.equal(starts()[9] + CHAPTERS[9].duration, TOTAL);
 	});
-	it('finish every part before its chapter ends', () => {
+	// The site stops on each chapter's last frame, so its last job's done (a 900 ms pulse and check) must have settled.
+	it('finish every part a second before its chapter ends', () => {
 		for (const c of CHAPTERS) for (const p of c.parts)
-			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 600, `chapter ${c.n}`);
+			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 1000, `chapter ${c.n}`);
 	});
 	it('chapter 1 never has more than one job waiting at a dispatch', () => {
 		for (const d of dispatches(part(1, 'pool', 'core'))) assert.ok(d.waiting <= 0, String(d.at));

@@ -1,14 +1,19 @@
-# VarMQ site
+# varmq site
 
-The next VarMQ docs site, built with [Fumadocs](https://fumadocs.dev) on Next.js and exported as static files for GitHub Pages. It replaces the Starlight site in `../docs`, which stays the published site until the content moves here.
+varmq's story in ten steps: a page that snaps one step per scroll, plays that chapter on the map, and morphs one code
+block into the code behind it. Plain HTML, CSS and TypeScript on Vite, with no framework.
 
 ```bash
 pnpm install
-pnpm dev     # http://localhost:3000
-pnpm build   # static site in out/
-pnpm start   # serve out/ as GitHub Pages would
+pnpm dev           # http://localhost:5173
+pnpm build         # dist/
+pnpm test          # the map's and the stations' tests
+pnpm types:check
 ```
 
-- `content/docs`: the pages, in MDX. The `/docs` URL prefix is the template's default, not a decision; the migration decides whether the current root URLs, such as `/start/quick-start/`, stay.
-- `lib/source.ts`: the content source; `lib/shared.ts`: the name and repository links.
-- `app/(home)`: the home page. `app/docs`: the docs layout and pages. `app/api/search/route.ts`: the search index, built at export time and searched in the browser.
+- `index.html`, `src/`: the page. `src/main.ts` drives the steps, `src/map.ts` the map, and `src/steps.ts` builds
+  each step from the map's chapters and the stations' code.
+- `lib/heromap/`: the map, copied from `docs/src/lib/heromap`, plus the tag that names a Redis job's holder.
+- `lib/home/stations.ts`: each step's code, and the lines each caption lights. `lib/home/compile.ts` highlights it
+  at build time (`vite.config.ts`), so the page ships tokens, not Shiki.
+- `src/fonts/`: Go Sans and Go Mono, made by `make.py` from `golang.org/x/image`.

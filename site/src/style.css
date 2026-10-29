@@ -1,0 +1,527 @@
+/* varmq's story in ten steps, one per scroll. The map keeps its own dark palette (lib/heromap/map.css): amber jobs,
+   green goroutines, a violet event loop. The page is the near-black it was drawn on, set in Go's typefaces, and the
+   code is in GitHub's dark theme. */
+
+@font-face {
+	font-family: 'Go Sans';
+	src: url('./fonts/go-regular.woff') format('woff');
+	font-weight: 400;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Go Sans';
+	src: url('./fonts/go-medium.woff') format('woff');
+	font-weight: 500;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Go Sans';
+	src: url('./fonts/go-bold.woff') format('woff');
+	font-weight: 700;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Go Mono';
+	src: url('./fonts/go-mono.woff') format('woff');
+	font-weight: 400;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Go Mono';
+	src: url('./fonts/go-mono-bold.woff') format('woff');
+	font-weight: 700;
+	font-display: swap;
+}
+
+:root {
+	--bg: #0b0e13;
+	--panel: #0d1117;
+	--edge: #1d2530;
+	--fg: #e6edf3;
+	--fg-quiet: #8b98a8;
+	--ring: #3a4655;
+	/* The map's own: a running goroutine's green lights the caption and the code it is about. */
+	--green: #44bf9e;
+	--red: #ff6b6b;
+	--sqlite: #4aa8e8;
+	--redis: #ff4438;
+
+	--sans: 'Go Sans', system-ui, sans-serif;
+	--mono: 'Go Mono', ui-monospace, monospace;
+	--small: 0.9375rem;
+	--max: 1320px;
+	--gutter: clamp(16px, 4vw, 48px);
+	--gap: clamp(24px, 4vw, 72px);
+	--pad-y: min(24px, 3svh);
+	--ease: cubic-bezier(0.16, 1, 0.3, 1);
+	/* The map's labels. */
+	--sl-font-mono: var(--mono);
+
+	color-scheme: dark;
+	scroll-snap-type: y mandatory;
+	background: var(--bg);
+	scrollbar-color: #2b3440 var(--bg);
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font: 400 1.0625rem / 1.6 var(--sans);
+	text-wrap: pretty;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p,
+ol,
+pre {
+	margin: 0;
+}
+
+::selection {
+	background: rgba(68, 191, 158, 0.35);
+	color: var(--fg);
+}
+
+:focus-visible {
+	outline: 2px solid var(--green);
+	outline-offset: 3px;
+	border-radius: 2px;
+}
+
+a {
+	color: inherit;
+	text-decoration-color: rgba(230, 237, 243, 0.35);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.22em;
+}
+
+a:hover {
+	text-decoration-color: var(--green);
+}
+
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* A track of one-screen steps for the page to snap to, under a stage pinned for all of them. */
+.story {
+	display: grid;
+}
+
+.track,
+.stage {
+	grid-area: 1 / 1;
+}
+
+.snap {
+	height: 100svh;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+}
+
+.stage {
+	position: sticky;
+	top: 0;
+	align-self: start;
+	display: grid;
+	grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+	grid-template-rows: minmax(0, 1fr);
+	column-gap: var(--gap);
+	align-items: center;
+	width: 100%;
+	max-width: var(--max);
+	height: 100svh;
+	margin: 0 auto;
+	padding: var(--pad-y) var(--gutter);
+}
+
+/* The step's place is a size container, so the text sets itself by the room it has rather than by the screen. The
+   step never grows past it: short of room, its code block gives up lines, and keeps the lit ones in view. */
+.text {
+	display: grid;
+	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+	height: 100%;
+	min-width: 0;
+	container-type: size;
+}
+
+.step {
+	align-self: center;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	max-height: 100%;
+}
+
+.count {
+	margin-bottom: 6px;
+	color: var(--fg-quiet);
+	font-size: var(--small);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+}
+
+.count span {
+	color: var(--green);
+	font-weight: 700;
+}
+
+.title {
+	margin-bottom: 14px;
+	font-size: clamp(2rem, 3.2vw, 2.625rem);
+	font-weight: 700;
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+
+.notes {
+	margin-bottom: 20px;
+	padding: 0;
+	list-style: none;
+	font-weight: 500;
+}
+
+.notes li {
+	position: relative;
+	padding-left: 24px;
+	color: var(--fg-quiet);
+	transition: color 240ms var(--ease);
+}
+
+.notes li::before {
+	content: '';
+	position: absolute;
+	top: calc(0.8em - 5.5px);
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border: 2px solid var(--ring);
+	border-radius: 50%;
+	transition:
+		background-color 240ms var(--ease),
+		border-color 240ms var(--ease);
+}
+
+.notes li[data-on] {
+	color: var(--fg);
+}
+
+.notes li:is([data-on], [data-done])::before {
+	border-color: var(--green);
+	background: var(--green);
+}
+
+.notes li[data-on]::before {
+	box-shadow: 0 0 0 4px rgba(68, 191, 158, 0.18);
+}
+
+/* A line runs from each caption's point to the next, and fills as the step moves on, reaching the next point as it
+   lights. */
+.notes li:not(:last-child)::after {
+	content: '';
+	position: absolute;
+	top: calc(0.8em + 8.5px);
+	bottom: calc(8.5px - 0.8em);
+	left: 6.5px;
+	width: 2px;
+	border-radius: 1px;
+	background-color: var(--ring);
+	background-image: linear-gradient(var(--green), var(--green));
+	background-repeat: no-repeat;
+	background-size: 100% 0;
+	transition: background-size 420ms var(--ease);
+}
+
+.notes li[data-done]::after {
+	background-size: 100% 100%;
+}
+
+.notes li[data-on]:not(:first-child)::before {
+	transition-delay: 280ms;
+}
+
+.notes em {
+	font-style: normal;
+	color: var(--fg);
+	font-weight: 700;
+}
+
+.fail {
+	color: var(--red);
+	font-weight: 700;
+}
+
+.brand-sqlite {
+	color: var(--sqlite);
+	font-weight: 700;
+}
+
+.brand-redis {
+	color: var(--redis);
+	font-weight: 700;
+}
+
+/* The one code block, whose code morphs from step to step. Each caption lights the lines it is about. It is the part
+   of a step that gives way when room runs short, down to three lines; it never scrolls by hand, so no scrollbar shows,
+   even mid-morph. */
+.code {
+	--lh: 23px;
+	--pad: 16px;
+	position: relative;
+	flex: 0 1 auto;
+	min-height: calc(2 * var(--pad) + 3 * var(--lh));
+	overflow: hidden;
+	border: 1px solid var(--edge);
+	border-radius: 10px;
+	background: var(--panel);
+	box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.9);
+}
+
+.code pre {
+	position: relative;
+	z-index: 1;
+	padding: var(--pad) 20px;
+	overflow: hidden;
+	background: transparent !important;
+	font: 14px / var(--lh) var(--mono);
+	tab-size: 4;
+	--smm-duration: 700ms;
+	--smm-easing: var(--ease);
+}
+
+.rows i {
+	position: absolute;
+	z-index: 2;
+	right: 0;
+	left: 0;
+	top: calc(var(--pad) + var(--n) * var(--lh));
+	height: var(--lh);
+	pointer-events: none;
+	transition: background-color 240ms var(--ease);
+}
+
+.rows i[data-state='lit'] {
+	background: rgba(68, 191, 158, 0.11);
+}
+
+.rows i[data-state='none'] {
+	display: none;
+}
+
+/* Short of room, the block fades at its cut edges, so a half line reads as more code rather than a break. Where all
+   the code fits, the fades lie over its padding and show nothing. */
+.code::before,
+.code::after {
+	content: '';
+	position: sticky;
+	z-index: 3;
+	display: block;
+	height: var(--pad);
+	pointer-events: none;
+}
+
+.code::before {
+	top: 0;
+	margin-bottom: calc(-1 * var(--pad));
+	background: linear-gradient(var(--panel), transparent);
+}
+
+.code::after {
+	bottom: 0;
+	margin-top: calc(-1 * var(--pad));
+	background: linear-gradient(transparent, var(--panel));
+}
+
+.code-phone {
+	display: none;
+}
+
+.source {
+	margin-top: 12px;
+	color: var(--fg-quiet);
+	font-size: var(--small);
+}
+
+/* The map, in its own colours. It reserves the bottom 56 of its 400 units for a caption, which the step text replaces
+   here: the frame crops that band, where the next region down would otherwise show. Its top and bottom edges fade
+   over the 20-unit margin the camera leaves around a chapter, so a sliver of a neighbouring region never shows. */
+.map {
+	min-width: 0;
+}
+
+.map-frame {
+	width: min(100%, calc((100svh - 2 * var(--pad-y) - 24px) * 400 / 344));
+	aspect-ratio: 400 / 344;
+	margin-left: auto;
+	overflow: hidden;
+	mask-image: linear-gradient(transparent, #000 6%, #000 94%, transparent);
+}
+
+varmq-map {
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+}
+
+varmq-map .vm-caption {
+	display: none;
+}
+
+/* The step's place, by the room it has. A narrow one takes the phone cut of the code, which breaks the long lines,
+   and sets the step a size down. */
+@container (max-width: 29rem) {
+	.code-wide {
+		display: none;
+	}
+
+	.code-phone {
+		display: block;
+		--lh: 18px;
+		--pad: 12px;
+	}
+
+	.code-phone pre {
+		padding: var(--pad) 14px;
+		font-size: 12px;
+		tab-size: 2;
+	}
+}
+
+@container (max-width: 25rem) {
+	.title {
+		margin-bottom: 8px;
+		font-size: 1.625rem;
+	}
+
+	.notes {
+		margin-bottom: 12px;
+		font-size: 1rem;
+	}
+
+	.source {
+		margin-top: 8px;
+		font-size: 0.8125rem;
+	}
+}
+
+/* Narrower still, as on a 320px phone: the code a size down, so its 40 columns still fit. */
+@container (max-width: 20rem) {
+	.code-phone {
+		--lh: 17px;
+		--pad: 10px;
+	}
+
+	.code-phone pre {
+		padding: var(--pad) 10px;
+		font-size: 11px;
+	}
+}
+
+/* A short place shows only the lit caption. The step's captions share one cell, as tall as the longest of them, so
+   the code block holds still while they change. */
+@container (max-height: 34rem) {
+	.notes {
+		display: grid;
+	}
+
+	.notes li {
+		grid-area: 1 / 1;
+	}
+
+	.notes li:not([data-on]) {
+		visibility: hidden;
+	}
+
+	.notes li::after {
+		display: none;
+	}
+}
+
+/* A very short one, as on a phone held sideways: the gaps close up. */
+@container (max-height: 21rem) {
+	.count {
+		margin-bottom: 2px;
+	}
+
+	.title {
+		margin-bottom: 6px;
+		font-size: 1.375rem;
+	}
+
+	.notes {
+		margin-bottom: 8px;
+	}
+
+	.source {
+		margin-top: 6px;
+	}
+}
+
+/* Portrait below desktop: the map on top, the step under it. The step keeps 20rem, and the map takes the rest,
+   between 30% and 40% of the screen's height, and no wider than the screen. */
+@media (max-width: 1023px) and (orientation: portrait) {
+	.stage {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+		align-items: start;
+		padding: 0;
+	}
+
+	.map {
+		grid-row: 1;
+		padding: 8px 0 10px;
+	}
+
+	.map-frame {
+		width: min(100%, calc(clamp(30svh, 100svh - 18px - 20rem, 40svh) * 400 / 344));
+		margin: 0 auto;
+	}
+
+	.text {
+		grid-row: 2;
+		padding: 4px var(--gutter) 12px;
+	}
+
+	.step {
+		align-self: start;
+	}
+}
+
+/* Landscape below desktop, as at 200% zoom or on a phone held sideways: still side by side, the step at least 18rem
+   wide. */
+@media (max-width: 1023px) and (orientation: landscape) {
+	.stage {
+		grid-template-columns: minmax(18rem, 1fr) minmax(0, 1fr);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition: none !important;
+	}
+
+	.code pre {
+		--smm-duration: 0ms;
+	}
+}

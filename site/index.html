@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="theme-color" content="#0b0e13" />
+		<title>VarMQ, step by step</title>
+		<meta
+			name="description"
+			content="How a job goes through varmq, from one worker to SQLite and Redis: ten steps, each run on a live map beside the code that does it."
+		/>
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	</head>
+	<body>
+		<main class="story">
+			<h1 class="sr">VarMQ, step by step</h1>
+			<!-- The whole story as text, for screen readers: the stage only ever shows one step. -->
+			<div class="sr story-text"></div>
+			<div class="track" aria-hidden="true"></div>
+			<div class="stage">
+				<div class="text">
+					<div class="step">
+						<div aria-live="polite">
+							<p class="count"></p>
+							<h2 class="title"></h2>
+						</div>
+						<ol class="notes"></ol>
+						<div class="code code-wide">
+							<pre class="shiki-magic-move-container"></pre>
+							<div class="rows" aria-hidden="true"></div>
+						</div>
+						<div class="code code-phone">
+							<pre class="shiki-magic-move-container"></pre>
+							<div class="rows" aria-hidden="true"></div>
+						</div>
+						<p class="source">Full program: <a></a></p>
+					</div>
+				</div>
+				<div class="map">
+					<div class="map-frame"><varmq-map aria-hidden="true"></varmq-map></div>
+				</div>
+			</div>
+		</main>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>
