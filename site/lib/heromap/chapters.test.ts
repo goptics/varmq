@@ -199,15 +199,15 @@ describe('chapter rules', () => {
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
 	it('chapter 5 runs one burst per strategy, each leaving in that strategy\'s order', () => {
-		// q is the queue, u the priority queue (urgent) and b the third queue (batch), bound in that order.
-		const letter = { queue: 'q', prio: 'u', 'queue-c': 'b' };
+		// a is alerts (the queue), r reports (the priority queue) and e emails (the third queue), bound in that order.
+		const letter = { queue: 'a', prio: 'r', 'queue-c': 'e' };
 		const runs = {};
 		for (const d of dispatches(part(5, 'pool', 'core'))) runs[d.strategy] = (runs[d.strategy] ?? '') + letter[d.source];
 		assert.deepEqual(runs, {
-			priority: 'qquuub', // in bind order, though u is the longest and b the shortest
-			maxlen: 'uuqub', // u while it is the longest, then the first of equals
-			minlen: 'ubbqqq', // the shortest with a job first
-			roundrobin: 'qubqub', // each in turn, from the turn chapter 4 left
+			priority: 'aarrre', // in bind order, though r is the longest and e the shortest
+			maxlen: 'rrare', // r while it is the longest, then the first of equals
+			minlen: 'reeaaa', // the shortest with a job first
+			roundrobin: 'areare', // each in turn, from the turn chapter 4 left
 		});
 	});
 	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {

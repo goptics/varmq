@@ -26,12 +26,12 @@ const strategy = (name: string, phone = false) => {
 	const ranked = name === 'Priority';
 	const bindings = phone
 		? `${ranked ? '// high, medium, low' : ''}
-queue := worker.BindQueue()
-urgent := worker.BindPriorityQueue()
-batch := worker.BindQueue()`
-		: `queue := worker.BindQueue()${ranked ? '          // high' : ''}
-urgent := worker.BindPriorityQueue()${ranked ? ' // medium' : ''}
-batch := worker.BindQueue()${ranked ? '          // low' : ''}`;
+alerts := worker.BindQueue()
+reports := worker.BindPriorityQueue()
+emails := worker.BindQueue()`
+		: `alerts := worker.BindQueue()${ranked ? '          // high' : ''}
+reports := worker.BindPriorityQueue()${ranked ? ' // medium' : ''}
+emails := worker.BindQueue()${ranked ? '          // low' : ''}`;
 	return `worker := varmq.NewWorker(
 	process,
 	varmq.WithStrategy(varmq.${name}),
@@ -44,11 +44,11 @@ export const STATIONS: Station[] = [
 		code: `worker := varmq.NewWorker(func(j varmq.Job[int]) {
 	fmt.Println("processing", j.Data())
 })
-queue := worker.BindQueue()
+alerts := worker.BindQueue()
 
-queue.Add(1)
-queue.Add(2)
-queue.Add(3)`,
+alerts.Add(1)
+alerts.Add(2)
+alerts.Add(3)`,
 		lines: [[6, 7, 8]],
 		phone: {
 			code: `worker := varmq.NewWorker(
@@ -56,11 +56,11 @@ queue.Add(3)`,
 		fmt.Println(j.Data())
 	},
 )
-queue := worker.BindQueue()
+alerts := worker.BindQueue()
 
-queue.Add(1)
-queue.Add(2)
-queue.Add(3)`,
+alerts.Add(1)
+alerts.Add(2)
+alerts.Add(3)`,
 			lines: [[8, 9, 10]],
 		},
 		source: { label: 'quick-start', href: `${EXAMPLES}/quick-start` },
@@ -68,11 +68,11 @@ queue.Add(3)`,
 	{
 		code: `// one goroutine to start
 worker := varmq.NewWorker(process)
-queue := worker.BindQueue()
+alerts := worker.BindQueue()
 
 worker.TunePool(5)
 for i := range 5 {
-	queue.Add(i)
+	alerts.Add(i)
 }`,
 		lines: [
 			[5, 6, 7, 8],
@@ -94,13 +94,13 @@ n, err = job.Result() // 0, an error`,
 		source: { label: 'worker-types-result', href: `${EXAMPLES}/worker-types-result` },
 	},
 	{
-		code: `urgent := worker.BindPriorityQueue()
+		code: `reports := worker.BindPriorityQueue()
 
-urgent.Add("five", 5)
-urgent.Add("two", 2)
-urgent.Add("eight", 8)
-urgent.Add("one", 1)
-urgent.Add("three", 3)
+reports.Add("five", 5)
+reports.Add("two", 2)
+reports.Add("eight", 8)
+reports.Add("one", 1)
+reports.Add("three", 3)
 // they run 1, 2, 3, 5, 8`,
 		lines: [[6, 8]],
 		source: { label: 'queues-priority', href: `${EXAMPLES}/queues-priority` },

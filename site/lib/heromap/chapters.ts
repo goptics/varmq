@@ -73,8 +73,8 @@ const LATE = { ...PACE, wake: 900 };
 // Chapter 5's four bursts must each land, run and finish before the next lands, so there it runs a little quicker.
 const VOLLEY = { ...PACE, wake: 700, gap: 250 };
 
-// The core's sources in bind order: the queue from chapter 1, the priority queue (urgent) from 4, a third queue
-// (batch) from 5 and the topic from 6. None is bound with a priority, so the worker holds them in that order. The
+// The core's sources in bind order: the queue from chapter 1 (alerts), the priority queue from 4 (reports), a third
+// queue from 5 (emails) and the topic from 6. None is bound with a priority, so the worker holds them in that order. The
 // core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip, after showing what each of the
 // other strategies would do. The result worker has a queue of its own, and the second worker the topic alone.
 const QUEUE = { id: 'queue' };
@@ -226,7 +226,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 5. Each strategy in turn, on the same three queues. A burst lands in them a second after its caption, before the
 	// event loop looks, so the order its jobs leave in is the strategy's: Priority goes in bind order, as no queue is
-	// bound with a priority, so it empties queue first though urgent is longer and batch shorter; MaxLen takes from
+	// bound with a priority, so it empties alerts first though reports is longer and emails shorter; MaxLen takes from
 	// the longest, MinLen from the shortest, and RoundRobin from each in turn. The counts keep each burst's first
 	// picks free of ties. A worker has one strategy for life (`WithStrategy`): this shows what each would do, and ends
 	// on RoundRobin, which the worker keeps.
