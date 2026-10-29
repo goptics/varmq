@@ -47,11 +47,10 @@ describe('chapters', () => {
 			last = endState(p.plan, p.events);
 		}
 		// Round robin goes on from the source after the last one served, as varmq keeps its index for the worker's life.
-		// It starts at the queue in chapter 4, where a second source first binds. From chapter 5 it counts the sources
-		// in rank order, the third queue (priority 1) first; chapter 9 takes only from the queue, so chapter 10 looks at
-		// the priority queue first and finds the topic's copy before the queue's jobs.
+		// It starts at the queue in chapter 4, where a second source first binds; chapter 9 takes only from the queue,
+		// so chapter 10 looks at the priority queue first and finds the topic's copy before the queue's jobs.
 		assert.equal(part(4, 'pool', 'core').plan.turn, 0);
-		assert.equal(part(10, 'pool', 'core').plan.turn, 2);
+		assert.equal(part(10, 'pool', 'core').plan.turn, 1);
 		assert.deepEqual(dispatches(part(10, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
 	});
 	it('chapter 4 runs the lowest number first', () => {
@@ -200,15 +199,15 @@ describe('chapter rules', () => {
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
 	it('chapter 5 runs one burst per strategy, each leaving in that strategy\'s order', () => {
-		// b is the third queue (batch, priority 1, first in rank order), q the queue, u the priority queue (urgent).
-		const letter = { 'queue-c': 'b', queue: 'q', prio: 'u' };
+		// q is the queue, u the priority queue (urgent) and b the third queue (batch), bound in that order.
+		const letter = { queue: 'q', prio: 'u', 'queue-c': 'b' };
 		const runs = {};
 		for (const d of dispatches(part(5, 'pool', 'core'))) runs[d.strategy] = (runs[d.strategy] ?? '') + letter[d.source];
 		assert.deepEqual(runs, {
-			priority: 'bbqqqu', // b first, as it ranks first, though it is not the longest
-			maxlen: 'uubqu', // u while it is the longest, then the first of equals
+			priority: 'qquuub', // in bind order, though u is the longest and b the shortest
+			maxlen: 'uuqub', // u while it is the longest, then the first of equals
 			minlen: 'ubbqqq', // the shortest with a job first
-			roundrobin: 'bqubqu', // each in turn, from the turn chapter 4 left
+			roundrobin: 'qubqub', // each in turn, from the turn chapter 4 left
 		});
 	});
 	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {

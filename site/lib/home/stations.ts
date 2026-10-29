@@ -18,14 +18,14 @@ export interface Station {
 
 const EXAMPLES = 'https://github.com/goptics/varmq/tree/main/docs/examples';
 
-// Chapter 5 runs one burst per strategy, and its code names each in turn in the one line that sets it. The third
-// queue's priority decides only the Priority burst, but it is bound that way throughout.
-const strategy = (name: string, phone = false) => `worker := varmq.NewWorker(process,
+// Chapter 5 runs one burst per strategy, and its code names each in turn in the one line that sets it. No queue is
+// bound with a priority, so Priority, the default, follows the order they are bound in.
+const strategy = (name: string) => `worker := varmq.NewWorker(process,
 	varmq.WithStrategy(varmq.${name}),
 )
 queue := worker.BindQueue()
 urgent := worker.BindPriorityQueue()
-${phone ? 'batch := worker.BindQueue(\n\tvarmq.WithQueuePriority(1),\n)' : 'batch := worker.BindQueue(varmq.WithQueuePriority(1))'}`;
+batch := worker.BindQueue()`;
 
 export const STATIONS: Station[] = [
 	{
@@ -82,22 +82,21 @@ n, err = job.Result() // 0, an error`,
 		source: { label: 'worker-types-result', href: `${EXAMPLES}/worker-types-result` },
 	},
 	{
-		code: `queue := worker.BindPriorityQueue()
+		code: `urgent := worker.BindPriorityQueue()
 
-queue.Add("five", 5)
-queue.Add("two", 2)
-queue.Add("eight", 8)
-queue.Add("one", 1)
-queue.Add("three", 3)
+urgent.Add("five", 5)
+urgent.Add("two", 2)
+urgent.Add("eight", 8)
+urgent.Add("one", 1)
+urgent.Add("three", 3)
 // they run 1, 2, 3, 5, 8`,
 		lines: [[6, 8]],
 		source: { label: 'queues-priority', href: `${EXAMPLES}/queues-priority` },
 	},
 	{
 		code: strategy('Priority'),
-		lines: [[2, 6], [2], [2], [2]],
-		phone: { code: strategy('Priority', true), lines: [[2, 6, 7, 8], [2], [2], [2]] },
-		then: ['MaxLen', 'MinLen', 'RoundRobin'].map((name) => ({ code: strategy(name), phone: strategy(name, true) })),
+		lines: [[2, 4, 5, 6], [2], [2], [2]],
+		then: ['MaxLen', 'MinLen', 'RoundRobin'].map((name) => ({ code: strategy(name) })),
 		source: { label: 'the strategies guide', href: 'https://varmq.goptics.org/guides/strategies/' },
 	},
 	{

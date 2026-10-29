@@ -73,13 +73,13 @@ const LATE = { ...PACE, wake: 900 };
 // Chapter 5's four bursts must each land, run and finish before the next lands, so there it runs a little quicker.
 const VOLLEY = { ...PACE, wake: 700, gap: 250 };
 
-// The core's sources in bind order: the queue from chapter 1, the priority queue from 4, a third queue from 5
-// and the topic from 6. The third is bound with priority 1 (`WithQueuePriority(1)`), so the worker reads it first.
-// The core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip, after showing what each of
-// the other strategies would do. The result worker has a queue of its own, and the second worker the topic alone.
+// The core's sources in bind order: the queue from chapter 1, the priority queue (urgent) from 4, a third queue
+// (batch) from 5 and the topic from 6. None is bound with a priority, so the worker holds them in that order. The
+// core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip, after showing what each of the
+// other strategies would do. The result worker has a queue of its own, and the second worker the topic alone.
 const QUEUE = { id: 'queue' };
 const PRIO = { id: 'prio', priority: true };
-const QUEUE_C = { id: 'queue-c', rank: 1 };
+const QUEUE_C = { id: 'queue-c' };
 const TOPIC = { id: 'topic' };
 const BOUND = [QUEUE, PRIO, QUEUE_C, TOPIC];
 const R_QUEUE = { id: 'r-queue' };
@@ -225,13 +225,14 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 5. Each strategy in turn, on the same three queues. A burst lands in them a second after its caption, before the
-	// event loop looks, so the order its jobs leave in is the strategy's: Priority empties the third queue first, as
-	// it is bound with priority 1; MaxLen takes from the longest, MinLen from the shortest, and RoundRobin from each
-	// in turn. The counts keep each burst's first picks free of ties. A worker has one strategy for life
-	// (`WithStrategy`): this shows what each would do, and ends on RoundRobin, which the worker keeps.
+	// event loop looks, so the order its jobs leave in is the strategy's: Priority goes in bind order, as no queue is
+	// bound with a priority, so it empties queue first though urgent is longer and batch shorter; MaxLen takes from
+	// the longest, MinLen from the shortest, and RoundRobin from each in turn. The counts keep each burst's first
+	// picks free of ties. A worker has one strategy for life (`WithStrategy`): this shows what each would do, and ends
+	// on RoundRobin, which the worker keeps.
 	(carry) => {
 		const bursts: [Strategy, number, Record<string, number>][] = [
-			['priority', 300, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
+			['priority', 300, { [QUEUE.id]: 2, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
 			['maxlen', 3700, { [QUEUE.id]: 1, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
 			['minlen', 7100, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
 			['roundrobin', 10500, { [QUEUE.id]: 2, [PRIO.id]: 2, [QUEUE_C.id]: 2 }],
@@ -249,7 +250,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 			title: 'Many queues, one worker',
 			duration: 15800,
 			captions: [
-				{ at: 300, until: 3200, text: '*Priority*, the default, empties batch first' },
+				{ at: 300, until: 3200, text: '*Priority*, the default, goes in bind order' },
 				{ at: 3700, until: 6600, text: '*MaxLen* takes from the longest queue' },
 				{ at: 7100, until: 10000, text: '*MinLen* takes from the shortest queue' },
 				{ at: 10500, until: 15000, text: '*RoundRobin* takes from each queue in turn' },

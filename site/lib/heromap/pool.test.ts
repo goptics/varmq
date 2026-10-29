@@ -172,9 +172,8 @@ describe('pool rules', () => {
 	const lanes = [['a', 3], ['b', 1], ['c', 2]].flatMap(([source, n]) =>
 		Array.from({ length: n }, (_, k) => ({ id: `${source}${k}`, source, at: 100, work: 5000 })));
 	const order = (p: Partial<PoolPlan>) => dispatches(simulatePool(plan({ limit: 6, sources, jobs: lanes, ...p }))).map(e => e.source).join('');
-	it('reads several sources by Priority when none is named: lowest rank first, then bind order', () => {
+	it('reads several sources by Priority when none is named: the first bound with a job', () => {
 		assert.equal(order({}), 'aaabcc');
-		assert.equal(order({ sources: [{ id: 'a' }, { id: 'b' }, { id: 'c', rank: 1 }] }), 'ccaaab');
 		assert.equal(dispatches(simulatePool(plan({ jobs: burst(1) })))[0].strategy, undefined); // one source has none
 	});
 	it('MaxLen takes the longest source and MinLen the shortest with a job, the first of equals', () => {
@@ -182,12 +181,10 @@ describe('pool rules', () => {
 		assert.equal(order({ strategy: 'minlen' }), 'bccaaa');
 		assert.equal(order({ strategy: 'roundrobin' }), 'abcaca');
 	});
-	it('moves the round-robin turn only under RoundRobin, over the sources in rank order', () => {
+	it('moves the round-robin turn only under RoundRobin', () => {
 		const turn = (p: Partial<PoolPlan>) => { const q = plan({ limit: 6, sources, jobs: lanes, ...p }); return endState(q, simulatePool(q)).turn; };
 		assert.equal(turn({ strategy: 'maxlen' }), 0);
 		assert.equal(turn({ strategy: 'roundrobin' }), 1); // last served a
-		// Ranked first, c is index 0: round robin starts there, and the last served, a, leaves the turn at b.
-		assert.equal(order({ strategy: 'roundrobin', sources: [{ id: 'a' }, { id: 'b' }, { id: 'c', rank: 1 }] }), 'cabcaa');
 	});
 	it('can show each strategy in turn on one worker, from the times given', () => {
 		const again = lanes.map(j => ({ ...j, id: `${j.id}'`, at: 20000 }));
