@@ -417,9 +417,11 @@ export function renderMap(host: HTMLElement): MapNodes {
 	let zoom = Number.NaN; // the camera's, until the first setCamera
 	let width: number = VIEW.w; // the map's on screen
 	let shown = Number.NaN; // what --vm-label holds: most camera moves leave it as it is
-	// Labels show by their size on screen, so a smaller square hides them sooner.
+	// Labels show by their size on screen, so a smaller square hides them sooner; and only as large as they would be
+	// on a 400 px square, so the whole map shows none however wide it is drawn, and they come in as the camera zooms
+	// into a chapter.
 	const legible = () => {
-		const label = labelOpacity((zoom * width) / VIEW.w);
+		const label = Math.min(labelOpacity((zoom * width) / VIEW.w), labelOpacity(zoom));
 		if (Number.isNaN(label) || label === shown) return;
 		world.style.setProperty('--vm-label', String(label));
 		shown = label;
