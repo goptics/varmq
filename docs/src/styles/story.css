@@ -9,8 +9,8 @@
 	scroll-padding-top: var(--sl-nav-height);
 }
 
-/* The home page is a landing page (docs/DESIGN.md, "Page types"): the story runs the full width of the page, under
-   the header, and the rest of the page keeps the docs' reading column. */
+/* The home page is a landing page (docs/DESIGN.md, "Page types"). The story and everything under it share one frame,
+   the stage's: as wide, with the same gutters, so their edges line up. */
 :root:has(.st) .main-pane > main {
 	max-width: none;
 	border-inline: 0;
@@ -18,27 +18,86 @@
 
 :root:has(.st) .content-panel {
 	padding-top: 0;
+	padding-inline: 0;
 }
 
 :root:has(.st) .content-panel > .sl-container {
+	--st-max: 1320px;
+	--st-gap: clamp(24px, 4vw, 72px);
 	max-width: none;
 }
 
 :root:has(.st) .sl-container > :not(.st) {
-	max-width: 44rem;
+	max-width: var(--st-max);
 	margin-inline: auto;
+	padding-inline: var(--gutter);
+}
+
+/* Each section under the story is a row (index.mdx): a perforation above it, as on any docs page, then its heading and
+   lead in the story's text column and the rest in the map's. Short of room for both, the row stacks at a reading
+   width. */
+.home-row {
+	margin-top: 3rem;
+	padding-top: 1.75rem;
+	border-top: 1px dashed var(--rule);
+}
+
+.home-row:first-child {
+	margin-top: 0.5rem;
+}
+
+.sl-markdown-content .home-row > *,
+.sl-markdown-content .home-row .sl-heading-wrapper.level-h2 {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+@media (min-width: 72rem) {
+	.home-row {
+		display: grid;
+		grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+		column-gap: var(--st-gap);
+		align-items: start;
+	}
+}
+
+/* The footer keeps the rows' columns: its links under the headings, its note under the rest. */
+@media (min-width: 72rem) {
+	:root:has(.st) .shell-foot__in {
+		display: grid;
+		grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+		column-gap: var(--st-gap);
+	}
+}
+
+@media (max-width: 71.99rem) {
+	.home-row > * {
+		max-width: 44rem;
+	}
+
+	.sl-markdown-content .home-row > * + * {
+		margin-top: 1.25rem;
+	}
 }
 
 /* About 70 letters a line. In this face `ch`, a zero, is much wider than an average letter, so the measure is in em. */
 :root:has(.st) .sl-markdown-content :is(p, .card .body) {
 	max-width: 34em;
+	text-wrap: pretty;
 }
 
-/* Below the story, three link cards share one row, and the three figures, each with its paragraph, read as a list
-   rather than a two-and-one grid. */
-@media (min-width: 50rem) {
+/* Three link cards share one line where a row stacks, and read as a list beside a heading. The three figures, each
+   with its paragraph, are always a list rather than a two-and-one grid. */
+@media (min-width: 50rem) and (max-width: 71.99rem) {
 	:root:has(.st) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@media (min-width: 72rem) {
+	:root:has(.st) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -60,13 +119,10 @@
 
 .st {
 	--st-h: calc(100svh - var(--sl-nav-height));
-	--st-max: 1320px;
-	--st-gap: clamp(24px, 4vw, 72px);
 	--st-pad-y: min(24px, 3svh);
 	--st-small: 0.9375rem;
 
 	display: grid;
-	margin-inline: calc(-1 * var(--sl-content-pad-x));
 }
 
 .st-track,
@@ -184,7 +240,7 @@
 	width: 16px;
 	height: 16px;
 	fill: none;
-	stroke: var(--accent-text);
+	stroke: var(--brand);
 	stroke-width: 1.75;
 	stroke-linecap: round;
 	stroke-linejoin: round;
@@ -268,7 +324,7 @@
 }
 
 .st-notes button:hover .st-ring {
-	stroke: var(--accent-text);
+	stroke: var(--brand);
 }
 
 .st-notes button:focus-visible {
@@ -277,10 +333,12 @@
 	border-radius: 4px;
 }
 
-/* Each caption's point is a ring, like a goroutine's on the map: its arc fills while the caption plays (main.ts sets
-   --p from the map's clock), and once the caption is done the ring fills in and pulses. */
+/* Each caption's point is a ring, like a goroutine's on the map and in the logo's green: its arc fills while the
+   caption plays (main.ts sets --p from the map's clock), and once the caption is done the ring fills in and pulses.
+   It is drawn over the line, which runs into its stroke. */
 .st-point {
 	position: absolute;
+	z-index: 1;
 	top: calc(0.8em - 7px);
 	left: 1px;
 	width: 14px;
@@ -300,14 +358,14 @@
 }
 
 .st-point .st-arc {
-	stroke: var(--accent-text);
+	stroke: var(--brand);
 	stroke-dasharray: 1;
 	stroke-dashoffset: calc(1 - var(--p, 0));
 	transform: rotate(-90deg);
 }
 
 .st-point .st-core {
-	fill: var(--accent-text);
+	fill: var(--brand);
 	stroke: none;
 	transform: scale(0);
 	transition: transform 300ms var(--ease);
@@ -327,17 +385,17 @@
 	}
 }
 
-/* A line runs from each caption's point to the next, and fills once the caption is done. */
+/* A line runs from each caption's point to the next, and fills once the caption is done. Its ends sit under the two
+   rings' strokes (radius 5 to 7 around the point at 0.8em), so ring, line and ring read as one track. */
 .st-notes li:not(:last-child)::after {
 	content: '';
 	position: absolute;
-	top: calc(0.8em + 10px);
-	bottom: calc(6px - 0.8em);
+	top: calc(0.8em + 5px);
+	bottom: calc(1px - 0.8em);
 	left: 7px;
 	width: 2px;
-	border-radius: 1px;
 	background-color: var(--rule);
-	background-image: linear-gradient(var(--accent-text), var(--accent-text));
+	background-image: linear-gradient(var(--brand), var(--brand));
 	background-repeat: no-repeat;
 	background-size: 100% 0;
 	transition: background-size 420ms var(--ease);

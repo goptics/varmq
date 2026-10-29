@@ -16,10 +16,10 @@ Use only the variables in `src/styles/tokens.css`. Never write a hex color in a 
 | Surface (paper) | `--paper`, `--bar` and `--bar-2` for the 48 px stripes, `--hole` |
 | Text | `--ink`, `--ink-2`, `--ink-3`; `--accent-text` for links and highlights on paper |
 | Lines | `--rule` (dashed for banners and tear lines, solid for cards) |
-| Brand | `--brand` for fills and primary buttons, `--brand-hover` for the hover state, `--brand-ink` for text on `--brand` |
+| Brand | `--brand` for fills, marks and primary buttons, `--brand-hover` for the hover state, `--brand-ink` for text on `--brand`. Each theme's brand is its own logo's green (`assets/logo-light.svg`, `logo-dark.svg`): `#2e9c7f` in light and `--brand-on-dark` (`#44bf9e`) in dark. On paper the light one has 3.2:1, enough for a mark or a fill, so `--accent-text` is the same hue darker, at 5.4:1, for text. |
 | Signal | `--amber` for "against VarMQ" and warnings, `--cobalt` for secondary data, `--danger` for errors |
 | Dark surfaces | `--panel`, `--panel-2`, `--panel-ink`, `--panel-ink-2`, `--panel-rule`, `--panel-accent`; `--panel-fill` and `--panel-fill-2` for control and track fills. Code and simulation panels are dark in both themes. |
-| Go syntax | `--tk-k`, `--tk-s`, `--tk-c`, `--tk-n`, `--tk-f`, `--tk-t`, `--tk-b` (follow the theme). `--tk-*-on-dark` are the dark values. `ui.css` pins `--tk-*` to them inside `.sframe`, `.code--dark` and `.expressive-code`. |
+| Go syntax | `--tk-k`, `--tk-s`, `--tk-c`, `--tk-n`, `--tk-f`, `--tk-t`, `--tk-b` (follow the theme). `--tk-*-on-dark` are the dark values. `ui.css` pins `--tk-*`, and `--brand` to `--brand-on-dark`, inside `.sframe`, `.code--dark`, `.expressive-code`, `.on-dark` (any other dark surface), `.pool` and `.st-code`, so a dark panel looks the same in both themes. `alt.css` does the same for `/alt/`'s scenes and status bar. |
 | Type and layout | `--display`, `--mono`, `--gutter`, `--max`, `--ease` |
 
 All text pairs pass WCAG AA in both themes (lowest ratio 4.75:1).
@@ -91,7 +91,7 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 
 | Type | Used by | Rule |
 |---|---|---|
-| Landing | `/alt/`, `/` | Full width. `/alt/` has paper stripes and the status bar. `/` keeps the Starlight header and opens on the story (below), then keeps the 44rem reading column for the rest of the page. |
+| Landing | `/alt/`, `/` | Full width. `/alt/` has paper stripes and the status bar. `/` keeps the Starlight header and opens on the story (below). Everything under the story shares the stage's frame (up to 1320 px, the `--gutter` at each side), so the edges line up: each section is a row with its heading and lead in the story's text column and the rest in the map's, and stacks at 44rem below 72rem. |
 | Article | `start`, `concepts`, `guides`, `persistence`, `operations` | Starlight layout restyled by the shell theme. One banner, then the article. Add a scene where a scene explains faster than text. |
 | Reference | `reference/comparison` | Dense tables and a feature matrix that the reader can filter. |
 | Data | `reference/benchmarks` | Explorer and score board on dark panels, raw-data links, and the callout for results against VarMQ. Data comes from a committed snapshot (`components/bench/data.json`, checked by `scripts/bench-data.mjs`). |
@@ -104,7 +104,7 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 - **The stage.** It is pinned under the header, with the text on the left and the map on the right. The text column is a size container, so it sets itself by the room it has. On portrait screens below 1024 px the map sits on top and the text below.
 - **The intro.** It comes first: the h1 and the lede (the hero fields of `index.mdx`), the install box, Get started and GitHub, and the whole map standing still. On portrait screens the intro has the stage to itself, and the map comes in with step 1.
 - **The steps.** Each scroll plays one of ten steps: its chapter of the map, once, at the map's own pace. The one code block morphs into the code behind that chapter and lights the lines each caption is about. The code block is a dark panel in both themes, highlighted at build time with the same theme as the doc code blocks (`ec.config.mjs`).
-- **Captions.** A caption is a button. It plays its step again from that caption.
+- **Captions.** A caption is a button. It plays its step again from that caption. Its point is a ring in `--brand`, and a line runs from ring to ring with its ends under the rings' strokes, so the captions read as one track that fills as the step plays.
 - **Snapping.** The page snaps one step at a time only while the reader is in the story. One wheel turn is one step, and a free-spinning wheel keeps stepping. Past the last step the wheel and the keys leave the story, and below it the page scrolls normally. A scroll that ends half-way between the last step and the content goes on to whichever it was heading for.
 - **Reduced motion.** Each step shows its last frame.
 - **Checks.** Check every step at the 18 viewport sizes in `home-stage-fit-testing`, both themes. Test the wheel inside the page, not through CDP events alone.
@@ -115,11 +115,12 @@ The map keeps its own palette (`lib/heromap/map.css`), in both themes:
 
 - **Dark.** The map's original palette, which is not to be changed: amber jobs, green goroutines, a violet event loop, red failures, SQLite blue and Redis red.
 - **Light.** The same hues, made dark enough to read on `--paper`:
-  - Every stroke and every text colour has an OKLCH lightness of 0.50 to 0.56, the same as the page's own on-paper colours (`--accent-text`, the `--tk-*` values). At equal lightness no hue looks heavier than another, and each has at least 4.5:1 against `--paper`.
+  - Every text colour, and the strokes of every hue but green, has an OKLCH lightness of 0.50 to 0.56, the same as the page's own on-paper colours (`--accent-text`, the `--tk-*` values). At equal lightness no hue looks heavier than another, and each has at least 4.5:1 against `--paper`.
+  - The green of a worker, its goroutines and their work is the light logo's (`--brand`), as the dark map's is the dark logo's, so the map and the logo share one green. As a mark it needs 3:1, and has 3.2:1.
   - Fills use the same hues at a lightness of about 0.96.
   - The greys come from the page's green-tinted inks (`--ink-3`, `--ink`) rather than a cool grey, so the map matches the paper around it.
   - A job keeps the dark map's amber (`#f2b036`) with a darker edge (`#a26500`), which gives the square its 3:1 against the paper.
-  - The light palette uses tokens where the page has one: `--accent-text` for green, `--tk-s` for the amber text, and `--ink-3` for labels and lines.
+  - The light palette uses tokens where the page has one: `--brand` for green marks, `--accent-text` for green text, `--tk-s` for the amber text, and `--ink-3` for labels and lines.
 - **Where it lives.** The palette is set on `:root`, so the story's text beside the map uses the same red, SQLite blue and Redis red (`--vm-*-text`).
 
 ## Adding a page or a component

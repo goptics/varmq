@@ -58,10 +58,12 @@ varmq-map {
 	container-type: inline-size;
 }
 
-/* Light: the dark map's hues, as ink on the page's paper. Strokes and text share one lightness, OKLCH L 0.50 to
-   0.56, as the page's own on-paper colours do, so no hue outweighs another, and each one has at least 4.5:1 against
-   --paper. Fills are the same hues near L 0.96. The greys take the paper's green rather than a cool grey, so the map
-   sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
+/* Light: the dark map's hues, as ink on the page's paper. Text and the other hues' strokes share one lightness, OKLCH
+   L 0.50 to 0.56, as the page's own on-paper colours do, so no hue outweighs another, and each one has at least 4.5:1
+   against --paper. The green that marks a worker, its goroutines and their work is the light logo's own (--brand,
+   3.2:1, enough for a mark), as the dark map's is the dark logo's. Fills are the same hues near L 0.96. The greys take
+   the paper's green rather than a cool grey, so the map sits in the page. A job keeps the dark map's amber, with a
+   darker edge for its 3:1 against the paper. */
 :root[data-theme='light'] {
 	--vm-dot: #cddbd4;
 	--vm-ink: var(--ink-3);
@@ -78,7 +80,7 @@ varmq-map {
 	--vm-chip-edge: color-mix(in srgb, #a26500 80%, transparent);
 	--vm-chip-ink: var(--tk-s);
 	--vm-value: #e4f7ee;
-	--vm-value-edge: color-mix(in srgb, var(--accent-text) 75%, transparent);
+	--vm-value-edge: color-mix(in srgb, var(--brand) 85%, transparent);
 	--vm-error: #ffedea;
 	--vm-error-edge: color-mix(in srgb, #bd3933 60%, transparent);
 	--vm-lane: color-mix(in srgb, #f2b036 12%, transparent);
@@ -88,12 +90,12 @@ varmq-map {
 	--vm-tray: color-mix(in srgb, #f2b036 5%, transparent);
 	--vm-tray-edge: color-mix(in srgb, #a26500 70%, transparent);
 	--vm-slot: color-mix(in srgb, #a26500 30%, transparent);
-	--vm-go: var(--accent-text);
-	--vm-go-fill: color-mix(in srgb, var(--accent-text) 10%, transparent);
-	--vm-ghost: color-mix(in srgb, var(--accent-text) 40%, transparent);
+	--vm-go: var(--brand);
+	--vm-go-fill: color-mix(in srgb, var(--brand) 12%, transparent);
+	--vm-ghost: color-mix(in srgb, var(--brand) 55%, transparent);
 	--vm-check: #095e46;
-	--vm-card: color-mix(in srgb, var(--accent-text) 7%, transparent);
-	--vm-card-edge: color-mix(in srgb, var(--accent-text) 75%, transparent);
+	--vm-card: color-mix(in srgb, var(--brand) 8%, transparent);
+	--vm-card-edge: color-mix(in srgb, var(--brand) 85%, transparent);
 	--vm-loop: #6b4bb8;
 	--vm-loop-fill: color-mix(in srgb, #6b4bb8 8%, transparent);
 	--vm-pulse: #6b4bb8;
@@ -102,7 +104,7 @@ varmq-map {
 	--vm-program: color-mix(in srgb, var(--ink-3) 5%, transparent);
 	--vm-program-edge: color-mix(in srgb, var(--ink-3) 60%, transparent);
 	--vm-line: color-mix(in srgb, var(--ink-3) 55%, transparent);
-	--vm-ack: color-mix(in srgb, var(--accent-text) 50%, transparent);
+	--vm-ack: color-mix(in srgb, var(--brand) 65%, transparent);
 	--vm-button: color-mix(in srgb, var(--paper) 80%, transparent);
 	--vm-button-edge: color-mix(in srgb, var(--ink-3) 30%, transparent);
 	--vm-red-text: #bd3933;

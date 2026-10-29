@@ -18,14 +18,16 @@ This file reviews it, and records what the branch `docs/new-site` changes on top
   - First an intro: the h1, the lede, the install box, Get started and GitHub, beside the whole map standing still.
   - Then ten steps, one per scroll. Each step plays its chapter on the map, while one code block morphs into the code behind it and lights the lines each caption is about.
   - The page snaps only while the reader is in the story. Below it the page scrolls normally.
-  - The rest of the home page keeps the docs' reading column:
+  - The rest of the home page shares the story's frame, so their edges line up. Each section is a row with its heading and lead in the story's text column and the rest in the map's:
     - Try it: five runnable programs in tabs. The old "Try it" and "A closer look" sections are merged.
     - Where jobs live.
     - Performance.
     - Next.
   - "What you get" is removed: its six cards repeated what the story now shows.
+- **Each theme's green is its logo's.** #148's light theme used the dark logo's mint (`#44bf9e`) for buttons and a darker, yellower green for text, beside a light logo in `#2e9c7f`. Now `--brand` is `#2e9c7f` in light and `#44bf9e` in dark, and the light text green is the same hue as the logo. Dark panels keep the dark green in both themes.
 - **A light palette for the map.** In dark mode the map keeps its original palette. In light mode it uses the same hues, darkened to read on `--paper`:
-  - Every stroke and text colour sits at one OKLCH lightness, 0.50 to 0.56, as the page's own on-paper colours do. Each has at least 4.5:1 against the paper.
+  - Text and the other hues' strokes sit at one OKLCH lightness, 0.50 to 0.56, as the page's own on-paper colours do. Each has at least 4.5:1 against the paper.
+  - The green of workers and goroutines is the light logo's, as the dark map's is the dark logo's.
   - Fills are the same hues near lightness 0.96.
   - The greys come from the page's green-tinted inks.
   - The reasoning is in `DESIGN.md`, "The map's two palettes".

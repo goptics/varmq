@@ -30,12 +30,16 @@
 .tk-t { color: var(--tk-t); }
 .tk-b { color: var(--tk-b); }
 
-/* Inside a dark panel the Go tokens take their dark values in both themes. */
+/* Inside a dark panel the Go tokens and the brand take their dark values in both themes. `.on-dark` marks any other
+   dark surface. */
 .sframe,
 .code--dark,
 .expressive-code,
+.on-dark,
 .pool,
 .st-code {
+	--brand: var(--brand-on-dark);
+	--brand-hover: var(--brand-hover-on-dark);
 	--tk-k: var(--tk-k-on-dark);
 	--tk-s: var(--tk-s-on-dark);
 	--tk-c: var(--tk-c-on-dark);

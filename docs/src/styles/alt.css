@@ -702,6 +702,14 @@ body.alt {
 	white-space: nowrap;
 }
 
+/* The scenes and the status bar are dark surfaces too: like every dark panel (ui.css), they keep the dark logo's green
+   in both themes. */
+.scene,
+.bar {
+	--brand: var(--brand-on-dark);
+	--brand-hover: var(--brand-hover-on-dark);
+}
+
 .chip {
 	background: var(--brand);
 	color: var(--brand-ink);

@@ -12,11 +12,16 @@
 	--ink-2: #3b5248;
 	--ink-3: #51695e;
 	--rule: #b9d3c7;
-	--accent-text: #1b7358;
+	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f has 3.2:1,
+	   enough for marks and fills, so text takes the same hue darker, at 5.4:1. */
+	--accent-text: #06755c;
 
-	--brand: #44bf9e;
-	--brand-hover: #5dd0b0;
+	--brand: #2e9c7f;
+	--brand-hover: #3cab8d;
 	--brand-ink: #062116;
+	/* The dark logo's green: the brand in dark, and on a dark panel in both themes (ui.css). */
+	--brand-on-dark: #44bf9e;
+	--brand-hover-on-dark: #5dd0b0;
 	--amber: #f0b24a;
 	--cobalt: #8fb0ff;
 	--danger: #ff8d7a;
@@ -50,6 +55,8 @@
 	--ink-3: #8fa89c;
 	--rule: #2a4137;
 	--accent-text: #5fd4b2;
+	--brand: var(--brand-on-dark);
+	--brand-hover: var(--brand-hover-on-dark);
 	--panel: #0a1410;
 	--panel-2: #0f1c16;
 }

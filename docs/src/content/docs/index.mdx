@@ -19,9 +19,16 @@ hero:
 import { Card, CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 import GoPlay from '../../components/GoPlay.astro';
 
+{/* Each section is a row on the story's two columns (styles/story.css): its heading and lead, then the rest. */}
+
+<section class="home-row">
+<div>
+
 ## Try it
 
 Each tab is a full program. Press Run to run it in the Go Playground, or edit it first.
+
+</div>
 
 <Tabs>
 	<TabItem label="Quick start">
@@ -51,7 +58,14 @@ Each tab is a full program. Press Run to run it in the Go Playground, or edit it
 	</TabItem>
 </Tabs>
 
+</section>
+
+<section class="home-row">
+<div>
+
 ## Where jobs live
+
+</div>
 
 <CardGrid>
 	<LinkCard
@@ -71,9 +85,18 @@ Each tab is a full program. Press Run to run it in the Go Playground, or edit it
 	/>
 </CardGrid>
 
+</section>
+
+<section class="home-row">
+<div>
+
 ## Performance
 
 Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
+
+The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
+
+</div>
 
 <CardGrid>
 	<Card title="4.89M tasks/s">
@@ -90,9 +113,14 @@ Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the 
 	</Card>
 </CardGrid>
 
-The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
+</section>
+
+<section class="home-row">
+<div>
 
 ## Next
+
+</div>
 
 <CardGrid>
 	<LinkCard title="Start" description="Install varmq and run your first worker." href="/start/introduction/" />
@@ -100,3 +128,5 @@ The [comparison](/reference/comparison/) lists features side by side with other 
 	<LinkCard title="Guides" description="Concurrency, errors, waiting, metrics and more." href="/guides/queues/" />
 	<LinkCard title="Persistence" description="Redis and SQLite adapters, and writing your own." href="/persistence/overview/" />
 </CardGrid>
+
+</section>
