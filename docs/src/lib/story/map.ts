@@ -3,17 +3,68 @@ import { CHAPTERS, STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { renderMap } from '../heromap/render.ts';
 import { REGIONS, frame } from '../heromap/scene.ts';
 
+/** A stretch that plays over: it holds its end `again` ms, then plays again from `restart` (its start by default) to
+ * the same end. `held` starts it in that hold, at the end already. */
+export interface Loop {
+	again: number;
+	restart?: number;
+	held?: boolean;
+}
+
 export interface MapHandle {
 	/** Shows the map at time `t` of its loop, and holds it there. */
 	seek(t: number): void;
 	/**
-	 * Plays the loop from `from` for `ms` at its own pace, then holds at the end. Given `again`, it holds the end that
-	 * many ms and plays the stretch over, until told otherwise.
+	 * Plays the loop from `from` for `ms` at its own pace, then holds at the end; given `loop`, plays it over until told
+	 * otherwise. `onTime` hears only its first run, so what follows the map's clock stays as that run left it.
 	 */
-	play(from: number, ms: number, again?: number): void;
+	play(from: number, ms: number, loop?: Loop): void;
+	/**
+	 * Plays the loop backward at its own pace, from where the map is to `to`, over `most` ms at most: from further on,
+	 * it starts `most` ms past `to`. Then it holds at `to`, and calls `then`.
+	 */
+	rewind(to: number, most: number, then?: () => void): void;
 }
 
 const wrap = (t: number) => ((t % TOTAL) + TOTAL) % TOTAL;
+
+/**
+ * Shows a timeline at times after `end` in any order, as a full seek would, but cheaply. A full seek redraws the loop
+ * from 0, which takes up to 20 ms late in it, and anime.js going backward by itself keeps stale values over this
+ * score's tweens (score.ts). So it seeks to `end` once, in full; each time after that is anime.js's own seek forward
+ * from `end`, which it renders right, once every attribute the time before changed under `host` is put back.
+ */
+export function after(tl: Timeline, host: Element, end: number) {
+	const seek = Object.getPrototypeOf(tl).seek as Timeline['seek'];
+	tl.pause().seek(end);
+	const clean = new Map<Element, Map<string, string | null>>();
+	const watch = new MutationObserver(() => {});
+	watch.observe(host, { attributes: true, subtree: true, attributeOldValue: true });
+	const note = () => {
+		for (const r of watch.takeRecords()) {
+			const attrs = clean.get(r.target as Element) ?? new Map<string, string | null>();
+			clean.set(r.target as Element, attrs);
+			if (!attrs.has(r.attributeName!)) attrs.set(r.attributeName!, r.oldValue);
+		}
+	};
+	return {
+		/** Shows time `at`, no earlier than `end` and before the loop's end. */
+		show(at: number) {
+			seek.call(tl, end);
+			note();
+			for (const [el, attrs] of clean) {
+				for (const [name, value] of attrs) {
+					if (value === null) el.removeAttribute(name);
+					else el.setAttribute(name, value);
+				}
+			}
+			watch.takeRecords();
+			seek.call(tl, at);
+			note();
+		},
+		stop: () => watch.disconnect(),
+	};
+}
 
 /**
  * Draws the map into `host`: its still frame (the whole network, as at STATIC_AT) until the animation's code has
@@ -30,45 +81,97 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 	let t = STATIC_AT;
 	let frameId = 0;
 	let pending: (() => void) | undefined;
+	let frames: ReturnType<typeof after> | undefined;
+
+	const cancel = () => {
+		cancelAnimationFrame(frameId);
+		frames?.stop();
+		frames = undefined;
+	};
 
 	const seek = (at: number) => {
-		cancelAnimationFrame(frameId);
+		cancel();
 		pending = undefined;
 		t = wrap(at);
 		timeline?.pause().seek(t);
 		onTime(t);
 	};
 
-	const play = (from: number, ms: number, again?: number) => {
-		cancelAnimationFrame(frameId);
+	// A play or a rewind stops a frame or two short of its end, where the map is already still, rather than a frame past
+	// it: past the end the next stretch has begun (the finale's fade, say), and the seek back from there flickers. Two
+	// frames, as the timeline's clock can run a frame ahead of this one.
+	const ending = (now: number, last: number, begun: number, ms: number) => now + 2 * (now - last) - begun >= ms;
+
+	const play = (from: number, ms: number, loop?: Loop) => {
+		cancel();
 		const tl = timeline;
 		if (!tl) {
 			// Not loaded yet: play once it is.
-			t = wrap(from);
-			pending = () => play(from, ms, again);
+			t = wrap(loop?.held ? from + ms : from);
+			pending = () => play(from, ms, loop);
 			return;
 		}
 		pending = undefined;
-		tl.seek(wrap(from)).play();
-		let begun = performance.now();
-		let last = begun;
+		const end = from + ms;
+		let start = from;
+		let first = !loop?.held;
+		let begun = performance.now() - (loop?.held ? ms : 0);
+		if (first) tl.seek(wrap(from)).play();
+		let last = performance.now();
 		const tick = () => {
 			const now = performance.now();
-			// It stops a frame or two short of the end, where every step's map is already still, rather than a frame past
-			// it: past the end the next stretch has begun (the finale's fade, say), and the seek back from there flickers.
-			// Two frames, as the timeline's clock can run a frame ahead of this one.
-			const ending = now + 2 * (now - last) - begun >= ms;
-			last = now;
-			if (!tl.paused && ending) {
-				t = wrap(from + ms);
+			if (!tl.paused && ending(now, last, begun, end - start)) {
+				t = wrap(end);
 				tl.pause().seek(t);
-				onTime(t);
-				if (again === undefined) return;
-			} else if (tl.paused && now - begun >= ms + again!) {
-				begun = last = now;
-				tl.seek(wrap(from)).play();
-			} else if (!tl.paused) onTime(tl.iterationCurrentTime);
+				if (first) onTime(t);
+				if (!loop) return;
+			} else if (tl.paused && now - begun >= end - start + loop!.again) {
+				start = loop!.restart ?? from;
+				first = false;
+				begun = now;
+				tl.seek(wrap(start)).play();
+			} else if (!tl.paused) {
+				t = tl.iterationCurrentTime;
+				if (first) onTime(t);
+			}
+			last = now;
 			frameId = requestAnimationFrame(tick);
+		};
+		frameId = requestAnimationFrame(tick);
+	};
+
+	const rewind = (to: number, most: number, then?: () => void) => {
+		cancel();
+		const tl = timeline;
+		if (!tl) {
+			t = wrap(to);
+			pending = () => {
+				seek(to);
+				then?.();
+			};
+			return;
+		}
+		pending = undefined;
+		const ms = Math.min(wrap(t - to), most);
+		const end = wrap(to);
+		onTime(end);
+		const shown = (frames = after(tl, host, end));
+		// The loop's end shows as its start does, so a rewind that starts there need not seek over it.
+		const at = (left: number) => (t = Math.min(end + Math.max(0, left), TOTAL - 0.001));
+		shown.show(at(ms));
+		const begun = performance.now();
+		const tick = () => {
+			const left = ms - (performance.now() - begun);
+			shown.show(at(left));
+			if (left > 0) {
+				frameId = requestAnimationFrame(tick);
+				return;
+			}
+			cancel();
+			// The frame is exact already; a full seek leaves anime.js's own state, and the renderer's, exact too.
+			tl.seek(t);
+			onTime(t);
+			then?.();
 		};
 		frameId = requestAnimationFrame(tick);
 	};
@@ -78,5 +181,5 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		timeline.seek(t);
 		pending?.();
 	});
-	return { seek, play };
+	return { seek, play, rewind };
 }

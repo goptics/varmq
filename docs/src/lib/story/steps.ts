@@ -1,9 +1,8 @@
-import { CHAPTERS, TOTAL, plain, starts, type Caption } from '../heromap/chapters.ts';
+import { CAMERA, CHAPTERS, TOTAL, plain, starts, type Caption } from '../heromap/chapters.ts';
 import { STATIONS } from './stations.ts';
 
-// Step 1 also plays the zoom from the whole map into chapter 1, which closes the loop; the finale holds the whole map
-// up to where that zoom starts.
-const ZOOM_IN = 1200;
+// Step 1 also plays the zoom from the whole map into chapter 1, which closes the loop (the finale's last CAMERA ms);
+// the finale holds the whole map up to where that zoom starts. So every step opens on a camera move CAMERA ms long.
 
 /** A code block's cut: the wide one, or the phone one with its long lines broken. */
 export type Cut = 'wide' | 'phone';
@@ -51,10 +50,10 @@ const firsts = STATIONS.map((_, i) => STATIONS.slice(0, i).reduce((n, s) => n + 
 export const STEPS: Step[] = CHAPTERS.map((chapter, i) => {
 	const station = STATIONS[i];
 	const phone = station.phone ?? station;
-	const lead = i === 0 ? ZOOM_IN : 0;
+	const lead = i === 0 ? CAMERA : 0;
 	return {
-		from: i === 0 ? TOTAL - ZOOM_IN : starts()[i],
-		ms: lead + chapter.duration - (i === CHAPTERS.length - 1 ? ZOOM_IN : 0),
+		from: i === 0 ? TOTAL - CAMERA : starts()[i],
+		ms: lead + chapter.duration - (i === CHAPTERS.length - 1 ? CAMERA : 0),
 		captions: chapter.captions.map((c) => lead + c.at),
 		code: chapter.captions.map((_, c) => firsts[i] + Math.min(c, station.then?.length ?? 0)),
 		lines: { wide: station.lines, phone: phone.lines },

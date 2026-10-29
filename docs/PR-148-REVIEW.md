@@ -163,6 +163,7 @@ These are matters of taste, not bugs:
 - Scroll input on the home page:
   - Tested with wheel events at real timing inside the page, with trusted wheel and key input from the browser protocol, and with touch drags.
   - A notch, a flick or a swipe moves one step, and a free-spinning wheel keeps stepping.
+  - A scroll back up plays each transition backward and lands on the step's end exactly as it was left going down (pixel-identical), at 60 fps: each frame seeks forward from that end, and puts back what the frame before changed (`lib/story/map.ts`, `after`), since a full seek redraws the loop from 0 and anime.js going backward keeps stale values.
   - A free spin recorded from an MX Master on Linux replays through every step. Before, it stopped after four: the story measured the wheel's speed per event, and Chrome sends the notches it holds back during a step's first frames as one event (`lib/story/wheel.ts`, with tests).
   - From the last step down the page scrolls normally, by wheel, keys and touch; on the way back up it stops at the last step, and the story takes over again from there.
 - Reduced motion: each step shows its last frame, and nothing animates.

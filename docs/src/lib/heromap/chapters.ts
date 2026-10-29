@@ -493,6 +493,9 @@ export function starts(): number[] {
 
 export const TOTAL = CHAPTERS.reduce((t, c) => t + c.duration, 0);
 
+/** Each chapter's camera move, its first CAMERA ms, and the finale's zoom into chapter 1's frame, its last. */
+export const CAMERA = 1200;
+
 /** The still frame for reduced motion: the finale once the camera has pulled back, before anything moves. */
 export const STATIC_AT = starts()[CHAPTERS.length - 1] + 1300;
 

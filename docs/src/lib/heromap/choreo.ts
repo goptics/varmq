@@ -14,7 +14,7 @@
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
 
 import { eases, svg, type Timeline } from 'animejs';
-import { CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
+import { CAMERA, CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
 import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
@@ -37,7 +37,6 @@ type Worker = keyof typeof RINGS;
 type PoolPart = Extract<Part, { kind: 'pool' }>;
 type StorePart = Exclude<Part, PoolPart>;
 
-const CAMERA = 1200; // each chapter's camera move
 // How far into its camera move a chapter's new pieces start to draw in: as the view sweeps toward them, so it never
 // arrives on an empty stretch of map.
 const OPENS = 300;

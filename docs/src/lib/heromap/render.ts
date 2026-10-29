@@ -423,15 +423,14 @@ export function renderMap(host: HTMLElement): MapNodes {
 	const findSwap = lookup(swaps, 'caption swap');
 	let zoom = Number.NaN; // the camera's, until the first setCamera
 	let width: number = VIEW.w; // the map's on screen
-	let shown = Number.NaN; // what --vm-label holds: most camera moves leave it as it is
 	// Labels show by their size on screen, so a smaller square hides them sooner; and only as large as they would be
 	// on a 400 px square, so the whole map shows none however wide it is drawn, and they come in as the camera zooms
-	// into a chapter.
+	// into a chapter. Most camera moves leave --vm-label as it is, so it is set only when it changes, tested against
+	// what the element holds rather than what was last set here: a rewind (story/map.ts) puts attributes back itself.
 	const legible = () => {
-		const label = Math.min(labelOpacity((zoom * width) / VIEW.w), labelOpacity(zoom));
-		if (Number.isNaN(label) || label === shown) return;
-		world.style.setProperty('--vm-label', String(label));
-		shown = label;
+		const label = String(Math.min(labelOpacity((zoom * width) / VIEW.w), labelOpacity(zoom)));
+		if (label === 'NaN' || label === world.style.getPropertyValue('--vm-label')) return;
+		world.style.setProperty('--vm-label', label);
 	};
 	return {
 		svg,
@@ -455,8 +454,9 @@ export function renderMap(host: HTMLElement): MapNodes {
 			world.setAttribute('transform', transform);
 			dots.setAttribute('patternTransform', transform);
 			// The map fades into the page FEATHER world units deep at the square's edges (map.css): inside the margin
-			// every chapter's frame leaves, so only what the edge cuts fades.
-			if (s !== zoom) host.style.setProperty('--vm-feather', `${(FEATHER * s * 100) / VIEW.w}%`);
+			// every chapter's frame leaves, so only what the edge cuts fades. Set only when it changes, as --vm-label is.
+			const feather = `${(FEATHER * s * 100) / VIEW.w}%`;
+			if (feather !== host.style.getPropertyValue('--vm-feather')) host.style.setProperty('--vm-feather', feather);
 			zoom = s;
 			legible();
 		},
