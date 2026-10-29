@@ -14,7 +14,7 @@
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
 
 import { eases, svg, type Timeline } from 'animejs';
-import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
+import { CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
 import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
@@ -44,6 +44,7 @@ const OPENS = 300;
 const DRAW = 650; // a solid outline drawing in
 const POP = 600; // a chip or a ring popping in
 const FADE = 500; // a dashed part fading in
+const SWAP = 350; // a chip's name fading in where the one before was (Chapter.chips)
 const LABEL = 400; // a label fading in
 const ADD_FLIGHT = 600; // the longest flight from Add() or Publish() into a lane
 const QUICK = 250; // the shortest
@@ -505,7 +506,14 @@ export class Choreo {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
 		for (const p of PIECES) this.declarePiece(p.id, p.kind, p.chapter === 1);
-		for (const c of CHAPTERS) for (const chip of c.chips ?? []) this.declarePiece(`${chip.id}@${c.n}`, 'chip', false);
+		for (const c of CHAPTERS) {
+			for (const [i, chip] of (c.chips ?? []).entries()) {
+				const key = chipKey(c.n, i, chip.id);
+				this.declarePiece(key, 'chip', false);
+				// A chip that takes another's place fades its name in (see `chapter`).
+				if (chip.fade) for (const label of this.labels(nodes.piece(key))) score.start(label, { opacity: 1 });
+			}
+		}
 		for (const c of CONNS) {
 			const g = nodes.piece(c.id);
 			const on = c.chapter === 1;
@@ -595,6 +603,7 @@ export class Choreo {
 		const el = this.nodes.record(id);
 		this.score.start(el, { pos: [0, 0], opacity: 0, scale: 1 });
 		this.score.start(this.fill(el), { fillOpacity: 1 });
+		for (const tag of el.querySelectorAll('.vm-tag')) this.score.start(tag, { opacity: 0 });
 		const sq = { id, family: id, els: [el] };
 		this.bodies.add(sq);
 		return sq;
@@ -658,9 +667,17 @@ export class Choreo {
 		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
 		this.open(c, move ? T + OPENS : T);
 		this.captions(c, T);
-		for (const chip of c.chips ?? []) {
-			const g = this.nodes.piece(`${chip.id}@${c.n}`);
-			score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
+		for (const [i, chip] of (c.chips ?? []).entries()) {
+			const g = this.nodes.piece(chipKey(c.n, i, chip.id));
+			if (chip.fade) {
+				// It takes the place at once, covering the chip before, and only its name fades in: the chip holds
+				// still, and two names never show at once.
+				score.set(g, { opacity: 1, scale: 1 }, T + chip.at);
+				for (const label of this.labels(g)) {
+					score.set(label, { opacity: 0 }, T + chip.at);
+					score.tween(label, { opacity: 1 }, T + chip.at, SWAP, E.fade);
+				}
+			} else score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
 			score.tween(g, { opacity: 0, scale: 0 }, T + chip.until, 300, E.out);
 		}
 
@@ -1061,6 +1078,12 @@ export class Choreo {
 						const drop = from.x === to.x ? [to] : [pt(from.x, queue.gap), pt(to.x, queue.gap), to];
 						score.move(rec, drop, at, DROP, E.leave);
 						score.tween(this.fill(rec), { fillOpacity: 0 }, at + 150, 350, E.fade);
+						// Redis keeps the record until the ack, tagged with the consumer that took it.
+						if (part.kind === 'redis') {
+							const tag = rec.querySelector(`.vm-tag-${e.consumer}`)!;
+							score.start(tag, { opacity: 0 });
+							score.tween(tag, { opacity: 1 }, at + 150, 350, E.fade);
+						}
 						// A copy comes out where the queue's line leaves the store, one copy at a time, and flies to its ring.
 						const copy = copies.get(e.job)!.els;
 						owners.set(e.job, consumer(e.consumer));
@@ -1130,6 +1153,7 @@ export class Choreo {
 			const p = score.pos(rec.els[0], start);
 			score.move(rec.els[0], [pt(p.x, queue.gap), pt(to.x, queue.gap), to], start, REQUEUE, E.move);
 			score.tween(this.fill(rec.els[0]), { fillOpacity: 1 }, start + 150, 350, E.fade);
+			for (const tag of rec.els[0].querySelectorAll('.vm-tag')) score.tween(tag, { opacity: 0 }, start, 150, E.fade);
 		}
 		for (const [id, held] of queue.held) {
 			const k = after.indexOf(id);

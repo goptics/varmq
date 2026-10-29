@@ -1,0 +1,713 @@
+/* The home page's opening (components/Story.astro, lib/story/main.ts): the intro, then varmq's story in ten steps,
+   one per scroll. A stage is pinned under the header for a track of one-stage steps. Its text column is a size
+   container, so the text sets itself by the room it has. The map draws in its own palette (lib/heromap/map.css),
+   the code is a dark panel in both themes, and green marks what is happening now. */
+
+/* While the reader is in the story, the page snaps a step at a time (main.ts turns this on and off). */
+:root.st-snap {
+	scroll-snap-type: y mandatory;
+	scroll-padding-top: var(--sl-nav-height);
+}
+
+/* The home page is a landing page (docs/DESIGN.md, "Page types"): the story runs the full width of the page, under
+   the header, and the rest of the page keeps the docs' reading column. */
+:root:has(.st) .main-pane > main {
+	max-width: none;
+	border-inline: 0;
+}
+
+:root:has(.st) .content-panel {
+	padding-top: 0;
+}
+
+:root:has(.st) .content-panel > .sl-container {
+	max-width: none;
+}
+
+:root:has(.st) .sl-container > :not(.st) {
+	max-width: 44rem;
+	margin-inline: auto;
+}
+
+/* About 70 letters a line. In this face `ch`, a zero, is much wider than an average letter, so the measure is in em. */
+:root:has(.st) .sl-markdown-content :is(p, .card .body) {
+	max-width: 34em;
+}
+
+/* Below the story, three link cards share one row, and the three figures, each with its paragraph, read as a list
+   rather than a two-and-one grid. */
+@media (min-width: 50rem) {
+	:root:has(.st) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+:root:has(.st) .card-grid:has(> .card:nth-child(3):last-child) {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+/* On a phone, Starlight keeps the theme switch in the sidebar's menu, which the home page does not have: its header
+   shows the switch instead, without the GitHub link, which the intro has. */
+@media (max-width: 49.99rem) {
+	:root:has(.st) .header .right-group {
+		display: flex;
+	}
+
+	:root:has(.st) .header .social-icons {
+		display: none;
+	}
+}
+
+.st {
+	--st-h: calc(100svh - var(--sl-nav-height));
+	--st-max: 1320px;
+	--st-gap: clamp(24px, 4vw, 72px);
+	--st-pad-y: min(24px, 3svh);
+	--st-small: 0.9375rem;
+
+	display: grid;
+	margin-inline: calc(-1 * var(--sl-content-pad-x));
+}
+
+.st-track,
+.st-stage {
+	grid-area: 1 / 1;
+}
+
+.st-snap {
+	height: var(--st-h);
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+}
+
+.st-stage {
+	position: sticky;
+	top: var(--sl-nav-height);
+	align-self: start;
+	display: grid;
+	grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+	grid-template-rows: minmax(0, 1fr);
+	column-gap: var(--st-gap);
+	align-items: center;
+	width: 100%;
+	max-width: var(--st-max);
+	height: var(--st-h);
+	margin: 0 auto;
+	padding: var(--st-pad-y) var(--gutter);
+}
+
+/* The step's place is a size container, so the text sets itself by the room it has rather than by the screen. The
+   step never grows past it: short of room, its code block gives up lines, and keeps the lit ones in view. */
+.st-text {
+	display: grid;
+	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+	height: 100%;
+	min-width: 0;
+	container-type: size;
+}
+
+.st-intro,
+.st-step {
+	grid-area: 1 / 1;
+	align-self: center;
+	min-width: 0;
+	max-height: 100%;
+	animation: st-in 420ms var(--ease) both;
+}
+
+.st-intro[hidden],
+.st-step[hidden] {
+	display: none;
+}
+
+@keyframes st-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+
+:where(.st) :where(h1, h2, p, ol, pre) {
+	margin: 0;
+}
+
+/* ---- The intro ---- */
+
+.st-intro {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+.st-intro h1 {
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: clamp(2.375rem, 4.4vw, 3.75rem);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 96;
+	letter-spacing: -0.035em;
+	line-height: 0.98;
+	text-wrap: balance;
+}
+
+.st-lede {
+	max-width: 40ch;
+	margin-top: 20px;
+	color: var(--ink-2);
+	font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+	line-height: 1.5;
+	text-wrap: pretty;
+}
+
+.st-intro .install {
+	margin-top: 32px;
+}
+
+.st-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.st-hint {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 40px;
+	color: var(--ink-3);
+	font-size: var(--st-small);
+}
+
+.st-hint svg {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: var(--accent-text);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	animation: st-nudge 2.4s var(--ease) infinite;
+}
+
+@keyframes st-nudge {
+	50% {
+		transform: translateY(3px);
+	}
+}
+
+/* ---- A step ---- */
+
+.st-step {
+	display: flex;
+	flex-direction: column;
+}
+
+.st-count {
+	margin-bottom: 6px;
+	color: var(--ink-3);
+	font: 500 0.8125rem/1.4 var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.st-count span {
+	color: var(--accent-text);
+	font-weight: 700;
+}
+
+.st-title {
+	margin-bottom: 14px;
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: clamp(2rem, 3.2vw, 2.625rem);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 72;
+	letter-spacing: -0.03em;
+	line-height: 1.05;
+	text-wrap: balance;
+}
+
+.st-notes {
+	margin-bottom: 20px;
+	padding: 0;
+	list-style: none;
+	font-weight: 500;
+}
+
+.st-notes li {
+	position: relative;
+	padding-left: 26px;
+	color: var(--ink-3);
+	transition: color 240ms var(--ease);
+}
+
+.st-notes li + li {
+	margin-top: 4px;
+}
+
+.st-notes li[data-on] {
+	color: var(--ink);
+}
+
+/* Each caption plays the step again from it (main.ts). */
+.st-notes button {
+	display: block;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.st-notes button:hover {
+	color: var(--ink);
+}
+
+.st-notes button:hover .st-ring {
+	stroke: var(--accent-text);
+}
+
+.st-notes button:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+	border-radius: 4px;
+}
+
+/* Each caption's point is a ring, like a goroutine's on the map: its arc fills while the caption plays (main.ts sets
+   --p from the map's clock), and once the caption is done the ring fills in and pulses. */
+.st-point {
+	position: absolute;
+	top: calc(0.8em - 7px);
+	left: 1px;
+	width: 14px;
+	height: 14px;
+	overflow: visible;
+}
+
+.st-point circle {
+	fill: none;
+	stroke-width: 2;
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+.st-point .st-ring {
+	stroke: var(--rule);
+}
+
+.st-point .st-arc {
+	stroke: var(--accent-text);
+	stroke-dasharray: 1;
+	stroke-dashoffset: calc(1 - var(--p, 0));
+	transform: rotate(-90deg);
+}
+
+.st-point .st-core {
+	fill: var(--accent-text);
+	stroke: none;
+	transform: scale(0);
+	transition: transform 300ms var(--ease);
+}
+
+.st-notes li[data-done] .st-core {
+	transform: scale(1);
+}
+
+.st-notes li[data-done] .st-point {
+	animation: st-pulse 520ms var(--ease);
+}
+
+@keyframes st-pulse {
+	27% {
+		transform: scale(1.22);
+	}
+}
+
+/* A line runs from each caption's point to the next, and fills once the caption is done. */
+.st-notes li:not(:last-child)::after {
+	content: '';
+	position: absolute;
+	top: calc(0.8em + 10px);
+	bottom: calc(6px - 0.8em);
+	left: 7px;
+	width: 2px;
+	border-radius: 1px;
+	background-color: var(--rule);
+	background-image: linear-gradient(var(--accent-text), var(--accent-text));
+	background-repeat: no-repeat;
+	background-size: 100% 0;
+	transition: background-size 420ms var(--ease);
+}
+
+.st-notes li[data-done]::after {
+	background-size: 100% 100%;
+}
+
+.st-notes em {
+	font-style: normal;
+	color: var(--ink);
+	font-weight: 700;
+}
+
+.st .fail {
+	color: var(--vm-red-text);
+	font-weight: 700;
+}
+
+.st .brand-sqlite {
+	color: var(--vm-sqlite-text);
+	font-weight: 700;
+}
+
+.st .brand-redis {
+	color: var(--vm-redis-text);
+	font-weight: 700;
+}
+
+/* The one code block, whose code morphs from step to step. Each caption lights the lines it is about. It is the part
+   of a step that gives way when room runs short, down to three lines; it never scrolls by hand, so no scrollbar shows,
+   even mid-morph. A dark panel in both themes, like every code block on the site. */
+.st-code {
+	--lh: 23px;
+	--pad: 16px;
+	position: relative;
+	flex: 0 1 auto;
+	min-height: calc(2 * var(--pad) + 3 * var(--lh));
+	overflow: hidden;
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	box-shadow: var(--sl-shadow-md);
+}
+
+.st-code pre {
+	position: relative;
+	z-index: 1;
+	padding: var(--pad) 20px;
+	overflow: hidden;
+	background: transparent !important;
+	font: 14px / var(--lh) var(--mono);
+	font-variant-ligatures: none;
+	tab-size: 4;
+	--smm-duration: 700ms;
+	--smm-easing: var(--ease);
+}
+
+.st-rows i {
+	position: absolute;
+	z-index: 2;
+	right: 0;
+	left: 0;
+	top: calc(var(--pad) + var(--n) * var(--lh));
+	height: var(--lh);
+	pointer-events: none;
+	transition: background-color 240ms var(--ease);
+}
+
+.st-rows i[data-state='lit'] {
+	background: color-mix(in srgb, var(--panel-accent) 12%, transparent);
+}
+
+.st-rows i[data-state='none'] {
+	display: none;
+}
+
+/* Short of room, the block fades at its cut edges, so a half line reads as more code rather than a break. Where all
+   the code fits, the fades lie over its padding and show nothing. */
+.st-code::before,
+.st-code::after {
+	content: '';
+	position: sticky;
+	z-index: 3;
+	display: block;
+	height: var(--pad);
+	pointer-events: none;
+}
+
+.st-code::before {
+	top: 0;
+	margin-bottom: calc(-1 * var(--pad));
+	background: linear-gradient(var(--panel), transparent);
+}
+
+.st-code::after {
+	bottom: 0;
+	margin-top: calc(-1 * var(--pad));
+	background: linear-gradient(transparent, var(--panel));
+}
+
+.st-code-phone {
+	display: none;
+}
+
+.st-source {
+	margin-top: 12px;
+	color: var(--ink-3);
+	font-size: var(--st-small);
+}
+
+.st-source a {
+	color: var(--accent-text);
+	text-underline-offset: 0.22em;
+}
+
+/* ---- The map ---- */
+
+/* The map reserves the bottom 56 of its 400 units for a caption, which the step text replaces here: the frame crops
+   that band, where the next region down would otherwise show. Its top and bottom edges fade into the page over the
+   20-unit margin the camera leaves around a chapter, so a sliver of a neighbouring region never shows. The fades lie
+   over the map rather than mask it: a mask would repaint the whole map every frame. */
+.st-map {
+	min-width: 0;
+	animation: st-fade 420ms var(--ease) both;
+}
+
+@keyframes st-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+.st-frame {
+	position: relative;
+	width: min(100%, calc((var(--st-h) - 2 * var(--st-pad-y) - 24px) * 400 / 344));
+	aspect-ratio: 400 / 344;
+	margin-left: auto;
+	overflow: hidden;
+}
+
+.st-frame::before,
+.st-frame::after {
+	content: '';
+	position: absolute;
+	z-index: 1;
+	right: 0;
+	left: 0;
+	height: 6%;
+	pointer-events: none;
+}
+
+.st-frame::before {
+	top: 0;
+	background: linear-gradient(var(--paper), transparent);
+}
+
+.st-frame::after {
+	bottom: 0;
+	background: linear-gradient(transparent, var(--paper));
+}
+
+.st varmq-map {
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+}
+
+.st varmq-map .vm-caption {
+	display: none;
+}
+
+/* ---- By the room the text has ---- */
+
+/* A narrow place takes the phone cut of the code, which breaks the long lines, and sets the step a size down. */
+@container (max-width: 29rem) {
+	.st-code-wide {
+		display: none;
+	}
+
+	.st-code-phone {
+		display: block;
+		--lh: 18px;
+		--pad: 12px;
+	}
+
+	.st-code-phone pre {
+		padding: var(--pad) 14px;
+		font-size: 12px;
+		tab-size: 2;
+	}
+}
+
+@container (max-width: 25rem) {
+	.st-title {
+		margin-bottom: 8px;
+		font-size: 1.625rem;
+	}
+
+	.st-notes {
+		margin-bottom: 12px;
+		font-size: 1rem;
+	}
+
+	.st-source {
+		margin-top: 8px;
+		font-size: 0.8125rem;
+	}
+}
+
+/* Narrower still, as on a 320px phone: the code a size down, so its 40 columns still fit. */
+@container (max-width: 20rem) {
+	.st-code-phone {
+		--lh: 17px;
+		--pad: 10px;
+	}
+
+	.st-code-phone pre {
+		padding: var(--pad) 10px;
+		font-size: 11px;
+	}
+}
+
+/* A short place shows only the lit caption. The step's captions share one cell, as tall as the longest of them, so
+   the code block holds still while they change. */
+@container (max-height: 34rem) {
+	.st-notes {
+		display: grid;
+	}
+
+	.st-notes li {
+		grid-area: 1 / 1;
+	}
+
+	.st-notes li + li {
+		margin-top: 0;
+	}
+
+	.st-notes li:not([data-on]) {
+		visibility: hidden;
+	}
+
+	.st-notes li::after {
+		display: none;
+	}
+
+	.st-hint {
+		display: none;
+	}
+}
+
+/* The intro on a short place: the hint goes first (above), then the title sets a size down and the gaps close up,
+   then the lede goes. */
+@container (max-height: 26rem) {
+	.st-intro h1 {
+		font-size: 1.875rem;
+	}
+
+	.st-lede {
+		margin-top: 12px;
+		font-size: 1rem;
+	}
+
+	.st-intro .install {
+		margin-top: 16px;
+	}
+
+	.st-actions {
+		margin-top: 12px;
+	}
+}
+
+@container (max-height: 20rem) {
+	.st-lede {
+		display: none;
+	}
+}
+
+/* A very short one, as on a phone held sideways: the gaps close up. */
+@container (max-height: 21rem) {
+	.st-count {
+		margin-bottom: 2px;
+	}
+
+	.st-title {
+		margin-bottom: 6px;
+		font-size: 1.375rem;
+	}
+
+	.st-notes {
+		margin-bottom: 8px;
+	}
+
+	.st-source {
+		margin-top: 6px;
+	}
+}
+
+/* Shorter still: the phone code a size down, so the lines a caption lights fit in its window. */
+@container (max-height: 18rem) {
+	.st-code-phone {
+		--lh: 16px;
+		--pad: 8px;
+	}
+
+	.st-code-phone pre {
+		font-size: 11px;
+	}
+}
+
+/* Portrait below desktop: the map on top, the step under it. The step keeps 20rem, and the map takes the rest,
+   between 30% and 40% of the stage's height, and no wider than the screen. */
+@media (max-width: 1023px) and (orientation: portrait) {
+	.st-stage {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+		align-items: start;
+		padding: 0;
+	}
+
+	.st-map {
+		grid-row: 1;
+		padding: 8px 0 10px;
+	}
+
+	.st-frame {
+		width: min(100%, calc(clamp(30svh, var(--st-h) - 18px - 20rem, 40svh) * 400 / 344));
+		margin: 0 auto;
+	}
+
+	.st-text {
+		grid-row: 2;
+		padding: 4px var(--gutter) 12px;
+	}
+
+	/* The intro has the stage to itself: the map comes in with step 1. */
+	.st[data-at='intro'] .st-map {
+		display: none;
+	}
+
+	.st[data-at='intro'] .st-text {
+		grid-row: 1 / -1;
+		padding-block: 16px;
+	}
+
+	.st-intro,
+	.st-step {
+		align-self: start;
+	}
+}
+
+/* Landscape below desktop, as at 200% zoom or on a phone held sideways: still side by side, the step at least 18rem
+   wide. */
+@media (max-width: 1023px) and (orientation: landscape) {
+	.st-stage {
+		grid-template-columns: minmax(18rem, 1fr) minmax(0, 1fr);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.st *,
+	.st *::before,
+	.st *::after {
+		transition: none !important;
+		animation: none !important;
+	}
+
+	.st-code pre {
+		--smm-duration: 0ms;
+	}
+}

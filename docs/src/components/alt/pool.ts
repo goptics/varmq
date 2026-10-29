@@ -160,7 +160,7 @@ function init(root: HTMLElement) {
 			for (const el of stats.waiting) el.textContent = String(queue.length);
 			for (const el of stats.done) el.textContent = String(done);
 			pauseBtn.textContent = paused ? 'Resume' : 'Pause';
-			pauseBtn.disabled = state === 'pausing';
+			pauseBtn.setAttribute('aria-disabled', String(state === 'pausing'));
 			const e = JSON.stringify({ workers, waiting: queue.length, state, done });
 			if (e !== evt) {
 				evt = e;
@@ -171,7 +171,9 @@ function init(root: HTMLElement) {
 
 	let last = performance.now();
 	let since = 0;
+	let raf = 0;
 	const frame = (now: number) => {
+		raf = 0;
 		const dt = Math.min(now - last, 100);
 		last = now;
 		if (visible) {
@@ -187,12 +189,15 @@ function init(root: HTMLElement) {
 				render();
 			}
 		}
-		requestAnimationFrame(frame);
+		if (visible) raf = requestAnimationFrame(frame);
 	};
 
 	new IntersectionObserver(([entry]) => {
 		visible = entry.isIntersecting;
-		last = performance.now();
+		if (visible && !raf) {
+			last = performance.now();
+			raf = requestAnimationFrame(frame);
+		}
 	}).observe(root);
 
 	root.addEventListener('click', (e) => {
@@ -220,6 +225,7 @@ function init(root: HTMLElement) {
 				}
 				break;
 			case 'toggle':
+				if (btn.getAttribute('aria-disabled') === 'true') break;
 				paused = !paused;
 				say(paused ? 'worker.Pause()' : 'worker.Resume()', paused ? 'Worker paused. Running jobs finish.' : 'Worker resumed.');
 				break;
@@ -240,5 +246,5 @@ function init(root: HTMLElement) {
 	prodBtn.setAttribute('aria-pressed', String(producer));
 	step(0, false);
 	render();
-	requestAnimationFrame(frame);
+	raf = requestAnimationFrame(frame);
 }

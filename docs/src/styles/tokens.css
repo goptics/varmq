@@ -2,7 +2,7 @@
    and any page that follows docs/DESIGN.md. Change a value here, not in a page stylesheet. */
 
 :root {
-	color-scheme: light dark;
+	color-scheme: light;
 
 	--paper: #f5faf7;
 	--bar: #ebf5f0;
@@ -39,20 +39,19 @@
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--paper: #0f1713;
-		--bar: #121d18;
-		--bar-2: #182720;
-		--hole: #070c09;
-		--ink: #e5f1eb;
-		--ink-2: #b0c7bb;
-		--ink-3: #8fa89c;
-		--rule: #2a4137;
-		--accent-text: #5fd4b2;
-		--panel: #0a1410;
-		--panel-2: #0f1c16;
-	}
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--paper: #0f1713;
+	--bar: #121d18;
+	--bar-2: #182720;
+	--hole: #070c09;
+	--ink: #e5f1eb;
+	--ink-2: #b0c7bb;
+	--ink-3: #8fa89c;
+	--rule: #2a4137;
+	--accent-text: #5fd4b2;
+	--panel: #0a1410;
+	--panel-2: #0f1c16;
 }
 
 
@@ -78,14 +77,12 @@
 	--tk-b-on-dark: #8fb0ff;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--tk-k: var(--tk-k-on-dark);
-		--tk-s: var(--tk-s-on-dark);
-		--tk-c: var(--tk-c-on-dark);
-		--tk-n: var(--tk-n-on-dark);
-		--tk-f: var(--tk-f-on-dark);
-		--tk-t: var(--tk-t-on-dark);
-		--tk-b: var(--tk-b-on-dark);
-	}
+:root[data-theme='dark'] {
+	--tk-k: var(--tk-k-on-dark);
+	--tk-s: var(--tk-s-on-dark);
+	--tk-c: var(--tk-c-on-dark);
+	--tk-n: var(--tk-n-on-dark);
+	--tk-f: var(--tk-f-on-dark);
+	--tk-t: var(--tk-t-on-dark);
+	--tk-b: var(--tk-b-on-dark);
 }

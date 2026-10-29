@@ -66,7 +66,6 @@ function init(root: HTMLElement) {
 		dbQ.replaceChildren(...(persistent ? list(waiting) : []));
 		runEl.replaceChildren(running === null ? Object.assign(document.createElement('small'), { textContent: up ? 'no job' : 'down' }) : chip(running));
 		pauseBtn.textContent = frozen ? 'Resume demo' : 'Pause demo';
-		pauseBtn.setAttribute('aria-pressed', String(frozen));
 	};
 
 	const tick = () => {
@@ -139,7 +138,9 @@ function init(root: HTMLElement) {
 	document.addEventListener('tabchange', (e) => {
 		const tab = e.target as HTMLElement;
 		if (!tab.closest('[data-store-tabs]')) return;
-		mode = (tab.dataset.key as Mode) ?? 'memory';
+		const next = (tab.dataset.key as Mode) ?? 'memory';
+		if (next === mode) return;
+		mode = next;
 		waiting = [];
 		lost = [];
 		running = null;

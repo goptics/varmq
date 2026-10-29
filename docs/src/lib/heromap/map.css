@@ -1,9 +1,9 @@
-/* The hero map's styles, added to the home page by HeroMap.astro (as one injected stylesheet), so no other page
-   loads them. Everything but the reserved square, which the component keeps global so it holds before any script.
+/* The map's styles, imported by the home page's story (components/Story.astro), so no other page loads them. The
+   palette sits on the page root, so the story's text beside the map can use the map's colours too.
 
    Style A · Glow. Dark is the default; the light palette keeps the hues in darker ink, with no glow. The square
    has no background of its own: the page's shows through, under a dot grid that fades toward the edges. */
-varmq-map {
+:root {
 	--vm-dot: #1e2a38;
 	--vm-ink: #8592a3;
 	--vm-caption: #cfd8e3;
@@ -46,54 +46,68 @@ varmq-map {
 	--vm-ack: rgba(68, 191, 158, 0.3);
 	--vm-button: rgba(6, 8, 12, 0.6);
 	--vm-button-edge: rgba(150, 175, 200, 0.3);
+	/* The map's red, SQLite blue and Redis red as text on the page, beside the map. */
+	--vm-red-text: #ff6b6b;
+	--vm-sqlite-text: #4aa8e8;
+	--vm-redis-text: #ff4438;
+}
 
+varmq-map {
 	position: relative;
 	overflow: hidden;
 	container-type: inline-size;
 }
 
-:root[data-theme='light'] varmq-map {
-	--vm-dot: #cfd8e3;
-	--vm-ink: #4b5563;
-	--vm-caption: #1f2937;
-	--vm-green: #0f7a5c;
-	--vm-red: #c62828;
-	--vm-sqlite: #0f80cc;
-	--vm-redis: #dc382d;
+/* Light: the dark map's hues, as ink on the page's paper. Strokes and text share one lightness, OKLCH L 0.50 to
+   0.56, as the page's own on-paper colours do, so no hue outweighs another, and each one has at least 4.5:1 against
+   --paper. Fills are the same hues near L 0.96. The greys take the paper's green rather than a cool grey, so the map
+   sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
+:root[data-theme='light'] {
+	--vm-dot: #cddbd4;
+	--vm-ink: var(--ink-3);
+	--vm-caption: var(--ink);
+	--vm-green: var(--accent-text);
+	--vm-red: #bd3933;
+	--vm-sqlite: #196ea9;
+	--vm-redis: #c53227;
 	--vm-glow: none;
-	--vm-job: #e09b0c;
-	--vm-job-edge: #b7791f;
-	--vm-chip: #fcf5e7;
-	--vm-chip-edge: rgba(183, 121, 31, 0.7);
-	--vm-chip-ink: #8f5a0b;
-	--vm-value: #eaf5f2;
-	--vm-value-edge: rgba(46, 156, 127, 0.7);
-	--vm-error: #faeeee;
-	--vm-error-edge: rgba(198, 40, 40, 0.6);
-	--vm-lane: rgba(224, 155, 12, 0.07);
-	--vm-lane-edge: #b7791f;
+	--vm-job: #f2b036;
+	--vm-job-edge: #a26500;
+	--vm-job-ink: #4c2e02;
+	--vm-chip: #fcf0dc;
+	--vm-chip-edge: color-mix(in srgb, #a26500 80%, transparent);
+	--vm-chip-ink: var(--tk-s);
+	--vm-value: #e4f7ee;
+	--vm-value-edge: color-mix(in srgb, var(--accent-text) 75%, transparent);
+	--vm-error: #ffedea;
+	--vm-error-edge: color-mix(in srgb, #bd3933 60%, transparent);
+	--vm-lane: color-mix(in srgb, #f2b036 12%, transparent);
+	--vm-lane-edge: #a26500;
 	--vm-lane-tail: 0.3;
 	--vm-lane-head: 1;
-	--vm-tray: rgba(224, 155, 12, 0.03);
-	--vm-tray-edge: rgba(183, 121, 31, 0.6);
-	--vm-slot: rgba(183, 121, 31, 0.35);
-	--vm-go: #2e9c7f;
-	--vm-go-fill: rgba(46, 156, 127, 0.12);
-	--vm-ghost: rgba(46, 156, 127, 0.45);
-	--vm-check: #0f7a5c;
-	--vm-card: rgba(46, 156, 127, 0.06);
-	--vm-card-edge: rgba(46, 156, 127, 0.6);
-	--vm-loop: #7c3aed;
-	--vm-loop-fill: rgba(124, 58, 237, 0.08);
-	--vm-pulse: #7c3aed;
-	--vm-store: rgba(124, 58, 237, 0.05);
-	--vm-store-edge: rgba(124, 58, 237, 0.6);
-	--vm-program: rgba(71, 85, 105, 0.03);
-	--vm-program-edge: rgba(71, 85, 105, 0.45);
-	--vm-line: rgba(71, 85, 105, 0.45);
-	--vm-ack: rgba(46, 156, 127, 0.55);
-	--vm-button: rgba(255, 255, 255, 0.75);
-	--vm-button-edge: rgba(71, 85, 105, 0.3);
+	--vm-tray: color-mix(in srgb, #f2b036 5%, transparent);
+	--vm-tray-edge: color-mix(in srgb, #a26500 70%, transparent);
+	--vm-slot: color-mix(in srgb, #a26500 30%, transparent);
+	--vm-go: var(--accent-text);
+	--vm-go-fill: color-mix(in srgb, var(--accent-text) 10%, transparent);
+	--vm-ghost: color-mix(in srgb, var(--accent-text) 40%, transparent);
+	--vm-check: #095e46;
+	--vm-card: color-mix(in srgb, var(--accent-text) 7%, transparent);
+	--vm-card-edge: color-mix(in srgb, var(--accent-text) 75%, transparent);
+	--vm-loop: #6b4bb8;
+	--vm-loop-fill: color-mix(in srgb, #6b4bb8 8%, transparent);
+	--vm-pulse: #6b4bb8;
+	--vm-store: color-mix(in srgb, #6b4bb8 5%, transparent);
+	--vm-store-edge: color-mix(in srgb, #6b4bb8 75%, transparent);
+	--vm-program: color-mix(in srgb, var(--ink-3) 5%, transparent);
+	--vm-program-edge: color-mix(in srgb, var(--ink-3) 60%, transparent);
+	--vm-line: color-mix(in srgb, var(--ink-3) 55%, transparent);
+	--vm-ack: color-mix(in srgb, var(--accent-text) 50%, transparent);
+	--vm-button: color-mix(in srgb, var(--paper) 80%, transparent);
+	--vm-button-edge: color-mix(in srgb, var(--ink-3) 30%, transparent);
+	--vm-red-text: #bd3933;
+	--vm-sqlite-text: #196ea9;
+	--vm-redis-text: #c53227;
 }
 
 /* The map, world and grid, fades into the page at the square's edges, so a piece the edge cuts has no hard edge.
@@ -108,6 +122,12 @@ varmq-map .vm-svg {
 		linear-gradient(to right, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent),
 		linear-gradient(to bottom, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent);
 	mask-composite: intersect;
+}
+
+/* The map's own svg changes every frame it plays, so it has a layer of its own: repainting it never repaints the
+   grid's svg under it (render.ts). */
+varmq-map .vm-svg:not(.vm-under) {
+	will-change: transform;
 }
 
 /* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */
@@ -169,6 +189,15 @@ varmq-map .vm-label.vm-died {
 varmq-map .vm-text {
 	font-size: 13px;
 	fill: var(--vm-chip-ink);
+}
+
+/* A Redis record in flight shows the consumer holding it, B or C, until the ack or the requeue. */
+varmq-map .vm-tag {
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 12px;
+	font-weight: 700;
+	fill: var(--vm-chip-ink);
+	fill-opacity: var(--vm-label, 1);
 }
 
 varmq-map .vm-num {

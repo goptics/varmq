@@ -18,15 +18,18 @@ describe('chapters', () => {
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 22);
+		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 25);
 	});
-	it('run about 85 seconds', () => {
-		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
+	// The site plays a step per scroll rather than the loop, so the loop may run long enough to show every strategy.
+	it('run about 100 seconds', () => {
+		assert.ok(TOTAL >= 80000 && TOTAL <= 105000, String(TOTAL));
 		assert.equal(starts()[9] + CHAPTERS[9].duration, TOTAL);
 	});
-	it('finish every part before its chapter ends', () => {
+	// The site stops on each chapter's last frame, so its last job's done (a 900 ms pulse and check) must have settled.
+	it('finish every part a second before its chapter ends', () => {
 		for (const c of CHAPTERS) for (const p of c.parts)
-			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 600, `chapter ${c.n}`);
+			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 1000, `chapter ${c.n}`);
 	});
 	it('chapter 1 never has more than one job waiting at a dispatch', () => {
 		for (const d of dispatches(part(1, 'pool', 'core'))) assert.ok(d.waiting <= 0, String(d.at));
@@ -195,10 +198,17 @@ describe('chapter rules', () => {
 		const p = part(3, 'pool', 'result');
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
-	it('chapter 5 takes from its queues in turn and skips the empty priority queue', () => {
-		const p = part(5, 'pool', 'core');
-		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
-		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
+	it('chapter 5 runs one burst per strategy, each leaving in that strategy\'s order', () => {
+		// a is alerts (the queue), r reports (the priority queue) and e emails (the third queue), bound in that order.
+		const letter = { queue: 'a', prio: 'r', 'queue-c': 'e' };
+		const runs = {};
+		for (const d of dispatches(part(5, 'pool', 'core'))) runs[d.strategy] = (runs[d.strategy] ?? '') + letter[d.source];
+		assert.deepEqual(runs, {
+			priority: 'aarrre', // in bind order, though r is the longest and e the shortest
+			maxlen: 'rrare', // r while it is the longest, then the first of equals
+			minlen: 'reeaaa', // the shortest with a job first
+			roundrobin: 'areare', // each in turn, from the turn chapter 4 left
+		});
 	});
 	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);

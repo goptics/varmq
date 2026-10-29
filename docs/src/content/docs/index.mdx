@@ -10,67 +10,25 @@ lastUpdated: false
 prev: false
 next: false
 tableOfContents: false
+# The hero is the story (components/Story.astro): its intro shows this title and tagline beside the whole map.
 hero:
-  tagline: A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program
-  image:
-    html: '<varmq-map></varmq-map>'
-  actions:
-    - text: Get started
-      link: /start/quick-start/
-      variant: primary
-      icon: right-arrow
-    - text: GitHub
-      link: https://github.com/goptics/varmq
-      variant: minimal
-      icon: external
+  title: Worker pools and job queues for Go
+  tagline: Add jobs to a queue. A pool of workers runs them. Keep the jobs in memory, or in Redis or SQLite so they survive a restart.
 ---
 
-import { Card, CardGrid, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 import GoPlay from '../../components/GoPlay.astro';
-import HeroMap from '../../components/HeroMap.astro';
-
-<HeroMap />
-
-<Code code="go get github.com/goptics/varmq" lang="sh" title="Install" />
 
 ## Try it
 
-A worker with the default concurrency of 1 runs two jobs, one after the other. Press Run to run it in the Go Playground, or edit it first.
-
-<GoPlay example="quick-start" />
-
-## What you get
-
-<CardGrid>
-	<Card title="Typed jobs and results" icon="approve-check">
-		A job carries your type. A worker can also return an error, or a result and an error, that you
-		read from the job. See [worker types](/guides/worker-types/).
-	</Card>
-	<Card title="Priority queues" icon="list-format">
-		Add a job with a priority and the lowest number runs first. See [queues](/guides/queues/).
-	</Card>
-	<Card title="Several queues, one pool" icon="random">
-		Bind many queues to one worker and choose how it picks between them. See
-		[strategies](/guides/strategies/).
-	</Card>
-	<Card title="Topics" icon="rss">
-		Publish once and every subscribed worker gets its own job. See [topics](/guides/topics/).
-	</Card>
-	<Card title="Persistent and distributed queues" icon="puzzle">
-		Keep jobs across restarts, or share a queue between processes, with a storage adapter. See
-		[persistence](/persistence/overview/).
-	</Card>
-	<Card title="Control at runtime" icon="setting">
-		Pause, resume, restart or resize a running worker, from code or over HTTP. See
-		[lifecycle](/concepts/lifecycle/) and the [REST API](/operations/rest-api/).
-	</Card>
-</CardGrid>
-
-## A closer look
-
-Each tab is a full program you can run.
+Each tab is a full program. Press Run to run it in the Go Playground, or edit it first.
 
 <Tabs>
+	<TabItem label="Quick start">
+		A worker with the default concurrency of 1 runs two jobs, one after the other.
+
+		<GoPlay example="quick-start" />
+	</TabItem>
 	<TabItem label="Priority">
 		The worker is started after the three jobs are added, so the lowest number runs first.
 
@@ -119,13 +77,13 @@ Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the 
 
 <CardGrid>
 	<Card title="4.89M tasks/s">
-		Average over 15M tasks per run, 50K workers, 1 to 1M producers. The next fastest pool, a
-		hand-rolled buffered channel pool, does 2.73M, and ants 2.22M. It uses more memory: 115 MB per 1M
+		Mean of 15 runs of 1M tasks (3 task types by 5 producer shapes) at GOMAXPROCS 24, 8 and 4, with
+		50K workers. The next fastest pool, a hand-rolled buffered channel pool, does 2.73M, and ants 2.22M. It uses more memory: 115 MB per 1M
 		tasks against 15 MB for ants, because `Add` never blocks.
 	</Card>
 	<Card title="59,898 jobs/s on Redis">
-		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. The median
-		time from enqueue to handler is 0.058 ms.
+		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. With 10
+		workers taking one job at a time, the median time from enqueue to handler is 0.058 ms.
 	</Card>
 	<Card title="14,725 jobs/s on SQLite">
 		With sqliteq, draining 20K jobs on WAL. goqite does 2,933 and River 3,230 on the same run.

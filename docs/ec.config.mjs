@@ -18,7 +18,7 @@ const rule = (scope, token, fontStyle) => ({
 });
 
 /** @type {import('@astrojs/starlight/expressive-code').StarlightExpressiveCodeOptions['themes']} */
-const themes = [
+export const themes = [
 	{
 		name: 'varmq-panel',
 		type: 'dark',

@@ -33,7 +33,9 @@
 /* Inside a dark panel the Go tokens take their dark values in both themes. */
 .sframe,
 .code--dark,
-.expressive-code {
+.expressive-code,
+.pool,
+.st-code {
 	--tk-k: var(--tk-k-on-dark);
 	--tk-s: var(--tk-s-on-dark);
 	--tk-c: var(--tk-c-on-dark);
@@ -147,7 +149,6 @@
 .code--dark :focus-visible {
 	outline: 2px solid var(--panel-accent);
 	outline-offset: 3px;
-	border-radius: 4px;
 }
 
 .sframe__bar {
@@ -308,6 +309,11 @@
 	color: var(--panel-accent);
 }
 
+.pbtn--paper[aria-pressed='true'] {
+	border-color: var(--accent-text);
+	color: var(--accent-text);
+}
+
 .pbtn[disabled],
 .pbtn[aria-disabled='true'] {
 	opacity: 0.4;
@@ -413,7 +419,8 @@
 
 /* ---- Code card: a file name row, the code, a copy button ---- */
 
-.code {
+/* Expressive Code names each line of its code blocks `.code` as well; the card is never one of those. */
+.code:not(:where(.ec-line > *)) {
 	border: 1px solid var(--rule);
 	border-radius: 12px;
 	background: color-mix(in srgb, var(--paper) 86%, var(--bar-2));
@@ -541,6 +548,168 @@ button.copy:hover {
 
 .sfield input[type='text'] {
 	width: 11ch;
+}
+
+/* ---- Buttons for a page's main actions, on paper (the landing pages) ---- */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 10px 18px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	font: 600 0.9375rem/1 var(--display);
+	text-decoration: none;
+	cursor: pointer;
+	transition:
+		background-color 0.15s,
+		transform 0.15s var(--ease);
+}
+
+.alt a.btn--primary,
+.btn--primary {
+	background: var(--brand);
+	color: var(--brand-ink);
+}
+
+.btn--primary:hover {
+	background: var(--brand-hover);
+	text-decoration: none;
+}
+
+.btn--primary:active {
+	transform: translateY(1px);
+}
+
+.alt a.btn--ghost,
+.btn--ghost {
+	color: var(--ink);
+	border-color: var(--rule);
+	background: transparent;
+}
+
+.btn--ghost:hover {
+	background: var(--bar-2);
+	text-decoration: none;
+}
+
+/* ---- Install box: the `go get` commands in tabs (components/ui/Install.astro) ---- */
+
+.install :focus-visible {
+	outline-color: var(--panel-accent);
+}
+
+.install {
+	width: min(100%, 640px);
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	overflow: hidden;
+}
+
+.install [role='tablist'] {
+	display: flex;
+	gap: 2px;
+	padding: 8px 8px 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.install [role='tab'] {
+	flex: none;
+	min-height: 36px;
+	padding: 8px 12px;
+	border: 0;
+	border-radius: 8px 8px 0 0;
+	background: transparent;
+	color: var(--panel-ink-2);
+	font: 500 0.8125rem/1 var(--mono);
+	cursor: pointer;
+}
+
+.install [role='tab'][aria-selected='true'] {
+	background: var(--panel-2);
+	color: var(--panel-ink);
+}
+
+.install__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 14px 14px 16px;
+	background: var(--panel-2);
+	font: 400 0.9375rem/1.4 var(--mono);
+}
+
+.install__row code {
+	flex: 1;
+	min-width: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.install__row code::before {
+	content: '$ ';
+	color: var(--panel-ink-2);
+}
+
+/* ---- Theme switch: Light, Dark, System (components/ui/ThemeSwitch.astro) ---- */
+
+.tswitch fieldset {
+	display: inline-flex;
+	gap: 2px;
+	margin: 0;
+	padding: 3px;
+	border: 1px solid var(--rule);
+	border-radius: 12px;
+}
+
+.tswitch label {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	color: var(--ink-3);
+	cursor: pointer;
+	transition:
+		color 0.15s var(--ease),
+		background-color 0.15s var(--ease);
+}
+
+.tswitch label:hover {
+	color: var(--ink);
+	background: var(--bar-2);
+}
+
+.tswitch input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.tswitch label:has(:checked) {
+	background: var(--ink);
+	color: var(--paper);
+}
+
+.tswitch label:has(:focus-visible) {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+}
+
+@media (pointer: coarse) {
+	.tswitch label {
+		width: 40px;
+		height: 40px;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,13 +3,14 @@ import '../../styles/ui.css';
 import '../../styles/alt.css';
 import logoLight from '../../assets/logo-light.svg';
 import logoDark from '../../assets/logo-dark.svg';
-import Install from '../../components/alt/Install.astro';
+import Install from '../../components/ui/Install.astro';
 import Pool from '../../components/alt/Pool.astro';
 import Scenes from '../../components/alt/Scenes.astro';
 import Storage from '../../components/alt/Storage.astro';
 import Race from '../../components/alt/Race.astro';
 import Examples from '../../components/alt/Examples.astro';
 import StatusBar from '../../components/alt/StatusBar.astro';
+import ThemeSwitch from '../../components/ui/ThemeSwitch.astro';
 
 const title = 'VarMQ | Queues and worker pools for Go';
 const description =
@@ -31,7 +32,16 @@ const index = [
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="color-scheme" content="light dark" />
+		<script is:inline>
+			// The theme before the first paint: the stored choice (shared with the docs pages), else the system's.
+			document.documentElement.dataset.theme = (function () {
+				try {
+					var t = localStorage.getItem('starlight-theme');
+					if (t === 'light' || t === 'dark') return t;
+				} catch (e) {}
+				return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+			})();
+		</script>
 		<meta name="robots" content="noindex" />
 		<title>{title}</title>
 		<meta name="description" content={description} />
@@ -51,10 +61,8 @@ const index = [
 		<header class="nav">
 			<div class="wrap nav__in">
 				<a class="nav__logo" href="/alt/" aria-label="VarMQ home">
-					<picture>
-						<source media="(prefers-color-scheme: dark)" srcset={logoDark.src} />
-						<img src={logoLight.src} alt="VarMQ" width="116" height="30" />
-					</picture>
+					<img class="logo--light" src={logoLight.src} alt="VarMQ" width="116" height="30" />
+					<img class="logo--dark" src={logoDark.src} alt="VarMQ" width="116" height="30" />
 				</a>
 				<nav class="nav__links" aria-label="Main">
 					<a href="/start/introduction/">Docs</a>
@@ -62,10 +70,11 @@ const index = [
 					<a class="opt" href="#benchmarks">Benchmarks</a>
 					<a class="opt" href="https://github.com/goptics/varmq">GitHub</a>
 				</nav>
+				<ThemeSwitch />
 			</div>
 		</header>
 
-		<main id="main">
+		<main id="main" tabindex="-1">
 			<section class="hero wrap" aria-labelledby="hero-title">
 				<div class="banner">
 					<span class="banner__id">JOB 01</span><span>VarMQ</span><span class="banner__rule"></span><span class="banner__meta">queue + worker pool</span>

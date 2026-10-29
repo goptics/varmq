@@ -80,7 +80,6 @@ document.querySelectorAll<HTMLElement>('[data-scene]').forEach(init);
 const label = () => {
 	if (!toggle) return;
 	toggle.textContent = playing ? 'Pause animation' : 'Play animation';
-	toggle.setAttribute('aria-pressed', String(!playing));
 };
 label();
 toggle?.addEventListener('click', () => {
