@@ -10,7 +10,11 @@
 export interface SourceSpec {
 	id: string;
 	priority?: boolean; // priority: lowest number first, ties by arrival
+	rank?: number; // `WithQueuePriority`: the worker reads its sources lowest rank first, then in bind order; none is last
 }
+
+/** How a worker with several sources picks the next (`Strategy`, `helpers.Manager`). varmq's default is Priority. */
+export type Strategy = 'priority' | 'roundrobin' | 'maxlen' | 'minlen';
 
 export interface JobSpec {
 	id: string;
@@ -27,11 +31,14 @@ export type ControlSpec =
 export interface PoolPlan {
 	limit: number;
 	idle: number[]; // goroutine rings idle at t = 0, in the order they went idle: the last gets the next job
-	// Round robin: the index of the source to look at first, the one after the last served. varmq keeps it on the
-	// worker for its whole life (`roundRobinIndex`), and binding a source never resets it.
+	// Round robin: the index, in rank order, of the source to look at first, the one after the last served. varmq keeps
+	// it on the worker (`roundRobinIndex`): binding a source never resets it, and one ranked ahead shifts what it
+	// points at. Only round robin moves it.
 	turn: number;
 	sources: SourceSpec[]; // in bind order
-	strategy?: 'roundrobin'; // needed with several sources: varmq defaults to Priority, which is not modelled
+	// The worker's strategy, Priority when none is named. A worker has one for life (`WithStrategy`); to show each in
+	// turn on one worker, a story may give `[from ms, strategy]` pairs instead.
+	strategy?: Strategy | [at: number, strategy: Strategy][];
 	jobs: JobSpec[];
 	controls?: ControlSpec[];
 	wake: number; // ms from a land, resume or tune to the dispatch wake-up
@@ -49,6 +56,7 @@ export type PoolEvent =
 			ring: number;
 			spawned: boolean;
 			waiting: number; // jobs still queued once this one has been taken
+			strategy?: Strategy; // the one that picked the source, where there were several
 	  }
 	| { at: number; type: 'done'; job: string; ring: number }
 	| { at: number; type: 'idle'; ring: number }
@@ -90,6 +98,8 @@ function track(plan: PoolPlan) {
 	const jobs = new Map<string, JobSpec>(plan.jobs.map((j) => [j.id, j]));
 	const byPriority = new Set(plan.sources.filter((s) => s.priority).map((s) => s.id));
 	const rank = (id: string) => jobs.get(id)?.priority ?? 0;
+	// The sources as the worker holds them (`Register`): lowest rank first, ties in bind order.
+	const ordered = [...plan.sources].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
 	const pool: Pool = {
 		limit: plan.limit,
 		busy: [],
@@ -112,8 +122,8 @@ function track(plan: PoolPlan) {
 				pool.waiting[e.source] = pool.waiting[e.source].filter((id) => id !== e.job);
 				pool.idle = pool.idle.filter((r) => r !== e.ring);
 				pool.busy = [...pool.busy, e.ring].sort((a, b) => a - b);
-				// The turn moves past the source served (`GetRoundRobinItem`).
-				pool.turn = (plan.sources.findIndex((s) => s.id === e.source) + 1) % plan.sources.length;
+				// Round robin moves the turn past the source served (`GetRoundRobinItem`); the others leave it.
+				if (e.strategy === 'roundrobin') pool.turn = (ordered.findIndex((s) => s.id === e.source) + 1) % ordered.length;
 				break;
 			case 'done':
 				pool.busy = pool.busy.filter((r) => r !== e.ring);
@@ -131,18 +141,13 @@ function track(plan: PoolPlan) {
 		}
 	}
 
-	return { jobs, pool, apply };
+	return { jobs, pool, apply, ordered };
 }
 
 export function simulatePool(plan: PoolPlan): PoolEvent[] {
-	// Several sources are read by the worker's strategy, and the default one, Priority, is not modelled.
-	if (plan.sources.length > 1 && plan.strategy !== 'roundrobin') {
-		throw new Error(
-			`strategy: several sources need 'roundrobin', as varmq's default, Priority, is not modelled`,
-		);
-	}
-
-	const { jobs, pool, apply } = track(plan);
+	const { jobs, pool, apply, ordered } = track(plan);
+	const timeline: [number, Strategy][] = Array.isArray(plan.strategy) ? plan.strategy : [[0, plan.strategy ?? 'priority']];
+	const strategyAt = (now: number) => (timeline.findLast(([at]) => at <= now) ?? timeline[0])[1];
 	const events: PoolEvent[] = [];
 	const timers: { at: number; seq: number; fire: (now: number) => void }[] = [];
 	let seq = 0;
@@ -163,12 +168,22 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 	// What the event loop's `for` asks: active, a slot below the limit (`busyWorkers < concurrency`), a job.
 	const ready = () => !paused && !stopped && pool.busy.length < pool.limit && pending() > 0;
 
+	// Several sources are read by the strategy, over the sources in rank order (`strategyManager.next`): Priority
+	// takes the first with a job; MaxLen the longest and MinLen the shortest but empty, the first of equals; round
+	// robin the first with a job from the turn, which the dispatch then moves past it (see `apply`).
+	const pick = (strategy: Strategy) => {
+		const len = (s: SourceSpec) => pool.waiting[s.id].length;
+		const full = ordered.filter((s) => len(s) > 0);
+		if (strategy === 'maxlen') return full.reduce((best, s) => (len(s) > len(best) ? s : best));
+		if (strategy === 'minlen') return full.reduce((best, s) => (len(s) < len(best) ? s : best));
+		if (strategy === 'roundrobin') return [...ordered.slice(pool.turn), ...ordered.slice(0, pool.turn)].find((s) => len(s) > 0)!;
+		return full[0];
+	};
+
 	// Hands the next source's head to the goroutine that went idle last, or to a new one on the lowest ring.
 	const dispatch = (now: number) => {
-		// One source is read as it is. Several are read round robin in bind order from the turn, skipping the
-		// empty ones; the dispatch moves the turn past the one served (see `apply`).
-		const from = [...plan.sources.slice(pool.turn), ...plan.sources.slice(0, pool.turn)];
-		const source = from.find((s) => pool.waiting[s.id].length > 0)!;
+		const strategy = ordered.length > 1 ? strategyAt(now) : undefined;
+		const source = strategy ? pick(strategy) : ordered[0];
 		const [job] = pool.waiting[source.id];
 		const waiting = pending() - 1;
 		// varmq hands a lone worker every waiting job at once. Only a single plain queue or a topic does, but
@@ -180,7 +195,7 @@ export function simulatePool(plan: PoolPlan): PoolEvent[] {
 		}
 		const spawned = pool.idle.length === 0;
 		const ring = spawned ? lowestFree(pool.busy) : pool.idle[pool.idle.length - 1];
-		emit({ at: now, type: 'dispatch', job, source: source.id, ring, spawned, waiting });
+		emit({ at: now, type: 'dispatch', job, source: source.id, ring, spawned, waiting, ...(strategy && { strategy }) });
 		timer(now + jobs.get(job)!.work, (at) => finish(at, job, ring));
 	};
 

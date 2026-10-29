@@ -11,7 +11,7 @@
 //   fade in instead, since drawing would turn their dashes solid, and so do a lane's or tray's five
 //   `.vm-slot`s. Text is `.vm-label` (the ACK line has one too), or `.vm-text` inside a chip. The loop also holds
 //   `.vm-pulse`, a ring over its circle, hidden.
-// - `piece('<id>@<n>')`: chapter n's transient chip in piece `<id>`'s place (`Chapter.chips`), its own element,
+// - `piece(chipKey(n, i, '<id>'))`: chapter n's transient chip i in piece `<id>`'s place (`Chapter.chips`), its own element,
 //   hidden. Chapter 2's TunePool(5) is `piece('ctl-restart@2')`.
 // - `piece('s-prog')`, the SQLite program, also holds its crash, hidden: `.vm-flash`, a red outline over its
 //   box, and the labels `.vm-died` (PROGRAM · DIED) and `.vm-restarted` (PROGRAM · RESTARTED) after its own
@@ -40,7 +40,7 @@
 // - `swap(n, i)`: for a caption with a `swap`, the word that takes its last word's place: in the same box, stacked
 //   on it, and hidden.
 
-import { CHAPTERS } from './chapters.ts';
+import { CHAPTERS, chipKey } from './chapters.ts';
 import {
 	CONNS,
 	LABEL_GAP,
@@ -64,7 +64,7 @@ export interface MapNodes {
 	svg: SVGSVGElement;
 	world: SVGGElement;
 	caption: HTMLElement;
-	/** Pieces and connectors by id, and transient chips by `<id>@<chapter>`. */
+	/** Pieces and connectors by id, and transient chips by `chipKey`. */
 	piece(id: string): SVGGraphicsElement;
 	ring(
 		worker: string,
@@ -342,8 +342,8 @@ export function renderMap(host: HTMLElement): MapNodes {
 	}
 	for (const p of PIECES) pieces.set(p.id, drawPiece(world, p));
 	for (const chapter of CHAPTERS) {
-		for (const chip of chapter.chips ?? []) {
-			const key = `${chip.id}@${chapter.n}`;
+		for (const [i, chip] of (chapter.chips ?? []).entries()) {
+			const key = chipKey(chapter.n, i, chip.id);
 			const p = PIECES.find((q) => q.id === chip.id);
 			if (!p) throw new Error(`heromap: chapter ${chapter.n} has a chip at no piece ${chip.id}`);
 			pieces.set(key, drawPiece(world, p, key, chip.label, HIDDEN));

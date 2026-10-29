@@ -10,7 +10,7 @@
 // - Job ids are unique across the loop: the renderer makes one element per id, and a store job's record
 //   shares its job's id. Each subscriber makes its own job from a published value, `<value>-<worker>`.
 
-import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan } from './pool.ts';
+import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan, type Strategy } from './pool.ts';
 import {
 	simulateRedis,
 	simulateSqlite,
@@ -68,13 +68,16 @@ const SQLITE_TRAVEL = { takeTravel: 720, ackTravel: 780 };
 const REDIS_TRAVEL = { landAfter: 700, notifyTravel: 420, takeTravel: 720, ackTravel: 730 };
 // Chapters 4 and 5 need the whole burst in the lanes before the first dispatch: there the loop looks later.
 const LATE = { ...PACE, wake: 900 };
+// Chapter 5's four bursts must each land, run and finish before the next lands, so there it runs a little quicker.
+const VOLLEY = { ...PACE, wake: 700, gap: 250 };
 
 // The core's sources in bind order: the queue from chapter 1, the priority queue from 4, a third queue from 5
-// and the topic from 6. The core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip.
-// The result worker has a queue of its own, and the second worker the topic alone.
+// and the topic from 6. The third is bound with priority 1 (`WithQueuePriority(1)`), so the worker reads it first.
+// The core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip, after showing what each of
+// the other strategies would do. The result worker has a queue of its own, and the second worker the topic alone.
 const QUEUE = { id: 'queue' };
 const PRIO = { id: 'prio', priority: true };
-const QUEUE_C = { id: 'queue-c' };
+const QUEUE_C = { id: 'queue-c', rank: 1 };
 const TOPIC = { id: 'topic' };
 const BOUND = [QUEUE, PRIO, QUEUE_C, TOPIC];
 const R_QUEUE = { id: 'r-queue' };
@@ -219,29 +222,53 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 5. Jobs wait in two of the three queues, and round robin takes from them in turn, skipping the empty one.
-	(carry) => ({
-		title: 'Many queues, one worker',
-		duration: 7000,
-		captions: [{ at: 300, until: 6400, text: '*RoundRobin* picks the next queue' }],
-		parts: [
-			pool(carry, 'core', {
-				...LATE,
-				sources: [QUEUE, PRIO, QUEUE_C],
-				strategy: 'roundrobin',
-				jobs: [
-					...queued(QUEUE.id, [
-						['q0', 1900, 2000],
-						['q1', 2200, 1600],
-					]),
-					...queued(QUEUE_C.id, [
-						['c0', 2050, 1400],
-						['c1', 2350, 1500],
-					]),
-				],
-			}),
-		],
-	}),
+	// 5. Each strategy in turn, on the same three queues. A burst lands in them a second after its caption, before the
+	// event loop looks, so the order its jobs leave in is the strategy's: Priority empties the third queue first, as
+	// it is bound with priority 1; MaxLen takes from the longest, MinLen from the shortest, and RoundRobin from each
+	// in turn. The counts keep each burst's first picks free of ties. A worker has one strategy for life
+	// (`WithStrategy`): this shows what each would do, and ends on RoundRobin, which the worker keeps.
+	(carry) => {
+		const bursts: [Strategy, number, Record<string, number>][] = [
+			['priority', 300, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
+			['maxlen', 3700, { [QUEUE.id]: 1, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
+			['minlen', 7100, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
+			['roundrobin', 10500, { [QUEUE.id]: 2, [PRIO.id]: 2, [QUEUE_C.id]: 2 }],
+		];
+		// A burst's jobs land 100 ms apart, taking the three lanes in turn, all before the loop looks 700 ms on.
+		const jobs = bursts.flatMap(([, at, counts], b) => {
+			const left = { ...counts };
+			const order: string[] = [];
+			while (order.length < Object.values(counts).reduce((n, c) => n + c, 0)) {
+				for (const id of [QUEUE.id, PRIO.id, QUEUE_C.id]) if (left[id]-- > 0) order.push(id);
+			}
+			return order.map((source, k) => ({ id: `st${b}.${k}`, source, at: at + 1000 + 100 * k, work: [900, 1000, 950, 1050, 900, 1000][k] }));
+		});
+		return {
+			title: 'Many queues, one worker',
+			duration: 15800,
+			captions: [
+				{ at: 300, until: 3200, text: '*Priority*, the default, empties batch first' },
+				{ at: 3700, until: 6600, text: '*MaxLen* takes from the longest queue' },
+				{ at: 7100, until: 10000, text: '*MinLen* takes from the shortest queue' },
+				{ at: 10500, until: 15000, text: '*RoundRobin* takes from each queue in turn' },
+			],
+			// The other strategies' names cover the RoundRobin chip in turn, each popping in over the last before it
+			// leaves; the first pops no later than the chip itself, so the chip never shows beneath it.
+			chips: [
+				{ id: 'strategy', label: 'Priority', at: 300, until: 4300 },
+				{ id: 'strategy', label: 'MaxLen', at: 3700, until: 7700 },
+				{ id: 'strategy', label: 'MinLen', at: 7100, until: 10500 },
+			],
+			parts: [
+				pool(carry, 'core', {
+					...VOLLEY,
+					sources: [QUEUE, PRIO, QUEUE_C],
+					strategy: bursts.map(([strategy, at]) => [at, strategy]),
+					jobs,
+				}),
+			],
+		};
+	},
 
 	// 6. Each value is published once, and both subscribers get it at once and make their own job from it. The
 	// second worker runs at concurrency 1, so its copy of the second value waits at it until the first is done.
@@ -465,6 +492,9 @@ export const TOTAL = CHAPTERS.reduce((t, c) => t + c.duration, 0);
 export const STATIC_AT = starts()[CHAPTERS.length - 1] + 1300;
 
 /** A caption's text without its colour marks. */
+/** A transient chip's element: chapter n's chip i, in its piece's place. A chapter may have several in one place. */
+export const chipKey = (n: number, i: number, id: string) => `${id}@${n}:${i}`;
+
 export function plain(text: string): string {
 	return text.replace(/[*!#]/g, '');
 }

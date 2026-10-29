@@ -14,7 +14,7 @@
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
 
 import { eases, svg, type Timeline } from 'animejs';
-import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
+import { CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
 import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
@@ -505,7 +505,7 @@ export class Choreo {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
 		for (const p of PIECES) this.declarePiece(p.id, p.kind, p.chapter === 1);
-		for (const c of CHAPTERS) for (const chip of c.chips ?? []) this.declarePiece(`${chip.id}@${c.n}`, 'chip', false);
+		for (const c of CHAPTERS) for (const [i, chip] of (c.chips ?? []).entries()) this.declarePiece(chipKey(c.n, i, chip.id), 'chip', false);
 		for (const c of CONNS) {
 			const g = nodes.piece(c.id);
 			const on = c.chapter === 1;
@@ -659,8 +659,8 @@ export class Choreo {
 		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
 		this.open(c, move ? T + OPENS : T);
 		this.captions(c, T);
-		for (const chip of c.chips ?? []) {
-			const g = this.nodes.piece(`${chip.id}@${c.n}`);
+		for (const [i, chip] of (c.chips ?? []).entries()) {
+			const g = this.nodes.piece(chipKey(c.n, i, chip.id));
 			score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
 			score.tween(g, { opacity: 0, scale: 0 }, T + chip.until, 300, E.out);
 		}

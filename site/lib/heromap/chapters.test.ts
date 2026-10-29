@@ -18,10 +18,12 @@ describe('chapters', () => {
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 22);
+		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 25);
 	});
-	it('run about 85 seconds', () => {
-		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
+	// The site plays a step per scroll rather than the loop, so the loop may run long enough to show every strategy.
+	it('run about 100 seconds', () => {
+		assert.ok(TOTAL >= 80000 && TOTAL <= 105000, String(TOTAL));
 		assert.equal(starts()[9] + CHAPTERS[9].duration, TOTAL);
 	});
 	// The site stops on each chapter's last frame, so its last job's done (a 900 ms pulse and check) must have settled.
@@ -45,10 +47,11 @@ describe('chapters', () => {
 			last = endState(p.plan, p.events);
 		}
 		// Round robin goes on from the source after the last one served, as varmq keeps its index for the worker's life.
-		// It starts at the queue in chapter 4, where a second source first binds; chapter 9 takes only from the queue,
-		// so chapter 10 looks at the priority queue first and finds the topic's copy before the queue's jobs.
+		// It starts at the queue in chapter 4, where a second source first binds. From chapter 5 it counts the sources
+		// in rank order, the third queue (priority 1) first; chapter 9 takes only from the queue, so chapter 10 looks at
+		// the priority queue first and finds the topic's copy before the queue's jobs.
 		assert.equal(part(4, 'pool', 'core').plan.turn, 0);
-		assert.equal(part(10, 'pool', 'core').plan.turn, 1);
+		assert.equal(part(10, 'pool', 'core').plan.turn, 2);
 		assert.deepEqual(dispatches(part(10, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
 	});
 	it('chapter 4 runs the lowest number first', () => {
@@ -196,10 +199,17 @@ describe('chapter rules', () => {
 		const p = part(3, 'pool', 'result');
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
-	it('chapter 5 takes from its queues in turn and skips the empty priority queue', () => {
-		const p = part(5, 'pool', 'core');
-		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
-		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
+	it('chapter 5 runs one burst per strategy, each leaving in that strategy\'s order', () => {
+		// b is the third queue (batch, priority 1, first in rank order), q the queue, u the priority queue (urgent).
+		const letter = { 'queue-c': 'b', queue: 'q', prio: 'u' };
+		const runs = {};
+		for (const d of dispatches(part(5, 'pool', 'core'))) runs[d.strategy] = (runs[d.strategy] ?? '') + letter[d.source];
+		assert.deepEqual(runs, {
+			priority: 'bbqqqu', // b first, as it ranks first, though it is not the longest
+			maxlen: 'uubqu', // u while it is the longest, then the first of equals
+			minlen: 'ubbqqq', // the shortest with a job first
+			roundrobin: 'bqubqu', // each in turn, from the turn chapter 4 left
+		});
 	});
 	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);

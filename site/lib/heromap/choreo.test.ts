@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CHAPTERS, TOTAL } from './chapters.ts';
+import { CHAPTERS, TOTAL, chipKey } from './chapters.ts';
 import { Choreo, buildTimeline } from './choreo.ts';
 import { CONNS, PIECES, RINGS } from './scene.ts';
 
@@ -31,7 +31,7 @@ function lookup(ids, what, make) {
 	};
 }
 
-const chips = CHAPTERS.flatMap(c => (c.chips ?? []).map(chip => `${chip.id}@${c.n}`));
+const chips = CHAPTERS.flatMap(c => (c.chips ?? []).map((chip, i) => chipKey(c.n, i, chip.id)));
 const stores = CHAPTERS.flatMap(c => c.parts.filter(p => p.kind !== 'pool'));
 const jobs = CHAPTERS.flatMap(c => [...(c.published ?? []).map(v => v.id), ...c.parts.flatMap(p => p.plan.jobs.map(j => j.id))]);
 const rings = Object.entries(RINGS).flatMap(([worker, places]) => places.map((_, i) => `${worker}:${i}`));
