@@ -163,6 +163,7 @@ These are matters of taste, not bugs:
 - Scroll input on the home page:
   - Tested with wheel events at real timing inside the page, with trusted wheel and key input from the browser protocol, and with touch drags.
   - A notch, a flick or a swipe moves one step, and a free-spinning wheel keeps stepping.
+  - A free spin recorded from an MX Master on Linux replays through every step. Before, it stopped after four: the story measured the wheel's speed per event, and Chrome sends the notches it holds back during a step's first frames as one event (`lib/story/wheel.ts`, with tests).
   - The story can be left and re-entered by wheel, keys and touch.
 - Reduced motion: each step shows its last frame, and nothing animates.
 - The design detector reports nothing on the home page.

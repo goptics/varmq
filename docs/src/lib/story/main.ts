@@ -5,6 +5,7 @@ import CODE from 'virtual:code-steps';
 import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { mountMap } from './map.ts';
 import { STEPS, STORY_TEXT, type Cut, type Step } from './steps.ts';
+import { wheelSteps } from './wheel.ts';
 
 // The home page opens on the intro, beside the whole map standing still. From there the page snaps a step at a time:
 // each scroll brings the next step, which plays its chapter on the map once, at the map's own pace, while the one code
@@ -12,13 +13,6 @@ import { STEPS, STORY_TEXT, type Cut, type Step } from './steps.ts';
 // its last frame. Past the last step the page scrolls on as usual, through the rest of the home page.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
-// A wheel turn moves one step once it has travelled THRESHOLD px; a pause of QUIET ms ends a turn, so each notch of a
-// wheel turned notch by notch is a step. A wheel that keeps spinning, as a free-spinning mouse wheel does, moves on a
-// step every COOLDOWN ms, about as long as the page takes to scroll one, for as long as it keeps half its speed; a
-// swipe's momentum, which dies away, does not.
-const COOLDOWN = 650;
-const THRESHOLD = 40;
-const QUIET = 200;
 /** The snap positions: the intro, then one per step. */
 const COUNT = STEPS.length + 1;
 /** How far past the last step, in steps, the page stops snapping, and how far back above it it snaps again. */
@@ -240,14 +234,10 @@ function leave() {
 	scrollTo({ top: top() + COUNT * height(), behavior: motion() });
 }
 
-// Keyboard and touch scroll natively and snap a step at a time. The wheel is taken over, so that one turn is one step:
-// snapping alone lets a short notch fall back to where it was. At the last step, the wheel and the keys that scroll
-// down leave the story.
-let stepped = -Infinity; // when the wheel last moved a step
-let wheeled = -Infinity; // its last event
-let travel = 0; // how far it has turned since the last step
-let speed = 0; // how fast it turns, smoothed over a few events
-let peak = 0; // the fastest it has turned since it last moved a step
+// Keyboard and touch scroll natively and snap a step at a time. The wheel is taken over, so that one turn is one step
+// (wheel.ts): snapping alone lets a short notch fall back to where it was. At the last step, the wheel and the keys
+// that scroll down leave the story.
+const turn = wheelSteps();
 addEventListener(
 	'wheel',
 	(e) => {
@@ -260,18 +250,7 @@ addEventListener(
 		const next = from + Math.sign(e.deltaY);
 		if (next < 0) return;
 		e.preventDefault();
-		const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
-		const fresh = e.timeStamp - wheeled > QUIET;
-		wheeled = e.timeStamp;
-		if (fresh || Math.sign(delta) !== Math.sign(travel)) travel = 0;
-		speed = fresh ? Math.abs(delta) : speed * 0.7 + Math.abs(delta) * 0.3;
-		peak = fresh ? speed : Math.max(peak, speed);
-		if (!fresh && (e.timeStamp - stepped < COOLDOWN || speed < peak / 2)) return;
-		travel += delta;
-		if (Math.abs(travel) < THRESHOLD) return;
-		travel = 0;
-		peak = speed;
-		stepped = e.timeStamp;
+		if (!turn(e.timeStamp, e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1))) return;
 		if (next >= COUNT) return leave();
 		snapping(true);
 		target = next;
