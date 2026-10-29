@@ -110,6 +110,12 @@ varmq-map .vm-svg {
 	mask-composite: intersect;
 }
 
+/* The map's own svg changes every frame it plays, so it has a layer of its own: repainting it never repaints the
+   grid's svg under it (render.ts). */
+varmq-map .vm-svg:not(.vm-under) {
+	will-change: transform;
+}
+
 /* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */
 @media (forced-colors: active) {
 	varmq-map :is(.vm-svg, .vm-ring) {

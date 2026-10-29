@@ -389,17 +389,39 @@ a:hover {
 
 /* The map, in its own colours. It reserves the bottom 56 of its 400 units for a caption, which the step text replaces
    here: the frame crops that band, where the next region down would otherwise show. Its top and bottom edges fade
-   over the 20-unit margin the camera leaves around a chapter, so a sliver of a neighbouring region never shows. */
+   into the page over the 20-unit margin the camera leaves around a chapter, so a sliver of a neighbouring region
+   never shows. The fades lie over the map rather than mask it: a mask would repaint the whole map every frame. */
 .map {
 	min-width: 0;
 }
 
 .map-frame {
+	position: relative;
 	width: min(100%, calc((100svh - 2 * var(--pad-y) - 24px) * 400 / 344));
 	aspect-ratio: 400 / 344;
 	margin-left: auto;
 	overflow: hidden;
-	mask-image: linear-gradient(transparent, #000 6%, #000 94%, transparent);
+}
+
+.map-frame::before,
+.map-frame::after {
+	content: '';
+	position: absolute;
+	z-index: 1;
+	right: 0;
+	left: 0;
+	height: 6%;
+	pointer-events: none;
+}
+
+.map-frame::before {
+	top: 0;
+	background: linear-gradient(var(--bg), transparent);
+}
+
+.map-frame::after {
+	bottom: 0;
+	background: linear-gradient(transparent, var(--bg));
 }
 
 varmq-map {

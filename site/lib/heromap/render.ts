@@ -134,11 +134,8 @@ function add<K extends keyof SVGElementTagNameMap>(
 	return node;
 }
 
-/**
- * The dot grid, its fade toward the square's edges, the glow and the lanes' edge, which brightens toward the
- * head. Returns the grid's pattern, which `setCamera` moves with the world.
- */
-function defs(svg: SVGSVGElement): SVGPatternElement {
+/** The dot grid and its fade toward the square's edges. Returns the grid's pattern, which `setCamera` moves with the world. */
+function gridDefs(svg: SVGSVGElement): SVGPatternElement {
 	const defs = add(svg, 'defs');
 	const dots = add(defs, 'pattern', { id: 'vm-dots', width: 14, height: 14, patternUnits: 'userSpaceOnUse' });
 	add(dots, 'circle', { class: 'vm-dot', cx: 1, cy: 1, r: 0.8 });
@@ -154,6 +151,12 @@ function defs(svg: SVGSVGElement): SVGPatternElement {
 	add(fade, 'stop', { offset: 1, 'stop-color': '#fff', 'stop-opacity': 0 });
 	const mask = add(defs, 'mask', { id: 'vm-grid-fade' });
 	add(mask, 'rect', { width: VIEW.w, height: VIEW.h, fill: 'url(#vm-fade)' });
+	return dots;
+}
+
+/** The glow, and the lanes' edge, which brightens toward the head. */
+function defs(svg: SVGSVGElement): void {
+	const defs = add(svg, 'defs');
 	const glow = add(defs, 'filter', { id: 'vm-glow', x: '-80%', y: '-80%', width: '260%', height: '260%' });
 	add(glow, 'feGaussianBlur', { stdDeviation: 2.6, result: 'blur' });
 	const merge = add(glow, 'feMerge');
@@ -162,7 +165,6 @@ function defs(svg: SVGSVGElement): SVGPatternElement {
 	const edge = add(defs, 'linearGradient', { id: 'vm-lane-edge', x1: 0, x2: 1 });
 	add(edge, 'stop', { class: 'vm-edge-tail', offset: 0 });
 	add(edge, 'stop', { class: 'vm-edge-head', offset: 1 });
-	return dots;
 }
 
 /** A piece's group: its outline, a lane's slots, and its label (above it, below the loop, inside a chip). */
@@ -322,14 +324,19 @@ function lookup<T>(map: Map<string, T>, what: string) {
 }
 
 export function renderMap(host: HTMLElement): MapNodes {
+	// The dot grid has an svg of its own, under the map's. It changes only as the camera moves, while the map changes
+	// every frame it plays: apart (map.css gives the map's a layer of its own), those frames never repaint the grid,
+	// whose thousands of masked dots, repainted with them, made the browser drop tiles for a frame.
+	const under = document.createElementNS(NS, 'svg');
+	under.setAttribute('class', 'vm-svg vm-under');
+	under.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
+	const dots = gridDefs(under);
+	// The grid covers the square and stays put. Its pattern moves with the camera, and so its dots move with the world.
+	add(under, 'rect', { class: 'vm-grid', width: VIEW.w, height: VIEW.h, mask: 'url(#vm-grid-fade)', fill: 'url(#vm-dots)' });
 	const svg = document.createElementNS(NS, 'svg');
 	svg.setAttribute('class', 'vm-svg');
 	svg.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
-	const dots = defs(svg);
-	// The grid covers the square and stays put, under the world. Its pattern moves with the camera, and so its
-	// dots move with the world.
-	const grid = { class: 'vm-grid', width: VIEW.w, height: VIEW.h, mask: 'url(#vm-grid-fade)' };
-	add(svg, 'rect', { ...grid, fill: 'url(#vm-dots)' });
+	defs(svg);
 	const world = add(svg, 'g', { class: 'vm-world' });
 
 	const pieces = new Map<string, SVGGraphicsElement>();
@@ -409,7 +416,7 @@ export function renderMap(host: HTMLElement): MapNodes {
 			if (made.swap) swaps.set(`${chapter.n}:${i}`, made.swap);
 		});
 	}
-	host.append(svg, caption);
+	host.append(under, svg, caption);
 
 	const findRing = lookup(rings, 'ring');
 	const findLine = lookup(lines, 'caption');
@@ -441,11 +448,15 @@ export function renderMap(host: HTMLElement): MapNodes {
 			const dx = VIEW.w / 2 - x * s;
 			const dy = VIEW.mapH / 2 - y * s;
 			const transform = `translate(${dx} ${dy}) scale(${s})`;
+			// The choreography sets the camera every frame it plays, mostly to where it already is. Setting a transform
+			// again, even to the same value, repaints all it moves, the whole world and grid, every frame: enough work
+			// that the browser now and then shows a frame with tiles missing. So a still camera sets nothing.
+			if (transform === world.getAttribute('transform')) return;
 			world.setAttribute('transform', transform);
 			dots.setAttribute('patternTransform', transform);
 			// The map fades into the page FEATHER world units deep at the square's edges (map.css): inside the margin
 			// every chapter's frame leaves, so only what the edge cuts fades.
-			if (s !== zoom) svg.style.setProperty('--vm-feather', `${(FEATHER * s * 100) / VIEW.w}%`);
+			if (s !== zoom) host.style.setProperty('--vm-feather', `${(FEATHER * s * 100) / VIEW.w}%`);
 			zoom = s;
 			legible();
 		},
