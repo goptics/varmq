@@ -35,6 +35,10 @@ body:has(.hp-home) {
 	--hp-gap: clamp(24px, 4vw, 72px);
 	--hp-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+	/* Type runs on four sizes: display for titles, 1.5rem for sub-titles, 1.0625rem for copy, and this one for
+	   labels, notes and table data. */
+	--hp-small: 0.9375rem;
+
 	/* Fumadocs' tokens, so its nav sits in the same enamel. */
 	--color-fd-background: var(--hp-enamel);
 	--color-fd-foreground: var(--hp-cream);
@@ -56,9 +60,10 @@ body:has(.hp-home) {
 	min-height: 100svh;
 	background: var(--hp-enamel);
 	color: var(--hp-cream);
-	font-family: var(--hp-font-copy), system-ui, sans-serif;
+	font-family: var(--hp-font-sans), system-ui, sans-serif;
 	font-size: 1.0625rem;
 	line-height: 1.6;
+	text-wrap: pretty;
 	caret-color: var(--hp-lamp);
 	accent-color: var(--hp-lamp);
 	-webkit-font-smoothing: antialiased;
@@ -89,6 +94,13 @@ body:has(.hp-home) {
 .hp-home code {
 	font-family: var(--hp-font-code), ui-monospace, monospace;
 	font-size: 0.9em;
+}
+
+.hp-home :is(h2, h3) {
+	font-weight: 700;
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
 }
 
 /* The nav: solid enamel, and the light-ink logo whatever the theme. */
@@ -217,7 +229,7 @@ body:has(.hp-home) {
 	flex-wrap: wrap;
 	gap: 8px 28px;
 	margin: 20px 0 0;
-	font-weight: 600;
+	font-weight: 500;
 }
 
 .hp-hero-links .hp-go {
@@ -227,7 +239,7 @@ body:has(.hp-home) {
 .hp-hero-hint {
 	margin: 40px 0 0;
 	color: var(--hp-cream-quiet);
-	font-size: 0.9375rem;
+	font-size: var(--hp-small);
 }
 
 /* The send slot: the install command on a brass-rimmed card, with its copy button. */
@@ -274,31 +286,25 @@ body:has(.hp-home) {
 .hp-count {
 	margin: 0 0 6px;
 	color: var(--hp-cream-quiet);
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 600;
-	font-size: 1rem;
-	letter-spacing: 0.06em;
+	font-weight: 500;
+	font-size: var(--hp-small);
 	font-variant-numeric: lining-nums tabular-nums;
 }
 
 .hp-count span {
 	color: var(--hp-lamp);
+	font-weight: 700;
 }
 
 .hp-step-title {
 	margin: 0 0 14px;
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 700;
-	font-size: clamp(2rem, 3.4vw, 2.75rem);
-	line-height: 1;
-	text-transform: uppercase;
+	font-size: clamp(2rem, 3.2vw, 2.625rem);
 }
 
 .hp-notes-live {
 	margin: 0 0 20px;
 	padding: 0;
 	list-style: none;
-	font-size: 1.125rem;
 	font-weight: 500;
 }
 
@@ -335,7 +341,7 @@ body:has(.hp-home) {
 .hp-notes-live em {
 	font-style: normal;
 	color: var(--hp-cream);
-	font-weight: 600;
+	font-weight: 700;
 }
 
 .hp-fail {
@@ -345,12 +351,12 @@ body:has(.hp-home) {
 
 .hp-brand-sqlite {
 	color: #79c0f2;
-	font-weight: 600;
+	font-weight: 700;
 }
 
 .hp-brand-redis {
 	color: #ff8576;
-	font-weight: 600;
+	font-weight: 700;
 }
 
 /* The one code block: a cream label whose code morphs from step to step, with the lines each caption is about lit
@@ -397,7 +403,7 @@ body:has(.hp-home) {
 .hp-source {
 	margin: 12px 0 0;
 	color: var(--hp-cream-quiet);
-	font-size: 0.875rem;
+	font-size: var(--hp-small);
 }
 
 /* The sections after the story. */
@@ -409,26 +415,19 @@ body:has(.hp-home) {
 }
 
 .hp-section-title {
-	margin: 0 0 12px;
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 700;
+	margin: 0 0 14px;
 	font-size: clamp(2.25rem, 4vw, 3rem);
-	line-height: 1;
-	text-transform: uppercase;
 }
 
 .hp-section-lead {
 	margin: 0 0 28px;
-	max-width: 68ch;
+	max-width: 60ch;
 	color: var(--hp-cream-quiet);
 }
 
 .hp-sub-title {
-	margin: 64px 0 8px;
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 600;
-	font-size: 1.75rem;
-	text-transform: uppercase;
+	margin: 64px 0 10px;
+	font-size: 1.5rem;
 }
 
 .hp-table-wrap {
@@ -441,7 +440,7 @@ body:has(.hp-home) {
 	border-collapse: collapse;
 	background: var(--hp-cream);
 	color: var(--hp-ink);
-	font-size: 0.9375rem;
+	font-size: var(--hp-small);
 	font-variant-numeric: lining-nums tabular-nums;
 }
 
@@ -456,18 +455,17 @@ body:has(.hp-home) {
 .hp-table thead th {
 	background: var(--hp-enamel-deep);
 	color: var(--hp-cream);
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 600;
-	font-size: 0.9375rem;
-	letter-spacing: 0.03em;
-	text-transform: uppercase;
+	font-weight: 700;
 	border-bottom: 2px solid var(--hp-brass);
 }
 
 .hp-table th[scope='row'],
 .hp-table thead th:first-child {
 	text-align: left;
-	font-weight: 600;
+}
+
+.hp-table th[scope='row'] {
+	font-weight: 500;
 }
 
 .hp-table tbody tr:last-child > * {
@@ -506,7 +504,7 @@ body:has(.hp-home) {
 .hp-table sup {
 	margin-left: 2px;
 	font-size: 0.7em;
-	font-weight: 600;
+	font-weight: 700;
 }
 
 .hp-features-list {
@@ -531,12 +529,12 @@ body:has(.hp-home) {
 }
 
 .hp-feature {
-	font-weight: 600;
+	font-weight: 700;
 }
 
 .hp-also {
 	color: #4a4436;
-	font-size: 0.9375rem;
+	font-size: var(--hp-small);
 }
 
 .hp-also sup {
@@ -549,14 +547,14 @@ body:has(.hp-home) {
 	padding-left: 1.4em;
 	list-style: decimal;
 	color: var(--hp-cream-quiet);
-	font-size: 0.875rem;
+	font-size: var(--hp-small);
 }
 
 .hp-notes-text {
 	margin: 14px 0 0;
-	max-width: 80ch;
+	max-width: 60ch;
 	color: var(--hp-cream-quiet);
-	font-size: 0.9375rem;
+	font-size: var(--hp-small);
 }
 
 .hp-plates {
@@ -575,10 +573,7 @@ body:has(.hp-home) {
 	align-items: center;
 	gap: 10px;
 	margin: 0 0 8px;
-	font-family: var(--hp-font-sign), sans-serif;
-	font-weight: 700;
-	font-size: 1.75rem;
-	text-transform: uppercase;
+	font-size: 1.5rem;
 }
 
 .hp-plate p {
@@ -599,23 +594,15 @@ body:has(.hp-home) {
 	fill: #ff8576;
 }
 
-.hp-mini {
-	font-size: 0.9375rem;
-}
-
 .hp-mini th,
 .hp-mini td {
 	padding: 8px 10px;
 }
 
-.hp-mini th[scope='row'] {
-	font-weight: 500;
-}
-
 .hp-plate-note {
 	margin: 12px 0 0 !important;
 	color: var(--hp-cream-quiet);
-	font-size: 0.875rem;
+	font-size: var(--hp-small);
 }
 
 .hp-close {
@@ -628,7 +615,7 @@ body:has(.hp-home) {
 	padding: 28px var(--hp-gutter) 40px;
 	border-top: 1px solid rgba(200, 161, 90, 0.28);
 	color: var(--hp-cream-quiet);
-	font-size: 0.9375rem;
+	font-size: var(--hp-small);
 	scroll-snap-align: end;
 }
 
@@ -675,7 +662,7 @@ body:has(.hp-home) {
 	--vm-program-edge: rgba(239, 230, 207, 0.36);
 	--vm-line: rgba(200, 161, 90, 0.75);
 	--vm-ack: rgba(242, 181, 68, 0.5);
-	--sl-font-mono: var(--hp-font-sign);
+	--sl-font-mono: var(--hp-font-code);
 	--sl-color-bg: var(--hp-enamel);
 }
 
