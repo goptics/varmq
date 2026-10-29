@@ -17,7 +17,7 @@ This file reviews it, and records what the branch `docs/new-site` changes on top
 - **The home page opens on varmq's story.** It replaces the old hero map.
   - First an intro: the h1, the lede, the install box, Get started and GitHub, beside the whole map. The map runs as in the last step, holds a moment, and runs again until the reader scrolls on.
   - Then ten steps, one per scroll. Each step plays its chapter on the map, while one code block morphs into the code behind it and lights the lines each caption is about. Each caption's point is a ring that fills as it plays, joined to the next by a line, as one track.
-  - A scroll back up plays the transition backward: the camera move that brought the step below in runs in reverse, and the step shows how it ended, as it was left. From step 1 the map zooms back out to the intro.
+  - A scroll back up plays the transition backward: the camera move that brought the step below in runs in reverse, to how this step ended, and then the step plays again, its captions starting over. From step 1 the map zooms back out to the intro.
   - The last step plays its chapter, then loops the whole map's run as the intro does, until the reader scrolls on.
   - The page snaps only while the reader is in the story above its last step. From the last step down it scrolls normally, with every input; going back up, it stops at the last step, and the story takes over again.
   - On a portrait phone the map sits on top of the intro and of every step, at one size, so nothing moves when the story starts.

@@ -106,6 +106,8 @@ let at = -1;
 let step = -1;
 let caption = -1;
 let settled = 0;
+/** Where in its step the map's play began, in ms: the lit caption's ring fills from there, if it began mid-caption. */
+let begin = 0;
 
 /** A caption's point: a ring whose arc fills while the caption plays, and whose core shows once it is done. */
 const POINT =
@@ -134,8 +136,9 @@ const map = mountMap($('varmq-map'), (t) => {
 	const local = (((t - s.from) % TOTAL) + TOTAL) % TOTAL;
 	const i = Math.max(0, s.captions.findLastIndex((at) => at <= local));
 	setCaption(i);
-	// The lit caption's ring fills from its start to the next caption's, or to the step's end, where it is done too.
-	const start = s.captions[i];
+	// The lit caption's ring fills from its start, or from where the play began, to the next caption's start, or to the
+	// step's end, where it is done too.
+	const start = Math.max(s.captions[i], begin);
 	const p = Math.min(1, Math.max(0, (local - start) / ((s.captions[i + 1] ?? s.ms) - start)));
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
@@ -160,12 +163,13 @@ function showIntro(back = false) {
 
 /**
  * Shows step k: its text, its code, and its chapter playing on the map, or its last frame under reduced motion. Back up
- * from the step after it, it shows how it ended, as the reader left it: the map plays the camera move that brought the
- * next step in backward, to this step's end, every caption done.
+ * from the step after it, the map first plays the camera move that brought that step in backward, to how this one
+ * ended, every caption done; then this step plays again from where its own camera move ends, as the camera is there.
  */
 function show(k: number, back = false) {
 	step = k;
 	caption = -1;
+	begin = 0;
 	root.dataset.at = 'step';
 	intro.hidden = true;
 	stepView.hidden = false;
@@ -182,7 +186,12 @@ function show(k: number, back = false) {
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
 	if (reduce.matches) map.seek(s.from + s.ms);
-	else if (back) map.rewind(s.from + s.ms, CAMERA);
+	else if (back) {
+		map.rewind(s.from + s.ms, CAMERA, () => {
+			begin = CAMERA;
+			map.play(s.from + CAMERA, s.ms - CAMERA);
+		});
+	}
 	else map.play(s.from, s.ms, k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
 }
 
@@ -193,6 +202,7 @@ notes.addEventListener('click', (e) => {
 	const i = Number((e.target as Element).closest('button')?.dataset.i);
 	if (step < 0 || Number.isNaN(i)) return;
 	const s = STEPS[step];
+	begin = 0;
 	if (reduce.matches) map.seek(s.from + (s.captions[i + 1] ?? s.ms) - 1);
 	else map.play(s.from + s.captions[i], s.ms - s.captions[i]);
 });
