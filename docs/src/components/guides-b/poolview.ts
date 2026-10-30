@@ -15,6 +15,8 @@ export interface PoolViewOptions {
 	laneLabel?: string;
 	/** Kinds of done square to explain under the tally. */
 	legend?: Array<'ok' | 'fail' | 'early' | 'closed'>;
+	/** Draw only the live goroutines, one block each, instead of one lane per slot. */
+	blocks?: boolean;
 }
 
 const LEGEND = { ok: 'finished', fail: 'failed', early: 'returned early', closed: 'closed, never ran' } as const;
@@ -43,6 +45,7 @@ export class PoolView {
 	private tallyEl!: HTMLElement;
 	private qLen!: HTMLElement;
 	private lanes: LaneEl[] = [];
+	private blockEls = new Map<number, HTMLElement>();
 	private ended: Array<'ok' | 'fail' | 'early' | 'closed'> = [];
 	private qSig = '';
 	private pSig = '';
@@ -51,7 +54,7 @@ export class PoolView {
 	constructor(root: HTMLElement, sim: WorkerSim, opts: PoolViewOptions = {}) {
 		this.root = root;
 		this.sim = sim;
-		this.o = { maxLanes: 12, showQueue: 16, showDone: true, laneLabel: 'goroutines', legend: [], ...opts };
+		this.o = { maxLanes: 12, showQueue: 16, showDone: true, laneLabel: 'goroutines', legend: [], blocks: false, ...opts };
 		this.build();
 	}
 
@@ -60,6 +63,8 @@ export class PoolView {
 		this.ended = [];
 		this.qSig = this.pSig = this.dSig = '';
 		for (const l of this.lanes) l.sig = '';
+		for (const b of this.blockEls.values()) b.remove();
+		this.blockEls.clear();
 	}
 
 	/** Feed the events of the sim so the done column knows how each job ended. */
@@ -82,7 +87,7 @@ export class PoolView {
 			</div>
 			<div class="gb-col gb-col--lanes">
 				<span class="slabel">${this.o.laneLabel}</span>
-				<div class="gb-lanes" data-lanes></div>
+				<div class="${this.o.blocks ? 'gb-blocks' : 'gb-lanes'}" data-lanes></div>
 			</div>
 			${
 				this.o.showDone
@@ -150,7 +155,29 @@ export class PoolView {
 			this.parkedEl.replaceChildren(...p.slice(0, 12).map((j) => this.chip(j, 'is-parked')));
 		}
 
-		// Lanes: one row per slot that is alive or below the limit.
+		if (this.o.blocks) this.drawBlocks();
+		else this.drawLanes();
+
+		// Done
+		if (this.o.showDone) {
+			const total = this.ended.length;
+			const tail = this.ended.slice(-DOTS);
+			const dSig = total + ':' + tail.length;
+			if (dSig !== this.dSig) {
+				this.dSig = dSig;
+				const dots = this.dotsEl.children;
+				for (let i = 0; i < DOTS; i++) {
+					const k = tail[i];
+					(dots[i] as HTMLElement).className = k ?? '';
+				}
+				setText(this.tallyEl, `${total} ended`);
+			}
+		}
+	}
+
+	/** One row per slot that is alive or below the limit. */
+	private drawLanes() {
+		const sim = this.sim;
 		let rows = Math.min(sim.limit, this.o.maxLanes);
 		for (const g of sim.gors) rows = Math.max(rows, g.slot + 1);
 		rows = Math.min(rows, this.o.maxLanes);
@@ -187,22 +214,32 @@ export class PoolView {
 			}
 			if (job) l.row.style.setProperty('--p', String(Math.max(0, Math.min(1, 1 - job.left / job.dur)).toFixed(3)));
 		}
+	}
 
-		// Done
-		if (this.o.showDone) {
-			const total = this.ended.length;
-			const tail = this.ended.slice(-DOTS);
-			const dSig = total + ':' + tail.length;
-			if (dSig !== this.dSig) {
-				this.dSig = dSig;
-				const dots = this.dotsEl.children;
-				for (let i = 0; i < DOTS; i++) {
-					const k = tail[i];
-					(dots[i] as HTMLElement).className = k ?? '';
-				}
-				setText(this.tallyEl, `${total} ended`);
-			}
+	/** One block per live goroutine, in slot order: a goroutine that exits leaves the DOM. */
+	private drawBlocks() {
+		const live = [...this.sim.gors].sort((x, y) => x.slot - y.slot);
+		const slots = new Set(live.map((g) => g.slot));
+		for (const [slot, el] of this.blockEls) {
+			if (slots.has(slot)) continue;
+			el.remove();
+			this.blockEls.delete(slot);
 		}
+		let added = false;
+		for (const g of live) {
+			let el = this.blockEls.get(g.slot);
+			if (!el) {
+				el = document.createElement('span');
+				el.className = 'gb-block';
+				el.innerHTML = `<b>g${g.slot + 1}</b>`;
+				this.blockEls.set(g.slot, el);
+				added = true;
+			}
+			const job = g.busy ? g.batch[g.i] : undefined;
+			el.dataset.s = job ? 'busy' : 'idle';
+			el.style.setProperty('--p', job ? Math.max(0, Math.min(1, 1 - job.left / job.dur)).toFixed(3) : '0');
+		}
+		if (added) this.lanesEl.replaceChildren(...live.map((g) => this.blockEls.get(g.slot)!));
 	}
 
 	private addLane() {

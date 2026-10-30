@@ -221,6 +221,58 @@
 	color: var(--panel-ink-2);
 }
 
+/* Live goroutines only (idle scene): one block each, filled while it runs a job. */
+.gb-pool:has(.gb-blocks) {
+	min-height: 120px;
+}
+
+.gb-blocks {
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 8px;
+	padding: 0 var(--local-pad);
+}
+
+.gb-block {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 6px;
+	border: 1px solid var(--panel-rule);
+	background: var(--panel-fill);
+	overflow: hidden;
+	animation: gb-pop 0.24s var(--ease);
+}
+
+.gb-block::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--brand) 34%, transparent);
+	transform-origin: bottom;
+	transform: scaleY(var(--p, 0));
+}
+
+.gb-block[data-s='busy'] {
+	border-color: var(--brand);
+}
+
+.gb-block b {
+	position: relative;
+	font: 600 0.6875rem/1 var(--mono);
+	color: var(--panel-ink);
+}
+
+@keyframes gb-pop {
+	from {
+		opacity: 0;
+		scale: 0.8;
+	}
+}
+
 .gb-dots {
 	display: grid;
 	grid-template-columns: repeat(6, 1fr);
@@ -370,7 +422,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.gb-lane[data-s='busy'] .gb-lane__job {
+	.gb-lane[data-s='busy'] .gb-lane__job,
+	.gb-block {
 		animation: none;
 	}
 	.gb-meter__fill,
