@@ -2,7 +2,7 @@
    Needs tokens.css. The docs pages load both through `customCss`.
    A scene is a dark panel in both themes, so these rules read only the `--panel*` tokens inside it.
 
-   Pieces: `.sr-only`, `.sframe` (the scene frame), `.gocode`, `.call`, `.tk-*`, `.pbtn`, `.stepper`, `.seg`, `.code` (code card), `.copy`, `.sfield`, `.slabel`. */
+   Pieces: `.sr-only`, `.sframe` (the scene frame), `.gocode`, `.call`, `.tk-*`, `.pbtn`, `.stepper`, `.seg` (also Starlight's tabs), `.code` (code card), `.copy`, `.sfield`, `.slabel`. */
 
 .sr-only {
 	position: absolute;
@@ -81,17 +81,6 @@
 
 .call.is-new {
 	animation: call-flash 0.7s var(--ease);
-}
-
-/* A touch target is at least 44 px. */
-@media (pointer: coarse) {
-	.pbtn,
-	.sframe .seg [role='tab'],
-	.sframe .seg [role='radio'],
-	.sfield,
-	button.copy {
-		min-height: 44px;
-	}
 }
 
 @keyframes call-flash {
@@ -348,9 +337,10 @@
 	color: var(--panel-ink);
 }
 
-/* ---- Segmented choice: tabs (with panels) or radios (a plain choice) ---- */
+/* ---- Segmented choice: tabs (with panels) or radios (a plain choice). Starlight's <Tabs> share the look. ---- */
 
-.seg {
+.seg,
+starlight-tabs [role='tablist'] {
 	display: inline-flex;
 	flex-wrap: wrap;
 	gap: 4px;
@@ -361,7 +351,8 @@
 }
 
 .seg [role='tab'],
-.seg [role='radio'] {
+.seg [role='radio'],
+starlight-tabs .tab > [role='tab'] {
 	min-height: 40px;
 	padding: 8px 16px;
 	border: 0;
@@ -374,12 +365,14 @@
 }
 
 .seg [role='tab']:hover,
-.seg [role='radio']:hover {
+.seg [role='radio']:hover,
+starlight-tabs .tab > [role='tab']:hover {
 	background: var(--bar-2);
 }
 
 .seg [aria-selected='true'],
-.seg [aria-checked='true'] {
+.seg [aria-checked='true'],
+starlight-tabs .tab > [role='tab'][aria-selected='true'] {
 	background: var(--ink);
 	color: var(--paper);
 }
@@ -612,12 +605,12 @@ button.copy:hover {
 	overflow: hidden;
 }
 
+/* The tabs wrap rather than scroll, so a tab that does not fit (large text, a narrow box) stays in view. */
 .install [role='tablist'] {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 2px;
 	padding: 8px 8px 0;
-	overflow-x: auto;
-	scrollbar-width: none;
 }
 
 .install [role='tab'] {
@@ -706,10 +699,30 @@ button.copy:hover {
 	outline-offset: 3px;
 }
 
+/* ---- A touch target is at least 44 px. Last in the file, so it wins over the base sizes above. ---- */
+
 @media (pointer: coarse) {
+	.pbtn,
+	.seg [role='tab'],
+	.seg [role='radio'],
+	.sframe .seg [role='tab'],
+	.sframe .seg [role='radio'],
+	starlight-tabs .tab > [role='tab'],
+	.install [role='tab'],
+	.sfield,
+	.sframe select,
+	button.copy,
+	.code__head button.copy {
+		min-height: 44px;
+	}
+
+	.stepper .pbtn {
+		min-width: 44px;
+	}
+
 	.tswitch label {
-		width: 40px;
-		height: 40px;
+		width: 44px;
+		height: 44px;
 	}
 }
 

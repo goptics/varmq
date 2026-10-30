@@ -775,41 +775,15 @@ site-search button > kbd {
 	color: var(--ink);
 }
 
-/* Segmented tabs, as in the landing page: a rounded track and a filled current tab. */
+/* Segmented tabs: the `.seg` rules in ui.css style them. This drops Starlight's own underline. */
 starlight-tabs .tablist-wrapper {
 	overflow-x: auto;
 	scrollbar-width: none;
 }
 
-starlight-tabs [role='tablist'] {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 4px;
-	border: 1px solid var(--rule);
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--paper) 80%, transparent);
-}
-
 starlight-tabs .tab > [role='tab'] {
-	min-height: 40px;
-	padding: 8px 16px;
-	border-radius: 8px;
 	box-shadow: none;
-	background: transparent;
-	color: var(--ink-2);
-	font: 600 0.875rem/1 var(--display);
 	white-space: nowrap;
-}
-
-starlight-tabs .tab > [role='tab']:hover {
-	background: var(--bar-2);
-	color: var(--ink);
-}
-
-starlight-tabs .tab [role='tab'][aria-selected='true'] {
-	background: var(--ink);
-	color: var(--paper);
 }
 
 starlight-tabs .tablist-wrapper ~ [role='tabpanel'] {
@@ -1013,6 +987,8 @@ mobile-starlight-toc .dropdown {
 .shell-foot__note {
 	max-width: 70ch;
 	margin: 0;
+	/* The repository path is one long word; at large text sizes it breaks rather than widening the page. */
+	overflow-wrap: anywhere;
 	color: var(--ink-3);
 	font: 400 0.75rem/1.6 var(--mono);
 }
@@ -1077,6 +1053,16 @@ dialog[aria-label='Search'] button[data-close-modal] {
 	line-height: 1.5;
 	max-width: 46ch;
 	text-wrap: pretty;
+}
+
+/* ---- A touch target is at least 44 px (ui.css sizes the shared pieces) ---- */
+
+@media (pointer: coarse) {
+	.expressive-code .copy button,
+	site-search button[data-open-modal] {
+		min-width: 44px;
+		min-height: 44px;
+	}
 }
 
 /* ---- Motion and print ---- */
