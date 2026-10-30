@@ -15,7 +15,7 @@ qsa<HTMLElement>(document, '[data-scene="gb-concurrency"]').forEach(init);
 
 function init(root: HTMLElement) {
 	const sim = new WorkerSim({ limit: 3 });
-	const view = new PoolView(qs(root, '[data-pool]'), sim, { blocks: true });
+	const view = new PoolView(qs(root, '[data-pool]'), sim);
 	const say = caller(root);
 	const live = announcer(root);
 

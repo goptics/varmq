@@ -1,36 +1,17 @@
-// Draws a WorkerSim: the queue, one lane per goroutine slot, and the finished jobs.
-// One square is one job. One lane is one goroutine.
+// Draws a WorkerSim: the queue, one block per live goroutine, and the finished jobs.
+// One square is one job.
 
 import type { Job, SimEvent, WorkerSim } from './sim';
 import { setText } from './scene';
 
 export interface PoolViewOptions {
-	/** Most lanes to draw. A busy goroutine in a slot above it is not drawn. */
-	maxLanes?: number;
 	/** Most squares to draw in the queue before "+n". */
 	showQueue?: number;
 	/** Draw the "done" column. */
 	showDone?: boolean;
-	/** Label of the lane column. */
-	laneLabel?: string;
-	/** Kinds of done square to explain under the tally. */
-	legend?: Array<'ok' | 'fail' | 'early' | 'closed'>;
-	/** Draw only the live goroutines, one block each, instead of one lane per slot. */
-	blocks?: boolean;
 }
-
-const LEGEND = { ok: 'finished', fail: 'failed', early: 'returned early', closed: 'closed, never ran' } as const;
 
 const DOTS = 36;
-
-interface LaneEl {
-	row: HTMLElement;
-	word: HTMLElement;
-	job: HTMLElement;
-	held: HTMLElement;
-	id: HTMLElement;
-	sig: string;
-}
 
 export class PoolView {
 	sim: WorkerSim;
@@ -44,9 +25,8 @@ export class PoolView {
 	private dotsEl!: HTMLElement;
 	private tallyEl!: HTMLElement;
 	private qLen!: HTMLElement;
-	private lanes: LaneEl[] = [];
 	private blockEls = new Map<number, HTMLElement>();
-	private ended: Array<'ok' | 'fail' | 'early' | 'closed'> = [];
+	private ended: Array<'ok' | 'fail'> = [];
 	private qSig = '';
 	private pSig = '';
 	private dSig = '';
@@ -54,7 +34,7 @@ export class PoolView {
 	constructor(root: HTMLElement, sim: WorkerSim, opts: PoolViewOptions = {}) {
 		this.root = root;
 		this.sim = sim;
-		this.o = { maxLanes: 12, showQueue: 16, showDone: true, laneLabel: 'goroutines', legend: [], blocks: false, ...opts };
+		this.o = { showQueue: 16, showDone: true, ...opts };
 		this.build();
 	}
 
@@ -62,15 +42,13 @@ export class PoolView {
 		this.sim = sim;
 		this.ended = [];
 		this.qSig = this.pSig = this.dSig = '';
-		for (const l of this.lanes) l.sig = '';
 		for (const b of this.blockEls.values()) b.remove();
 		this.blockEls.clear();
 	}
 
 	/** Feed the events of the sim so the done column knows how each job ended. */
 	record(e: SimEvent) {
-		if (e.type === 'end') this.ended.push(e.job.early ? 'early' : e.job.fail ? 'fail' : 'ok');
-		else if (e.type === 'close') for (let i = 0; i < e.jobs.length; i++) this.ended.push('closed');
+		if (e.type === 'end') this.ended.push(e.job.fail ? 'fail' : 'ok');
 		if (this.ended.length > 400) this.ended.splice(0, this.ended.length - DOTS);
 	}
 
@@ -86,8 +64,8 @@ export class PoolView {
 				</div>
 			</div>
 			<div class="gb-col gb-col--lanes">
-				<span class="slabel">${this.o.laneLabel}</span>
-				<div class="${this.o.blocks ? 'gb-blocks' : 'gb-lanes'}" data-lanes></div>
+				<span class="slabel">goroutines</span>
+				<div class="gb-blocks" data-lanes></div>
 			</div>
 			${
 				this.o.showDone
@@ -95,11 +73,6 @@ export class PoolView {
 				<span class="slabel">done</span>
 				<div class="gb-dots" data-dots></div>
 				<p class="gb-tally" data-tally></p>
-				${
-					this.o.legend.length
-						? `<ul class="gb-legend">${this.o.legend.map((k) => `<li><i class="${k}"></i>${LEGEND[k]}</li>`).join('')}</ul>`
-						: ''
-				}
 			</div>`
 					: ''
 			}`;
@@ -155,8 +128,7 @@ export class PoolView {
 			this.parkedEl.replaceChildren(...p.slice(0, 12).map((j) => this.chip(j, 'is-parked')));
 		}
 
-		if (this.o.blocks) this.drawBlocks();
-		else this.drawLanes();
+		this.drawBlocks();
 
 		// Done
 		if (this.o.showDone) {
@@ -172,47 +144,6 @@ export class PoolView {
 				}
 				setText(this.tallyEl, `${total} ended`);
 			}
-		}
-	}
-
-	/** One row per slot that is alive or below the limit. */
-	private drawLanes() {
-		const sim = this.sim;
-		let rows = Math.min(sim.limit, this.o.maxLanes);
-		for (const g of sim.gors) rows = Math.max(rows, g.slot + 1);
-		rows = Math.min(rows, this.o.maxLanes);
-		while (this.lanes.length < rows) this.addLane();
-		while (this.lanes.length > rows) this.lanes.pop()!.row.remove();
-
-		for (let i = 0; i < rows; i++) {
-			const g = sim.gors.find((x) => x.slot === i);
-			const l = this.lanes[i];
-			const state = !g ? 'none' : g.busy ? 'busy' : 'idle';
-			const job = g?.busy ? g.batch[g.i] : undefined;
-			const held = g?.busy ? g.batch.slice(g.i + 1) : [];
-			const over = state === 'busy' && i >= sim.limit;
-			const sig = `${state}:${job?.id ?? 0}:${held.map((h) => h.id).join(',')}:${over}:${i < sim.limit}`;
-			if (sig !== l.sig) {
-				l.sig = sig;
-				l.row.dataset.s = state;
-				l.row.dataset.over = over ? 'true' : 'false';
-				l.row.dataset.off = i >= sim.limit && state === 'none' ? 'true' : 'false';
-				l.id.textContent = over ? `g${i + 1} over` : `g${i + 1}`;
-				l.word.textContent = state === 'idle' ? 'idle goroutine' : state === 'none' ? 'no goroutine' : '';
-				l.job.textContent = job ? String(job.id) : '';
-				l.job.dataset.fail = job?.fail ?? '';
-				const nodes: HTMLElement[] = [];
-				if (held.length) {
-					const tag = document.createElement('span');
-					tag.className = 'gb-lane__tag';
-					tag.textContent = 'batch';
-					nodes.push(tag);
-				}
-				nodes.push(...held.slice(0, 6).map((h) => this.chip(h, 'is-held')));
-				if (held.length > 6) nodes.push(this.more(held.length - 6));
-				l.held.replaceChildren(...nodes);
-			}
-			if (job) l.row.style.setProperty('--p', String(Math.max(0, Math.min(1, 1 - job.left / job.dur)).toFixed(3)));
 		}
 	}
 
@@ -249,22 +180,5 @@ export class PoolView {
 			el.style.setProperty('--p', job ? Math.max(0, Math.min(1, 1 - job.left / job.dur)).toFixed(3) : '0');
 		}
 		if (added) this.lanesEl.replaceChildren(...live.map((g) => this.blockEls.get(g.slot)!));
-	}
-
-	private addLane() {
-		const row = document.createElement('div');
-		row.className = 'gb-lane';
-		row.innerHTML = `<span class="gb-lane__id"></span>
-			<div class="gb-lane__track"><span class="gb-lane__fill"></span><span class="gb-job gb-lane__job"></span><span class="gb-lane__word"></span></div>
-			<div class="gb-lane__held"></div>`;
-		this.lanesEl.append(row);
-		this.lanes.push({
-			row,
-			id: row.querySelector('.gb-lane__id')!,
-			word: row.querySelector('.gb-lane__word')!,
-			job: row.querySelector('.gb-lane__job')!,
-			held: row.querySelector('.gb-lane__held')!,
-			sig: '',
-		});
 	}
 }

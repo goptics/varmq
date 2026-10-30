@@ -17,7 +17,7 @@ function init(root: HTMLElement) {
 	let ratio = 0;
 	let expiry = false;
 	let sim = make();
-	const view = new PoolView(qs(root, '[data-pool]'), sim, { showDone: false, blocks: true });
+	const view = new PoolView(qs(root, '[data-pool]'), sim, { showDone: false });
 	const say = caller(root);
 	const live = announcer(root);
 	const codeEl = qs(root, '[data-code]');

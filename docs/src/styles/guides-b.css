@@ -14,11 +14,6 @@
 	display: none !important;
 }
 
-.gb-break {
-	flex-basis: 100%;
-	height: 0;
-}
-
 .gb .sframe__stats dd[data-warn='true'] {
 	color: var(--amber);
 }
@@ -112,116 +107,7 @@
 	border: 1px dashed var(--panel-rule);
 }
 
-.gb-lanes {
-	display: grid;
-	gap: 6px;
-}
-
-.gb-lane {
-	display: grid;
-	grid-template-columns: 52px minmax(0, 1fr) auto;
-	align-items: center;
-	gap: 8px;
-	min-height: 34px;
-	padding: 0 var(--local-pad);
-}
-
-.gb-lane__id {
-	font-size: 0.6875rem;
-	color: var(--panel-ink-2);
-	white-space: nowrap;
-}
-
-.gb-lane[data-over='true'] .gb-lane__id {
-	color: var(--amber);
-}
-
-.gb-lane__track {
-	position: relative;
-	height: 30px;
-	border-radius: 8px;
-	background: var(--panel-fill);
-	border: 1px solid transparent;
-	overflow: hidden;
-}
-
-.gb-lane[data-s='none'] .gb-lane__track {
-	background: transparent;
-	border: 1px dashed var(--panel-rule);
-}
-
-.gb-lane[data-s='idle'] .gb-lane__track {
-	border: 1px solid var(--panel-rule);
-}
-
-.gb-lane__word {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	align-items: center;
-	padding-left: 10px;
-	font-size: 0.6875rem;
-	color: var(--panel-ink-2);
-	white-space: nowrap;
-}
-
-.gb-lane__fill {
-	position: absolute;
-	inset: 0;
-	border-radius: 4px;
-	background: color-mix(in srgb, var(--brand) 26%, transparent);
-	transform-origin: left center;
-	transform: scaleX(var(--p, 0));
-	display: none;
-}
-
-.gb-lane__job {
-	position: absolute;
-	top: 1px;
-	left: calc(var(--p, 0) * (100% - 38px));
-	display: none;
-}
-
-.gb-lane[data-s='busy'] .gb-lane__fill {
-	display: block;
-}
-
-.gb-lane[data-s='busy'] .gb-lane__job {
-	display: grid;
-	animation: gb-arrive 0.3s var(--ease);
-}
-
-.gb-lane__job[data-fail='error'],
-.gb-lane__job[data-fail='panic'] {
-	background: var(--danger);
-	color: var(--panel);
-}
-
-@keyframes gb-arrive {
-	from {
-		opacity: 0;
-		translate: -14px 0;
-	}
-}
-
-.gb-lane__held {
-	display: flex;
-	gap: 4px;
-	justify-content: flex-end;
-	max-width: 11rem;
-	overflow: hidden;
-}
-
-.gb-lane__tag {
-	align-self: center;
-	margin-right: 2px;
-	font-size: 0.625rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--panel-ink-2);
-}
-
-/* Live goroutines only (idle scene): one block each, filled while it runs a job. */
+/* Live goroutines only: one block each, filled while it runs a job. */
 .gb-pool:has(.gb-blocks) {
 	min-height: 120px;
 }
@@ -330,18 +216,6 @@
 	outline-offset: -1px;
 }
 
-.gb-dots i.early {
-	background: transparent;
-	outline: 2px solid var(--cobalt);
-	outline-offset: -2px;
-}
-
-.gb-dots i.closed {
-	background: transparent;
-	outline: 1px dashed var(--panel-ink-2);
-	outline-offset: -1px;
-}
-
 .gb-tally {
 	margin: 0;
 	padding: 10px var(--local-pad) 0;
@@ -435,16 +309,6 @@
 	.gb > .sframe__stage {
 		--local-pad: 12px;
 	}
-	.gb-lane {
-		grid-template-columns: 44px minmax(0, 1fr);
-	}
-	.gb-lane__held {
-		grid-column: 2;
-		justify-content: flex-start;
-	}
-	.gb-lane__held:empty {
-		display: none;
-	}
 	.gb .sfield {
 		flex: 1 1 100%;
 	}
@@ -455,7 +319,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.gb-lane[data-s='busy'] .gb-lane__job,
 	.gb-block {
 		animation: none;
 	}
@@ -463,85 +326,6 @@
 	.gb-meter__tick {
 		transition: none;
 	}
-}
-
-.gb-legend {
-	display: grid;
-	gap: 4px;
-	margin: 0;
-	padding: 10px var(--local-pad) 0;
-	list-style: none;
-	font-size: 0.6875rem;
-	color: var(--panel-ink-2);
-}
-
-.gb-legend li {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.gb-legend i {
-	flex: none;
-	width: 10px;
-	height: 10px;
-	border-radius: 4px;
-	background: var(--panel-fill);
-}
-
-.gb-legend i.ok { background: var(--brand); }
-.gb-legend i.fail {
-	background: repeating-linear-gradient(135deg, var(--danger) 0 2px, transparent 2px 4px);
-	outline: 1px solid var(--danger);
-	outline-offset: -1px;
-}
-.gb-legend i.early {
-	background: transparent;
-	outline: 2px solid var(--cobalt);
-	outline-offset: -2px;
-}
-.gb-legend i.closed {
-	background: transparent;
-	outline: 1px dashed var(--panel-ink-2);
-	outline-offset: -1px;
-}
-
-/* ---- Readouts: label and value pairs ---- */
-
-.gb-kv {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-	gap: 8px 24px;
-	margin: 0;
-	padding: 12px var(--local-pad) 14px;
-	border-top: 1px solid var(--panel-rule);
-	font-size: 0.75rem;
-	line-height: 1.4;
-}
-
-.gb-kv div {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 2px 8px;
-	align-items: baseline;
-}
-
-.gb-kv dt {
-	color: var(--panel-ink-2);
-}
-
-.gb-kv dd {
-	margin: 0;
-	color: var(--panel-ink);
-	font-variant-numeric: tabular-nums;
-}
-
-.gb-kv dd[data-tone='warn'] {
-	color: var(--amber);
-}
-
-.gb-kv dd[data-tone='bad'] {
-	color: var(--danger);
 }
 
 /* ---- Timeline (waiting) ---- */
