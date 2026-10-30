@@ -44,7 +44,7 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 			</div>
 			<div class="eloop__col">
 				<span class="slabel">pool · up to <span data-limit>4</span></span>
-				<div data-lanes></div>
+				<div class="lblocks" data-lanes></div>
 			</div>
 			<div class="eloop__col">
 				<span class="slabel">done</span>
@@ -99,7 +99,6 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 		let c = Number(root.dataset.c) || 4;
 		let n = Number(root.dataset.jobs) || 6;
 		let model = new PoolModel(c, JOB_MS);
-		const spawned = new Set<number>([1]);
 		let P = 0; // presentation clock, ms
 		let due = 0; // the next step may run at this time
 		let playing = !reducedMotion();
@@ -151,20 +150,17 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 			q('[data-queue]').innerHTML = model.queue.length ? model.queue.map((j) => chip(j, animate ? 'ljob--new' : '')).join('') : '<span class="lempty">empty</span>';
 			q('[data-done]').innerHTML = model.done.length ? model.done.map((j) => chip(j, 'ljob--done')).join('') : '<span class="lempty">none yet</span>';
 
-			const top = Math.max(c, ...model.busy.map((b) => b.node), ...model.idle);
-			const lanes: string[] = [];
-			for (let i = 1; i <= top; i++) {
-				const b = model.busy.find((x) => x.node === i);
-				const isIdle = model.idle.includes(i);
-				const state = b ? 'busy' : isIdle ? 'idle' : 'none';
-				const label = b ? '' : isIdle ? 'idle' : spawned.has(i) ? 'exited' : 'not started';
-				lanes.push(
-					`<div class="llane" data-s="${state}" data-node="${i}"><span class="llane__id">W${i}</span><div class="llane__track">${
-						b ? '<span class="llane__fill" data-fill></span>' + b.jobs.map((j) => chip(j)).join('') + '<span>running</span>' : label
-					}</div></div>`,
-				);
-			}
-			q('[data-lanes]').innerHTML = lanes.join('');
+			// Only live goroutines: one block each, filled while it runs its batch. An exited one is gone.
+			const live = [...model.busy.map((b) => b.node), ...model.idle].sort((a, b) => a - b);
+			q('[data-lanes]').innerHTML = live
+				.map((i) => {
+					const b = model.busy.find((x) => x.node === i);
+					const jobs = b ? (b.jobs.length > 1 ? `${b.jobs[0]}–${b.jobs[b.jobs.length - 1]}` : String(b.jobs[0])) : '';
+					return `<div class="lblock" data-s="${b ? 'busy' : 'idle'}" data-node="${i}">${
+						b ? '<span class="lblock__fill" data-fill></span>' : ''
+					}<b>W${i}</b>${jobs ? `<span>${jobs}</span>` : ''}</div>`;
+				})
+				.join('');
 			q('[data-limit]').textContent = String(c);
 			q('[data-c-out]').textContent = String(c);
 			q('[data-n-out]').textContent = String(n);
@@ -202,7 +198,6 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 
 		const apply = (s: Step) => {
 			if (s.kind === 'wait') return;
-			if (s.kind === 'handoff') spawned.add(s.node);
 			if (s.kind === 'idle') over = true;
 			latest = readFor(s);
 			setCall(q('[data-call]'), callFor(s));
@@ -210,12 +205,12 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 			schedule();
 		};
 
-		/** The bar of each busy lane shows how far its batch has run. */
+		/** The fill of each busy block shows how far its batch has run. */
 		const fills = () => {
-			scene.querySelectorAll<HTMLElement>('.llane[data-s="busy"]').forEach((lane) => {
+			scene.querySelectorAll<HTMLElement>('.lblock[data-s="busy"]').forEach((lane) => {
 				const b = model.busy.find((x) => x.node === Number(lane.dataset.node));
 				const fill = lane.querySelector<HTMLElement>('[data-fill]');
-				if (b && fill) fill.style.transform = `scaleX(${Math.min(1, Math.max(0, (P - b.start) / (b.end - b.start)))})`;
+				if (b && fill) fill.style.transform = `scaleY(${Math.min(1, Math.max(0, (P - b.start) / (b.end - b.start)))})`;
 			});
 		};
 
@@ -249,8 +244,6 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 
 		const reset = () => {
 			model = new PoolModel(c, JOB_MS);
-			spawned.clear();
-			spawned.add(1);
 			P = 0;
 			due = 0;
 			fresh = true;

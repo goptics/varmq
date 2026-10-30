@@ -133,6 +133,56 @@
 	opacity: 0.6;
 }
 
+/* Live goroutines in the pool scene: one block each, filled from the bottom while it runs. */
+.lblocks {
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 8px;
+}
+
+.lblock {
+	position: relative;
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	gap: 3px;
+	min-width: 46px;
+	height: 46px;
+	padding: 0 6px;
+	border-radius: 6px;
+	border: 1px solid var(--panel-rule);
+	background: var(--panel-fill);
+	overflow: hidden;
+	font: 600 0.6875rem/1 var(--mono);
+	color: var(--panel-ink);
+}
+
+.lblock > :not(.lblock__fill) {
+	position: relative;
+}
+
+.lblock > span:not(.lblock__fill) {
+	font-weight: 500;
+	color: var(--panel-ink-2);
+}
+
+.lblock[data-s='busy'] {
+	border-color: var(--brand);
+}
+
+.lblock__fill {
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--brand) 34%, transparent);
+	transform-origin: bottom;
+	transform: scaleY(0);
+}
+
+.sframe.is-paused .lblock__fill {
+	opacity: 0.6;
+}
+
 /* ---- Event loop and pool ---- */
 
 .eloop {
