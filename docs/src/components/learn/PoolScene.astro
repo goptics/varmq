@@ -89,6 +89,7 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 
 	const GAP = 340; // ms of presentation time between the visible steps of the loop
 	const JOB_MS = 1400; // ms of presentation time for one job
+	const DONE_SHOWN = 3; // finished jobs drawn before "+n more"
 
 	document.querySelectorAll<HTMLElement>('[data-pool]').forEach((root) => {
 		const scene = root.closest<HTMLElement>('.sframe')!;
@@ -148,7 +149,12 @@ const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
 
 		const render = (animate: boolean) => {
 			q('[data-queue]').innerHTML = model.queue.length ? model.queue.map((j) => chip(j, animate ? 'ljob--new' : '')).join('') : '<span class="lempty">empty</span>';
-			q('[data-done]').innerHTML = model.done.length ? model.done.map((j) => chip(j, 'ljob--done')).join('') : '<span class="lempty">none yet</span>';
+			// The newest finished jobs, then a count of the rest, so the column does not grow with the run.
+			const shown = model.done.slice(-DONE_SHOWN);
+			const rest = model.done.length - shown.length;
+			q('[data-done]').innerHTML = model.done.length
+				? shown.map((j) => chip(j, 'ljob--done')).join('') + (rest ? `<span class="lempty">+${rest} more</span>` : '')
+				: '<span class="lempty">none yet</span>';
 
 			// Only live goroutines: one block each, filled while it runs its batch. An exited one is gone.
 			const live = [...model.busy.map((b) => b.node), ...model.idle].sort((a, b) => a - b);
