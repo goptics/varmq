@@ -149,16 +149,19 @@ const map = mountMap($('varmq-map'), (t) => {
 
 /**
  * Shows the intro, beside the whole map. The map runs as in the last step, from where its camera has pulled back, holds
- * a moment once it is still, and runs again, until the reader scrolls on. Under reduced motion it stands still.
+ * a moment once it is still, and runs again, until the reader scrolls on. Back up from step 1, the map first plays
+ * step 1 backward to the run's end, and the loop goes on from that hold. Under reduced motion it stands still.
  */
-function showIntro() {
+function showIntro(back = false) {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
 	intro.hidden = false;
 	stepView.hidden = true;
+	const run = (held: boolean) => map.play(STATIC_AT, RUN_END - STATIC_AT, { ...AGAIN, held });
 	if (reduce.matches) map.seek(STATIC_AT);
-	else map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN);
+	else if (back) map.rewind(RUN_END, STEPS[0].ms, () => run(true));
+	else run(false);
 }
 
 /**
@@ -248,7 +251,7 @@ const tick = () => {
 		const stop = STOPS[k - 1];
 		const up = k < at;
 		at = k;
-		if (!stop) showIntro();
+		if (!stop) showIntro(up);
 		else if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
 		} else show(stop.step, stop.caption, up);

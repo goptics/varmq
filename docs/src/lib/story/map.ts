@@ -21,9 +21,10 @@ export interface MapHandle {
 	play(from: number, ms: number, loop?: Loop): void;
 	/**
 	 * Plays the loop backward from where the map is to `to`, over `most` ms of it at most: from further on, it starts
-	 * `most` ms past `to`. It takes REWIND ms at most, faster than the loop's own pace if need be. Then it holds at `to`.
+	 * `most` ms past `to`, and it may go back over the loop's end. It takes REWIND ms at most, faster than the loop's own
+	 * pace if need be. Then it holds at `to`, and calls `then` if given.
 	 */
-	rewind(to: number, most: number): void;
+	rewind(to: number, most: number, then?: () => void): void;
 	/** The loop's time the map shows. */
 	now(): number;
 }
@@ -147,27 +148,41 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		frameId = requestAnimationFrame(tick);
 	};
 
-	const rewind = (to: number, most: number) => {
+	const rewind = (to: number, most: number, then?: () => void) => {
 		cancel();
 		const tl = timeline;
 		if (!tl) {
 			t = wrap(to);
-			pending = () => seek(to);
+			pending = () => {
+				seek(to);
+				then?.();
+			};
 			return;
 		}
 		pending = undefined;
 		const ms = Math.min(wrap(t - to), most);
 		const end = wrap(to);
 		onTime(end);
-		const shown = (frames = after(tl, host, end, camera));
-		// The loop's end shows as its start does, so a rewind that starts there need not seek over it.
-		const at = (left: number) => (t = Math.min(end + Math.max(0, left), TOTAL - 0.001));
-		shown.show(at(ms));
+		// `after` shows only times past its own end, so a rewind back over the loop's end goes in two parts: down to the
+		// loop's start, then from the loop's end, which shows as its start does, down to `to`.
+		let from = -1;
+		const show = (left: number) => {
+			const u = end + Math.max(0, left); // past TOTAL while it is still on the far side of the loop's end
+			const base = u >= TOTAL ? 0 : end;
+			if (base !== from) {
+				frames?.stop();
+				frames = after(tl, host, base, camera);
+				from = base;
+			}
+			t = Math.min(u - (base === 0 ? TOTAL : 0), TOTAL - 0.001);
+			frames!.show(t);
+		};
+		show(ms);
 		const begun = performance.now();
 		const pace = Math.max(1, ms / REWIND);
 		const tick = () => {
 			const left = ms - (performance.now() - begun) * pace;
-			shown.show(at(left));
+			show(left);
 			if (left > 0) {
 				frameId = requestAnimationFrame(tick);
 				return;
@@ -176,6 +191,7 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 			// The frame is exact already; a full seek leaves anime.js's own state, and the renderer's, exact too.
 			tl.seek(t);
 			onTime(t);
+			then?.();
 		};
 		frameId = requestAnimationFrame(tick);
 	};
