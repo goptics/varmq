@@ -140,7 +140,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'One worker',
 		duration: 8300,
-		captions: [{ at: 300, until: 7400, text: '*Add()* puts jobs in a queue' }],
+		captions: [{ at: 300, until: 7400, text: '*Add* puts jobs in a queue' }],
 		parts: [
 			pool(carry, 'core', {
 				...PACE,
@@ -309,7 +309,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		duration: 16900,
 		captions: [
 			{ at: 300, until: 1150, text: 'SQLite keeps the *queue* in a file' },
-			{ at: 1300, until: 2800, text: '*Add()* writes each job to jobs.db' },
+			{ at: 1300, until: 2800, text: '*Add* writes each job to jobs.db' },
 			{ at: 3300, until: 6300, text: 'Taken jobs stay *in flight* until acked' },
 			{ at: 6800, until: 8200, text: 'The program !dies! mid-job' },
 			{ at: 9300, until: 10400, text: 'On restart they go *back* to the queue' },
@@ -377,10 +377,10 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'Control',
 		duration: 11600,
 		captions: [
-			{ at: 2300, until: 3500, text: '*Pause()* holds new jobs back' },
-			{ at: 4000, until: 5600, text: '*Resume()* starts the jobs that waited' },
-			{ at: 6100, until: 7400, text: '*Stop()* ends the loop once jobs finish' },
-			{ at: 7900, until: 10800, text: '*Restart()* runs the jobs that waited' },
+			{ at: 2300, until: 3500, text: '*Pause* holds new jobs back' },
+			{ at: 4000, until: 5600, text: '*Resume* starts the jobs that waited' },
+			{ at: 6100, until: 7400, text: '*Stop* ends the loop once jobs finish' },
+			{ at: 7900, until: 10800, text: '*Restart* runs the jobs that waited' },
 		],
 		parts: [
 			pool(carry, 'core', {

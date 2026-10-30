@@ -14,7 +14,7 @@ describe('chapters', () => {
 			'Many queues, one worker', 'Topics', 'SQLite', 'Redis', 'Control', 'Everything together']);
 	});
 	it('carry the agreed captions', () => {
-		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
+		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
