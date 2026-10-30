@@ -6,7 +6,6 @@ sidebar:
 ---
 
 import PoolScene from '../../../components/learn/PoolScene.astro';
-import TopicScene from '../../../components/learn/TopicScene.astro';
 import BatchPlanner from '../../../components/learn/BatchPlanner.astro';
 import EventLoopSteps from '../../../components/learn/EventLoopSteps.astro';
 
@@ -34,9 +33,7 @@ Below, six jobs are added to a worker with concurrency 4. Four go out back to ba
 
 A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) feeds the same event loop as a queue, but from a shared log instead of a queue of jobs. [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) appends the payload to the log once, then signals the event loop of every subscribed worker, the same one-slot signal `Add` sends. Each subscription reads the log through its own cursor, so each worker's loop makes its own job from the payload and hands it to its own pool. The workers run independently: a slow or paused one does not hold up `Publish` or the others.
 
-A payload stays in the log until every subscription has read it. Below, two workers subscribe to one topic, and the slower one keeps a chunk of the log alive until its cursor moves past it.
-
-<TopicScene />
+A payload stays in the log until every subscription has read it.
 
 [Topics](/guides/topics/) covers subscribing, capacity and priority.
 
