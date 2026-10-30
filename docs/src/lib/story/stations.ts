@@ -170,11 +170,12 @@ worker.WithDistributedQueue(dq)`,
 		code: `worker.Pause()
 worker.Resume()
 
-// running jobs finish, waiting stay
+// running jobs finish, then the event
+// loop and its goroutines exit
 worker.Stop()
 // the waiting jobs run
 worker.Restart()`,
-		lines: [[1], [2], [4, 5], [6, 7]],
+		lines: [[1], [2], [4, 5, 6], [7, 8]],
 		source: { label: 'lifecycle-restart', href: `${EXAMPLES}/lifecycle-restart` },
 	},
 	{
