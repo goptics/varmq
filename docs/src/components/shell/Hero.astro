@@ -28,3 +28,33 @@ const notFound = id === '404' || id.endsWith('/404');
 		</>
 	)
 }
+
+<script>
+	// The sprocket holes move with the scroll (story.css, .roll): the left rail's down, the right rail's up, by as
+	// much as the page moved, and the glow from the top of the page to the bottom. Each frame eases them a share of
+	// the way to the scroll position, so they glide after a step's snap instead of jumping. Reduced motion keeps
+	// them still and unlit.
+	const left = document.querySelector<HTMLElement>('.roll--l');
+	const right = document.querySelector<HTMLElement>('.roll--r');
+	if (left && right && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		const EASE = 0.12; // the share of the remaining distance covered each frame
+		let y = scrollY;
+		let frame = 0;
+		const apply = () => {
+			const p = y / Math.max(1, document.documentElement.scrollHeight - innerHeight);
+			left.style.setProperty('--y', `${y}px`);
+			right.style.setProperty('--y', `${-y}px`);
+			for (const rail of [left, right]) rail.style.setProperty('--p', p.toFixed(4));
+		};
+		const tick = () => {
+			const to = scrollY;
+			y += (to - y) * EASE;
+			if (Math.abs(to - y) < 0.5) y = to;
+			apply();
+			frame = y === to ? 0 : requestAnimationFrame(tick);
+		};
+		addEventListener('scroll', () => (frame ||= requestAnimationFrame(tick)), { passive: true });
+		for (const rail of [left, right]) rail.toggleAttribute('data-live', true);
+		apply();
+	}
+</script>

@@ -899,9 +899,10 @@
 
 /* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. They start under
    the header, one every 48px, each in the middle of its rail. Each hole is punched: a little darker than the paper,
-   with a thin green rim. The holes feed down slowly, as jobs move through, and one glow runs down both rails with the
-   page's scroll position. With reduced motion the holes stand still and unlit; without scroll-driven animations the
-   glow stays off. */
+   with a thin green rim. The holes move with the scroll, as paper feeding through: the left rail's go down and the right
+   rail's go up, by as much as the page moved, and one glow runs down both rails from the top of the page to the bottom.
+   Hero.astro eases --y (the distance) and --p (how far down the page, 0 to 1) toward the scroll position each frame,
+   so both glide. With reduced motion the holes stand still and unlit. */
 .roll {
 	display: none;
 }
@@ -924,8 +925,8 @@
 		margin: 0; /* the content stack's margin between siblings would push the right rail down */
 		z-index: 1;
 		pointer-events: none;
-		background: radial-gradient(circle at 50% 50%, var(--hole) 0 4.5px, var(--rim) 5px 5.75px, transparent 6.25px) 0 0 / 100%
-			var(--pitch) repeat-y;
+		background: radial-gradient(circle at 50% 50%, var(--hole) 0 4.5px, var(--rim) 5px 5.75px, transparent 6.25px) 0 var(--y, 0)
+			/ 100% var(--pitch) repeat-y;
 	}
 
 	:root[data-theme='dark'] .roll {
@@ -955,43 +956,14 @@
 				color-mix(in srgb, var(--brand) 12%, transparent) 7.5px,
 				transparent 10px
 			)
-			0 0 / 100% var(--pitch) repeat-y;
-		-webkit-mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 0 / 100% 168px no-repeat;
-		mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 0 / 100% 168px no-repeat;
+			0 var(--y, 0) / 100% var(--pitch) repeat-y;
+		-webkit-mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 calc(var(--p, 0) * 100%) / 100% 168px
+			no-repeat;
+		mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 calc(var(--p, 0) * 100%) / 100% 168px no-repeat;
 	}
 
-	@media (prefers-reduced-motion: no-preference) {
-		.roll,
-		.roll::after {
-			animation: roll-move 3s linear infinite;
-		}
-
-		@supports (animation-timeline: scroll()) {
-			.roll::after {
-				display: block;
-				animation:
-					roll-move 3s linear infinite,
-					roll-feed linear both;
-				animation-timeline: auto, scroll(root);
-			}
-		}
+	.roll[data-live]::after {
+		display: block;
 	}
 }
 
-/* One hole's pitch down, then again: the holes look like they keep moving. */
-@keyframes roll-move {
-	to {
-		background-position-y: var(--pitch);
-	}
-}
-
-@keyframes roll-feed {
-	from {
-		-webkit-mask-position: 0 0;
-		mask-position: 0 0;
-	}
-	to {
-		-webkit-mask-position: 0 calc(100vh - var(--sl-nav-height, 64px) - 168px);
-		mask-position: 0 calc(100vh - var(--sl-nav-height, 64px) - 168px);
-	}
-}
