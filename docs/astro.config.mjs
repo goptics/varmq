@@ -58,7 +58,7 @@ export default defineConfig({
 			customCss: ['./src/styles/tokens.css', './src/styles/ui.css', './src/styles/docs-theme.css'],
 			components: {
 				Head: './src/components/shell/Head.astro',
-				ThemeSelect: './src/components/shell/ThemeSelect.astro',
+				ThemeSelect: './src/components/ui/ThemeSwitch.astro',
 				PageTitle: './src/components/shell/PageTitle.astro',
 				Hero: './src/components/shell/Hero.astro',
 				Footer: './src/components/shell/Footer.astro',

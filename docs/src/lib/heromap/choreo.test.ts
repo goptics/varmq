@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { CHAPTERS, TOTAL, chipKey } from './chapters.ts';
-import { Choreo, buildTimeline } from './choreo.ts';
+import { Choreo } from './choreo.ts';
 import { CONNS, PIECES, RINGS } from './scene.ts';
 import { STEPS, until } from '../story/steps.ts';
 
@@ -36,8 +36,6 @@ const chips = CHAPTERS.flatMap(c => (c.chips ?? []).map((chip, i) => chipKey(c.n
 const stores = CHAPTERS.flatMap(c => c.parts.filter(p => p.kind !== 'pool'));
 const jobs = CHAPTERS.flatMap(c => [...(c.published ?? []).map(v => v.id), ...c.parts.flatMap(p => p.plan.jobs.map(j => j.id))]);
 const rings = Object.entries(RINGS).flatMap(([worker, places]) => places.map((_, i) => `${worker}:${i}`));
-const captions = CHAPTERS.flatMap(c => c.captions.map((cap, i) => [`${c.n}:${i}`, cap.text.split(' ').length]));
-const words = new Map(captions);
 
 const ring = lookup(new Set(rings), 'ring', id => ({
 	ring: element(`${id} ring`),
@@ -45,21 +43,13 @@ const ring = lookup(new Set(rings), 'ring', id => ({
 	check: element(`${id} check`),
 	ghost: element(`${id} ghost`),
 }));
-const line = lookup(new Set(words.keys()), 'caption', key =>
-	Array.from({ length: words.get(key) }, (_, i) => element(`caption ${key} word ${i}`)),
-);
-const swaps = new Set(CHAPTERS.flatMap(c => c.captions.flatMap((cap, i) => (cap.swap ? [`${c.n}:${i}`] : []))));
-const swapWord = lookup(swaps, 'caption swap', key => element(`caption ${key} swap`));
 const nodes = {
 	svg: element('svg'),
 	world: element('world'),
-	caption: element('caption'),
 	piece: lookup(new Set([...PIECES.map(p => p.id), ...CONNS.map(c => c.id), ...chips]), 'piece', element),
 	ring: (worker, i) => ring(`${worker}:${i}`),
 	job: lookup(new Set(jobs), 'job', id => [element(id), element(`${id} trail 1`), element(`${id} trail 2`)]),
 	record: lookup(new Set(stores.flatMap(p => p.plan.jobs.map(j => j.id))), 'record', id => element(`record ${id}`)),
-	words: (n, i) => line(`${n}:${i}`),
-	swap: (n, i) => swapWord(`${n}:${i}`),
 	setCamera: () => {},
 	setWidth: () => {},
 };
@@ -73,7 +63,7 @@ describe('choreography', () => {
 	it('builds the whole loop, all ten chapters, with nothing refused', () => {
 		// The choreographer refuses what it cannot draw: a lane with no slot free for a landing, a property changed out
 		// of order, a tween past the loop's end, a set with no room for its pad. Any of them fails this test.
-		const timeline = buildTimeline(nodes, page);
+		const timeline = new Choreo(nodes, page).build();
 		assert.equal(timeline.iterationDuration, TOTAL);
 		// And no set ends its property's chain (see score.ts).
 		for (let child = timeline._head; child; child = child._next) {
@@ -117,12 +107,12 @@ describe('choreography', () => {
 	it("holds each of the story's captions on a still frame", () => {
 		// The home page's story stops on each caption (story/steps.ts): there, what the caption is about has finished,
 		// and nothing of the next caption has begun. Only the progress arcs of jobs still running may be part way.
-		const timeline = buildTimeline(nodes, page);
+		const timeline = new Choreo(nodes, page).build();
 		const moving = [];
 		for (let child = timeline._head; child; child = child._next) {
 			for (let tween = child._head; tween; tween = tween._next) {
 				const name = tween.target?.name ?? 'camera';
-				if (name.startsWith('caption') || name.endsWith('progress')) continue;
+				if (name.endsWith('progress')) continue;
 				// A tween's absolute start counts from the engine's clock when the timeline was built (timeline._offset).
 				const start = Math.round(tween._absoluteStartTime - timeline._offset);
 				moving.push({ name, prop: tween.property, start, end: start + tween._updateDuration });

@@ -7,7 +7,6 @@
 	--paper: #f5faf7;
 	--bar: #ebf5f0;
 	--bar-2: #dcede4;
-	--hole: #cfe2d8;
 	--ink: #0e2019;
 	--ink-2: #3b5248;
 	--ink-3: #51695e;
@@ -40,7 +39,6 @@
 	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
 	--gutter: clamp(16px, 4vw, 40px);
-	--max: 1180px;
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -49,7 +47,6 @@
 	--paper: #0f1713;
 	--bar: #121d18;
 	--bar-2: #182720;
-	--hole: #070c09;
 	--ink: #e5f1eb;
 	--ink-2: #b0c7bb;
 	--ink-3: #8fa89c;

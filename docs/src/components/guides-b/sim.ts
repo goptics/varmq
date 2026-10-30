@@ -128,11 +128,6 @@ export class WorkerSim {
 	sweepIn() {
 		return this.expiry > 0 ? Math.max(0, this.expiry - this.expiryClock) : 0;
 	}
-	jobs(): Job[] {
-		const out: Job[] = [];
-		for (const g of this.gors) for (const j of g.batch) if (j.at === 'lane' || j.at === 'batch') out.push(j);
-		return [...this.queue, ...this.parked, ...out];
-	}
 
 	// ---- calls ----
 

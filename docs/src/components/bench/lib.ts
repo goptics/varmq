@@ -145,12 +145,6 @@ export function producerLabel(shape: string): string {
 	return m[1] === '1' ? '1 producer' : `${m[1]} producers`;
 }
 
-export function shapeLong(shape: string): string {
-	const m = /^(\d+[KM]?)u-(\d+[KM]?)t$/.exec(shape);
-	if (!m) return shape;
-	return `${m[1] === '1' ? '1 producer' : `${m[1]} producers`}, ${m[2]} tasks each`;
-}
-
 export const workerLabel = (v: string) => (v === '1' ? '1 worker' : `${v} workers`);
 
 const TEST_LABEL: Record<string, string> = { durable: 'Drain 100K jobs', enqueue: 'Enqueue only', latency: 'Latency' };

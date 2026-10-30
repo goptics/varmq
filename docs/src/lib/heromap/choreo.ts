@@ -61,8 +61,6 @@ const CLEAR = 44; // a copy has left the store's mouth, for the next one, once i
 const NEAR = 16; // a landing square this close to its slot is all but in it: from then on it must not touch
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
-// A caption word rolling out of its box as another rolls in: by more than the box is tall (14 px type, 1.4 lines).
-const ROLL = { by: 20, duration: 420 };
 
 const E = {
 	move: eases.inOutExpo,
@@ -539,12 +537,6 @@ export class Choreo {
 				score.start(score.drawable(r.check), { draw: [0, 0] });
 			});
 		}
-		for (const c of CHAPTERS) {
-			c.captions.forEach((cap, i) => {
-				const words = [...nodes.words(c.n, i), ...(cap.swap ? [nodes.swap(c.n, i)] : [])];
-				for (const word of words) score.start(word, { opacity: 0, translateY: 10 });
-			});
-		}
 		// The rest of the text on the map, a chip's and the ACK line's, shows wherever its piece does (`wrap`).
 		for (const p of [...PIECES, ...CONNS]) for (const text of this.texts(nodes.piece(p.id))) score.start(text, { opacity: 1 });
 	}
@@ -625,6 +617,7 @@ export class Choreo {
 		score.tween(dot, { opacity: 0 }, start + duration, 120, E.linear);
 	}
 
+	/** The whole loop as one anime.js timeline, `TOTAL` long, looping, and paused until played. */
 	build(): Timeline {
 		const at = starts();
 		for (const c of CHAPTERS) this.chapter(c, at[c.n - 1]);
@@ -667,7 +660,6 @@ export class Choreo {
 		const move = c.n === 1 ? 0 : CAMERA;
 		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
 		this.open(c, move ? T + OPENS : T);
-		this.captions(c, T);
 		for (const [i, chip] of (c.chips ?? []).entries()) {
 			const g = this.nodes.piece(chipKey(c.n, i, chip.id));
 			if (chip.fade) {
@@ -762,32 +754,6 @@ export class Choreo {
 			const track = this.score.track(ghost, 'opacity');
 			if (track.at(at)[0] === 0 && track.end <= at) this.score.tween(ghost, { opacity: 1 }, at, FADE, E.fade);
 		}
-	}
-
-	/**
-	 * Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. A swap rolls the
-	 * last word up out of its box as its stand-in rolls up into it, together, so the two never overlap.
-	 */
-	private captions(c: Chapter, T: number) {
-		let free = 0; // when the previous caption has left
-		c.captions.forEach((cap, i) => {
-			const words = this.nodes.words(c.n, i);
-			const enter = Math.max(cap.at, free);
-			this.score.stagger(words, { opacity: 1, translateY: 0 }, T + enter, 55, 520, E.pop);
-			let shown = words;
-			if (cap.swap) {
-				const last = words[words.length - 1];
-				const next = this.nodes.swap(c.n, i);
-				const at = T + cap.swap.at;
-				this.score.set(next, { opacity: 1, translateY: ROLL.by }, at);
-				this.score.tween(next, { translateY: 0 }, at, ROLL.duration, E.zoom);
-				this.score.tween(last, { translateY: -ROLL.by }, at, ROLL.duration, E.zoom);
-				this.score.set(last, { opacity: 0 }, at + ROLL.duration);
-				shown = [...words.slice(0, -1), next];
-			}
-			this.score.stagger(shown, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
-			free = cap.until + 300 + 30 * shown.length;
-		});
 	}
 
 	// -- Pools --------------------------------------------------------------------------------------------------
@@ -1225,12 +1191,3 @@ const consumer = (id: string): Worker => (id === 'sqlite' ? 'sqlite' : (`redis-$
 const valueOf = (copy: string) => copy.slice(0, copy.lastIndexOf('-'));
 
 const isTopicDispatch = (e: PoolEvent): e is Dispatch => e.type === 'dispatch' && e.source === 'topic';
-
-/**
- * The whole loop as one anime.js timeline: `loop: true`, `TOTAL` long, and paused until played
- * (`autoplay: false`). Each frame puts the camera where its tweens have it. `page` is the browser's unless a test
- * gives its own.
- */
-export function buildTimeline(nodes: MapNodes, page: Page = browserPage(nodes.world)): Timeline {
-	return new Choreo(nodes, page).build();
-}

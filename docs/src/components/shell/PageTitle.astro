@@ -18,18 +18,13 @@ const links = (entries: SidebarItem[]): SidebarItem[] =>
 let id = 'DOCS';
 let label = '';
 
-if (entry.id === '404' || entry.id.endsWith('/404')) {
-	id = 'JOB 404';
-	label = 'Not found';
-} else {
-	for (const item of sidebar as SidebarItem[]) {
-		if (item.type !== 'group') continue;
-		const position = links(item.entries ?? []).findIndex((link) => link.isCurrent);
-		if (position === -1) continue;
-		id = `JOB ${String(position + 1).padStart(2, '0')}`;
-		label = item.label;
-		break;
-	}
+for (const item of sidebar as SidebarItem[]) {
+	if (item.type !== 'group') continue;
+	const position = links(item.entries ?? []).findIndex((link) => link.isCurrent);
+	if (position === -1) continue;
+	id = `JOB ${String(position + 1).padStart(2, '0')}`;
+	label = item.label;
+	break;
 }
 ---
 

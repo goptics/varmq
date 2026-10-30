@@ -910,11 +910,6 @@
 	text-align: left;
 }
 
-.bboard .blue {
-	color: var(--panel-accent);
-	font-weight: 600;
-}
-
 /* ---- narrow panel: the panel measures itself ---- */
 
 @container bench (max-width: 620px) {

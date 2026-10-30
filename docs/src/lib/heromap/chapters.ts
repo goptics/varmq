@@ -36,14 +36,13 @@ export type Part =
 	| { kind: 'redis'; plan: RedisPlan; events: StoreEvent[] };
 
 /**
- * One line under the map. `*word*` is green and `!word!` red, and `#word#` takes its logo's colour (SQLite's or
- * Redis's); a mark may wrap several words.
+ * One of the story's captions, beside the map. `*word*` is green and `!word!` red, and `#word#` takes its logo's
+ * colour (SQLite's or Redis's); a mark may wrap several words.
  */
 export interface Caption {
 	at: number;
-	until: number; // when it starts to leave
 	text: string;
-	swap?: { at: number; text: string }; // at `at`, the last word rolls up out of sight as `text` rolls up into its place
+	swap?: { text: string }; // the story reads it as `text to swap`
 }
 
 export interface Chapter {
@@ -140,7 +139,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'One worker',
 		duration: 8300,
-		captions: [{ at: 300, until: 7400, text: '*Add* puts jobs in a queue' }],
+		captions: [{ at: 300, text: '*Add* puts jobs in a queue' }],
 		parts: [
 			pool(carry, 'core', {
 				...PACE,
@@ -161,8 +160,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'The pool',
 		duration: 9000,
 		captions: [
-			{ at: 300, until: 4800, text: 'The pool *grows* while jobs wait' },
-			{ at: 5300, until: 8400, text: 'and *shrinks* when the queue empties' },
+			{ at: 300, text: 'The pool *grows* while jobs wait' },
+			{ at: 5300, text: 'and *shrinks* when the queue empties' },
 		],
 		chips: [{ id: 'ctl-restart', label: 'TunePool(5)', at: 1300, until: 2500 }],
 		parts: [
@@ -186,7 +185,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'Results and errors',
 		duration: 6200,
-		captions: [{ at: 300, until: 5400, text: 'Jobs hand back a *value* or an *error*' }],
+		captions: [{ at: 300, text: 'Jobs hand back a *value* or an *error*' }],
 		parts: [
 			{
 				...pool(carry, 'result', {
@@ -207,7 +206,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'Priority',
 		duration: 7000,
-		captions: [{ at: 300, until: 6400, text: 'The *lowest* number runs first' }],
+		captions: [{ at: 300, text: 'The *lowest* number runs first' }],
 		parts: [
 			pool(carry, 'core', {
 				...LATE,
@@ -251,10 +250,10 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 			title: 'Many queues, one worker',
 			duration: 17900,
 			captions: [
-				{ at: 300, until: 4150, text: '*Priority*, the default, goes in bind order' },
-				{ at: 4650, until: 8500, text: '*MaxLen* takes from the longest queue' },
-				{ at: 9000, until: 12850, text: '*MinLen* takes from the shortest queue' },
-				{ at: 13350, until: 17100, text: '*RoundRobin* takes from each queue in turn' },
+				{ at: 300, text: '*Priority*, the default, goes in bind order' },
+				{ at: 4650, text: '*MaxLen* takes from the longest queue' },
+				{ at: 9000, text: '*MinLen* takes from the shortest queue' },
+				{ at: 13350, text: '*RoundRobin* takes from each queue in turn' },
 			],
 			// Each strategy's name takes the chip in turn. Priority pops in with the chip, and no later, so the chip's own
 			// RoundRobin never shows beneath it; each after it covers the one before and fades its name in. RoundRobin
@@ -286,7 +285,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		return {
 			title: 'Topics',
 			duration: 6200,
-			captions: [{ at: 300, until: 5400, text: '*Publish* once, every subscriber gets a copy' }],
+			captions: [{ at: 300, text: '*Publish* once, every subscriber gets a copy' }],
 			published,
 			parts: [
 				pool(carry, 'core', {
@@ -308,12 +307,12 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'SQLite',
 		duration: 16900,
 		captions: [
-			{ at: 300, until: 1150, text: 'SQLite keeps the *queue* in a file' },
-			{ at: 1300, until: 2800, text: '*Add* writes each job to jobs.db' },
-			{ at: 3300, until: 6300, text: 'Taken jobs stay *in flight* until acked' },
-			{ at: 6800, until: 8200, text: 'The program !dies! mid-job' },
-			{ at: 9300, until: 10400, text: 'On restart they go *back* to the queue' },
-			{ at: 10900, until: 16200, text: 'and run again. Nothing is *lost*' },
+			{ at: 300, text: 'SQLite keeps the *queue* in a file' },
+			{ at: 1300, text: '*Add* writes each job to jobs.db' },
+			{ at: 3300, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 6800, text: 'The program !dies! mid-job' },
+			{ at: 9300, text: 'On restart they go *back* to the queue' },
+			{ at: 10900, text: 'and run again. Nothing is *lost*' },
 		],
 		parts: [
 			sqlite(carry, {
@@ -345,11 +344,11 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'Redis',
 		duration: 11500,
 		captions: [
-			{ at: 300, until: 1150, text: 'Redis holds *one queue* for many programs' },
-			{ at: 1300, until: 3300, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 3800, until: 5400, text: 'Program B !dies! mid-job' },
-			{ at: 5900, until: 6800, text: 'Its jobs go *back* to the front' },
-			{ at: 6900, until: 10800, text: 'Redis wakes C, which runs them. Nothing is *lost*' },
+			{ at: 300, text: 'Redis holds *one queue* for many programs' },
+			{ at: 1300, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 3800, text: 'Program B !dies! mid-job' },
+			{ at: 5900, text: 'Its jobs go *back* to the front' },
+			{ at: 6900, text: 'Redis wakes C, which runs them. Nothing is *lost*' },
 		],
 		parts: [
 			redis(carry, {
@@ -377,10 +376,10 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'Control',
 		duration: 11600,
 		captions: [
-			{ at: 2300, until: 3500, text: '*Pause* holds new jobs back' },
-			{ at: 4000, until: 5600, text: '*Resume* starts the jobs that waited' },
-			{ at: 6100, until: 7400, text: '*Stop* ends the loop once jobs finish' },
-			{ at: 7900, until: 10800, text: '*Restart* runs the jobs that waited' },
+			{ at: 2300, text: '*Pause* holds new jobs back' },
+			{ at: 4000, text: '*Resume* starts the jobs that waited' },
+			{ at: 6100, text: '*Stop* ends the loop once jobs finish' },
+			{ at: 7900, text: '*Restart* runs the jobs that waited' },
 		],
 		parts: [
 			pool(carry, 'core', {
@@ -407,16 +406,15 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	}),
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
-	// and then its goroutines go. Nothing waits in its queue at the stop. The one caption stays up until the map is
-	// still, its last word SQLite giving way to Redis halfway; the stop only winds the map down. From 7800 ms the
-	// camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
+	// and then its goroutines go. Nothing waits in its queue at the stop; the stop only winds the map down. From 7800 ms
+	// the camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
 	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
 			duration: 9000,
 			captions: [
-				{ at: 300, until: 7500, text: 'One worker model, from memory to #SQLite#', swap: { at: 3900, text: '#Redis#' } },
+				{ at: 300, text: 'One worker model, from memory to #SQLite#', swap: { text: '#Redis#' } },
 			],
 			published,
 			parts: [

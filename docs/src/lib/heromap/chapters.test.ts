@@ -96,30 +96,12 @@ describe('chapter rules', () => {
 		const ids = CHAPTERS.flatMap(c => [...c.parts.flatMap(p => p.plan.jobs.map(j => j.id)), ...(c.published ?? []).map(v => v.id)]);
 		assert.equal(new Set(ids).size, ids.length);
 	});
-	it('show one caption at a time, each risen in full before it leaves, gone before the chapter ends', () => {
-		// Words rise 55 ms apart, each over 520 ms, and a caption starts to leave at `until`, which takes 300 ms and 30 ms
-		// more per word. The story page lists the captions beside the map and hides the map's own, so a caption may be
-		// short, as long as what it is about, and the next may come before it has left.
+	it('order each chapter\'s captions within it, their marks paired', () => {
 		for (const c of CHAPTERS) c.captions.forEach((cap, i) => {
-			const words = plain(cap.text).split(' ').length;
-			assert.ok(cap.at >= 0 && cap.at + 55 * (words - 1) + 520 <= cap.until, `chapter ${c.n}: ${cap.text}`);
-			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
-			if (i > 0) assert.ok(c.captions[i - 1].until <= cap.at, `chapter ${c.n}: ${cap.text}`);
+			assert.ok(cap.at >= 0 && cap.at < c.duration, `chapter ${c.n}: ${cap.text}`);
+			if (i > 0) assert.ok(c.captions[i - 1].at < cap.at, `chapter ${c.n}: ${cap.text}`);
 			for (const mark of ['*', '!', '#']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
-			// A swap waits for every word to have risen, and its roll (420 ms) is over before the line leaves.
-			if (cap.swap) {
-				assert.ok(cap.at + 55 * (words - 1) + 520 <= cap.swap.at, `chapter ${c.n}: ${cap.text}`);
-				assert.ok(cap.swap.at + 420 <= cap.until, `chapter ${c.n}: ${cap.text}`);
-			}
 		});
-	});
-	it('show the finale\'s first caption, fully risen, in the still frame', () => {
-		// Words rise 55 ms apart, each over 520 ms (the choreographer's caption rule).
-		const cap = CHAPTERS[9].captions[0], words = plain(cap.text).split(' ').length;
-		assert.ok(starts()[9] + cap.at + 55 * (words - 1) + 520 <= STATIC_AT, cap.text);
-		assert.ok(STATIC_AT < starts()[9] + cap.until);
-		// The still frame shows the caption's own words, so it comes before the swap.
-		assert.ok(STATIC_AT < starts()[9] + cap.swap.at);
 	});
 	it('start nothing before the camera has arrived', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) assert.ok(p.events[0].at >= 1300, `chapter ${c.n} ${p.kind}`);

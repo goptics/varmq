@@ -170,14 +170,3 @@ export function copyButtons() {
 		void copyText(btn, text, source, live);
 	});
 }
-
-/** Run `fn` once the element is first in view. */
-export function whenVisible(el: Element, fn: () => void) {
-	const io = new IntersectionObserver((entries) => {
-		if (entries.some((e) => e.isIntersecting)) {
-			io.disconnect();
-			fn();
-		}
-	});
-	io.observe(el);
-}

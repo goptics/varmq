@@ -392,8 +392,7 @@ site-search button > kbd {
 	white-space: nowrap;
 }
 
-.shell-banner__label,
-.shell-banner__meta {
+.shell-banner__label {
 	white-space: nowrap;
 }
 
@@ -401,12 +400,6 @@ site-search button > kbd {
 	flex: 1;
 	min-width: 16px;
 	border-top: 1px dashed var(--rule);
-}
-
-@media (max-width: 519px) {
-	.shell-banner__meta {
-		display: none;
-	}
 }
 
 /* Kept to one class's weight, so a page that sets its own title (the home page's story) can. */

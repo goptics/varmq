@@ -47,17 +47,6 @@
 	border: 1px solid var(--panel-rule);
 }
 
-.ljob--wait {
-	background: transparent;
-	color: var(--panel-ink);
-	border: 1px solid var(--panel-ink-2);
-}
-
-.ljob--err {
-	background: var(--danger);
-	color: var(--brand-ink);
-}
-
 .ljob--new {
 	animation: l-arrive 0.3s var(--ease);
 }

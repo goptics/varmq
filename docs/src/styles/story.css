@@ -594,10 +594,6 @@
 	aspect-ratio: 1;
 }
 
-.st varmq-map .vm-caption {
-	display: none;
-}
-
 /* ---- By the room the text has ---- */
 
 /* A narrow place takes the phone cut of the code, which breaks the long lines, and sets the step a size down. */

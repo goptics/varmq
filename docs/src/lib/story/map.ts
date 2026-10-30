@@ -1,5 +1,5 @@
 import type { Timeline } from 'animejs';
-import { CHAPTERS, STATIC_AT, TOTAL } from '../heromap/chapters.ts';
+import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { renderMap } from '../heromap/render.ts';
 import { REGIONS, frame } from '../heromap/scene.ts';
 
@@ -81,7 +81,6 @@ export function after(tl: Timeline, host: Element, end: number, state: object = 
 export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHandle {
 	const nodes = renderMap(host);
 	nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
-	for (const word of nodes.words(CHAPTERS.length, 0)) word.style.opacity = '1';
 	new ResizeObserver(([entry]) => nodes.setWidth(entry.contentRect.width)).observe(host);
 
 	let timeline: Timeline | undefined;

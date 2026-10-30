@@ -124,10 +124,6 @@ export class PoolModel {
 		return { kind: 'add', n };
 	}
 
-	get over() {
-		return this.queue.length === 0 && this.busy.length === 0 && !this.signal && this.phase === 'rest';
-	}
-
 	/** When the first running batch ends, or null when nothing runs. */
 	nextDue(): number | null {
 		return this.busy.length ? Math.min(...this.busy.map((b) => b.end)) : null;
