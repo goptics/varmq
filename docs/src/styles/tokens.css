@@ -4,15 +4,15 @@
 :root {
 	color-scheme: light;
 
-	--paper: #f5faf7;
-	--bar: #ebf5f0;
-	--bar-2: #dcede4;
+	--paper: #e5f9ef;
+	--bar: #dcf4e8;
+	--bar-2: #d3f0e2;
 	--ink: #0e2019;
 	--ink-2: #3b5248;
 	--ink-3: #51695e;
 	--rule: #b9d3c7;
-	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f has 3.2:1,
-	   enough for marks and fills, so text takes the same hue darker, at 5.4:1. */
+	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f has 3.1:1,
+	   enough for marks and fills, so text takes the same hue darker, at 5.2:1. */
 	--accent-text: #06755c;
 
 	--brand: #2e9c7f;
