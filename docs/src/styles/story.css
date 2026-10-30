@@ -23,6 +23,16 @@
 	}
 }
 
+/* No scrollbar on the home page: the glow on the sprocket-hole rails shows where the reader is. The page still
+   scrolls with the wheel, keys and touch. */
+:root:has(.st) {
+	scrollbar-width: none;
+}
+
+:root:has(.st)::-webkit-scrollbar {
+	display: none;
+}
+
 :root:has(.st) .main-pane > main {
 	max-width: none;
 	border-inline: 0;
