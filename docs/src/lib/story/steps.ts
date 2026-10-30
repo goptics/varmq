@@ -73,9 +73,9 @@ export const until = (s: Step, c: number) => (c + 1 < s.captions.length ? s.capt
 /** The story's scroll stops after the intro: one per caption, so each scroll plays the next caption of its step. */
 export const STOPS = STEPS.flatMap((s, step) => s.captions.map((_, caption) => ({ step, caption })));
 
-/** The story as text: each step's title, captions and code, in order. */
+/** The story as text: each step's title, captions and code, in order, under Story.astro's h2. */
 export const STORY_TEXT = `<ol>${CHAPTERS.map(
 	(chapter, i) =>
-		`<li><h2>${escape(chapter.title)}</h2><p>${escape(chapter.captions.map((c) => plain(words(c))).join('. '))}.</p>` +
+		`<li><h3>${escape(chapter.title)}</h3><p>${escape(chapter.captions.map((c) => plain(words(c))).join('. '))}.</p>` +
 		`<pre><code>${escape(STATIONS[i].code)}</code></pre></li>`,
 ).join('')}</ol>`;

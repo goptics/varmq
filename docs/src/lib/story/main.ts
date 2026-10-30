@@ -26,6 +26,10 @@ const AGAIN = { again: 1500 };
 const SLACK = 0.02;
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+/** Whether the reader has paused the map with its Pause button. */
+let paused = false;
+/** Whether the map holds still: a step shows its last frame, as under reduced motion, rather than playing. */
+const still = () => reduce.matches || paused;
 const motion = (): ScrollBehavior => (reduce.matches ? 'auto' : 'smooth');
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 
@@ -91,15 +95,18 @@ function follow(code: Code, step: Step, caption: number) {
 
 const root = $('.st');
 const stage = $('.st-stage');
-const intro = $('.st-intro');
+const h1 = $('.st-intro h1');
 const stepView = $('.st-step');
 const codes = [codeBlock('.st-code-wide', 'wide'), codeBlock('.st-code-phone', 'phone')];
 const count = $('.st-count');
 const title = $('.st-title');
 const notes = $('.st-notes');
+const text = $('.st-text');
 const source = $<HTMLAnchorElement>('.st-source a');
 const track = $('.st-track');
 const skip = $<HTMLButtonElement>('.st-skip');
+const pause = $<HTMLButtonElement>('.st-pause');
+const live = $('.st-live');
 /** The skip's outline: a segment per step, each a track and the fill over it. */
 const segments = STEPS.map((_, n) => {
 	const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -108,8 +115,8 @@ const segments = STEPS.map((_, n) => {
 	return g;
 });
 $('.st-skip-ring').append(...segments);
-$('.st-all').innerHTML = STORY_TEXT;
-track.append(...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-snap' })));
+$('.st-all').insertAdjacentHTML('beforeend', STORY_TEXT);
+track.append(...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-stop' })));
 
 /** The snap position shown: 0 for the intro, n + 1 for STOPS[n]. */
 let at = -1;
@@ -124,14 +131,31 @@ const POINT =
 	'<svg class="st-point" viewBox="0 0 14 14" aria-hidden="true"><circle class="st-ring" cx="7" cy="7" r="6"/>' +
 	'<circle class="st-arc" cx="7" cy="7" r="6" pathLength="1"/><circle class="st-core" cx="7" cy="7" r="3"/></svg>';
 
+/**
+ * Marks a caption done or not, for the eye (data-done) and for screen readers, whose description of its button then
+ * says it has played.
+ */
+function done(li: Element, on: boolean) {
+	if (li.hasAttribute('data-done') === on) return;
+	li.toggleAttribute('data-done', on);
+	li.firstElementChild!.setAttribute('aria-describedby', on ? 'st-done st-does' : 'st-does');
+}
+
 function setCaption(i: number) {
 	if (i === caption) return;
 	caption = i;
 	[...notes.children].forEach((li, n) => {
 		li.toggleAttribute('data-on', n === i);
-		li.toggleAttribute('data-done', n < i);
+		if (n === i) li.firstElementChild!.setAttribute('aria-current', 'step');
+		else li.firstElementChild!.removeAttribute('aria-current');
+		done(li, n < i);
 		if (n !== i) (li as HTMLElement).style.setProperty('--p', n < i ? '1' : '0');
 	});
+	// Where only the lit caption shows (story.css), a focused caption that goes out of sight hands focus to the lit one.
+	const focused = document.activeElement;
+	if (focused && notes.contains(focused) && getComputedStyle(focused).visibility === 'hidden') {
+		notes.querySelector<HTMLElement>('[data-on] button')?.focus({ preventScroll: true });
+	}
 	for (const code of codes) {
 		// A step's code may change with its caption, as chapter 5's names each strategy in turn.
 		if (STEPS[step].code[i] !== code.at) morph(code, STEPS[step].code[i]);
@@ -153,10 +177,56 @@ const map = mountMap($('varmq-map'), (t) => {
 	const p = Math.min(1, Math.max(0, (local - s.captions[i]) / (until(s, i) - s.captions[i])));
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
-	li?.toggleAttribute('data-done', p >= 1);
+	if (li) done(li, p >= 1);
 	// A step's segment fills once its last caption is done.
 	const played = i === s.captions.length - 1 && p >= 1;
 	segments.forEach((g, n) => g.toggleAttribute('data-done', n < step || (n === step && played)));
+});
+
+/** The step to say once the page rests on it, and the step said last. */
+let news = '';
+let said = '';
+let saying = 0;
+/** Says the step once the page has rested on it a moment, so a scroll that passes several steps says only the last. */
+function rest() {
+	if (!news) return;
+	clearTimeout(saying);
+	saying = window.setTimeout(() => {
+		if (news !== said) live.textContent = said = news;
+		news = '';
+	}, 400);
+}
+function tell(text: string) {
+	news = text;
+	rest();
+}
+
+/** Plays the map on from where Pause held it, as the intro or step shown would have. */
+function resume() {
+	const t = map.now();
+	const loop = { ...AGAIN, restart: STATIC_AT };
+	if (step < 0) {
+		// The intro's run, or the rewind from step 1 on its way back to it.
+		if (t >= STATIC_AT && t <= RUN_END) map.play(t, RUN_END - t, loop);
+		else map.rewind(RUN_END, STEPS[0].ms, () => map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN));
+		return;
+	}
+	const s = STEPS[step];
+	const left = until(s, limit) - into(s, t);
+	if (step === STEPS.length - 1) {
+		// Out of view below the story, the loop rests (tick).
+		if (!away) map.play(t, Math.max(0, left), loop);
+	} else if (left > 0) map.play(t, left);
+	else if (left < 0) map.rewind(s.from + until(s, limit), -left);
+}
+
+pause.addEventListener('click', () => {
+	paused = !paused;
+	pause.setAttribute('aria-pressed', String(paused));
+	pause.textContent = paused ? 'Play' : 'Pause';
+	root.toggleAttribute('data-paused', paused);
+	if (paused) map.seek(map.now());
+	else resume();
 });
 
 /**
@@ -168,10 +238,13 @@ function showIntro(back = false) {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
-	intro.hidden = false;
+	// Focus in the step, which is about to go, moves to the h1.
+	const focused = stepView.contains(document.activeElement);
 	stepView.hidden = true;
+	if (focused) h1.focus({ preventScroll: true });
+	news = said = '';
 	const run = () => map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN);
-	if (reduce.matches) map.seek(STATIC_AT);
+	if (still()) map.seek(STATIC_AT);
 	else if (back) map.rewind(RUN_END, STEPS[0].ms, run);
 	else run();
 }
@@ -185,22 +258,32 @@ function show(k: number, c: number, back = false) {
 	step = k;
 	caption = -1;
 	limit = c;
+	// The intro's h1 stays, visually hidden (story.css), so the page keeps its h1 on every step.
 	root.dataset.at = 'step';
-	intro.hidden = true;
 	stepView.hidden = false;
+	// Focus on the h1, now hidden, moves to the step's title.
+	if (document.activeElement === h1) title.focus({ preventScroll: true });
 	const s = STEPS[k];
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
-	notes.innerHTML = s.notes.map((note, i) => `<li><button type="button" data-i="${i}">${POINT}${note}</button></li>`).join('');
+	tell(`Step ${k + 1} of ${STEPS.length}: ${s.title}`);
+	const focused = notes.contains(document.activeElement);
+	notes.innerHTML = s.notes
+		.map((note, i) => `<li><button type="button" data-i="${i}" aria-describedby="st-does">${POINT}${note}</button></li>`)
+		.join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
 	const first = back ? c : 0;
 	for (const code of codes) morph(code, s.code[first]);
 	setCaption(first);
+	// Where the text column scrolls (story.css, 400% zoom), a step opens at its top, or reached going up, at its end.
+	if (getComputedStyle(text).overflowY === 'auto') text.scrollTop = back ? text.scrollHeight : 0;
+	// Focus on a caption that was just replaced moves to the new step's caption shown: its first, or going up its last.
+	if (focused) notes.querySelector<HTMLElement>('[data-on] button')!.focus({ preventScroll: true });
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
-	if (reduce.matches) map.seek(s.from + until(s, c));
+	if (still()) map.seek(s.from + until(s, c));
 	else if (back) map.rewind(s.from + until(s, c), STEPS[k + 1]?.ms ?? s.ms);
 	else map.play(s.from, until(s, c), k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
 }
@@ -213,7 +296,7 @@ function move(c: number, back: boolean) {
 	const s = STEPS[step];
 	limit = c;
 	const left = until(s, c) - into(s, map.now());
-	if (reduce.matches) map.seek(s.from + until(s, c));
+	if (still()) map.seek(s.from + until(s, c));
 	else if (back && left > 0) map.play(map.now(), left);
 	// From wherever it is in the step: a rewind still on its way back from the caption below goes on from there.
 	else if (back) map.rewind(s.from + until(s, c), s.ms);
@@ -270,11 +353,13 @@ const tick = () => {
 		} else show(stop.step, stop.caption, up);
 		// The skip shows from step 1 to the step before the last.
 		skip.disabled = !stop || stop.step === STEPS.length - 1;
+		// Focus on the skip, which has just gone, moves to the last step's title, as a skip lands, or to the intro's h1.
+		if (skip.disabled && document.activeElement === skip) (stop ? title : h1).focus({ preventScroll: true });
 	}
 	// Out of view below the story, the last step's loop rests on its end; back in view, the step plays from its start.
 	if (away !== position() >= COUNT) {
 		away = !away;
-		if (at === COUNT - 1 && !reduce.matches) {
+		if (at === COUNT - 1 && !still()) {
 			if (away) map.seek(RUN_END);
 			else show(STEPS.length - 1, 0);
 		}
@@ -285,6 +370,7 @@ const schedule = () => {
 	frameId ||= requestAnimationFrame(tick);
 };
 addEventListener('scroll', schedule, { passive: true });
+addEventListener('scroll', rest, { passive: true });
 addEventListener('resize', () => {
 	schedule();
 	if (step >= 0) for (const code of codes) follow(code, STEPS[step], caption);
@@ -308,6 +394,9 @@ addEventListener(
 		if (e.ctrlKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
 		const p = position();
 		const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+		// Where the text column scrolls on its own, as at 400% zoom (story.css), the wheel scrolls it to its end first.
+		const room = delta > 0 ? text.scrollHeight - text.clientHeight - text.scrollTop : text.scrollTop;
+		if (room > 1 && text.contains(e.target as Node)) return;
 		// From the last step down, the wheel is the reader's, both ways, until a turn up would pass the last step.
 		if (p >= COUNT - 1 - SLACK && (delta > 0 || p + delta / height() > COUNT - 1 + SLACK)) return;
 		const from = target >= 0 ? target : p > COUNT - 1 + SLACK ? COUNT : nearest();
