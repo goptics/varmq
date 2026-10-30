@@ -1,10 +1,11 @@
 ---
-// The home page's opening: the intro beside the whole map, then varmq's story in ten steps, one per scroll. Each step
-// plays its chapter of the map while the one code block morphs into the code behind it (lib/story/main.ts). The
+// The home page's opening: the intro beside the whole map, then varmq's story in ten steps, a caption per scroll. Each
+// step plays its chapter of the map while the one code block morphs into the code behind it (lib/story/main.ts). The
 // title and the lede are the page's hero fields in index.mdx.
 import '@shikijs/magic-move/style.css';
 import '../lib/heromap/map.css';
 import '../styles/story.css';
+import GoPlay from './GoPlay.astro';
 import Install from './ui/Install.astro';
 
 const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
@@ -20,13 +21,14 @@ const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
 				<h1 id="_top" data-page-title>{title}</h1>
 				{tagline && <p class="st-lede" set:html={tagline} />}
 				<Install id="home" />
+				<GoPlay example="hero" title="main.go" compact />
 				<div class="st-actions">
 					<a class="btn btn--primary" href="/start/quick-start/">Get started</a>
 					<a class="btn btn--ghost" href="https://github.com/goptics/varmq">GitHub</a>
 				</div>
 				<p class="st-hint">
 					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v10M3.5 8 8 12.5 12.5 8"></path></svg>
-					Scroll: ten steps, each run on the map beside the code that does it.
+					Scroll: ten steps, run on the map beside the code that does it.
 				</p>
 			</div>
 			<div class="st-step" hidden>

@@ -2,19 +2,20 @@ import { syncTokenKeys, toKeyedTokens } from '@shikijs/magic-move/core';
 import { MagicMoveRenderer } from '@shikijs/magic-move/renderer';
 import type { KeyedTokensInfo } from '@shikijs/magic-move/types';
 import CODE from 'virtual:code-steps';
-import { CAMERA, STATIC_AT, TOTAL } from '../heromap/chapters.ts';
+import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { mountMap } from './map.ts';
-import { STEPS, STORY_TEXT, type Cut, type Step } from './steps.ts';
+import { STEPS, STOPS, STORY_TEXT, until, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
 
-// The home page opens on the intro, beside the whole map running as in the last step. From there the page snaps a step
-// at a time: each scroll brings the next step, which plays its chapter on the map once, at the map's own pace, while
-// the one code block morphs into that chapter's code and lights the lines each caption is about. Under reduced motion a
-// step shows its last frame. Past the last step the page scrolls on as usual, through the rest of the home page.
+// The home page opens on the intro, beside the whole map running as in the last step. From there the page snaps a
+// caption at a time: each scroll plays the next caption of a step on the map, at the map's own pace, while the one code
+// block morphs into that caption's code and lights the lines it is about. A scroll back up within a step plays its last
+// caption backward; a step reached from another one plays from its start. Under reduced motion a caption shows its last
+// frame. Past the last step the page scrolls on as usual, through the rest of the home page.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
-/** The snap positions: the intro, then one per step. */
-const COUNT = STEPS.length + 1;
+/** The snap positions: the intro, then one per caption (STOPS). */
+const COUNT = STOPS.length + 1;
 /**
  * The whole map's run, as the intro and the last step loop it: from STATIC_AT, where the last step's camera has pulled
  * back, to that step's end, where step 1's zoom begins; held AGAIN.again ms between runs.
@@ -101,13 +102,13 @@ const track = $('.st-track');
 $('.st-all').innerHTML = STORY_TEXT;
 track.append(...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-snap' })));
 
-/** The snap position shown: 0 for the intro, k + 1 for step k. */
+/** The snap position shown: 0 for the intro, n + 1 for STOPS[n]. */
 let at = -1;
 let step = -1;
 let caption = -1;
+/** The caption the step stops at: the map may run up to its end, and no further. */
+let limit = 0;
 let settled = 0;
-/** Where in its step the map's play began, in ms: the lit caption's ring fills from there, if it began mid-caption. */
-let begin = 0;
 
 /** A caption's point: a ring whose arc fills while the caption plays, and whose core shows once it is done. */
 const POINT =
@@ -130,16 +131,17 @@ function setCaption(i: number) {
 	}
 }
 
+/** Time t of the loop as ms into step s. */
+const into = (s: Step, t: number) => (((t - s.from) % TOTAL) + TOTAL) % TOTAL;
+
 const map = mountMap($('varmq-map'), (t) => {
 	if (step < 0) return;
 	const s = STEPS[step];
-	const local = (((t - s.from) % TOTAL) + TOTAL) % TOTAL;
-	const i = Math.max(0, s.captions.findLastIndex((at) => at <= local));
+	const local = into(s, t);
+	const i = Math.min(limit, Math.max(0, s.captions.findLastIndex((at) => at <= local)));
 	setCaption(i);
-	// The lit caption's ring fills from its start, or from where the play began, to the next caption's start, or to the
-	// step's end, where it is done too.
-	const start = Math.max(s.captions[i], begin);
-	const p = Math.min(1, Math.max(0, (local - start) / ((s.captions[i + 1] ?? s.ms) - start)));
+	// The lit caption's ring fills from its start to the next caption's start, or to the step's end, where it is done.
+	const p = Math.min(1, Math.max(0, (local - s.captions[i]) / (until(s, i) - s.captions[i])));
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
 	li?.toggleAttribute('data-done', p >= 1);
@@ -147,29 +149,26 @@ const map = mountMap($('varmq-map'), (t) => {
 
 /**
  * Shows the intro, beside the whole map. The map runs as in the last step, from where its camera has pulled back, holds
- * a moment once it is still, and runs again, until the reader scrolls on. Back up from step 1, the map first zooms out
- * again, to where that run ends. Under reduced motion it stands still.
+ * a moment once it is still, and runs again, until the reader scrolls on. Under reduced motion it stands still.
  */
-function showIntro(back = false) {
+function showIntro() {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
 	intro.hidden = false;
 	stepView.hidden = true;
 	if (reduce.matches) map.seek(STATIC_AT);
-	else if (back) map.rewind(RUN_END, CAMERA, () => map.play(STATIC_AT, RUN_END - STATIC_AT, { ...AGAIN, held: true }));
 	else map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN);
 }
 
 /**
- * Shows step k: its text, its code, and its chapter playing on the map, or its last frame under reduced motion. Back up
- * from the step after it, the map first plays the camera move that brought that step in backward, to how this one
- * ended, every caption done; then this step plays again from where its own camera move ends, as the camera is there.
+ * Shows step k from its start, every ring empty: its text, its code, and its chapter playing on the map up to the end
+ * of caption c, or that frame under reduced motion.
  */
-function show(k: number, back = false) {
+function show(k: number, c: number) {
 	step = k;
 	caption = -1;
-	begin = 0;
+	limit = c;
 	root.dataset.at = 'step';
 	intro.hidden = true;
 	stepView.hidden = false;
@@ -179,32 +178,36 @@ function show(k: number, back = false) {
 	notes.innerHTML = s.notes.map((note, i) => `<li><button type="button" data-i="${i}">${POINT}${note}</button></li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
-	const first = back ? s.captions.length - 1 : 0;
-	for (const code of codes) morph(code, s.code[first]);
-	setCaption(first);
+	for (const code of codes) morph(code, s.code[0]);
+	setCaption(0);
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
-	if (reduce.matches) map.seek(s.from + s.ms);
-	else if (back) {
-		map.rewind(s.from + s.ms, CAMERA, () => {
-			begin = CAMERA;
-			map.play(s.from + CAMERA, s.ms - CAMERA);
-		});
-	}
-	else map.play(s.from, s.ms, k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
+	if (reduce.matches) map.seek(s.from + until(s, c));
+	else map.play(s.from, until(s, c), k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
 }
 
-// A caption is a button: it plays the step again from that caption to the step's end, and the code, the lit lines and
-// the points follow the map's clock there, as when the step first played. Under reduced motion it shows the caption's
-// last frame.
+/**
+ * Moves the shown step to its caption c: down, the map plays caption c; up, it plays caption c + 1 backward, or, if the
+ * step is still playing up to there from its start, plays on to the end of caption c.
+ */
+function move(c: number, back: boolean) {
+	const s = STEPS[step];
+	limit = c;
+	const left = until(s, c) - into(s, map.now());
+	if (reduce.matches) map.seek(s.from + until(s, c));
+	else if (back && left > 0) map.play(map.now(), left);
+	else if (back) map.rewind(s.from + until(s, c), until(s, c + 1) - until(s, c));
+	else map.play(s.from + s.captions[c], until(s, c) - s.captions[c]);
+}
+
+// A caption is a button: it scrolls to that caption's stop, or plays it again if the page is there.
 notes.addEventListener('click', (e) => {
 	const i = Number((e.target as Element).closest('button')?.dataset.i);
 	if (step < 0 || Number.isNaN(i)) return;
-	const s = STEPS[step];
-	begin = 0;
-	if (reduce.matches) map.seek(s.from + (s.captions[i + 1] ?? s.ms) - 1);
-	else map.play(s.from + s.captions[i], s.ms - s.captions[i]);
+	const k = STOPS.findIndex((stop) => stop.step === step && stop.caption === i) + 1;
+	if (k === at) move(i, false);
+	else go(k);
 });
 
 // The stage is pinned under the header, and each snap position is one stage's height down the track.
@@ -234,18 +237,21 @@ const tick = () => {
 	snapping();
 	const k = nearest();
 	if (k !== at) {
-		// A step back up plays its transition backward; any other change plays the new position from its start.
-		const back = k === at - 1;
+		// The next or the previous caption of the same step moves to it; any other change plays the new step from its start.
+		const was = STOPS[at - 1];
+		const stop = STOPS[k - 1];
 		at = k;
-		if (k === 0) showIntro(back);
-		else show(k - 1, back);
+		if (!stop) showIntro();
+		else if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
+			move(stop.caption, stop.caption < was.caption);
+		} else show(stop.step, stop.caption);
 	}
-	// Out of view below the story, the last step's loop rests on its end; back in view, it holds that a moment and runs.
+	// Out of view below the story, the last step's loop rests on its end; back in view, the step plays from its start.
 	if (away !== position() >= COUNT) {
 		away = !away;
 		if (at === COUNT - 1 && !reduce.matches) {
 			if (away) map.seek(RUN_END);
-			else map.play(STATIC_AT, RUN_END - STATIC_AT, { ...AGAIN, held: true });
+			else show(STEPS.length - 1, 0);
 		}
 	}
 	if (Math.abs(position() - target) < 1 / height()) target = -1;
@@ -267,7 +273,7 @@ function go(k: number) {
 	scrollTo({ top: top() + k * height(), behavior: motion() });
 }
 
-// Keyboard and touch scroll natively and snap a step at a time. The wheel is taken over, so that one turn is one step
+// Keyboard and touch scroll natively and snap a stop at a time. The wheel is taken over, so that one turn is one stop
 // (wheel.ts): snapping alone lets a short notch fall back to where it was. From the last step down, the page scrolls as
 // usual with every input; on the way back up, the story takes over again at the last step.
 const turn = wheelSteps();
@@ -294,7 +300,7 @@ addEventListener('scrollend', () => {
 	snapping();
 });
 // End goes to the foot of the page, so it stops the snapping first. From the last step down the keys scroll as usual,
-// but the keys that scroll up go to the last step from just below it, and from it to the step before, as the wheel
+// but the keys that scroll up go to the last step from just below it, and from it to the stop before, as the wheel
 // does.
 addEventListener('keydown', (e) => {
 	if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;

@@ -238,6 +238,22 @@
 	margin-top: 32px;
 }
 
+/* The program the install gets: a tight pair with it, a tab less deep and a little tighter than an article's code,
+   with Run in its title bar (GoPlay compact). */
+.st-intro go-play[data-compact] {
+	width: 100%;
+	max-width: 34rem;
+	margin-top: 8px;
+}
+
+.st-intro go-play .expressive-code {
+	margin: 0;
+}
+
+.st-intro go-play .ec-line {
+	line-height: 1.5;
+}
+
 .st-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -673,6 +689,24 @@
 	}
 
 	.st-hint {
+		display: none;
+	}
+}
+
+/* The intro with its program: below 46rem the hint goes and the install moves up, below 42.5rem the program goes
+   (the phone's 22rem included), where the Quick start further down the page has it. */
+@container (max-height: 46rem) {
+	.st-hint {
+		display: none;
+	}
+
+	.st-intro .install {
+		margin-top: 20px;
+	}
+}
+
+@container (max-height: 42.5rem) {
+	.st-intro go-play[data-compact] {
 		display: none;
 	}
 }

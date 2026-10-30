@@ -24,6 +24,8 @@ export interface MapHandle {
 	 * it starts `most` ms past `to`. Then it holds at `to`, and calls `then`.
 	 */
 	rewind(to: number, most: number, then?: () => void): void;
+	/** The loop's time the map shows. */
+	now(): number;
 }
 
 const wrap = (t: number) => ((t % TOTAL) + TOTAL) % TOTAL;
@@ -181,5 +183,5 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		timeline.seek(t);
 		pending?.();
 	});
-	return { seek, play, rewind };
+	return { seek, play, rewind, now: () => t };
 }
