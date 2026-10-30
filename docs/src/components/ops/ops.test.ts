@@ -8,15 +8,18 @@ import { close, fresh, kill, nacked, sweepIfDue, take } from './redisflow-model.
 describe('crash test steps', () => {
 	it('show no acknowledgement for a queue in memory', () => {
 		const steps = stepsOf('memory');
-		assert.equal(steps.length, 5);
+		assert.equal(steps.length, 4);
 		for (const s of steps) assert.doesNotMatch(`${s.sub} ${s.call}`, /Ack|JSON/, s.label);
 		assert.equal(steps[1].sub, 'Dequeue');
 	});
 
 	it('take jobs from redisq and sqliteq with one batch call, and from your adapter with DequeueWithAckId', () => {
-		for (const mode of ['redis', 'dist', 'sqlite'] as const) assert.equal(stepsOf(mode)[1].sub, 'DequeueBatchWithAckIds', mode);
+		for (const mode of ['redis', 'sqlite'] as const) assert.equal(stepsOf(mode)[1].sub, 'DequeueBatchWithAckIds', mode);
 		assert.equal(stepsOf('own')[1].sub, 'DequeueWithAckId');
-		for (const mode of ['redis', 'dist', 'sqlite', 'own'] as const) assert.equal(stepsOf(mode)[3].sub, 'Acknowledge', mode);
+		for (const mode of ['redis', 'sqlite', 'own'] as const) {
+			assert.equal(stepsOf(mode)[3].sub, 'not acknowledged', mode);
+			assert.equal(stepsOf(mode)[4].sub, 'Acknowledge', mode);
+		}
 	});
 });
 

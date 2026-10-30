@@ -6,19 +6,22 @@ import Scene from '../ui/Scene.astro';
 
 const modes = [
 	{ key: 'memory', label: 'In memory' },
-	{ key: 'redis', label: 'redisq, persistent' },
-	{ key: 'dist', label: 'redisq, distributed' },
+	{ key: 'redis', label: 'redisq' },
 	{ key: 'sqlite', label: 'sqliteq' },
 	{ key: 'own', label: 'Your adapter' },
 ];
 const describe =
-	'A scene with one job, number 7, and three waiting jobs. The job goes through five steps: waiting, taken, running, returned and acknowledged. In memory the last step is done, because there is nothing to acknowledge. ' +
-	'You pick where the queue lives: in memory, in redisq on Redis as a persistent or distributed queue, in sqliteq, or in an adapter of your own. ' +
-	'Use Step to move the job on. Use Kill the process to stop the process at the current step. The scene then says what the storage holds and what that adapter does with a job that was taken and not acknowledged. ' +
-	'In memory, the job and the waiting jobs are lost. With redisq and sqliteq the job comes back and runs a second time. With your own adapter, the adapter decides.';
+	'A scene with one job, number 7, and three waiting jobs. The job goes through its steps: waiting, taken, running, returned and acknowledged. In memory the last step is closed, because there is nothing to acknowledge. ' +
+	'You pick where the queue lives: in memory, in redisq on Redis, in sqliteq, or in an adapter of your own. ' +
+	'Use Step to move the job on, and Kill the process at any step. The scene then shows what the storage holds and what that adapter does with a job that was taken and not acknowledged. ' +
+	'In memory, the job and the waiting jobs are lost. With redisq and sqliteq the job comes back; if its function had started, it runs a second time. With your own adapter, the adapter decides.';
 ---
 
 <Scene id="ack" title="Crash test" call="queue.Add(job)" describe={describe}>
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>runs of job 7</dt><dd data-stat="runs">0</dd></div>
+		<div><dt>acknowledged</dt><dd data-stat="acked">no</dd></div>
+	</dl>
 	<div class="seg ops-modes" role="tablist" aria-label="Where the jobs are stored" data-ack-modes>
 		{
 			modes.map((m, i) => (
@@ -44,7 +47,7 @@ const describe =
 				<path d="M6 8h28M30 4l4 4-4 4M34 16H6m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
 			</svg>
 			<div class="ack__box ack__store" data-store>
-				<div class="ack__head"><span data-store-name>Redis</span><b data-store-tag>outside</b></div>
+				<div class="ack__head"><span data-store-name>Redis (redisq)</span><b>outside the process</b></div>
 				<div class="ack__zones" data-zones></div>
 			</div>
 		</div>
@@ -59,7 +62,6 @@ const describe =
 		<button type="button" class="pbtn pbtn--primary" data-act="restart" hidden>Restart the process</button>
 		<button type="button" class="pbtn pbtn--primary" data-act="wait" hidden>Wait</button>
 		<button type="button" class="pbtn" data-act="lose" hidden>Never hand it out</button>
-		<label class="ops-check"><input type="checkbox" data-panic /> The function panics</label>
 		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 </Scene>

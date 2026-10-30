@@ -8,31 +8,27 @@ import { job, refocus } from './ops';
 
 interface State {
 	mode: Mode;
-	stage: number; // 0 waiting, 1 taken, 2 running, 3 returned, 4 acknowledged
-	runner: 'A' | 'B';
-	down: boolean; // process A is dead
+	stage: number; // index into stepsOf(mode)
+	down: boolean; // the process is dead
 	crashStage: number; // stage at the crash, -1 when none
 	orphan: boolean; // the storage holds job 7 as taken, and nothing will acknowledge it
 	lost: boolean; // job 7 is gone
 	othersLost: boolean; // jobs 8, 9 and 10 are gone
-	started: number;
-	returned: number;
+	started: number; // runs of job 7's function
 	msg: string;
 }
 
 const STORE_NAME: Record<Mode, string> = {
-	memory: 'Storage',
+	memory: '',
 	redis: 'Redis (redisq)',
-	dist: 'Redis (redisq)',
 	sqlite: 'SQLite (sqliteq)',
 	own: 'Your storage',
 };
 const HINT: Record<Mode, [string, string, string]> = {
 	memory: ['', '', ''],
 	redis: ['jobs', 'jobs:nacked', 'entry removed'],
-	dist: ['jobs', 'jobs:nacked', 'entry removed'],
 	sqlite: ['pending', 'processing', 'row deleted'],
-	own: ['Dequeue', 'IAcknowledgeable', 'Acknowledge true'],
+	own: ['Enqueue', 'DequeueWithAckId', 'Acknowledge true'],
 };
 
 const root = document.querySelector<HTMLElement>('[data-ack]');
@@ -43,93 +39,93 @@ function init(root: HTMLElement) {
 	const $ = <T extends HTMLElement>(s: string) => figure.querySelector<T>(s)!;
 	const procs = $('[data-procs]');
 	const store = $('[data-store]');
+	const wire = $('.ack__wire');
 	const storeName = $('[data-store-name]');
-	const storeTag = $('[data-store-tag]');
 	const zones = $('[data-zones]');
 	const stepsEl = $('[data-steps]');
 	const out = $('[data-out]');
 	const call = $('[data-call]');
-	const panic = $<HTMLInputElement>('[data-panic]');
+	const runs = $('[data-stat="runs"]');
+	const acked = $('[data-stat="acked"]');
 	const btn = (a: string) => $<HTMLButtonElement>(`[data-act="${a}"]`);
 
 	const fresh = (mode: Mode): State => ({
 		mode,
 		stage: 0,
-		runner: 'A',
 		down: false,
 		crashStage: -1,
 		orphan: false,
 		lost: false,
 		othersLost: false,
 		started: 0,
-		returned: 0,
-		msg: 'Press Step to move job 7 through the five steps. Press Kill the process to stop the process at the current step.',
+		msg: 'Press Step to move job 7 along, and Kill the process at any step.',
 	});
 	let s = fresh('redis');
 
 	const persistent = () => s.mode !== 'memory';
+	const last = () => stepsOf(s.mode).length - 1;
+	/** Said when job 7 comes back: whether its function will run for the first or the second time. */
+	const again = () => (s.crashStage >= 2 ? ' Its function will run a second time.' : ' Its function has not run yet.');
 
-	const chip = (id: number, cls = '') => job(id, cls);
-	const lostChip = (id: number) => chip(id, 'is-lost');
-
-	function box(who: 'A' | 'B') {
-		const dead = who === 'A' && s.down;
-		// A job taken by a process that died is in the storage only: no live process holds it.
-		const holds = s.stage >= 1 && s.stage <= 3 && s.runner === who && !(s.lost && !s.down) && (!s.orphan || dead);
-		const state = dead ? 'died' : holds ? 'busy' : 'idle';
-		const head = h('div', { class: 'ack__head' }, h('span', { text: `process ${who}` }), h('b', { text: state }));
+	function processBox() {
+		const dead = s.down;
+		// Job 7 is in the process from Taken until the storage hears Acknowledge (until Close in memory).
+		const inSlot = s.stage >= 1 && s.stage <= (persistent() ? 3 : 2) && ((!s.lost && !s.orphan) || dead);
+		const head = h('div', { class: 'ack__head' }, h('span', { text: 'process' }), h('b', { text: dead ? 'died' : inSlot ? 'busy' : 'idle' }));
 		const slot = h('div', { class: 'ack__slot' });
-		if (holds) {
+		if (inSlot) {
 			const cls = dead ? 'is-lost' : s.stage === 2 ? 'is-run' : s.stage === 3 ? 'is-done' : '';
-			slot.append(chip(7, cls), h('small', { text: dead ? 'gone with the process' : ['', 'got ack-7', 'running', 'returned', ''][s.stage] }));
+			slot.append(job(7, cls), h('small', { text: dead ? 'gone with the process' : ['', persistent() ? 'got ack-7' : 'taken', 'running', 'returned'][s.stage] }));
 		} else {
 			slot.append(h('small', { text: dead ? 'down' : 'no job' }));
 		}
 		const el = h('div', { class: 'ack__box', ...(dead ? { 'data-down': true } : {}) }, head, slot);
-		if (s.mode === 'memory' && who === 'A') {
+		if (!persistent()) {
 			const q = h('div', { class: 'ack__q' });
-			const ids = s.othersLost ? [] : [...(s.stage === 0 && !s.lost ? [7] : []), 8, 9, 10];
-			for (const id of ids) q.append(chip(id, s.down ? 'is-lost' : ''));
-			if (!q.childElementCount) q.append(h('small', { text: 'queue is empty' }));
-			el.append(h('div', { class: 'ack__zlabel' }, h('span', { text: 'queue in memory' })), q);
+			const ids = s.othersLost ? [] : [...(s.stage === 0 && (!s.lost || dead) ? [7] : []), 8, 9, 10];
+			for (const id of ids) q.append(job(id, dead ? 'is-lost' : ''));
+			if (!q.childElementCount) q.append(h('small', { text: 'empty' }));
+			el.append(h('div', { class: 'ack__zlabel' }, h('span', { text: 'in memory' })), q);
 		}
 		return el;
 	}
 
-	function zone(label: string, hint: string, ...chips: Node[]) {
+	function zone(label: string, hint: string, chips: Node[], none = 'empty') {
 		const body = h('div', { class: 'ack__q' }, ...chips);
-		if (!chips.length) body.append(h('small', { text: 'empty' }));
+		if (!chips.length) body.append(h('small', { text: none }));
 		return h('div', { class: 'ack__zone' }, h('div', { class: 'ack__zlabel' }, h('span', { text: label }), hint && h('code', { text: hint })), body);
 	}
 
 	function render() {
 		const [hw, ht, hd] = HINT[s.mode];
-		procs.replaceChildren(box('A'), ...(s.mode === 'dist' ? [box('B')] : []));
-		const stored = persistent();
-		store.toggleAttribute('data-off', !stored);
-		storeName.textContent = STORE_NAME[s.mode];
-		storeTag.textContent = stored ? 'outside the process' : 'none';
-		if (!stored) {
-			zones.replaceChildren(h('p', { class: 'ack__none', text: 'Nothing is kept outside the process.' }));
-		} else {
+		procs.replaceChildren(processBox());
+		// In memory nothing lives outside the process, so there is no storage to draw.
+		store.hidden = !persistent();
+		wire.style.display = persistent() ? '' : 'none';
+		if (persistent()) {
+			storeName.textContent = STORE_NAME[s.mode];
 			const waiting: Node[] = [];
-			if (s.stage === 0 && !s.lost) waiting.push(chip(7));
-			if (!s.othersLost) for (const id of [8, 9, 10]) waiting.push(chip(id));
-			const taken = s.stage >= 1 && s.stage <= 3 && !s.lost ? [chip(7, s.down || s.orphan ? 'is-orphan' : ''), h('small', { class: 'ack__ack', text: 'ack-7' })] : [];
-			const done = s.stage === 4 ? [chip(7, 'is-done')] : [];
+			if (s.stage === 0 && !s.lost) waiting.push(job(7));
+			if (!s.othersLost) for (const id of [8, 9, 10]) waiting.push(job(id));
+			const ran = s.orphan && s.crashStage === 3 ? ' · ran 1×' : '';
+			const taken = s.stage >= 1 && s.stage <= 3 && !s.lost ? [job(7, s.down || s.orphan ? 'is-orphan' : ''), h('small', { class: 'ack__ack', text: `ack-7${ran}` })] : [];
 			zones.replaceChildren(
-				zone('waiting', hw, ...waiting),
-				zone('taken, not acknowledged', ht, ...taken),
-				zone('acknowledged', hd, ...done),
+				zone('waiting', hw, waiting),
+				zone('taken, not acknowledged', ht, taken),
+				zone('acknowledged', hd, [], s.stage === 4 ? 'job 7 dropped' : 'none yet'),
 			);
 		}
 
 		const steps = stepsOf(s.mode);
+		stepsEl.style.setProperty('--n', String(steps.length));
 		stepsEl.replaceChildren(
 			...steps.map((st, i) =>
 				h(
 					'li',
-					{ class: `ack__step${i < s.stage ? ' is-past' : ''}${i === s.stage && !s.lost ? ' is-now' : ''}`, ...(i === s.stage && !s.lost ? { 'aria-current': 'step' } : {}) },
+					{
+						class: `ack__step${i < s.stage ? ' is-past' : ''}${i === s.stage && !s.lost ? ' is-now' : ''}${persistent() && i === 3 ? ' is-warn' : ''}`,
+						...(i === s.stage && !s.lost ? { 'aria-current': 'step' } : {}),
+					},
 					h('span', { class: 'ack__stepn', text: String(i + 1) }),
 					h('span', { class: 'ack__stept', text: st.label }),
 					h('code', { class: 'ack__sub', text: st.sub }),
@@ -137,55 +133,43 @@ function init(root: HTMLElement) {
 			),
 		);
 
-		const runnerUp = s.mode === 'dist' && s.runner === 'B';
-		btn('step').disabled = (s.down && !runnerUp) || s.stage >= 4 || s.orphan || s.lost;
+		runs.textContent = String(s.started);
+		runs.dataset.tone = s.started >= 2 ? 'bad' : '';
+		acked.textContent = !persistent() ? 'nothing to acknowledge' : s.stage === 4 ? 'yes' : 'no';
+
+		btn('step').disabled = s.down || s.stage >= last() || s.orphan || s.lost;
 		btn('kill').hidden = s.down;
 		btn('restart').hidden = !s.down;
 		const wait = btn('wait');
 		const lose = btn('lose');
-		wait.hidden = true;
-		lose.hidden = true;
-		if (s.orphan) {
-			if (s.mode === 'dist') {
-				wait.hidden = false;
-				wait.textContent = 'Wait 6 seconds';
-			} else if (s.mode === 'redis' && !s.down) {
-				wait.hidden = false;
-				wait.textContent = 'Run for 30 seconds';
-			} else if (s.mode === 'own' && !s.down) {
-				wait.hidden = false;
-				wait.textContent = 'Hand it out again';
-				lose.hidden = false;
-			}
-		}
-		setCall(call, !s.down ? steps[s.stage].call : persistent() ? '// the process died: no Acknowledge was called' : '// the process died, and the queue in memory with it');
-		out.innerHTML = '';
-		const counts = `Function of job 7: started ${s.started}×, returned ${s.returned}×.`;
-		out.append(h('span', { text: s.msg }), ' ', h('span', { class: 'ack__count', text: counts }));
+		wait.hidden = !(s.orphan && !s.down && s.mode !== 'sqlite');
+		lose.hidden = !(s.orphan && !s.down && s.mode === 'own');
+		wait.textContent = s.mode === 'redis' ? 'Run for 30 seconds' : 'Hand it out again';
+		setCall(
+			call,
+			!s.down
+				? steps[s.stage].call
+				: !persistent()
+					? '// the process died, and its memory with it'
+					: s.stage === 4
+						? '// the process died after Acknowledge'
+						: '// the process died before Acknowledge reached the storage',
+		);
+		out.textContent = s.msg;
 	}
 
 	function step() {
 		if (btn('step').disabled) return;
 		s.stage += 1;
-		if (s.mode === 'dist' && s.runner === 'A' && s.down) s.runner = 'B';
 		if (s.stage === 1) {
-			s.msg = persistent()
-				? 'The storage hands over job 7 and an acknowledgement ID, ack-7. It keeps its own record that job 7 is out.'
-				: 'The worker takes job 7 from the queue in memory. There is no acknowledgement ID. Nothing outside the process records that job 7 is out.';
+			s.msg = persistent() ? 'The storage hands out job 7 with ack-7 and marks it taken.' : 'The worker takes job 7 from memory. Nothing outside the process records it.';
 		} else if (s.stage === 2) {
 			s.started += 1;
-			s.msg = 'Your function runs.';
+			s.msg = s.started >= 2 ? 'Job 7 runs a second time.' : 'Your function runs job 7.';
 		} else if (s.stage === 3) {
-			s.returned += 1;
-			s.msg = panic.checked
-				? `The function panicked. varmq recovers the panic, counts the job as failed and reports it. ${persistent() ? 'The next step still acknowledges the job.' : 'Then the worker closes the job.'}`
-				: persistent()
-					? 'The function returned. The worker closes the job, and closing it calls Acknowledge with ack-7.'
-					: 'The function returned. The worker closes the job. In memory there is nothing to acknowledge.';
-		} else if (s.stage === 4) {
-			s.msg = persistent()
-				? `Acknowledge returned true. The storage forgets job 7.${panic.checked ? ' varmq does not retry a job that failed.' : ''}`
-				: 'The job is done.';
+			s.msg = persistent() ? 'The function returned. Acknowledge has not reached the storage yet.' : 'The function returned and the worker closes job 7.';
+		} else {
+			s.msg = 'Acknowledge(ack-7) returned true. The storage drops job 7.';
 		}
 		render();
 	}
@@ -194,25 +178,18 @@ function init(root: HTMLElement) {
 		if (s.down) return;
 		s.down = true;
 		s.crashStage = s.stage;
-		const at = stepsOf(s.mode)[s.stage].label.toLowerCase();
 		if (!persistent()) {
-			const ran = s.stage >= 3;
-			s.lost = !ran;
-			s.msg = ran
-				? 'The process died after the function returned. Job 7 had run. Waiting jobs 8, 9 and 10 are lost with the queue.'
-				: `The process died at step ${s.stage + 1} (${at}). A queue in memory ends with the process, so job 7 is lost, and so are waiting jobs 8, 9 and 10.`;
+			s.lost = s.stage < 3;
+			s.msg = s.lost ? 'The process died. The queue was in memory: jobs 7, 8, 9 and 10 are lost.' : 'The process died. Job 7 had finished, but 8, 9 and 10 were in memory and are lost.';
 		} else {
 			s.orphan = s.stage >= 1 && s.stage <= 3;
-			// Process B carries on. A job A had taken reaches B only when it is put back (wait).
-			if (s.mode === 'dist' && !s.orphan) s.runner = 'B';
 			s.msg = [
-				'The process died while job 7 waited. It is still in storage, with 8, 9 and 10.',
-				'The process died after it took job 7. The storage holds job 7 as taken and not acknowledged.',
-				'The process died while the function ran. The storage holds job 7 as taken and not acknowledged.',
-				'The function had returned, but Acknowledge was never called. The storage holds job 7 as taken and not acknowledged, though it already ran.',
-				'The process died after the acknowledgement. Nothing is lost: job 7 was done, and 8, 9 and 10 wait in storage.',
+				'The process died. Jobs 7, 8, 9 and 10 wait in storage.',
+				'The process died after taking job 7. The storage holds it as taken, not acknowledged.',
+				'The process died while job 7 ran. It is taken, not acknowledged.',
+				'The process died after the function returned. Job 7 ran, but it is not acknowledged.',
+				'The process died after the acknowledgement. Nothing is lost.',
 			][s.stage];
-			if (s.mode === 'dist' && s.orphan) s.msg += ' Another consumer, process B, is alive.';
 		}
 		render();
 	}
@@ -220,28 +197,23 @@ function init(root: HTMLElement) {
 	function restart() {
 		if (!s.down) return;
 		s.down = false;
-		// A job process B runs stays with B: the restarted process A does not take it over.
 		if (!persistent()) {
 			s.stage = 0;
 			s.lost = true;
 			s.othersLost = true;
-			s.msg = 'The process is back. The queue is empty. Nothing from the earlier run survived. Press Reset to start again.';
+			s.msg = 'The process is back with an empty queue. Nothing survived.';
 		} else if (s.orphan) {
 			if (s.mode === 'sqlite') {
 				s.orphan = false;
 				s.stage = 0;
-				s.msg =
-					'sqliteq sets every row that is processing back to pending when a process opens the queue. Job 7 is back at the front. There is no timeout. Press Step to run it again.';
+				s.msg = `sqliteq opens the queue and sets every processing row back to pending. Job 7 is at the front.${again()}`;
 			} else if (s.mode === 'redis') {
-				s.msg =
-					'redisq keeps job 7 in jobs:nacked with a deadline. It puts job 7 back at the front of the queue once the program has run for 30 seconds in all, or at the deadline (5 minutes by default), whichever comes first.';
-			} else if (s.mode === 'dist') {
-				s.msg = 'The process is back, but job 7 is still held as taken. Another consumer puts it back about six seconds after the crash.';
+				s.msg = 'redisq keeps job 7 in jobs:nacked until the program has run 30 s in all, or until the 5-minute deadline.';
 			} else {
-				s.msg = 'varmq cannot bring job 7 back. Your adapter decides: hand it out again after a timeout, at the next start, or never.';
+				s.msg = 'varmq cannot bring job 7 back. Your adapter decides when, or whether, to hand it out again.';
 			}
 		} else {
-			s.msg = 'The process is back. It starts on the jobs in the storage.';
+			s.msg = 'The process is back and starts on the jobs in storage.';
 		}
 		render();
 	}
@@ -250,15 +222,7 @@ function init(root: HTMLElement) {
 		if (!s.orphan) return;
 		s.orphan = false;
 		s.stage = 0;
-		s.runner = 'A';
-		if (s.mode === 'dist') {
-			s.runner = 'B';
-			s.msg = 'About six seconds after the crash, the other consumers put job 7 back at the front of the queue. Process B takes it next. Press Step.';
-		} else if (s.mode === 'redis') {
-			s.msg = 'The program has run for 30 seconds. redisq puts job 7 back at the front of the queue. Press Step to run it again.';
-		} else {
-			s.msg = 'This adapter handed job 7 out again. Press Step to run it again.';
-		}
+		s.msg = `${s.mode === 'redis' ? 'redisq puts job 7 back at the front of the queue.' : 'Your adapter hands job 7 out again.'}${again()}`;
 		render();
 	}
 
@@ -267,7 +231,7 @@ function init(root: HTMLElement) {
 		s.orphan = false;
 		s.lost = true;
 		s.stage = 0;
-		s.msg = 'This adapter never hands job 7 out again. The job is lost, and nothing in varmq retries it. Press Reset to start again.';
+		s.msg = 'Your adapter never hands job 7 out again. It is lost, and varmq does not retry it.';
 		render();
 	}
 

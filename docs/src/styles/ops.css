@@ -228,7 +228,7 @@
 
 .ack__steps {
 	display: grid;
-	grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr));
 	gap: 6px;
 	margin: 0;
 	padding: 0;
@@ -268,9 +268,16 @@
 	color: var(--panel-accent);
 	overflow-wrap: anywhere;
 }
+.ack__step.is-warn .ack__sub {
+	color: var(--amber);
+}
+.ack .sframe__stats dd[data-tone='bad'],
+.sframe__stats dd[data-stat='runs'][data-tone='bad'] {
+	color: var(--danger);
+}
 .ack__out {
 	margin: 0;
-	min-height: 4.5em;
+	min-height: 3.2em;
 	font-size: 0.8125rem;
 	line-height: 1.55;
 	color: var(--panel-ink);
@@ -289,16 +296,22 @@
 	.ack__wire {
 		display: none;
 	}
+	/* One row of numbered steps; the current one shows its name. The call strip shows the call. */
 	.ack__steps {
-		grid-template-columns: minmax(0, 1fr);
+		display: flex;
 	}
 	.ack__step {
-		grid-template-columns: 22px minmax(0, 1fr);
-		align-items: baseline;
-		column-gap: 8px;
+		flex: none;
+		min-width: 36px;
+		padding: 6px;
+		text-align: center;
 	}
+	.ack__step.is-now {
+		flex: 1;
+	}
+	.ack__step:not(.is-now) .ack__stept,
 	.ack__sub {
-		grid-column: 2;
+		display: none;
 	}
 }
 
