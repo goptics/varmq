@@ -1,0 +1,100 @@
+name: Docs Preview
+
+# Deploys the site the Docs workflow built for a pull request to the Worker
+# varmq-docs-pr-<number>, and deletes that Worker when the pull request closes.
+# Both triggers run main's copy of this file with the Cloudflare secrets, even
+# for forks, so no step may check out or run the pull request's code.
+on:
+  workflow_run:
+    workflows: [Docs]
+    types: [completed]
+  pull_request_target:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  preview:
+    # Docs also runs for releases and manual dispatches, which have no preview.
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # the Docs run's site artifact
+      contents: read
+      pull-requests: write # the preview comment
+    steps:
+      # A fork's run carries no PR number, so look for the open PR whose head
+      # is the commit Docs built. None means the PR has closed or moved on to
+      # a newer commit, whose own Docs run deploys.
+      - name: Find the pull request
+        id: pr
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          number=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+            --paginate --jq 'first(.[] | select(.head.sha == env.HEAD_SHA)) | .number')
+          echo "number=$number" >>"$GITHUB_OUTPUT"
+
+      # main's Worker config, never the pull request's.
+      - if: steps.pr.outputs.number
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - if: steps.pr.outputs.number
+        uses: actions/download-artifact@v8
+        with:
+          name: site-docs
+          path: docs/dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Deploy
+        id: deploy
+        if: steps.pr.outputs.number
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config docs/wrangler.jsonc --name varmq-docs-pr-${{ steps.pr.outputs.number }}
+
+      - name: Post the preview URL, or delete the preview of a closed PR
+        if: github.event.pull_request.number || steps.pr.outputs.number
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || steps.pr.outputs.number }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          comments="repos/$GITHUB_REPOSITORY/issues/$PR/comments"
+          id=$(gh api "$comments" --paginate --jq '.[]
+            | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- docs-preview -->")))
+            | .id' | head -n 1)
+
+          # Read again after deploying: a PR that closed meanwhile may have run
+          # its delete before this upload landed.
+          state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .state)
+          if [[ $GITHUB_EVENT_NAME == workflow_run && $state == open ]]; then
+            body="Docs preview: ${URL:?wrangler printed no deployment URL} (built from ${HEAD_SHA:0:7}). It updates with each push and is deleted when this pull request closes."
+          else
+            code=$(curl -sS -o "$RUNNER_TEMP/delete.json" -w '%{http_code}' -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/varmq-docs-pr-$PR?force=true")
+            # A 2xx may have no body. 10007 and 10090 mean no such Worker: this PR never had a preview.
+            [[ $code == 2?? ]] || jq -e 'any(.errors[]; .code == 10007 or .code == 10090)' "$RUNNER_TEMP/delete.json" >/dev/null || { cat "$RUNNER_TEMP/delete.json" >&2; exit 1; }
+            [[ -n $id ]] || exit 0
+            body="Docs preview deleted, since this pull request is closed."
+          fi
+
+          body=$'<!-- docs-preview -->\n'"$body"
+          if [[ -n $id ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "$comments" -f body="$body" >/dev/null
+          fi
