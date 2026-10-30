@@ -64,7 +64,7 @@ export default defineConfig({
 				Footer: './src/components/shell/Footer.astro',
 			},
 		}),
-		// /alt/ is noindex, so the sitemap leaves it out. With a sitemap here, Starlight does not add its own.
-		sitemap({ filter: (page) => !page.includes('/alt/') }),
+		// With a sitemap here, Starlight does not add its own.
+		sitemap(),
 	],
 });

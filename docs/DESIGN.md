@@ -1,6 +1,6 @@
 # VarMQ docs design contract
 
-Every page of the docs site follows this file. The values live in `src/styles/tokens.css`. The shared pieces live in `src/styles/ui.css` and `src/components/ui/`. The reference page is `/alt/` (`src/pages/alt/index.astro`, `src/styles/alt.css`, `src/components/alt/`).
+Every page of the docs site follows this file. The values live in `src/styles/tokens.css`. The shared pieces live in `src/styles/ui.css` and `src/components/ui/`. The home page `/` (`src/components/Story.astro`, `src/styles/story.css`) shows the system at its fullest.
 
 ## The idea
 
@@ -9,7 +9,7 @@ A page explains by showing: each claim is a small working scene placed next to t
 
 ## Tokens
 
-Use only the variables in `src/styles/tokens.css`. Never write a hex color in a page. The reader picks Light, Dark or System in the header's theme switch. System follows `prefers-color-scheme`. The tokens switch on `:root[data-theme='dark']`. Starlight's ThemeProvider sets `data-theme` before the first paint, and so does an inline script in the head of `/alt/`. Both read the same stored choice, so it carries from page to page.
+Use only the variables in `src/styles/tokens.css`. Never write a hex color in a page. The reader picks Light, Dark or System in the header's theme switch. System follows `prefers-color-scheme`. The tokens switch on `:root[data-theme='dark']`. Starlight's ThemeProvider sets `data-theme` before the first paint from the stored choice, so it carries from page to page.
 
 | Role | Variables |
 |---|---|
@@ -19,7 +19,7 @@ Use only the variables in `src/styles/tokens.css`. Never write a hex color in a 
 | Brand | `--brand` for fills, marks and primary buttons, `--brand-hover` for the hover state, `--brand-ink` for text on `--brand`. Each theme's brand is its own logo's green (`assets/logo-light.svg`, `logo-dark.svg`): `#2e9c7f` in light and `--brand-on-dark` (`#44bf9e`) in dark. On paper the light one has 3.2:1, enough for a mark or a fill, so `--accent-text` is the same hue darker, at 5.4:1, for text. |
 | Signal | `--amber` for "against VarMQ" and warnings, `--cobalt` for secondary data, `--danger` for errors |
 | Dark surfaces | `--panel`, `--panel-2`, `--panel-ink`, `--panel-ink-2`, `--panel-rule`, `--panel-accent`; `--panel-fill` and `--panel-fill-2` for control and track fills. Code and simulation panels are dark in both themes. |
-| Go syntax | `--tk-k`, `--tk-s`, `--tk-c`, `--tk-n`, `--tk-f`, `--tk-t`, `--tk-b` (follow the theme). `--tk-*-on-dark` are the dark values. `ui.css` pins `--tk-*`, and `--brand` to `--brand-on-dark`, inside `.sframe`, `.code--dark`, `.expressive-code`, `.on-dark` (any other dark surface), `.pool` and `.st-code`, so a dark panel looks the same in both themes. `alt.css` does the same for `/alt/`'s scenes and status bar. |
+| Go syntax | `--tk-k`, `--tk-s`, `--tk-c`, `--tk-n`, `--tk-f`, `--tk-t`, `--tk-b` (follow the theme). `--tk-*-on-dark` are the dark values. `ui.css` pins `--tk-*`, and `--brand` to `--brand-on-dark`, inside `.sframe`, `.code--dark`, `.expressive-code`, `.on-dark` (any other dark surface) and `.st-code`, so a dark panel looks the same in both themes. |
 | Type and layout | `--display`, `--mono`, `--gutter`, `--max`, `--ease` |
 
 All text pairs pass WCAG AA in both themes (lowest ratio 4.75:1).
@@ -56,10 +56,9 @@ Every component has one look. Use the shared piece. Do not write a second copy i
 | Code card | `.code` (+ `.code--dark`), `.code__head` with file name and `.copy` button, then `pre`. `[data-copy]` buttons are served by one handler; `copyText()` copies a computed string. Expressive Code also names each line of a doc code block `.code`, so the card rule skips those. | `ui.css`; `copyButtons()`, `copyText()` in `ui/dom.ts` |
 | Go syntax | `highlightGo`, `highlightShell`, `highlightJson` return `tk-*` spans. | `components/ui/go.ts` |
 | Doc code block | Expressive Code theme `varmq-panel`. Same tokens as the code card. | `ec.config.mjs`, `docs-theme.css` |
-| Lane | Label, bar track, value, and a "× VarMQ" ratio. The VarMQ lane uses `--brand`. | `.rlane` (`alt.css`, `bench.css`); scene lanes stay local (`.llane`, `.gb-*`) |
+| Lane | Label, bar track, value, and a "× VarMQ" ratio. The VarMQ lane uses `--brand`. | `.rlane` (`bench.css`); scene lanes stay local (`.llane`, `.gb-*`) |
 | Callout | Card with an `--amber` rule for results against VarMQ and a `--brand` rule for tips. Starlight asides, `.bboard` and the matrix notes use it. | `docs-theme.css` |
 | Tear line | Dashed rule with "tear here" between the last section and the closing call to action. | `.shell-tear`, `.tear` |
-| Status bar | Landing page only. | `components/alt/StatusBar.astro` |
 | Theme switch | Three native radios: Light, Dark, System. The choice is stored under `starlight-theme` (`''` for System). It sits in the header, and in the phone header on `/`, which has no sidebar menu. | `components/ui/ThemeSwitch.astro`, `ui.css` (`.tswitch`) |
 | Main action | `.btn` with `--primary` or `--ghost`, for a page's own call to action on paper (the landing pages). Scene controls stay `.pbtn`. | `ui.css` |
 | Install box | The `go get` commands in tabs: varmq, then varmq with redisq or sqliteq. | `components/ui/Install.astro`, `ui.css` (`.install`) |
@@ -92,7 +91,7 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 
 | Type | Used by | Rule |
 |---|---|---|
-| Landing | `/alt/`, `/` | Full width. `/alt/` has paper stripes and the status bar. `/` keeps the Starlight header and opens on the story (below). Everything under the story shares the stage's frame (up to 1320 px, the `--gutter` at each side), so the edges line up: each section is a row with its heading and lead in the story's text column and the rest in the map's, and stacks at 44rem below 72rem. |
+| Landing | `/` | Full width. It keeps the Starlight header and opens on the story (below). Everything under the story shares the stage's frame (up to 1320 px, the `--gutter` at each side), so the edges line up: each section is a row with its heading and lead in the story's text column and the rest in the map's, and stacks at 44rem below 72rem. |
 | Article | `start`, `concepts`, `guides`, `persistence`, `operations` | Starlight layout restyled by the shell theme. One banner, then the article. Add a scene where a scene explains faster than text. |
 | Reference | `reference/comparison` | Dense tables and a feature matrix that the reader can filter. |
 | Data | `reference/benchmarks` | Explorer and score board on dark panels, raw-data links, and the callout for results against VarMQ. Data comes from a committed snapshot (`components/bench/data.json`, checked by `scripts/bench-data.mjs`). |
@@ -139,6 +138,5 @@ The map keeps its own palette (`lib/heromap/map.css`), in both themes:
 - Selected tab = `--panel-ink` fill on a dark panel, `--ink` on paper. The brand fill is for primary buttons only.
 - The map on `/` (`src/lib/heromap/map.css`) keeps its own `--vm-*` palette (see "The map's two palettes"). The dark palette's hex values and the light palette's amber, violet, red and blue are not tokens.
 - Scene chips and lanes (`.ljob`, `.llane`, `.ga-*`, `.gb-*`, `.ops-job`) are still local. They read tokens, but each area has its own markup.
-- The `/alt/` pool keeps its own frame (`.pool`); it is not a `.sframe`.
 - `GoPlay.astro` uses Starlight `--sl-*` variables, which the shell maps to the tokens. Its buttons are `.pbtn`.
 - The explorer on the Benchmarks page and the matrix on the Comparison page keep their own table markup.

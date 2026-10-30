@@ -1,7 +1,7 @@
 /* Benchmarks page. The explorer and the score board are dark panels in both themes (docs/DESIGN.md: simulation panels).
    Every rule is scoped under .bench or .bboard so nothing leaks into the Starlight shell.
    The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
-   Tabs and buttons are the shared `seg` and `pbtn` (ui.css). Class names for rlane and rg__title copy src/styles/alt.css. */
+   Tabs and buttons are the shared `seg` and `pbtn` (ui.css). */
 
 .bench,
 .bboard {
@@ -367,7 +367,7 @@
 	color: var(--amber);
 }
 
-/* ---- lanes (alt.css) ---- */
+/* ---- lanes ---- */
 
 .bsec {
 	display: grid;

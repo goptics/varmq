@@ -1,5 +1,5 @@
 /* Shared interface pieces for every VarMQ docs page. Follows docs/DESIGN.md.
-   Needs tokens.css. The docs pages load it through `customCss`; `/alt/` imports both.
+   Needs tokens.css. The docs pages load both through `customCss`.
    A scene is a dark panel in both themes, so these rules read only the `--panel*` tokens inside it.
 
    Pieces: `.sr-only`, `.sframe` (the scene frame), `.gocode`, `.call`, `.tk-*`, `.pbtn`, `.stepper`, `.seg`, `.code` (code card), `.copy`, `.sfield`, `.slabel`. */
@@ -36,7 +36,6 @@
 .code--dark,
 .expressive-code,
 .on-dark,
-.pool,
 .st-code {
 	--brand: var(--brand-on-dark);
 	--brand-hover: var(--brand-hover-on-dark);
@@ -573,7 +572,6 @@ button.copy:hover {
 		transform 0.15s var(--ease);
 }
 
-.alt a.btn--primary,
 .btn--primary {
 	background: var(--brand);
 	color: var(--brand-ink);
@@ -588,7 +586,6 @@ button.copy:hover {
 	transform: translateY(1px);
 }
 
-.alt a.btn--ghost,
 .btn--ghost {
 	color: var(--ink);
 	border-color: var(--rule);

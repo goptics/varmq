@@ -1,8 +1,7 @@
 ---
-// Light, Dark or System. The choice is stored under Starlight's own key, `starlight-theme` ('' for System), so
-// the docs pages and /alt/ share it. The theme itself is set before the first paint: by Starlight's
-// ThemeProvider on docs pages and by the inline script in the head of /alt/. Native radios, so the arrow keys
-// move between the three.
+// Light, Dark or System. The choice is stored under Starlight's own key, `starlight-theme` ('' for System), and
+// Starlight's ThemeProvider sets the theme before the first paint. Native radios, so the arrow keys move between
+// the three.
 import { Icon } from '@astrojs/starlight/components';
 
 const name = `theme-${Math.random().toString(36).slice(2, 8)}`;
