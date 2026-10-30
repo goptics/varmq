@@ -223,10 +223,13 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 		width: 100%;
 		margin: 0;
 		padding: 0.75rem 1rem;
-		border: 1px solid var(--sl-color-gray-5);
-		border-radius: 0.5rem;
-		background: var(--sl-color-gray-7, var(--sl-color-gray-6));
-		color: var(--sl-color-white);
+		/* The editor and the output are dark panels in both themes, like the code block they replace. */
+		border: 1px solid var(--panel-rule);
+		border-radius: 12px;
+		background: var(--panel);
+		color: var(--panel-ink);
+		caret-color: var(--panel-accent);
+		color-scheme: dark; /* dark scrollbar and resize grip */
 		font-family: var(--__sl-font-mono);
 		font-size: var(--sl-text-code);
 		line-height: var(--sl-line-height);
@@ -237,7 +240,7 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 	}
 
 	textarea:focus-visible {
-		outline: 2px solid var(--sl-color-text-accent);
+		outline: 2px solid var(--panel-accent);
 		outline-offset: -1px;
 	}
 
@@ -266,10 +269,10 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 	pre {
 		margin: 0.75rem 0 0;
 		padding: 0.75rem 1rem;
-		border: 1px solid var(--sl-color-gray-5);
-		border-radius: 0.5rem;
-		background: var(--sl-color-gray-6);
-		color: var(--sl-color-white);
+		border: 1px solid var(--panel-rule);
+		border-radius: 12px;
+		background: var(--panel);
+		color: var(--panel-ink);
 		font-family: var(--__sl-font-mono);
 		font-size: var(--sl-text-code);
 		line-height: var(--sl-line-height);
@@ -288,11 +291,11 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 	/* Output lines are created at runtime, so they carry no scope attribute. */
 	pre :global(.stderr),
 	pre :global(.error) {
-		color: var(--sl-color-red-high);
+		color: var(--danger);
 	}
 
 	pre :global(.system) {
-		color: var(--sl-color-gray-3);
+		color: var(--panel-ink-2);
 	}
 
 	pre :global(button.link),
@@ -301,8 +304,12 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 		padding: 0;
 		border: 0;
 		background: none;
-		color: var(--sl-color-text-accent);
+		color: var(--panel-accent);
 		font: inherit;
 		text-decoration: underline;
+	}
+
+	pre :global(.link:focus-visible) {
+		outline-color: var(--panel-accent);
 	}
 </style>
