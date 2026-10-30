@@ -544,56 +544,6 @@
 	color: var(--danger);
 }
 
-/* ---- Equation panel (metrics) ---- */
-
-.gb-eq {
-	padding: 12px var(--local-pad) 14px;
-	border-top: 1px solid var(--panel-rule);
-	font-size: 0.75rem;
-	line-height: 1.5;
-}
-
-.gb-eq__line {
-	color: var(--panel-ink-2);
-}
-
-.gb-eq__calc {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 14px;
-	margin: 6px 0 4px;
-	font-size: 1rem;
-	font-variant-numeric: tabular-nums;
-	color: var(--panel-ink);
-}
-
-.gb-tag {
-	display: inline-block;
-	padding: 3px 8px;
-	border: 1px solid var(--brand);
-	border-radius: 4px;
-	font-size: 0.6875rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--panel-accent);
-}
-
-.gb-tag[data-tone='warn'] {
-	border-color: var(--amber);
-	color: var(--amber);
-}
-
-.gb-eq__why {
-	margin: 0;
-	min-height: 3em;
-	color: var(--panel-ink-2);
-}
-
-.gb-eq__why[data-tone='warn'] {
-	color: var(--panel-ink);
-}
-
 /* ---- Timeline (waiting) ---- */
 
 .gb-tl {
