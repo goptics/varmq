@@ -266,6 +266,17 @@ varmq-map .vm-chip > .vm-shape {
 	stroke-width: 1;
 }
 
+/* A control chip's lit layer: the call in effect. */
+varmq-map .vm-lit > .vm-shape {
+	fill: color-mix(in srgb, var(--vm-go) 18%, var(--vm-chip));
+	stroke: var(--vm-go);
+	stroke-width: 1;
+}
+
+varmq-map .vm-lit > .vm-text {
+	fill: var(--vm-go);
+}
+
 varmq-map .vm-value > .vm-shape {
 	fill: var(--vm-value);
 	stroke: var(--vm-value-edge);

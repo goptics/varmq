@@ -200,6 +200,12 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 	if (p.kind === 'chip') {
 		const centre = { x: x + w / 2, y: y + h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central' };
 		add(g, 'text', { class: 'vm-text', ...centre }, label);
+		// A control's chip lights up green while its call is the worker's state (choreo.ts).
+		if (p.id.startsWith('ctl-')) {
+			const lit = add(g, 'g', { class: 'vm-lit', ...HIDDEN });
+			add(lit, 'rect', { class: 'vm-shape', x, y, width: w, height: h, rx: RADIUS[p.kind] });
+			add(lit, 'text', { class: 'vm-text', ...centre }, label);
+		}
 	} else if (p.kind === 'loop') {
 		// EVENT over LOOP: on one line it would reach the worker's card and the third queue's line.
 		const baseline = y + h + LABEL_GAP + LABEL_PX - DESCENT;

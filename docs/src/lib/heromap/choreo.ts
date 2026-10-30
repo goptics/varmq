@@ -482,6 +482,7 @@ export class Choreo {
 	readonly page: Page;
 	readonly score: Score;
 	readonly cam: Camera;
+	private lit?: Element; // the control chip whose call is in effect
 	/** Rings shown, as `<worker>:<place>`. */
 	private readonly shown = new Set<string>();
 	/** Rings on their way out, by when they are gone. */
@@ -564,6 +565,7 @@ export class Choreo {
 		const v = on ? 1 : 0;
 		if (kind === 'chip') {
 			score.start(g, { opacity: v, scale: v });
+			if (key.startsWith('ctl-')) score.start(g.querySelector(':scope > .vm-lit')!, { opacity: 0 });
 			return;
 		}
 		score.start(g, { opacity: kind === 'tray' ? v : 1 });
@@ -1005,11 +1007,17 @@ export class Choreo {
 			this.ghosts(part.worker, e.to!, at + 200);
 			return;
 		}
-		this.press(this.nodes.piece(`ctl-${e.op}`), at);
-		// The event loop hands out nothing while the worker is paused or stopped. A restart brings it back, with the
-		// one idle goroutine `Start` leaves.
-		const on = e.op === 'resume' || e.op === 'restart';
-		this.score.tween(this.loop(), { opacity: on ? 1 : 0.35 }, at, 300, E.fade);
+		const chip = this.nodes.piece(`ctl-${e.op}`);
+		this.press(chip, at);
+		// The call in effect is lit: this one, from its press until the next.
+		if (this.lit) this.score.tween(this.lit, { opacity: 0 }, at, 200, E.fade);
+		this.lit = chip.querySelector(':scope > .vm-lit')!;
+		this.score.tween(this.lit, { opacity: 1 }, at, 200, E.fade);
+		// Stop() ends the event loop, and a restart starts it again, with the one idle goroutine `Start` leaves. A
+		// paused loop still runs: it only hands out nothing.
+		if (e.op === 'stop' || e.op === 'restart') {
+			this.score.tween(this.loop(), { opacity: e.op === 'stop' ? 0.35 : 1 }, at, 300, E.fade);
+		}
 		if (e.op === 'restart') this.spawn(part.worker, 0, at + 300);
 	}
 
