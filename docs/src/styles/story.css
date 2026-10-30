@@ -901,7 +901,7 @@
    window's full height, over the header too, one hole every 48px, each in the middle of its rail; the header's own
    padding clears them. Each hole is punched: a little darker than the paper,
    with a thin green rim. The holes move with the scroll, as paper feeding through: the left rail's go down and the right
-   rail's go up, by as much as the page moved, and one glow runs down both rails from the top of the page to the bottom.
+   rail's go up, a third as far as the page moved, and one glow runs down both rails from the top of the page to the bottom.
    Hero.astro eases --y (the distance) and --p (how far down the page, 0 to 1) toward the scroll position each frame,
    so both glide. With reduced motion the holes stand still and unlit. */
 .roll {
