@@ -325,6 +325,12 @@
 	color: var(--ink);
 }
 
+/* The caption playing now is in the theme's green, its marked words too, until it is done. */
+.st-notes li[data-on]:not([data-done]),
+.st-notes li[data-on]:not([data-done]) em {
+	color: var(--accent-text);
+}
+
 /* Each caption plays the step again from it (main.ts). */
 .st-notes button {
 	display: block;
@@ -437,6 +443,7 @@
 	font-style: normal;
 	color: var(--ink);
 	font-weight: 700;
+	transition: color 240ms var(--ease);
 }
 
 .st .fail {
