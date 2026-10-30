@@ -163,9 +163,10 @@ function showIntro() {
 
 /**
  * Shows step k: its text, its code, and its chapter playing on the map from its start, every ring empty, up to the end
- * of caption c. Still, or under reduced motion, it shows that frame at once, as a step back up from the next one does.
+ * of caption c. Going back up from a later step, the map plays its way back to the end of caption c, at most the next
+ * step's length of it, and holds there, every ring full. Under reduced motion it shows that frame at once.
  */
-function show(k: number, c: number, still = false) {
+function show(k: number, c: number, back = false) {
 	step = k;
 	caption = -1;
 	limit = c;
@@ -178,13 +179,14 @@ function show(k: number, c: number, still = false) {
 	notes.innerHTML = s.notes.map((note, i) => `<li><button type="button" data-i="${i}">${POINT}${note}</button></li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
-	const first = still ? c : 0;
+	const first = back ? c : 0;
 	for (const code of codes) morph(code, s.code[first]);
 	setCaption(first);
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
-	if (still || reduce.matches) map.seek(s.from + until(s, c));
+	if (reduce.matches) map.seek(s.from + until(s, c));
+	else if (back) map.rewind(s.from + until(s, c), STEPS[k + 1]?.ms ?? s.ms);
 	else map.play(s.from, until(s, c), k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
 }
 
@@ -241,7 +243,7 @@ const tick = () => {
 	const k = nearest();
 	if (k !== at) {
 		// The next or the previous caption of the same step moves to it. A step reached going down plays from its start;
-		// going up, it shows where it stops, still.
+		// going up, the map plays back to where it stops, and holds.
 		const was = STOPS[at - 1];
 		const stop = STOPS[k - 1];
 		const up = k < at;
