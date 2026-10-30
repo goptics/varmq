@@ -36,9 +36,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # ponytail: reads the 100 newest open PRs; paginate if that is ever too few.
           number=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
-            --jq 'first(.[] | select(.head.sha == env.HEAD_SHA)) | .number')
+            --paginate --jq 'first(.[] | select(.head.sha == env.HEAD_SHA)) | .number')
           echo "number=$number" >>"$GITHUB_OUTPUT"
 
       # main's Worker config, never the pull request's.
