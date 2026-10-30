@@ -51,7 +51,7 @@ The program below creates a worker with a limit of 100 and holds every job insid
 
 Before any job, the pool has one idle goroutine. With three jobs running, `NumProcessing` is 3, not 100. The idle goroutine took a job, so `NumIdleWorkers` is 0, and nothing is pending.
 
-Move the limit in the scene below and watch the lanes. The slider calls `TunePool` on a worker that keeps running: the jobs it already holds are not interrupted.
+Move the limit in the scene below and watch the goroutines. The slider calls `TunePool` on a worker that keeps running: the jobs it already holds are not interrupted.
 
 <ConcurrencyScene />
 

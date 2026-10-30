@@ -8,7 +8,7 @@ const program = `worker := varmq.NewWorker(process, 3)
 queue := worker.BindQueue()`;
 const hint = '// move the slider: TunePool(n) runs and its result shows here';
 
-const describe = `A simulation of one worker. Each job takes 2.4 seconds. The slider calls TunePool on the running worker. The lanes show the goroutines: a busy one holds a job, an idle one waits in the pool, and a dashed lane is a slot below the limit with no goroutine yet. The meter compares the jobs that finish each second with the ceiling, which is the limit divided by 2.4 s, and with the jobs that arrive. With a limit of 1 the one goroutine takes the waiting jobs as a batch, and raising the limit does not spread that batch.`;
+const describe = `A simulation of one worker. Each job takes 2.4 seconds. The slider calls TunePool on the running worker. Each block is a live goroutine: a busy one fills while it runs a job and shows +n for the jobs it still holds as a batch, an idle one waits in the pool, and one that runs above a lowered limit has an amber edge. A goroutine that exits disappears. The meter compares the jobs that finish each second with the ceiling, which is the limit divided by 2.4 s, and with the jobs that arrive. With a limit of 1 the one goroutine takes the waiting jobs as a batch, and raising the limit does not spread that batch.`;
 ---
 
 <Scene id="gb-concurrency" title="Worker pool" describe={describe} class="gb">
@@ -50,8 +50,8 @@ const describe = `A simulation of one worker. Each job takes 2.4 seconds. The sl
 	</Fragment>
 
 	<p class="sframe__note" slot="note">
-		Each job takes 2.4 s. A busy lane holds a job, an idle lane waits in the pool, and a dashed lane is a slot below
-		the limit with no goroutine yet. The meter compares the jobs done each second with the ceiling, the limit divided
+		Each job takes 2.4 s. A block is a live goroutine: it fills while it runs a job, +n is the rest of its
+		batch, and an amber edge means it runs above the limit. The meter compares the jobs done each second with the ceiling, the limit divided
 		by 2.4 s, and with the jobs that arrive.
 	</p>
 </Scene>

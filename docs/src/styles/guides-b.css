@@ -260,10 +260,43 @@
 	border-color: var(--brand);
 }
 
-.gb-block b {
-	position: relative;
+.gb-block[data-over='true'] {
+	border-color: var(--amber);
+}
+
+.gb-block {
+	gap: 3px;
+	place-content: center;
+	justify-items: center;
 	font: 600 0.6875rem/1 var(--mono);
 	color: var(--panel-ink);
+}
+
+.gb-block > * {
+	position: relative;
+}
+
+.gb-block__job {
+	font-weight: 500;
+	color: var(--panel-ink-2);
+}
+
+.gb-block__job:empty,
+.gb-block__held:empty {
+	display: none;
+}
+
+.gb-block__job[data-fail='error'],
+.gb-block__job[data-fail='panic'] {
+	color: var(--danger);
+}
+
+.gb-block__held {
+	position: absolute;
+	top: 2px;
+	right: 3px;
+	font-size: 0.5625rem;
+	color: var(--panel-ink-2);
 }
 
 @keyframes gb-pop {

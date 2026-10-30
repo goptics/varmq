@@ -1,4 +1,4 @@
-// Concurrency scene: a slider that calls TunePool on a running worker, the lanes it makes,
+// Concurrency scene: a slider that calls TunePool on a running worker, the goroutines it makes,
 // and the throughput the model gives. Each job takes 2.4 s. A producer adds a job every 0.7 s.
 
 import { WorkerSim } from './sim';
@@ -15,7 +15,7 @@ qsa<HTMLElement>(document, '[data-scene="gb-concurrency"]').forEach(init);
 
 function init(root: HTMLElement) {
 	const sim = new WorkerSim({ limit: 3 });
-	const view = new PoolView(qs(root, '[data-pool]'), sim);
+	const view = new PoolView(qs(root, '[data-pool]'), sim, { blocks: true });
 	const say = caller(root);
 	const live = announcer(root);
 
@@ -121,7 +121,7 @@ function init(root: HTMLElement) {
 	producerBtn.setAttribute('aria-pressed', String(producer));
 	producerBtn.textContent = `Producer: ${producer ? 'on' : 'off'}`;
 
-	// Start with a short backlog so the lanes are busy.
+	// Start with a short backlog so the goroutines are busy.
 	add(8);
 	sim.advance(80);
 	render();

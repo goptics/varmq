@@ -216,7 +216,10 @@ export class PoolView {
 		}
 	}
 
-	/** One block per live goroutine, in slot order: a goroutine that exits leaves the DOM. */
+	/**
+	 * One block per live goroutine, in slot order: a goroutine that exits leaves the DOM. A busy block shows
+	 * its job, "+n" for the jobs it still holds as a batch, and an amber edge when it runs above the limit.
+	 */
 	private drawBlocks() {
 		const live = [...this.sim.gors].sort((x, y) => x.slot - y.slot);
 		const slots = new Set(live.map((g) => g.slot));
@@ -226,17 +229,23 @@ export class PoolView {
 			this.blockEls.delete(slot);
 		}
 		let added = false;
+		let busy = 0;
 		for (const g of live) {
 			let el = this.blockEls.get(g.slot);
 			if (!el) {
 				el = document.createElement('span');
 				el.className = 'gb-block';
-				el.innerHTML = `<b>g${g.slot + 1}</b>`;
+				el.innerHTML = `<b>g${g.slot + 1}</b><span class="gb-block__job"></span><span class="gb-block__held"></span>`;
 				this.blockEls.set(g.slot, el);
 				added = true;
 			}
 			const job = g.busy ? g.batch[g.i] : undefined;
 			el.dataset.s = job ? 'busy' : 'idle';
+			el.dataset.over = String(!!job && ++busy > this.sim.limit);
+			setText(el.children[1] as HTMLElement, job ? String(job.id) : '');
+			const held = job ? g.batch.length - g.i - 1 : 0;
+			setText(el.children[2] as HTMLElement, held ? `+${held}` : '');
+			(el.children[1] as HTMLElement).dataset.fail = job?.fail ?? '';
 			el.style.setProperty('--p', job ? Math.max(0, Math.min(1, 1 - job.left / job.dur)).toFixed(3) : '0');
 		}
 		if (added) this.lanesEl.replaceChildren(...live.map((g) => this.blockEls.get(g.slot)!));
