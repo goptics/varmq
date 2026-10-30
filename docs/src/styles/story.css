@@ -897,28 +897,35 @@
 	}
 }
 
-/* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. Each hole is
-   punched: a little darker than the paper, with a thin green rim. As the page scrolls, one glow runs down both rails,
-   the paper feeding through. The browser drives it from the scroll position; without scroll-driven animations, or
-   with reduced motion, the holes stay still and unlit. */
+/* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. They start under
+   the header, one every 48px, each in the middle of its rail. Each hole is punched: a little darker than the paper,
+   with a thin green rim. The holes feed down slowly, as jobs move through, and one glow runs down both rails with the
+   page's scroll position. With reduced motion the holes stand still and unlit; without scroll-driven animations the
+   glow stays off. */
 .roll {
 	display: none;
+}
+
+/* The home page's paper is plain: one green bar under the header, alone, read as a stray shade. */
+:root:has(.st) body {
+	background-image: none;
 }
 
 @media (min-width: 1180px) {
 	.roll {
 		--hole: color-mix(in srgb, var(--ink) 9%, var(--paper));
 		--rim: color-mix(in srgb, var(--brand) 35%, transparent);
+		--pitch: 48px;
 		display: block;
 		position: fixed;
-		top: 0;
+		top: var(--sl-nav-height, 64px);
 		bottom: 0;
-		width: 28px;
+		width: 36px;
 		margin: 0; /* the content stack's margin between siblings would push the right rail down */
 		z-index: 1;
 		pointer-events: none;
-		background: radial-gradient(circle at 14px 24px, var(--hole) 0 4.5px, var(--rim) 5px 5.75px, transparent 6.25px) 0 0 / 28px 48px
-			repeat-y;
+		background: radial-gradient(circle at 50% 50%, var(--hole) 0 4.5px, var(--rim) 5px 5.75px, transparent 6.25px) 0 0 / 100%
+			var(--pitch) repeat-y;
 	}
 
 	:root[data-theme='dark'] .roll {
@@ -942,35 +949,49 @@
 		inset: 0;
 		display: none;
 		background: radial-gradient(
-				circle at 14px 24px,
+				circle at 50% 50%,
 				var(--brand) 0 3.5px,
 				color-mix(in srgb, var(--brand) 45%, transparent) 4.5px,
 				color-mix(in srgb, var(--brand) 12%, transparent) 7.5px,
 				transparent 10px
 			)
-			0 0 / 28px 48px repeat-y;
+			0 0 / 100% var(--pitch) repeat-y;
 		-webkit-mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 0 / 100% 168px no-repeat;
 		mask: linear-gradient(transparent, #000 40%, #000 60%, transparent) 0 0 / 100% 168px no-repeat;
 	}
 
-	@supports (animation-timeline: scroll()) {
-		@media (prefers-reduced-motion: no-preference) {
+	@media (prefers-reduced-motion: no-preference) {
+		.roll,
+		.roll::after {
+			animation: roll-move 3s linear infinite;
+		}
+
+		@supports (animation-timeline: scroll()) {
 			.roll::after {
 				display: block;
-				animation: roll-feed linear both;
-				animation-timeline: scroll(root);
+				animation:
+					roll-move 3s linear infinite,
+					roll-feed linear both;
+				animation-timeline: auto, scroll(root);
 			}
 		}
 	}
 }
 
+/* One hole's pitch down, then again: the holes look like they keep moving. */
+@keyframes roll-move {
+	to {
+		background-position-y: var(--pitch);
+	}
+}
+
 @keyframes roll-feed {
 	from {
-		-webkit-mask-position: 0 var(--sl-nav-height, 64px);
-		mask-position: 0 var(--sl-nav-height, 64px);
+		-webkit-mask-position: 0 0;
+		mask-position: 0 0;
 	}
 	to {
-		-webkit-mask-position: 0 calc(100vh - 168px);
-		mask-position: 0 calc(100vh - 168px);
+		-webkit-mask-position: 0 calc(100vh - var(--sl-nav-height, 64px) - 168px);
+		mask-position: 0 calc(100vh - var(--sl-nav-height, 64px) - 168px);
 	}
 }
