@@ -377,9 +377,9 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'Control',
 		duration: 11600,
 		captions: [
-			{ at: 2300, until: 3500, text: '*Pause()*: running jobs finish, new ones wait' },
+			{ at: 2300, until: 3500, text: '*Pause()* holds new jobs back' },
 			{ at: 4000, until: 5600, text: '*Resume()* starts the jobs that waited' },
-			{ at: 6100, until: 7400, text: '*Stop()* lets running jobs finish, then ends the event loop and goroutines' },
+			{ at: 6100, until: 7400, text: '*Stop()* ends the loop once jobs finish' },
 			{ at: 7900, until: 10800, text: '*Restart()* runs the jobs that waited' },
 		],
 		parts: [
