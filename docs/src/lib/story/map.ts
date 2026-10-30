@@ -4,11 +4,10 @@ import { renderMap } from '../heromap/render.ts';
 import { REGIONS, frame } from '../heromap/scene.ts';
 
 /** A stretch that plays over: it holds its end `again` ms, then plays again from `restart` (its start by default) to
- * the same end. `held` starts it in that hold, at the end already. */
+ * the same end. */
 export interface Loop {
 	again: number;
 	restart?: number;
-	held?: boolean;
 }
 
 export interface MapHandle {
@@ -115,16 +114,16 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		const tl = timeline;
 		if (!tl) {
 			// Not loaded yet: play once it is.
-			t = wrap(loop?.held ? from + ms : from);
+			t = wrap(from);
 			pending = () => play(from, ms, loop);
 			return;
 		}
 		pending = undefined;
 		const end = from + ms;
 		let start = from;
-		let first = !loop?.held;
-		let begun = performance.now() - (loop?.held ? ms : 0);
-		if (first) tl.seek(wrap(from)).play();
+		let first = true;
+		let begun = performance.now();
+		tl.seek(wrap(from)).play();
 		let last = performance.now();
 		const tick = () => {
 			const now = performance.now();
