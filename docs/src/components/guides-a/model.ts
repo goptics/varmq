@@ -2,14 +2,6 @@
 // above it, so a scene never shows a result that varmq cannot produce. model.test.ts checks the
 // outputs that the guide pages print.
 
-// ---- worker_eventloop.go: the batch a free goroutine takes ----
-
-/**
- * maxBatch. A worker with concurrency 1 hands its one goroutine everything that waits in a FIFO queue
- * or a topic, up to this many jobs, in one batch, and takes nothing more until the batch ends.
- */
-export const MAX_BATCH = 32;
-
 // ---- source_manager.go and internal/helpers/manager.go: which queue gives the next job ----
 
 export type StrategyName = 'Priority' | 'RoundRobin' | 'MaxLen' | 'MinLen';
@@ -88,80 +80,4 @@ export function nextRanked<T extends Ranked>(items: T[]): T | undefined {
 		if (!best || it.priority < best.priority || (it.priority === best.priority && it.seq < best.seq)) best = it;
 	}
 	return best;
-}
-
-// ---- topic.go and internal/topics: one log, one cursor for each subscription ----
-
-export interface TopicSub {
-	name: string;
-	subscribed: boolean;
-	paused: boolean;
-	/** The first payload this subscription receives. */
-	from: number;
-	read: Set<number>;
-	/** Payloads that the worker took and made a job of, and has not started: its batch, or what a pause parked. */
-	jobs: number[];
-}
-
-export type PublishResult = { ok: true; n: number } | { ok: false; why: 'no subscribers' | 'full' };
-
-export class Topic {
-	next = 1;
-	capacity = 0;
-	log: number[] = [];
-	subs: TopicSub[];
-
-	constructor(names: string[]) {
-		this.subs = names.map((name) => ({ name, subscribed: true, paused: false, from: 1, read: new Set(), jobs: [] }));
-	}
-
-	unread(s: TopicSub): number[] {
-		return s.subscribed ? this.log.filter((n) => n >= s.from && !s.read.has(n)) : [];
-	}
-
-	publish(): PublishResult {
-		const live = this.subs.filter((s) => s.subscribed);
-		if (live.length === 0) return { ok: false, why: 'no subscribers' };
-		// The limit applies to the slowest subscription.
-		if (this.capacity > 0 && Math.max(...live.map((s) => this.unread(s).length)) >= this.capacity) {
-			return { ok: false, why: 'full' };
-		}
-		const n = this.next++;
-		this.log.push(n);
-		return { ok: true, n };
-	}
-
-	/**
-	 * A worker with concurrency 1 reads the log only when its goroutine is free: it then takes every unread
-	 * payload, up to maxBatch, as one batch and makes its own job of each. A worker that runs a job
-	 * (`busy`) or still holds jobs it took, and a paused one, read nothing: their payloads stay unread.
-	 */
-	drain(s: TopicSub, busy = false): number[] {
-		if (!s.subscribed || s.paused || busy || s.jobs.length > 0) return [];
-		const taken = this.unread(s).slice(0, MAX_BATCH);
-		for (const n of taken) {
-			s.read.add(n);
-			s.jobs.push(n);
-		}
-		this.free();
-		return taken;
-	}
-
-	subscribe(s: TopicSub): void {
-		s.subscribed = true;
-		s.from = this.next; // a subscription gets only the payloads published after it subscribed
-		s.read = new Set();
-	}
-
-	/** The subscription drops what it has not read. A job it already took still runs. */
-	unsubscribe(s: TopicSub): void {
-		s.subscribed = false;
-		this.free();
-	}
-
-	/** A payload leaves the log once every subscription has read it. */
-	free(): void {
-		const live = this.subs.filter((s) => s.subscribed);
-		this.log = this.log.filter((n) => live.some((s) => n >= s.from && !s.read.has(n)));
-	}
 }

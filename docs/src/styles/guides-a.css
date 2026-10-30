@@ -170,11 +170,6 @@
 	color: var(--panel-accent);
 }
 
-.ga-tag--warn {
-	border-color: var(--amber);
-	color: var(--amber);
-}
-
 .ga-tag--bad {
 	border-color: var(--danger);
 	color: var(--danger);
@@ -291,69 +286,6 @@
 	color: var(--panel-ink);
 	font: 600 0.75rem/1.3 var(--mono);
 	letter-spacing: 0.04em;
-}
-
-.ga-head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-}
-
-.ga-head h3 {
-	margin: 0;
-	font: 600 0.75rem/1.3 var(--mono);
-	letter-spacing: 0.04em;
-	color: var(--panel-ink);
-}
-
-.ga-head h3 .ga-note {
-	margin-left: 6px;
-	font-weight: 400;
-}
-
-.ga-head__btns {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-/* Small buttons in a panel head. */
-.ga-head .pbtn {
-	min-height: 32px;
-	padding: 6px 10px;
-	font-size: 0.75rem;
-}
-
-.ga .chip--log {
-	height: auto;
-	min-height: 30px;
-	padding: 5px 10px 6px;
-	grid-auto-flow: row;
-	gap: 4px;
-}
-
-.ga .pips {
-	display: flex;
-	justify-content: center;
-	gap: 3px;
-}
-
-.ga .pip {
-	width: 12px;
-	height: 4px;
-	border-radius: 4px;
-	background: color-mix(in srgb, var(--brand-ink) 28%, transparent);
-}
-
-.ga .pip[data-s='on'] {
-	background: var(--brand-ink);
-}
-
-.ga .pip[data-s='na'] {
-	background: transparent;
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 45%, transparent);
 }
 
 .ga-methods {
