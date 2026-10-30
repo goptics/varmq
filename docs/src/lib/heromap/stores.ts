@@ -69,10 +69,17 @@ export interface RedisPlan {
 	notifyTravel: number; // ms from a land to the notification reaching a consumer
 	takeTravel: number;
 	ackTravel: number;
-	// One consumer's program dies at `at`, its jobs running. `backAfter` later the others' sweep puts its jobs back
-	// and wakes a consumer for them, and the program restarts at `restartAt`. A job's run after it is put back takes
-	// its `rework`, or its `work` again.
-	crash?: { consumer: string; at: number; backAfter: number; restartAt: number; rework: Record<string, number> };
+	// One consumer's program dies at `at`, its jobs running. `backAfter` later the others' sweep puts its jobs back,
+	// and `wakeAfter` after that (0 if not given) wakes a consumer for them; the program restarts at `restartAt`. A
+	// job's run after it is put back takes its `rework`, or its `work` again.
+	crash?: {
+		consumer: string;
+		at: number;
+		backAfter: number;
+		wakeAfter?: number;
+		restartAt: number;
+		rework: Record<string, number>;
+	};
 }
 
 // A job starts running takeTravel after its take (the copy's flight to the ring):
@@ -416,7 +423,7 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 		timer(crash.at + crash.backAfter, (now) => {
 			const jobs = held();
 			emit({ at: now, type: 'requeue', jobs });
-			wake(now);
+			wake(now + (crash.wakeAfter ?? 0));
 		});
 		timer(crash.restartAt, (now) => {
 			emit({ at: now, type: 'restart', consumer: w.id });

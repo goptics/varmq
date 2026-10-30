@@ -6,8 +6,6 @@ import goMod from '../../examples/go.mod?raw';
 interface Props {
 	example: string;
 	title?: string;
-	/** Shows only main's body and the Run button, as the home page's intro does. */
-	compact?: boolean;
 }
 
 const sources = import.meta.glob<string>('../../examples/*/main.go', {
@@ -16,7 +14,7 @@ const sources = import.meta.glob<string>('../../examples/*/main.go', {
 	eager: true,
 });
 
-const { example, title = `${example}/main.go`, compact = false } = Astro.props;
+const { example, title = `${example}/main.go` } = Astro.props;
 const src = sources[`../../examples/${example}/main.go`];
 if (src === undefined) throw new Error(`GoPlay: unknown example "${example}"`);
 const hintId = `go-play-hint-${example}`;
@@ -26,17 +24,10 @@ const hintId = `go-play-hint-${example}`;
 const lines = src.split('\n');
 let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
 if (lines[head] === 'func main() {') head++;
-// Compact, everything above main's first loop collapses: the program opens on the loop that adds its jobs. The
-// brace that closes main stays, rather than a bar for one line.
-const loop = lines.findIndex((l) => l.startsWith('\tfor '));
-const meta = compact
-	? `collapse={1-${loop}}`
-	: head > 0
-		? `collapse={1-${head}}`
-		: '';
+const meta = head > 0 ? `collapse={1-${head}}` : '';
 ---
 
-<go-play class="not-content" data-pins={JSON.stringify(pins(goMod))} data-compact={compact || undefined}>
+<go-play class="not-content" data-pins={JSON.stringify(pins(goMod))}>
 	<div data-read>
 		<Code code={src} lang="go" title={title} meta={meta} />
 	</div>
@@ -53,11 +44,10 @@ const meta = compact
 	>
 	<p class="hint" id={hintId}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
 	<div class="actions">
-		{compact && <button type="button" data-code class="pbtn">Code</button>}
 		<button type="button" data-run class="pbtn pbtn--primary">Run</button>
-		<button type="button" data-edit class="pbtn pbtn--paper" hidden={compact}>Edit</button>
+		<button type="button" data-edit class="pbtn pbtn--paper">Edit</button>
 		<button type="button" data-reset hidden class="pbtn pbtn--paper">Reset</button>
-		<button type="button" data-open class="pbtn pbtn--paper" hidden={compact}>Open in Go Playground</button>
+		<button type="button" data-open class="pbtn pbtn--paper">Open in Go Playground</button>
 	</div>
 	<pre data-output aria-live="polite"></pre>
 </go-play>
@@ -94,11 +84,6 @@ const meta = compact
 			this.editBtn.addEventListener('click', () => this.edit());
 			this.resetBtn.addEventListener('click', () => this.reset());
 			this.querySelector('[data-open]')!.addEventListener('click', () => this.open());
-			// Compact, the output covers the code; Code clears it to show the code again.
-			this.querySelector('[data-code]')?.addEventListener('click', () => {
-				this.out.replaceChildren();
-				this.runBtn.focus();
-			});
 			this.editor.addEventListener('keydown', (e) => this.onKey(e));
 		}
 
@@ -147,8 +132,6 @@ const meta = compact
 			span.className = kind;
 			span.textContent = text;
 			this.out.append(span);
-			// Where the output box is short (compact), keep its newest line in view.
-			this.out.scrollTop = this.out.scrollHeight;
 		}
 
 		async run() {
@@ -300,47 +283,6 @@ const meta = compact
 		margin: 0;
 		padding: 0;
 		border: 0;
-	}
-
-	/* Compact: Run sits in the code's title bar, and the output covers the code below it, the same size, so nothing
-	   around it moves. Code shows only once there is output to leave. */
-	go-play[data-compact] {
-		position: relative;
-	}
-
-	go-play[data-compact] .actions {
-		position: absolute;
-		top: 0;
-		right: 0;
-		margin: 0;
-		padding: 3px;
-		z-index: 2;
-		gap: 4px;
-	}
-
-	go-play[data-compact] .pbtn {
-		min-height: 0;
-		padding: 4px 12px;
-		font-size: 0.75rem;
-	}
-
-	go-play[data-compact]:has(pre:empty) [data-code] {
-		display: none;
-	}
-
-	go-play[data-compact] pre:not(:empty) {
-		position: absolute;
-		inset: var(--go-play-bar, 2rem) 0 0;
-		margin: 0;
-		border-radius: 0 0 0.5rem 0.5rem;
-		background: var(--panel);
-		color: var(--panel-ink);
-		overflow-y: auto;
-		z-index: 1;
-	}
-
-	go-play[data-compact] pre :global(.system) {
-		color: var(--panel-ink-2);
 	}
 
 	/* Output lines are created at runtime, so they carry no scope attribute. */

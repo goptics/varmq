@@ -19,7 +19,7 @@ describe('chapters', () => {
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
 		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 25);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 26);
 	});
 	// The site plays a step per scroll rather than the loop, so the loop may run long enough to show every strategy.
 	it('run about 100 seconds', () => {
@@ -230,7 +230,7 @@ describe('chapter rules', () => {
 		// One wake, to C, which takes both at once.
 		const after = ev.slice(index('requeue'));
 		assert.deepEqual(after.filter(e => e.type === 'notify').map(e => e.consumer), ['c']);
-		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[6920, 'r0', 'c'], [6920, 'r1', 'c']]);
+		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[7320, 'r0', 'c'], [7320, 'r1', 'c']]);
 	});
 	it('run each store worker as a pool, ending every chapter with one idle goroutine', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
@@ -253,9 +253,9 @@ describe('chapter rules', () => {
 			'2420 spawn b 1', '2520 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
 			'4000 exit b 0', '4000 exit b 1', // program B dies with both
 			'5370 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
-			'6920 spawn c 0', // woken for B's jobs, C pulls both
+			'7320 spawn c 0', // woken for B's jobs, C pulls both
 			'9000 spawn b 0', // B restarts with one
-			'9970 exit c 1',
+			'10370 exit c 1',
 		]);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
 		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);

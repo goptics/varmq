@@ -339,16 +339,17 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
 	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
 	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take. The first
-	// caption ends as Redis has drawn in, and the last starts as C takes B's jobs, so the wake ends the one before.
+	// caption ends as Redis has drawn in, and the one before the last ends on B's jobs back in the queue: the wake
+	// comes 400 ms later, with the last.
 	(carry) => ({
 		title: 'Redis',
-		duration: 11100,
+		duration: 11500,
 		captions: [
 			{ at: 300, until: 1150, text: 'Redis holds *one queue* for many programs' },
 			{ at: 1300, until: 3300, text: 'Program A adds. Redis *notifies* workers' },
 			{ at: 3800, until: 5400, text: 'Program B !dies! mid-job' },
-			{ at: 5900, until: 6820, text: 'Its jobs go *back*, and Redis wakes C' },
-			{ at: 6921, until: 10500, text: 'C runs them. Nothing is *lost*' },
+			{ at: 5900, until: 6800, text: 'Its jobs go *back* to the front' },
+			{ at: 6900, until: 10800, text: 'Redis wakes C, which runs them. Nothing is *lost*' },
 		],
 		parts: [
 			redis(carry, {
@@ -363,7 +364,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					['r2', 1500, 1400],
 					['r3', 1600, 1000],
 				]),
-				crash: { consumer: 'b', at: 4000, backAfter: 2500, restartAt: 9000, rework: { r0: 1600, r1: 1300 } },
+				crash: { consumer: 'b', at: 4000, backAfter: 2500, wakeAfter: 400, restartAt: 9000, rework: { r0: 1600, r1: 1300 } },
 			}),
 		],
 	}),
@@ -371,14 +372,15 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 9. Pause while two jobs run: they finish, and the two added meanwhile wait. Resume once nothing runs (a
 	// pausing worker refuses it), and they start. A third is added while they run, and Stop comes as it is due: the
 	// two running finish and every goroutine goes, and the third waits with the two added while the worker is
-	// stopped. Restart starts it again with one idle goroutine, and the three run.
+	// stopped. Restart starts it again with one idle goroutine, and the three run. Each press starts its caption.
 	(carry) => ({
 		title: 'Control',
-		duration: 12000,
+		duration: 11600,
 		captions: [
-			{ at: 300, until: 5900, text: '*Pause* and *resume* while it runs' },
-			{ at: 6400, until: 7800, text: '*Stop()* lets running jobs finish' },
-			{ at: 8300, until: 11200, text: '*Restart()* runs the jobs that waited' },
+			{ at: 2300, until: 3500, text: '*Pause()*: running jobs finish, new ones wait' },
+			{ at: 4000, until: 5600, text: '*Resume()* starts the jobs that waited' },
+			{ at: 6100, until: 7400, text: '*Stop()* lets running jobs finish' },
+			{ at: 7900, until: 10800, text: '*Restart()* runs the jobs that waited' },
 		],
 		parts: [
 			pool(carry, 'core', {
@@ -386,19 +388,19 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				sources: BOUND,
 				strategy: 'roundrobin',
 				controls: [
-					{ at: 2900, op: 'pause' },
-					{ at: 4400, op: 'resume' },
-					{ at: 6500, op: 'stop' },
-					{ at: 8300, op: 'restart' },
+					{ at: 2300, op: 'pause' },
+					{ at: 4000, op: 'resume' },
+					{ at: 6100, op: 'stop' },
+					{ at: 7900, op: 'restart' },
 				],
 				jobs: queued(QUEUE.id, [
-					['k0', 1900, 1700],
-					['k1', 2100, 1300],
-					['k2', 3100, 2400],
-					['k3', 3300, 2200],
-					['k4', 6200, 2000],
-					['k5', 7100, 1600],
-					['k6', 7300, 1500],
+					['k0', 1300, 1300],
+					['k1', 1500, 1000],
+					['k2', 2500, 2400],
+					['k3', 2700, 2200],
+					['k4', 5800, 2000],
+					['k5', 6700, 1600],
+					['k6', 6900, 1500],
 				]),
 			}),
 		],

@@ -238,31 +238,6 @@
 	margin-top: 32px;
 }
 
-/* The program the install gets, in the same panel under the command: a hairline apart, without a frame of its own, a
-   little tighter than an article's code, with Run in its title bar, and only its loop open (GoPlay compact). */
-.st-intro .install {
-	width: min(100%, 34rem);
-}
-
-.st-intro .install go-play[data-compact] {
-	margin: 0;
-	border-top: 1px solid var(--panel-rule);
-}
-
-.st-intro go-play .expressive-code {
-	margin: 0;
-}
-
-.st-intro go-play .expressive-code :is(.frame, pre, .title) {
-	border: 0;
-	border-radius: 0;
-	box-shadow: none;
-}
-
-.st-intro go-play .ec-line {
-	line-height: 1.5;
-}
-
 .st-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -698,24 +673,6 @@
 	}
 
 	.st-hint {
-		display: none;
-	}
-}
-
-/* The intro with its program: below 42rem the hint goes and the install moves up, below 37.5rem the program goes
-   (the phone's 22rem included), where the Quick start further down the page has it. */
-@container (max-height: 42rem) {
-	.st-hint {
-		display: none;
-	}
-
-	.st-intro .install {
-		margin-top: 20px;
-	}
-}
-
-@container (max-height: 37.5rem) {
-	.st-intro go-play[data-compact] {
 		display: none;
 	}
 }

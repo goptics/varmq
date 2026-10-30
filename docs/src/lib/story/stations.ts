@@ -174,11 +174,7 @@ worker.Resume()
 worker.Stop()
 // the waiting jobs run
 worker.Restart()`,
-		lines: [
-			[1, 2],
-			[4, 5],
-			[6, 7],
-		],
+		lines: [[1], [2], [4, 5], [6, 7]],
 		source: { label: 'lifecycle-restart', href: `${EXAMPLES}/lifecycle-restart` },
 	},
 	{
