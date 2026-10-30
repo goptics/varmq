@@ -130,7 +130,8 @@ function gridDefs(svg: SVGSVGElement): SVGPatternElement {
 	const defs = add(svg, 'defs');
 	const dots = add(defs, 'pattern', { id: 'vm-dots', width: 14, height: 14, patternUnits: 'userSpaceOnUse' });
 	add(dots, 'circle', { class: 'vm-dot', cx: 1, cy: 1, r: 0.8 });
-	// Full in the middle of the square and gone at its edges, so no edge shows against the page.
+	// Full in the middle of the square and gone at its edges, so no edge shows against the page. A luminance mask: its
+	// white only means opaque, so it is no colour of the theme's.
 	const fade = add(defs, 'radialGradient', {
 		id: 'vm-fade',
 		cx: VIEW.w / 2,
