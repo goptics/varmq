@@ -32,6 +32,15 @@
 	white-space: nowrap;
 }
 
+.ljob--b {
+	background: var(--cobalt);
+}
+
+.ljob--c {
+	background: var(--panel-ink);
+	color: var(--panel);
+}
+
 .ljob--done {
 	background: transparent;
 	color: var(--panel-ink-2);
@@ -477,6 +486,49 @@
 	.bp__track {
 		grid-column: 1 / -1;
 		grid-row: 2;
+	}
+}
+
+/* ---- Queues and a worker ---- */
+
+.bq__cols {
+	display: grid;
+	grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.8fr);
+	gap: 16px;
+}
+
+.bq__queues {
+	display: grid;
+	gap: 8px;
+}
+
+.bq__q {
+	display: grid;
+	gap: 6px;
+}
+
+.bq__name {
+	color: var(--panel-ink-2);
+	font-size: 0.6875rem;
+}
+
+.bq__name b {
+	margin-right: 4px;
+	font-weight: 600;
+	color: var(--panel-ink);
+}
+
+.learn .sframe__note a {
+	color: var(--panel-accent);
+}
+
+@container sframe (max-width: 520px) {
+	.bq__cols {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+
+	.bq__cols > :first-child {
+		grid-column: 1 / -1;
 	}
 }
 
