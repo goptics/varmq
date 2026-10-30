@@ -465,34 +465,6 @@
 	text-wrap: pretty;
 }
 
-.ga-log {
-	display: grid;
-	gap: 4px;
-}
-
-.ga-log li {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 4px 12px;
-	padding: 6px 8px;
-	border-radius: 4px;
-	background: var(--panel-fill);
-	overflow-wrap: anywhere;
-}
-
-.ga-log li > span:last-child {
-	color: var(--panel-accent);
-	text-align: right;
-}
-
-.ga-log li[data-tone='bad'] > span:last-child {
-	color: var(--danger);
-}
-
-.ga-log li[data-tone='warn'] > span:last-child {
-	color: var(--amber);
-}
-
 /* ---- Go code inside a scene: one line at a time can light up ---- */
 
 .ga-code {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { IdQueue, MAX_BATCH, Topic, nextRanked, pick, type Source, type StrategyName } from './model.ts';
+import { MAX_BATCH, Topic, nextRanked, pick, type Source, type StrategyName } from './model.ts';
 
 // The queues of the strategies page: alerts (rank 1), reports (rank 2), emails (no rank).
 function order(strategy: StrategyName, lens: [number, number, number]): string[] {
@@ -47,77 +47,6 @@ describe('priority queue', () => {
 			jobs.splice(jobs.indexOf(j), 1);
 		}
 		assert.deepEqual(out, ['alert', 'report', 'digest']);
-	});
-});
-
-describe('job IDs', () => {
-	it('refuses a second given ID while the first job is in the queue', () => {
-		const q = new IdQueue();
-		assert.equal(q.add('Add', 'refresh').ok, true);
-		assert.equal(q.add('Add', 'refresh').ok, false);
-	});
-	it('does not collide an AddAll item with an Add of the same ID', () => {
-		const q = new IdQueue();
-		q.add('Add', 'refresh');
-		const r = q.add('AddAll', 'refresh');
-		assert.equal(r.ok, true);
-		assert.equal(r.id, 'g:refresh');
-	});
-	it('frees the ID when a worker takes the job', () => {
-		const q = new IdQueue();
-		q.add('Add', 'refresh');
-		q.takeBatch();
-		assert.equal(q.add('Add', 'refresh').ok, true);
-	});
-	it('takes every waiting job into one batch and frees all their IDs', () => {
-		const q = new IdQueue();
-		q.add('Add', 'refresh');
-		q.add('Add', 'sync');
-		assert.deepEqual(
-			q.takeBatch().map((j) => j.id),
-			['refresh', 'sync'],
-		);
-		assert.equal(q.held.size, 0);
-		assert.equal(q.add('Add', 'sync').ok, true);
-	});
-	it('takes at most 32 jobs in one batch', () => {
-		const q = new IdQueue();
-		for (let i = 0; i < 40; i++) q.add('Add', '');
-		assert.equal(q.takeBatch().length, MAX_BATCH);
-		assert.equal(q.queue.length, 40 - MAX_BATCH);
-	});
-	it('frees every ID on Purge', () => {
-		const q = new IdQueue();
-		q.add('Add', 'a');
-		q.add('Add', 'b');
-		assert.equal(q.purge().length, 2);
-		assert.equal(q.held.size, 0);
-	});
-	it('stores two jobs without an ID', () => {
-		const q = new IdQueue();
-		assert.equal(q.add('Add', '').ok, true);
-		assert.equal(q.add('Add', '').ok, true);
-	});
-	it('does not check a generated ID', () => {
-		const q = new IdQueue();
-		q.generator = true;
-		assert.equal(q.add('Add', '').id, 'auto-1');
-		assert.equal(q.add('Add', '').id, 'auto-2');
-	});
-	it('throws away the generated value when WithJobId is given, and prefixes a generated AddAll ID', () => {
-		// The generator page: auto-1 for the plain Add, auto-2 thrown away by WithJobId, g:a, g:auto-3.
-		const q = new IdQueue();
-		q.generator = true;
-		assert.equal(q.add('Add', '').id, 'auto-1');
-		const second = q.add('Add', 'invoice');
-		assert.equal(second.id, 'invoice');
-		assert.equal(second.discarded, 'auto-2');
-		assert.equal(q.add('AddAll', 'a').id, 'g:a');
-		assert.equal(q.add('AddAll', '').id, 'g:auto-3');
-	});
-	it('gives an AddAll item without an ID and without a generator no ID', () => {
-		const q = new IdQueue();
-		assert.equal(q.add('AddAll', '').id, '');
 	});
 });
 
