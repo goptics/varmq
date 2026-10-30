@@ -897,8 +897,9 @@
 	}
 }
 
-/* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. They start under
-   the header, one every 48px, each in the middle of its rail. Each hole is punched: a little darker than the paper,
+/* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. The rails run the
+   window's full height, over the header too, one hole every 48px, each in the middle of its rail; the header's own
+   padding clears them. Each hole is punched: a little darker than the paper,
    with a thin green rim. The holes move with the scroll, as paper feeding through: the left rail's go down and the right
    rail's go up, by as much as the page moved, and one glow runs down both rails from the top of the page to the bottom.
    Hero.astro eases --y (the distance) and --p (how far down the page, 0 to 1) toward the scroll position each frame,
@@ -919,18 +920,29 @@
 		--pitch: 48px;
 		display: block;
 		position: fixed;
-		top: var(--sl-nav-height, 64px);
+		top: 0;
 		bottom: 0;
 		width: 36px;
 		margin: 0; /* the content stack's margin between siblings would push the right rail down */
-		z-index: 1;
+		z-index: calc(var(--sl-z-index-navbar, 10) + 1);
 		pointer-events: none;
 		background: radial-gradient(circle at 50% 50%, var(--hole) 0 4.5px, var(--rim) 5px 5.75px, transparent 6.25px) 0 var(--y, 0)
 			/ 100% var(--pitch) repeat-y;
+		background-color: var(--paper);
 	}
 
 	:root[data-theme='dark'] .roll {
 		--hole: color-mix(in srgb, black 45%, var(--paper));
+	}
+
+	:root:has(.st) .page > header.header {
+		padding-inline: 52px;
+	}
+
+	/* Starlight isolates the main pane, which would keep the rails under the header whatever their z-index. The home
+	   page has no sidebar for that isolation to protect. */
+	:root:has(.st) .main-pane {
+		isolation: auto;
 	}
 
 	.roll--l {
