@@ -96,13 +96,15 @@ describe('chapter rules', () => {
 		const ids = CHAPTERS.flatMap(c => [...c.parts.flatMap(p => p.plan.jobs.map(j => j.id)), ...(c.published ?? []).map(v => v.id)]);
 		assert.equal(new Set(ids).size, ids.length);
 	});
-	it('show one caption at a time, each for at least 1.4 s and 500 ms after the last, gone before the chapter ends', () => {
-		// A caption starts to leave at `until`, and leaving takes 300 ms and 30 ms more per word.
+	it('show one caption at a time, each risen in full before it leaves, gone before the chapter ends', () => {
+		// Words rise 55 ms apart, each over 520 ms, and a caption starts to leave at `until`, which takes 300 ms and 30 ms
+		// more per word. The story page lists the captions beside the map and hides the map's own, so a caption may be
+		// short, as long as what it is about, and the next may come before it has left.
 		for (const c of CHAPTERS) c.captions.forEach((cap, i) => {
 			const words = plain(cap.text).split(' ').length;
-			assert.ok(cap.at >= 0 && cap.until - cap.at >= 1400, `chapter ${c.n}: ${cap.text}`);
+			assert.ok(cap.at >= 0 && cap.at + 55 * (words - 1) + 520 <= cap.until, `chapter ${c.n}: ${cap.text}`);
 			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
-			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
+			if (i > 0) assert.ok(c.captions[i - 1].until <= cap.at, `chapter ${c.n}: ${cap.text}`);
 			for (const mark of ['*', '!', '#']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
 			// A swap waits for every word to have risen, and its roll (420 ms) is over before the line leaves.
 			if (cap.swap) {
@@ -220,7 +222,7 @@ describe('chapter rules', () => {
 	});
 	it('chapter 8 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {
 		const ev = part(8, 'redis').events, index = type => ev.findIndex(e => e.type === type);
-		assert.deepEqual(ev[index('crash')], { at: 4900, type: 'crash', consumer: 'b' });
+		assert.deepEqual(ev[index('crash')], { at: 4000, type: 'crash', consumer: 'b' });
 		// B's two jobs and C's two are in flight when B dies, and C finishes its own before B's come back.
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['r0', 'r1', 'r2', 'r3']);
 		assert.ok(ev.filter(e => e.type === 'ack' && ['r2', 'r3'].includes(e.job)).every(e => e.at < ev[index('requeue')].at));
@@ -228,7 +230,7 @@ describe('chapter rules', () => {
 		// One wake, to C, which takes both at once.
 		const after = ev.slice(index('requeue'));
 		assert.deepEqual(after.filter(e => e.type === 'notify').map(e => e.consumer), ['c']);
-		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[7820, 'r0', 'c'], [7820, 'r1', 'c']]);
+		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[6920, 'r0', 'c'], [6920, 'r1', 'c']]);
 	});
 	it('run each store worker as a pool, ending every chapter with one idle goroutine', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
@@ -241,19 +243,19 @@ describe('chapter rules', () => {
 		const changes = (n, kind) => part(n, kind).events.filter(e => e.type === 'spawn' || e.type === 'exit')
 			.map(e => `${e.at} ${e.type} ${e.consumer} ${e.ring}`);
 		assert.deepEqual(changes(7, 'sqlite'), [
-			'4200 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
-			'7700 exit sqlite 0', '7700 exit sqlite 1', // the program dies with both
-			'10300 spawn sqlite 0', // and restarts with one
-			'11200 spawn sqlite 1', // the requeue's claim takes two again
-			'16200 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
+			'3300 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
+			'6800 exit sqlite 0', '6800 exit sqlite 1', // the program dies with both
+			'9400 spawn sqlite 0', // and restarts with one
+			'10900 spawn sqlite 1', // the claim after the requeue takes two again
+			'15900 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
 		]);
 		assert.deepEqual(changes(8, 'redis'), [
-			'3320 spawn b 1', '3420 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
-			'4900 exit b 0', '4900 exit b 1', // program B dies with both
-			'6270 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
-			'7820 spawn c 0', // woken for B's jobs, C pulls both
-			'9900 spawn b 0', // B restarts with one
-			'10870 exit c 1',
+			'2420 spawn b 1', '2520 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
+			'4000 exit b 0', '4000 exit b 1', // program B dies with both
+			'5370 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
+			'6920 spawn c 0', // woken for B's jobs, C pulls both
+			'9000 spawn b 0', // B restarts with one
+			'9970 exit c 1',
 		]);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
 		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);

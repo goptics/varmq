@@ -302,32 +302,34 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
 	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
-	// down 2600 ms, its box red and its card empty.
+	// down 2600 ms, its box red and its card empty. The first caption ends as the store has drawn in (the camera
+	// lands at 1200), and the rerun waits for the last caption, so the one before it ends on the jobs in the queue.
 	(carry) => ({
 		title: 'SQLite',
-		duration: 17200,
+		duration: 16900,
 		captions: [
-			{ at: 300, until: 1700, text: 'SQLite keeps the *queue* in a file' },
-			{ at: 2200, until: 3700, text: '*Add()* writes each job to jobs.db' },
-			{ at: 4200, until: 7200, text: 'Taken jobs stay *in flight* until acked' },
-			{ at: 7700, until: 9100, text: 'The program !dies! mid-job' },
-			{ at: 10200, until: 11700, text: 'On restart they go *back* to the queue' },
-			{ at: 12200, until: 16500, text: 'and run again. Nothing is *lost*' },
+			{ at: 300, until: 1150, text: 'SQLite keeps the *queue* in a file' },
+			{ at: 1300, until: 2800, text: '*Add()* writes each job to jobs.db' },
+			{ at: 3300, until: 6300, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 6800, until: 8200, text: 'The program !dies! mid-job' },
+			{ at: 9300, until: 10400, text: 'On restart they go *back* to the queue' },
+			{ at: 10900, until: 16200, text: 'and run again. Nothing is *lost*' },
 		],
 		parts: [
 			sqlite(carry, {
 				...SQLITE_TRAVEL,
 				limit: 2,
 				jobs: stored([
-					['s0', 2800, 4200],
-					['s1', 3000, 800],
-					['s2', 3200, 3000],
-					['s3', 3400, 1000],
+					['s0', 1900, 4200],
+					['s1', 2100, 800],
+					['s2', 2300, 3000],
+					['s3', 2500, 1000],
 				]),
-				firstClaim: 4200,
-				crashAt: 7700,
-				restartAt: 10300,
+				firstClaim: 3300,
+				crashAt: 6800,
+				restartAt: 9400,
 				requeueAfter: 900,
+				rerunAfter: 600, // the jobs wait in the queue for the last caption, which takes them
 				rework: { s0: 1600, s2: 1000 }, // s3 never ran, so it takes its work
 			}),
 		],
@@ -336,16 +338,17 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 8. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
 	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
 	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
-	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take.
+	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take. The first
+	// caption ends as Redis has drawn in, and the last starts as C takes B's jobs, so the wake ends the one before.
 	(carry) => ({
 		title: 'Redis',
-		duration: 12000,
+		duration: 11100,
 		captions: [
-			{ at: 300, until: 1700, text: 'Redis holds *one queue* for many programs' },
-			{ at: 2200, until: 4200, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 4700, until: 6300, text: 'Program B !dies! mid-job' },
-			{ at: 6800, until: 8300, text: 'Its jobs go *back*, and Redis wakes C' },
-			{ at: 8800, until: 11400, text: 'C runs them. Nothing is *lost*' },
+			{ at: 300, until: 1150, text: 'Redis holds *one queue* for many programs' },
+			{ at: 1300, until: 3300, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 3800, until: 5400, text: 'Program B !dies! mid-job' },
+			{ at: 5900, until: 6820, text: 'Its jobs go *back*, and Redis wakes C' },
+			{ at: 6921, until: 10500, text: 'C runs them. Nothing is *lost*' },
 		],
 		parts: [
 			redis(carry, {
@@ -355,12 +358,12 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					{ id: 'c', limit: 2 },
 				],
 				jobs: stored([
-					['r0', 2200, 2200],
-					['r1', 2300, 1900],
-					['r2', 2400, 1400],
-					['r3', 2500, 1000],
+					['r0', 1300, 2200],
+					['r1', 1400, 1900],
+					['r2', 1500, 1400],
+					['r3', 1600, 1000],
 				]),
-				crash: { consumer: 'b', at: 4900, backAfter: 2500, restartAt: 9900, rework: { r0: 1600, r1: 1300 } },
+				crash: { consumer: 'b', at: 4000, backAfter: 2500, restartAt: 9000, rework: { r0: 1600, r1: 1300 } },
 			}),
 		],
 	}),

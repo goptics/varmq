@@ -162,10 +162,10 @@ function showIntro() {
 }
 
 /**
- * Shows step k from its start, every ring empty: its text, its code, and its chapter playing on the map up to the end
- * of caption c, or that frame under reduced motion.
+ * Shows step k: its text, its code, and its chapter playing on the map from its start, every ring empty, up to the end
+ * of caption c. Still, or under reduced motion, it shows that frame at once, as a step back up from the next one does.
  */
-function show(k: number, c: number) {
+function show(k: number, c: number, still = false) {
 	step = k;
 	caption = -1;
 	limit = c;
@@ -178,12 +178,13 @@ function show(k: number, c: number) {
 	notes.innerHTML = s.notes.map((note, i) => `<li><button type="button" data-i="${i}">${POINT}${note}</button></li>`).join('');
 	source.textContent = s.source.label;
 	source.href = s.source.href;
-	for (const code of codes) morph(code, s.code[0]);
-	setCaption(0);
+	const first = still ? c : 0;
+	for (const code of codes) morph(code, s.code[first]);
+	setCaption(first);
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
-	if (reduce.matches) map.seek(s.from + until(s, c));
+	if (still || reduce.matches) map.seek(s.from + until(s, c));
 	else map.play(s.from, until(s, c), k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
 }
 
@@ -239,14 +240,16 @@ const tick = () => {
 	snapping();
 	const k = nearest();
 	if (k !== at) {
-		// The next or the previous caption of the same step moves to it; any other change plays the new step from its start.
+		// The next or the previous caption of the same step moves to it. A step reached going down plays from its start;
+		// going up, it shows where it stops, still.
 		const was = STOPS[at - 1];
 		const stop = STOPS[k - 1];
+		const up = k < at;
 		at = k;
 		if (!stop) showIntro();
 		else if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
-		} else show(stop.step, stop.caption);
+		} else show(stop.step, stop.caption, up);
 	}
 	// Out of view below the story, the last step's loop rests on its end; back in view, the step plays from its start.
 	if (away !== position() >= COUNT) {

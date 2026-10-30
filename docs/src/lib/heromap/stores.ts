@@ -47,7 +47,8 @@ export interface SqlitePlan {
 	// add, claim, ack, with no crash, restart or requeue. With only some of them, simulateSqlite throws.
 	crashAt?: number;
 	restartAt?: number;
-	requeueAfter?: number; // ms from the restart to the queue being opened: the requeue, and a claim at once
+	requeueAfter?: number; // ms from the restart to the queue being opened: the requeue
+	rerunAfter?: number; // ms from the requeue to the claim that takes the jobs back: 0, at once, if not given
 	// The work of a run after the restart. A job with no entry takes its `work` again.
 	rework?: Record<string, number>;
 	takeTravel: number;
@@ -320,7 +321,7 @@ export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 				emit({ at, type: 'requeue', jobs });
 				open = true;
 				restarted = true;
-				wake(at);
+				wake(at + (plan.rerunAfter ?? 0));
 			});
 		});
 	}
