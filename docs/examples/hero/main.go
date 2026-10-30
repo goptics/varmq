@@ -12,10 +12,10 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 		fmt.Println("done job", j.Data())
 	}, 2) // two jobs at a time
+	defer worker.WaitUntilIdle()
 	queue := worker.BindQueue()
 
 	for i := range 10 {
 		queue.Add(i)
 	}
-	worker.WaitUntilIdle()
 }

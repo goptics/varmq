@@ -20,8 +20,7 @@ const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
 			<div class="st-intro">
 				<h1 id="_top" data-page-title>{title}</h1>
 				{tagline && <p class="st-lede" set:html={tagline} />}
-				<Install id="home" />
-				<GoPlay example="hero" title="main.go" compact />
+				<Install id="home"><GoPlay example="hero" title="main.go" compact /></Install>
 				<div class="st-actions">
 					<a class="btn btn--primary" href="/start/quick-start/">Get started</a>
 					<a class="btn btn--ghost" href="https://github.com/goptics/varmq">GitHub</a>

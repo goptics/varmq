@@ -197,7 +197,8 @@ function move(c: number, back: boolean) {
 	const left = until(s, c) - into(s, map.now());
 	if (reduce.matches) map.seek(s.from + until(s, c));
 	else if (back && left > 0) map.play(map.now(), left);
-	else if (back) map.rewind(s.from + until(s, c), until(s, c + 1) - until(s, c));
+	// From wherever it is in the step: a rewind still on its way back from the caption below goes on from there.
+	else if (back) map.rewind(s.from + until(s, c), s.ms);
 	else map.play(s.from + s.captions[c], until(s, c) - s.captions[c]);
 }
 
@@ -206,7 +207,8 @@ notes.addEventListener('click', (e) => {
 	const i = Number((e.target as Element).closest('button')?.dataset.i);
 	if (step < 0 || Number.isNaN(i)) return;
 	const k = STOPS.findIndex((stop) => stop.step === step && stop.caption === i) + 1;
-	if (k === at) move(i, false);
+	// The last step's one caption plays its loop again, as show() starts it.
+	if (k === at) step === STEPS.length - 1 ? show(step, i) : move(i, false);
 	else go(k);
 });
 

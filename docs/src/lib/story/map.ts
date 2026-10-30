@@ -20,25 +20,29 @@ export interface MapHandle {
 	 */
 	play(from: number, ms: number, loop?: Loop): void;
 	/**
-	 * Plays the loop backward at its own pace, from where the map is to `to`, over `most` ms at most: from further on,
-	 * it starts `most` ms past `to`. Then it holds at `to`, and calls `then`.
+	 * Plays the loop backward from where the map is to `to`, over `most` ms of it at most: from further on, it starts
+	 * `most` ms past `to`. It takes REWIND ms at most, faster than the loop's own pace if need be. Then it holds at `to`.
 	 */
-	rewind(to: number, most: number, then?: () => void): void;
+	rewind(to: number, most: number): void;
 	/** The loop's time the map shows. */
 	now(): number;
 }
 
 const wrap = (t: number) => ((t % TOTAL) + TOTAL) % TOTAL;
+/** The longest a rewind takes, in ms: long enough to see what goes back, short enough to keep up with a scroll. */
+const REWIND = 1000;
 
 /**
  * Shows a timeline at times after `end` in any order, as a full seek would, but cheaply. A full seek redraws the loop
  * from 0, which takes up to 20 ms late in it, and anime.js going backward by itself keeps stale values over this
  * score's tweens (score.ts). So it seeks to `end` once, in full; each time after that is anime.js's own seek forward
- * from `end`, which it renders right, once every attribute the time before changed under `host` is put back.
+ * from `end`, which it renders right, once every attribute the time before changed under `host` is put back, and
+ * `state`, an object the timeline tweens outside the page (the map's camera), is as it was at `end`.
  */
-export function after(tl: Timeline, host: Element, end: number) {
+export function after(tl: Timeline, host: Element, end: number, state: object = {}) {
 	const seek = Object.getPrototypeOf(tl).seek as Timeline['seek'];
 	tl.pause().seek(end);
+	const atEnd = { ...state };
 	const clean = new Map<Element, Map<string, string | null>>();
 	const watch = new MutationObserver(() => {});
 	watch.observe(host, { attributes: true, subtree: true, attributeOldValue: true });
@@ -61,6 +65,7 @@ export function after(tl: Timeline, host: Element, end: number) {
 				}
 			}
 			watch.takeRecords();
+			Object.assign(state, atEnd);
 			seek.call(tl, at);
 			note();
 		},
@@ -84,6 +89,7 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 	let frameId = 0;
 	let pending: (() => void) | undefined;
 	let frames: ReturnType<typeof after> | undefined;
+	let camera: object | undefined;
 
 	const cancel = () => {
 		cancelAnimationFrame(frameId);
@@ -142,28 +148,26 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		frameId = requestAnimationFrame(tick);
 	};
 
-	const rewind = (to: number, most: number, then?: () => void) => {
+	const rewind = (to: number, most: number) => {
 		cancel();
 		const tl = timeline;
 		if (!tl) {
 			t = wrap(to);
-			pending = () => {
-				seek(to);
-				then?.();
-			};
+			pending = () => seek(to);
 			return;
 		}
 		pending = undefined;
 		const ms = Math.min(wrap(t - to), most);
 		const end = wrap(to);
 		onTime(end);
-		const shown = (frames = after(tl, host, end));
+		const shown = (frames = after(tl, host, end, camera));
 		// The loop's end shows as its start does, so a rewind that starts there need not seek over it.
 		const at = (left: number) => (t = Math.min(end + Math.max(0, left), TOTAL - 0.001));
 		shown.show(at(ms));
 		const begun = performance.now();
+		const pace = Math.max(1, ms / REWIND);
 		const tick = () => {
-			const left = ms - (performance.now() - begun);
+			const left = ms - (performance.now() - begun) * pace;
 			shown.show(at(left));
 			if (left > 0) {
 				frameId = requestAnimationFrame(tick);
@@ -173,13 +177,14 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 			// The frame is exact already; a full seek leaves anime.js's own state, and the renderer's, exact too.
 			tl.seek(t);
 			onTime(t);
-			then?.();
 		};
 		frameId = requestAnimationFrame(tick);
 	};
 
-	import('../heromap/choreo.ts').then(({ buildTimeline }) => {
-		timeline = buildTimeline(nodes).pause();
+	import('../heromap/choreo.ts').then(({ Choreo, browserPage }) => {
+		const choreo = new Choreo(nodes, browserPage(nodes.world));
+		camera = choreo.cam;
+		timeline = choreo.build().pause();
 		timeline.seek(t);
 		pending?.();
 	});

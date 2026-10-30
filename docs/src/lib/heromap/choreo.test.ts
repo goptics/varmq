@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { CHAPTERS, TOTAL, chipKey } from './chapters.ts';
 import { Choreo, buildTimeline } from './choreo.ts';
 import { CONNS, PIECES, RINGS } from './scene.ts';
+import { STEPS, until } from '../story/steps.ts';
 
 // The page without a DOM. Each element is a plain object with a name and its parent, that hands back the same child
 // for the same selector, as the drawn map does, and the nodes refuse an id render.ts does not draw.
@@ -111,5 +112,29 @@ describe('choreography', () => {
 			}
 		}
 		assert.deepEqual([...seams], []);
+	});
+
+	it("holds each of the story's captions on a still frame", () => {
+		// The home page's story stops on each caption (story/steps.ts): there, what the caption is about has finished,
+		// and nothing of the next caption has begun. Only the progress arcs of jobs still running may be part way.
+		const timeline = buildTimeline(nodes, page);
+		const moving = [];
+		for (let child = timeline._head; child; child = child._next) {
+			for (let tween = child._head; tween; tween = tween._next) {
+				const name = tween.target?.name ?? 'camera';
+				if (name.startsWith('caption') || name.endsWith('progress')) continue;
+				// A tween's absolute start counts from the engine's clock when the timeline was built (timeline._offset).
+				const start = Math.round(tween._absoluteStartTime - timeline._offset);
+				moving.push({ name, prop: tween.property, start, end: start + tween._updateDuration });
+			}
+		}
+		const unfinished = STEPS.flatMap((step, k) =>
+			step.captions.map((_, c) => {
+				const hold = (((step.from + until(step, c)) % TOTAL) + TOTAL) % TOTAL;
+				const at = moving.filter(m => m.start < hold && hold < m.end && !m.name.includes('trail'));
+				return at.length ? `step ${k + 1} caption ${c + 1}: ${at.map(m => `${m.name} ${m.prop}`).join(', ')}` : '';
+			}),
+		);
+		assert.deepEqual(unfinished.filter(Boolean), []);
 	});
 });

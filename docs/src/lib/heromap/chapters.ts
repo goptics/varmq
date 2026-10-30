@@ -71,7 +71,7 @@ const REDIS_TRAVEL = { landAfter: 700, notifyTravel: 420, takeTravel: 720, ackTr
 // Chapters 4 and 5 need the whole burst in the lanes before the first dispatch: there the loop looks later.
 const LATE = { ...PACE, wake: 900 };
 // Chapter 5's four bursts must each land, run and finish before the next lands, so there it runs a little quicker.
-const VOLLEY = { ...PACE, wake: 700, gap: 250 };
+const VOLLEY = { ...PACE, wake: 400, gap: 200 };
 
 // The core's sources in bind order: the queue from chapter 1 (alerts), the priority queue from 4 (reports), a third
 // queue from 5 (emails) and the topic from 6. None is bound with a priority, so the worker holds them in that order. The
@@ -233,36 +233,37 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => {
 		const bursts: [Strategy, number, Record<string, number>][] = [
 			['priority', 300, { [QUEUE.id]: 2, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
-			['maxlen', 3700, { [QUEUE.id]: 1, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
-			['minlen', 7100, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
-			['roundrobin', 10500, { [QUEUE.id]: 2, [PRIO.id]: 2, [QUEUE_C.id]: 2 }],
+			['maxlen', 4650, { [QUEUE.id]: 1, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
+			['minlen', 9000, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
+			['roundrobin', 13350, { [QUEUE.id]: 2, [PRIO.id]: 2, [QUEUE_C.id]: 2 }],
 		];
-		// A burst's jobs land 100 ms apart, taking the three lanes in turn, all before the loop looks 700 ms on.
+		// A burst's jobs land 60 ms apart, taking the three lanes in turn, all before the loop looks 400 ms on. Each
+		// burst, the last check included, is done before the next caption, which comes 4350 ms after its own.
 		const jobs = bursts.flatMap(([, at, counts], b) => {
 			const left = { ...counts };
 			const order: string[] = [];
 			while (order.length < Object.values(counts).reduce((n, c) => n + c, 0)) {
 				for (const id of [QUEUE.id, PRIO.id, QUEUE_C.id]) if (left[id]-- > 0) order.push(id);
 			}
-			return order.map((source, k) => ({ id: `st${b}.${k}`, source, at: at + 1000 + 100 * k, work: [900, 1000, 950, 1050, 900, 1000][k] }));
+			return order.map((source, k) => ({ id: `st${b}.${k}`, source, at: at + 1000 + 60 * k, work: [650, 750, 700, 800, 650, 750][k] }));
 		});
 		return {
 			title: 'Many queues, one worker',
-			duration: 15800,
+			duration: 17900,
 			captions: [
-				{ at: 300, until: 3200, text: '*Priority*, the default, goes in bind order' },
-				{ at: 3700, until: 6600, text: '*MaxLen* takes from the longest queue' },
-				{ at: 7100, until: 10000, text: '*MinLen* takes from the shortest queue' },
-				{ at: 10500, until: 15000, text: '*RoundRobin* takes from each queue in turn' },
+				{ at: 300, until: 4150, text: '*Priority*, the default, goes in bind order' },
+				{ at: 4650, until: 8500, text: '*MaxLen* takes from the longest queue' },
+				{ at: 9000, until: 12850, text: '*MinLen* takes from the shortest queue' },
+				{ at: 13350, until: 17100, text: '*RoundRobin* takes from each queue in turn' },
 			],
 			// Each strategy's name takes the chip in turn. Priority pops in with the chip, and no later, so the chip's own
 			// RoundRobin never shows beneath it; each after it covers the one before and fades its name in. RoundRobin
 			// does too, and gives way to the chip's own, the same, as the chapter ends.
 			chips: [
-				{ id: 'strategy', label: 'Priority', at: 300, until: 4300 },
-				{ id: 'strategy', label: 'MaxLen', at: 3700, until: 7700, fade: true },
-				{ id: 'strategy', label: 'MinLen', at: 7100, until: 11100, fade: true },
-				{ id: 'strategy', label: 'RoundRobin', at: 10500, until: 15800, fade: true },
+				{ id: 'strategy', label: 'Priority', at: 300, until: 5250 },
+				{ id: 'strategy', label: 'MaxLen', at: 4650, until: 9600, fade: true },
+				{ id: 'strategy', label: 'MinLen', at: 9000, until: 13950, fade: true },
+				{ id: 'strategy', label: 'RoundRobin', at: 13350, until: 17900, fade: true },
 			],
 			parts: [
 				pool(carry, 'core', {
@@ -318,10 +319,10 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				...SQLITE_TRAVEL,
 				limit: 2,
 				jobs: stored([
-					['s0', 2400, 4200],
-					['s1', 2600, 800],
-					['s2', 2800, 3000],
-					['s3', 3000, 1000],
+					['s0', 2800, 4200],
+					['s1', 3000, 800],
+					['s2', 3200, 3000],
+					['s3', 3400, 1000],
 				]),
 				firstClaim: 4200,
 				crashAt: 7700,
@@ -335,15 +336,15 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 8. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
 	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
 	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
-	// about six seconds after the crash; here 2.7 s.) B comes back at the end, with nothing left to take.
+	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take.
 	(carry) => ({
 		title: 'Redis',
 		duration: 12000,
 		captions: [
 			{ at: 300, until: 1700, text: 'Redis holds *one queue* for many programs' },
-			{ at: 2200, until: 3800, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 4300, until: 5900, text: 'Program B !dies! mid-job' },
-			{ at: 6400, until: 8300, text: 'Its jobs go *back*, and Redis wakes C' },
+			{ at: 2200, until: 4200, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 4700, until: 6300, text: 'Program B !dies! mid-job' },
+			{ at: 6800, until: 8300, text: 'Its jobs go *back*, and Redis wakes C' },
 			{ at: 8800, until: 11400, text: 'C runs them. Nothing is *lost*' },
 		],
 		parts: [
@@ -354,27 +355,27 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					{ id: 'c', limit: 2 },
 				],
 				jobs: stored([
-					['r0', 1800, 2200],
-					['r1', 2000, 1900],
-					['r2', 2200, 2500],
-					['r3', 2400, 1900],
+					['r0', 2200, 2200],
+					['r1', 2300, 1900],
+					['r2', 2400, 1400],
+					['r3', 2500, 1000],
 				]),
-				crash: { consumer: 'b', at: 4600, backAfter: 2700, restartAt: 9800, rework: { r0: 1600, r1: 1300 } },
+				crash: { consumer: 'b', at: 4900, backAfter: 2500, restartAt: 9900, rework: { r0: 1600, r1: 1300 } },
 			}),
 		],
 	}),
 
-	// 9. Pause while two jobs run: they finish, and the jobs added meanwhile wait. Resume once nothing runs (a
-	// pausing worker refuses it), and they start. Stop as the third is due: the two running finish and every
-	// goroutine goes, and the third waits with the two added while the worker is stopped. Restart starts it again
-	// with one idle goroutine, and the three run.
+	// 9. Pause while two jobs run: they finish, and the two added meanwhile wait. Resume once nothing runs (a
+	// pausing worker refuses it), and they start. A third is added while they run, and Stop comes as it is due: the
+	// two running finish and every goroutine goes, and the third waits with the two added while the worker is
+	// stopped. Restart starts it again with one idle goroutine, and the three run.
 	(carry) => ({
 		title: 'Control',
 		duration: 12000,
 		captions: [
-			{ at: 300, until: 4700, text: '*Pause* and *resume* while it runs' },
-			{ at: 5200, until: 7600, text: '*Stop()* lets running jobs finish' },
-			{ at: 8100, until: 11200, text: '*Restart()* runs the jobs that waited' },
+			{ at: 300, until: 5900, text: '*Pause* and *resume* while it runs' },
+			{ at: 6400, until: 7800, text: '*Stop()* lets running jobs finish' },
+			{ at: 8300, until: 11200, text: '*Restart()* runs the jobs that waited' },
 		],
 		parts: [
 			pool(carry, 'core', {
@@ -384,7 +385,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				controls: [
 					{ at: 2900, op: 'pause' },
 					{ at: 4400, op: 'resume' },
-					{ at: 5400, op: 'stop' },
+					{ at: 6500, op: 'stop' },
 					{ at: 8300, op: 'restart' },
 				],
 				jobs: queued(QUEUE.id, [
@@ -392,9 +393,9 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					['k1', 2100, 1300],
 					['k2', 3100, 2400],
 					['k3', 3300, 2200],
-					['k4', 3500, 2000],
-					['k5', 6300, 1600],
-					['k6', 6500, 1500],
+					['k4', 6200, 2000],
+					['k5', 7100, 1600],
+					['k6', 7300, 1500],
 				]),
 			}),
 		],

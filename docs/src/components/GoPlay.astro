@@ -26,14 +26,19 @@ const hintId = `go-play-hint-${example}`;
 const lines = src.split('\n');
 let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
 if (lines[head] === 'func main() {') head++;
-const meta = head > 0 ? `collapse={1-${head}}` : '';
-// Compact, the block shows main's body alone, a tab less deep. Run still sends the full source.
-const shown = compact ? lines.slice(head, lines.lastIndexOf('}')).map((l) => l.replace(/^\t/, '')).join('\n') : src;
+// Compact, everything above main's first loop collapses: the program opens on the loop that adds its jobs. The
+// brace that closes main stays, rather than a bar for one line.
+const loop = lines.findIndex((l) => l.startsWith('\tfor '));
+const meta = compact
+	? `collapse={1-${loop}}`
+	: head > 0
+		? `collapse={1-${head}}`
+		: '';
 ---
 
 <go-play class="not-content" data-pins={JSON.stringify(pins(goMod))} data-compact={compact || undefined}>
 	<div data-read>
-		<Code code={shown} lang="go" title={title} meta={compact ? '' : meta} />
+		<Code code={src} lang="go" title={title} meta={meta} />
 	</div>
 	<textarea
 		data-editor
@@ -329,8 +334,13 @@ const shown = compact ? lines.slice(head, lines.lastIndexOf('}')).map((l) => l.r
 		margin: 0;
 		border-radius: 0 0 0.5rem 0.5rem;
 		background: var(--panel);
+		color: var(--panel-ink);
 		overflow-y: auto;
 		z-index: 1;
+	}
+
+	go-play[data-compact] pre :global(.system) {
+		color: var(--panel-ink-2);
 	}
 
 	/* Output lines are created at runtime, so they carry no scope attribute. */

@@ -427,7 +427,7 @@ export interface Page extends Stage {
  * The page in the browser: motion along hidden route paths in the world (anime.js measures their length, so they
  * are drawn, with neither fill nor stroke), anime.js's drawable outlines, and dots appended to the world.
  */
-function browserPage(world: SVGGElement): Page {
+export function browserPage(world: SVGGElement): Page {
 	const layer = document.createElementNS(NS, 'g');
 	layer.setAttribute('fill', 'none');
 	layer.setAttribute('stroke', 'none');

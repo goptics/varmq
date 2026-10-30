@@ -64,8 +64,11 @@ export const STEPS: Step[] = CHAPTERS.map((chapter, i) => {
 	};
 });
 
-/** Where a step's caption c stops, in ms from its start: where the next caption starts, or the step's end. */
-export const until = (s: Step, c: number) => s.captions[c + 1] ?? s.ms;
+/**
+ * Where a step's caption c stops, in ms from its start: the step's end, or a millisecond before the next caption
+ * starts, as the map puts in what that caption is about (chapter 5's next strategy name, say) right at its start.
+ */
+export const until = (s: Step, c: number) => (c + 1 < s.captions.length ? s.captions[c + 1] - 1 : s.ms);
 
 /** The story's scroll stops after the intro: one per caption, so each scroll plays the next caption of its step. */
 export const STOPS = STEPS.flatMap((s, step) => s.captions.map((_, caption) => ({ step, caption })));
