@@ -1,9 +1,13 @@
 ---
 title: VarMQ
-description: A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program
+description: Worker pools and job queues for Go that keep jobs in memory, or in Redis or SQLite so they survive a restart.
 head:
   - tag: title
     content: VarMQ | Worker pools and job queues for Go
+  - tag: meta
+    attrs:
+      property: og:title
+      content: VarMQ | Worker pools and job queues for Go
 template: splash
 editUrl: false
 lastUpdated: false
@@ -83,7 +87,7 @@ A worker runs its jobs the same way wherever the queue keeps them. Memory is bui
 
 ## Performance
 
-Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
+Measured on an i7-13700 (24 threads) on 2026-10-25. The [benchmarks](/reference/benchmarks/) page has every result, including the ones VarMQ loses. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
 
 The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
 
@@ -97,7 +101,8 @@ The [comparison](/reference/comparison/) lists features side by side with other 
 	</Card>
 	<Card title="59,898 jobs/s on Redis">
 		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. With 10
-		workers taking one job at a time, the median time from enqueue to handler is 0.058 ms.
+		workers taking one job at a time, the median time from enqueue to handler is 0.058 ms. With one
+		producer, Rmq leads: 35,708 jobs/s against 20,812.
 	</Card>
 	<Card title="14,725 jobs/s on SQLite">
 		With sqliteq, draining 20K jobs on WAL. goqite does 2,933 and River 3,230 on the same run.
