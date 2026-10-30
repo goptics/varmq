@@ -321,11 +321,7 @@
 	margin-top: 4px;
 }
 
-.st-notes li[data-on] {
-	color: var(--ink);
-}
-
-/* The caption playing now is in the theme's green, its marked words too, until it is done. */
+/* The caption playing now is in the theme's green, its marked words too. Once done it looks as the others do. */
 .st-notes li[data-on]:not([data-done]),
 .st-notes li[data-on]:not([data-done]) em {
 	color: var(--accent-text);
