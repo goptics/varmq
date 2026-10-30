@@ -29,6 +29,14 @@ export interface MapHandle {
 }
 
 const wrap = (t: number) => ((t % TOTAL) + TOTAL) % TOTAL;
+/** The longest the map's timeline builds for at a time, in ms, before it lets the page go on. */
+const BUILD = 8;
+/**
+ * Runs `then` once the page is idle, or after 50 ms at the latest; where there is no requestIdleCallback (Safari), in
+ * a task of its own.
+ */
+const later = (then: () => void) =>
+	typeof requestIdleCallback === 'function' ? requestIdleCallback(then, { timeout: 50 }) : setTimeout(then);
 /** The longest a rewind takes, in ms: long enough to see what goes back, short enough to keep up with a scroll. */
 const REWIND = 1000;
 
@@ -195,12 +203,29 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		frameId = requestAnimationFrame(tick);
 	};
 
+	// Building the timeline takes a few hundred ms on a slow phone, so it goes in steps: it lets the page scroll and draw
+	// once BUILD ms have passed, and again before its first seek and before what was asked of it meanwhile, each a full
+	// seek. The still frame stays until it is done.
 	import('../heromap/choreo.ts').then(({ Choreo, browserPage }) => {
 		const choreo = new Choreo(nodes, browserPage(nodes.world));
 		camera = choreo.cam;
-		timeline = choreo.build().pause();
-		timeline.seek(t);
-		pending?.();
+		const steps = choreo.building();
+		const next = () => {
+			const begun = performance.now();
+			let step = steps.next();
+			while (!step.done && performance.now() - begun < BUILD) step = steps.next();
+			if (!step.done) {
+				later(next);
+				return;
+			}
+			const built = step.value.pause();
+			later(() => {
+				timeline = built;
+				timeline.seek(t);
+				later(() => pending?.());
+			});
+		};
+		later(next);
 	});
 	return { seek, play, rewind, now: () => t };
 }

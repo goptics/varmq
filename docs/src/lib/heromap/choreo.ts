@@ -20,8 +20,10 @@ import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
 import {
 	Score,
+	along,
 	clamp01,
 	dist,
+	drain,
 	lengthOf,
 	pt,
 	solve,
@@ -422,27 +424,29 @@ export interface Page extends Stage {
 }
 
 /**
- * The page in the browser: motion along hidden route paths in the world (anime.js measures their length, so they
- * are drawn, with neither fill nor stroke), anime.js's drawable outlines, and dots appended to the world.
+ * The page in the browser: motion along a route worked out from its points (`along`, the point an SVG path's
+ * getPointAtLength gives, without asking the page for it), anime.js's drawable outlines, and dots appended to the
+ * world.
  */
 export function browserPage(world: SVGGElement): Page {
-	const layer = document.createElementNS(NS, 'g');
-	layer.setAttribute('fill', 'none');
-	layer.setAttribute('stroke', 'none');
-	world.append(layer);
-	const routes = new Map<string, SVGPathElement>();
 	return {
+		// anime.js tweens the distance along the route, from 0 to its length, and each frame turns it into x and y. Both
+		// read the same distance in a frame, so the point is worked out once for the two.
 		path(pts) {
-			const d = 'M' + pts.map((p) => `${+p.x.toFixed(3)} ${+p.y.toFixed(3)}`).join('L');
-			let path = routes.get(d);
-			if (!path) {
-				path = document.createElementNS(NS, 'path');
-				path.setAttribute('d', d);
-				layer.append(path);
-				routes.set(d, path);
-			}
-			const { translateX, translateY } = svg.createMotionPath(path)!;
-			return { translateX, translateY };
+			const length = lengthOf(pts);
+			let d = NaN;
+			let p = pts[0];
+			const point = (at: number) => {
+				if (at !== d) {
+					d = at;
+					p = along(pts, at);
+				}
+				return p;
+			};
+			return {
+				translateX: { from: 0, to: length, modifier: (at: number) => point(at).x },
+				translateY: { from: 0, to: length, modifier: (at: number) => point(at).y },
+			};
 		},
 		// anime.js draws an outline blank as it makes its stand-in, unless its pathLength is already anime's 1000:
 		// so set, building the timeline leaves the still frame whole.
@@ -619,10 +623,21 @@ export class Choreo {
 
 	/** The whole loop as one anime.js timeline, `TOTAL` long, looping, and paused until played. */
 	build(): Timeline {
+		return drain(this.building());
+	}
+
+	/**
+	 * `build` in steps, so a page can build it between frames: it stops after each chapter and as the score's timeline
+	 * is added (`Score.building`). The whole score is written before the first cue is added, as `build` does.
+	 */
+	*building(): Generator<void, Timeline> {
 		const at = starts();
-		for (const c of CHAPTERS) this.chapter(c, at[c.n - 1]);
+		for (const c of CHAPTERS) {
+			this.chapter(c, at[c.n - 1]);
+			yield;
+		}
 		this.wrap();
-		return this.score.build(() => this.nodes.setCamera(this.cam));
+		return yield* this.score.building(() => this.nodes.setCamera(this.cam));
 	}
 
 	/**
