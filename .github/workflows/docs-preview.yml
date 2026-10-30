@@ -85,10 +85,10 @@ jobs:
           if [[ $GITHUB_EVENT_NAME == workflow_run && $state == open ]]; then
             body="Docs preview: ${URL:?wrangler printed no deployment URL} (built from ${HEAD_SHA:0:7}). It updates with each push and is deleted when this pull request closes."
           else
-            res=$(curl -sS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/services/varmq-docs-pr-$PR?force=true")
-            # The codes wrangler reads as "no such Worker": this PR never had a preview.
-            jq -e '.success or any(.errors[]; .code == 10007 or .code == 10090)' <<<"$res" >/dev/null || { echo "$res" >&2; exit 1; }
+            code=$(curl -sS -o "$RUNNER_TEMP/delete.json" -w '%{http_code}' -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/varmq-docs-pr-$PR?force=true")
+            # A 2xx may have no body. 10007 and 10090 mean no such Worker: this PR never had a preview.
+            [[ $code == 2?? ]] || jq -e 'any(.errors[]; .code == 10007 or .code == 10090)' "$RUNNER_TEMP/delete.json" >/dev/null || { cat "$RUNNER_TEMP/delete.json" >&2; exit 1; }
             [[ -n $id ]] || exit 0
             body="Docs preview deleted, since this pull request is closed."
           fi
