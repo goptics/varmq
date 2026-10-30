@@ -272,6 +272,94 @@
 	}
 }
 
+/* ---- Skip: a fixed round button at the foot of the screen, on steps 1 to 9 (main.ts enables it). Its outline is ten
+   segments, one per step, that fill in --brand as the steps play. ---- */
+
+.st-skip {
+	position: fixed;
+	z-index: 5;
+	bottom: max(16px, env(safe-area-inset-bottom));
+	left: var(--skip-left, 50%);
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: var(--paper);
+	box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 12%, transparent);
+	cursor: pointer;
+	translate: var(--skip-x, -50%) 0;
+	transition:
+		opacity 240ms var(--ease),
+		translate 240ms var(--ease),
+		visibility 0s;
+}
+
+.st-skip:disabled {
+	visibility: hidden;
+	opacity: 0;
+	translate: var(--skip-x, -50%) 12px;
+	transition:
+		opacity 240ms var(--ease),
+		translate 240ms var(--ease),
+		visibility 0s 240ms;
+}
+
+.st-skip:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+}
+
+.st-skip-ring {
+	position: absolute;
+	inset: 0;
+	rotate: -90deg;
+	fill: none;
+	stroke-width: 3;
+}
+
+/* Each segment is 8.4 of the circle's 100, a gap of 1.6 between them. */
+.st-skip-ring circle {
+	stroke: var(--rule);
+	stroke-dasharray: 8.4 91.6;
+	stroke-dashoffset: calc(var(--n) * -10 - 0.8);
+}
+
+.st-skip-ring .st-fill {
+	stroke: var(--brand);
+	stroke-dasharray: 0 100;
+	transition: stroke-dasharray 420ms var(--ease);
+}
+
+.st-skip-ring [data-done] .st-fill {
+	stroke-dasharray: 8.4 91.6;
+}
+
+.st-skip-icon {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: var(--ink);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: stroke 160ms var(--ease);
+}
+
+.st-skip:hover .st-skip-icon {
+	stroke: var(--accent-text);
+}
+
+/* Short of height, the step's code reaches the foot of the screen: the button moves to the corner, under the map. */
+@media (max-height: 30rem) {
+	.st-skip {
+		--skip-left: calc(100% - 16px);
+		--skip-x: -100%;
+	}
+}
+
 /* ---- A step ---- */
 
 .st-step {

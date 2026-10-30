@@ -50,6 +50,12 @@ const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
 			<div class="st-frame"><varmq-map aria-hidden="true"></varmq-map></div>
 		</div>
 	</div>
+	<!-- On steps 1 to 9 only: the way past the rest of the story, to the last step, where the page scrolls freely. Its
+	     outline is the story's progress, a segment per step, filled once that step has played (main.ts). -->
+	<button class="st-skip" type="button" aria-label="Skip to step 10" disabled>
+		<svg class="st-skip-ring" viewBox="0 0 48 48" aria-hidden="true"></svg>
+		<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"></path></svg>
+	</button>
 </section>
 
 <script>

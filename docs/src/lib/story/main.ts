@@ -99,6 +99,15 @@ const title = $('.st-title');
 const notes = $('.st-notes');
 const source = $<HTMLAnchorElement>('.st-source a');
 const track = $('.st-track');
+const skip = $<HTMLButtonElement>('.st-skip');
+/** The skip's outline: a segment per step, each a track and the fill over it. */
+const segments = STEPS.map((_, n) => {
+	const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+	g.style.setProperty('--n', String(n));
+	g.innerHTML = '<circle cx="24" cy="24" r="22" pathLength="100"/><circle class="st-fill" cx="24" cy="24" r="22" pathLength="100"/>';
+	return g;
+});
+$('.st-skip-ring').append(...segments);
 $('.st-all').innerHTML = STORY_TEXT;
 track.append(...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-snap' })));
 
@@ -145,6 +154,9 @@ const map = mountMap($('varmq-map'), (t) => {
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
 	li?.toggleAttribute('data-done', p >= 1);
+	// A step's segment fills once its last caption is done.
+	const played = i === s.captions.length - 1 && p >= 1;
+	segments.forEach((g, n) => g.toggleAttribute('data-done', n < step || (n === step && played)));
 });
 
 /**
@@ -244,7 +256,8 @@ const tick = () => {
 	frameId = 0;
 	snapping();
 	const k = nearest();
-	if (k !== at) {
+	// On the way to a stop further than the next, as a skip goes, the stops passed are not shown.
+	if (k !== at && (target < 0 || k === target)) {
 		// The next or the previous caption of the same step moves to it. A step reached going down plays from its start;
 		// going up, the map plays back to where it stops, and holds.
 		const was = STOPS[at - 1];
@@ -255,6 +268,8 @@ const tick = () => {
 		else if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
 		} else show(stop.step, stop.caption, up);
+		// The skip shows from step 1 to the step before the last.
+		skip.disabled = !stop || stop.step === STEPS.length - 1;
 	}
 	// Out of view below the story, the last step's loop rests on its end; back in view, the step plays from its start.
 	if (away !== position() >= COUNT) {
@@ -304,11 +319,15 @@ addEventListener(
 	},
 	{ passive: false },
 );
-// A scroll that stops short of where it was heading, as when the reader takes over, heads nowhere any more.
+// A scroll that stops short of where it was heading, as when the reader takes over, heads nowhere any more: show the
+// stop it is at.
 addEventListener('scrollend', () => {
 	target = -1;
 	snapping();
+	schedule();
 });
+
+skip.addEventListener('click', () => go(COUNT - 1));
 // End goes to the foot of the page, so it stops the snapping first. From the last step down the keys scroll as usual,
 // but the keys that scroll up go to the last step from just below it, and from it to the stop before, as the wheel
 // does.
