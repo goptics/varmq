@@ -11,6 +11,7 @@
 	--ink-2: #3b5248;
 	--ink-3: #51695e;
 	--rule: #b9d3c7;
+	--hole: #c6e3d4; /* sprocket holes in the home page's margins */
 	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f has 3.1:1,
 	   enough for marks and fills, so text takes the same hue darker, at 5.2:1. */
 	--accent-text: #06755c;
@@ -51,6 +52,7 @@
 	--ink-2: #b0c7bb;
 	--ink-3: #8fa89c;
 	--rule: #2a4137;
+	--hole: #070c09;
 	--accent-text: #5fd4b2;
 	--brand: var(--brand-on-dark);
 	--brand-hover: var(--brand-hover-on-dark);

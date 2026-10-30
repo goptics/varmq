@@ -875,3 +875,31 @@
 		--smm-duration: 0ms;
 	}
 }
+
+/* Sprocket holes of continuous-feed paper in both margins, on screens wide enough to have margins. */
+.roll {
+	display: none;
+}
+
+@media (min-width: 1180px) {
+	.roll {
+		display: block;
+		position: fixed;
+		top: 0;
+		bottom: 0;
+		width: 28px;
+		z-index: 1;
+		pointer-events: none;
+		background: radial-gradient(circle at 14px 24px, var(--hole) 6px, transparent 6.5px) 0 0 / 28px 48px repeat-y;
+	}
+
+	.roll--l {
+		left: 0;
+		border-right: 1px dashed var(--rule);
+	}
+
+	.roll--r {
+		right: 0;
+		border-left: 1px dashed var(--rule);
+	}
+}

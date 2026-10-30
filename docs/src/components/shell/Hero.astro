@@ -21,6 +21,10 @@ const notFound = id === '404' || id.endsWith('/404');
 			</Default>
 		</>
 	) : (
-		<Story />
+		<>
+			<div class="roll roll--l" aria-hidden="true" />
+			<div class="roll roll--r" aria-hidden="true" />
+			<Story />
+		</>
 	)
 }
