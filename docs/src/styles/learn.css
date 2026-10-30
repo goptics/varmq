@@ -32,15 +32,6 @@
 	white-space: nowrap;
 }
 
-.ljob--b {
-	background: var(--cobalt);
-}
-
-.ljob--c {
-	background: var(--panel-ink);
-	color: var(--panel);
-}
-
 .ljob--done {
 	background: transparent;
 	color: var(--panel-ink-2);
@@ -489,62 +480,6 @@
 	}
 }
 
-/* ---- Queues and a worker ---- */
-
-.bq__queues {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-	gap: 10px;
-}
-
-.bq__q {
-	display: grid;
-	gap: 10px;
-	padding: 10px 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-}
-
-.bq__head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 4px 12px;
-}
-
-.bq__head b {
-	font-weight: 600;
-	color: var(--panel-ink);
-}
-
-.bq__head > span {
-	color: var(--panel-ink-2);
-	font-size: 0.75rem;
-}
-
-.bq__prio {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-	color: var(--panel-ink-2);
-	font-size: 0.6875rem;
-}
-
-.sframe .bq__prio select {
-	min-height: 32px;
-	padding: 2px 6px;
-	font-size: 0.75rem;
-}
-
-.bq__run {
-	margin-top: 16px;
-}
-
-.bq__row {
-	margin-bottom: 4px;
-}
-
 /* ---- Job ---- */
 
 .jb__rail {
@@ -649,7 +584,7 @@
 	margin-inline: auto;
 }
 
-@container sframe (max-width: 700px) {
+@container sframe (max-width: 540px) {
 	.lc__svg--wide {
 		display: none;
 	}
@@ -797,28 +732,12 @@
 	font-size: 0.75rem;
 }
 
+.lc__table :where(th, td) {
+	padding-block: 3px;
+}
+
 .lc__table td span {
 	color: var(--panel-ink-2);
-}
-
-.lc__checks {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-.lcheck {
-	padding: 4px 8px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
-	font-size: 0.75rem;
-	color: var(--panel-ink-2);
-}
-
-.lcheck[data-on='true'] {
-	border-color: var(--brand);
-	background: color-mix(in srgb, var(--brand) 18%, transparent);
-	color: var(--panel-ink);
 }
 
 .lc__loghead {

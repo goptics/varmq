@@ -10,7 +10,7 @@ import LifecycleScene from '../../../components/learn/LifecycleScene.astro';
 
 A worker is always in one of seven states. [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Status) returns the current one as a string, and five `Is*` methods answer yes or no for some of them.
 
-The diagram below is a worker you can drive. Click a state to read about it. Press a method to call it. The worker has three jobs waiting and runs one at a time.
+The diagram below is a worker you can drive. Click a state to read about it. Press a method to call it. The worker has three jobs waiting and runs one at a time, taking every waiting job into one batch. Pause and Stop never interrupt a running job, so press Finish to end it.
 
 <LifecycleScene />
 

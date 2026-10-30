@@ -159,16 +159,14 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				<p class="estep__title" data-d-name>Initiated</p>
 				<p class="estep__text" data-d-text></p>
 				<p class="lc__is" data-d-is></p>
+				<p class="slabel lc__loghead" id={`${id}-ct`}>Log</p>
+				<ol class="lc__log" data-log aria-live="polite" aria-labelledby={`${id}-ct`}></ol>
+			</section>
+			<section class="lc__side" aria-label="What each call returns from the selected state">
 				<table class="jb__table lc__table">
 					<thead><tr><th>call from here</th><td>result</td></tr></thead>
 					<tbody data-d-rows></tbody>
 				</table>
-			</section>
-			<section class="lc__side" aria-labelledby={`${id}-ct`}>
-				<p class="slabel" id={`${id}-ct`}>The worker now</p>
-				<p class="lc__checks" data-checks></p>
-				<p class="slabel lc__loghead">Log</p>
-				<ol class="lc__log" data-log aria-live="polite"></ol>
 			</section>
 		</div>
 	</div>
@@ -185,9 +183,6 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 		<button type="button" class="pbtn" data-act="reset">Reset</button>
 	</Fragment>
 
-	<p class="sframe__note" slot="note">
-		The worker has concurrency 1 and <code>WithAutoRun(false)</code>, so it takes every waiting job, up to 32, into one batch. Pause and Stop never interrupt a running job, so press Finish to let it end. The rest of the batch is then parked on the worker, outside the queue. A model of the library, not a benchmark.
-	</p>
 </Scene>
 
 <script>
@@ -447,18 +442,7 @@ const order = ['Initiated', 'Idle', 'Running', 'Pausing', 'Paused', 'Stopping', 
 				return `<tr><th><code>${m}()</code></th><td>${res}</td></tr>`;
 			}).join('');
 
-			// Is* checks of the worker itself.
-			const yes = (n: S[]) => String(n.includes(s));
-			q('[data-checks]').innerHTML = [
-				['IsIdle()', yes(['Idle'])],
-				['IsRunning()', yes(['Running'])],
-				['IsActive()', yes(['Idle', 'Running'])],
-				['IsPaused()', yes(['Paused'])],
-				['IsStopped()', yes(['Stopped'])],
-			]
-				.map(([k, v]) => `<span class="lcheck" data-on="${v}"><code>${k}</code> ${v}</span>`)
-				.join('');
-			q('[data-log]').innerHTML = log.slice(0, 5).map((l) => `<li>${l}</li>`).join('');
+			q('[data-log]').innerHTML = log.slice(0, 2).map((l) => `<li>${l}</li>`).join('');
 
 			// Controls.
 			all<HTMLElement>('[data-m]').forEach((b) => {

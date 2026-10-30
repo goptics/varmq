@@ -6,7 +6,6 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
-import BindScene from '../../../components/learn/BindScene.astro';
 
 A worker runs jobs; a queue holds them until the worker has a free slot. Apart from a producer-only distributed queue ([`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue)), you ask a worker for a queue, and that binds the two.
 
@@ -33,9 +32,9 @@ queue.Add("hello")
 
 ## One worker, several queues
 
-A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from. Bind more queues below and change the strategy to see which job the worker takes next.
+A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from. Below, three queues share one worker with concurrency 2 and the `RoundRobin` strategy, so the worker takes from each queue in turn.
 
-<BindScene />
+![Three queues bound to one worker with concurrency 2 and RoundRobin: the event loop takes the next job from each queue in turn, hands it to a pool goroutine while a slot is free, and skips a queue once it is empty](../../../../../assets/diagrams/varmq-multi-queue.svg)
 
 The program below does the same with two queues.
 
