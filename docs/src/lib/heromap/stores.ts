@@ -47,7 +47,8 @@ export interface SqlitePlan {
 	// add, claim, ack, with no crash, restart or requeue. With only some of them, simulateSqlite throws.
 	crashAt?: number;
 	restartAt?: number;
-	requeueAfter?: number; // ms from the restart to the queue being opened: the requeue, and a claim at once
+	requeueAfter?: number; // ms from the restart to the queue being opened: the requeue
+	rerunAfter?: number; // ms from the requeue to the claim that takes the jobs back: 0, at once, if not given
 	// The work of a run after the restart. A job with no entry takes its `work` again.
 	rework?: Record<string, number>;
 	takeTravel: number;
@@ -68,10 +69,17 @@ export interface RedisPlan {
 	notifyTravel: number; // ms from a land to the notification reaching a consumer
 	takeTravel: number;
 	ackTravel: number;
-	// One consumer's program dies at `at`, its jobs running. `backAfter` later the others' sweep puts its jobs back
-	// and wakes a consumer for them, and the program restarts at `restartAt`. A job's run after it is put back takes
-	// its `rework`, or its `work` again.
-	crash?: { consumer: string; at: number; backAfter: number; restartAt: number; rework: Record<string, number> };
+	// One consumer's program dies at `at`, its jobs running. `backAfter` later the others' sweep puts its jobs back,
+	// and `wakeAfter` after that (0 if not given) wakes a consumer for them; the program restarts at `restartAt`. A
+	// job's run after it is put back takes its `rework`, or its `work` again.
+	crash?: {
+		consumer: string;
+		at: number;
+		backAfter: number;
+		wakeAfter?: number;
+		restartAt: number;
+		rework: Record<string, number>;
+	};
 }
 
 // A job starts running takeTravel after its take (the copy's flight to the ring):
@@ -320,7 +328,7 @@ export function simulateSqlite(plan: SqlitePlan): StoreEvent[] {
 				emit({ at, type: 'requeue', jobs });
 				open = true;
 				restarted = true;
-				wake(at);
+				wake(at + (plan.rerunAfter ?? 0));
 			});
 		});
 	}
@@ -415,7 +423,7 @@ export function simulateRedis(plan: RedisPlan): StoreEvent[] {
 		timer(crash.at + crash.backAfter, (now) => {
 			const jobs = held();
 			emit({ at: now, type: 'requeue', jobs });
-			wake(now);
+			wake(now + (crash.wakeAfter ?? 0));
 		});
 		timer(crash.restartAt, (now) => {
 			emit({ at: now, type: 'restart', consumer: w.id });

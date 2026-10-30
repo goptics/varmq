@@ -1,0 +1,1034 @@
+/* Benchmarks page. The explorer and the score board are dark panels in both themes (docs/DESIGN.md: simulation panels).
+   Every rule is scoped under .bench or .bboard so nothing leaks into the Starlight shell.
+   The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
+   Tabs and buttons are the shared `seg` and `pbtn` (ui.css). */
+
+.bench,
+.bboard {
+	/* --local-: values the shared tokens do not have. */
+	--local-cell: 26px;
+
+	container: bench / inline-size;
+	margin: 1.75rem 0 2.25rem;
+	background: var(--panel);
+	color: var(--panel-ink);
+	border: 1px solid var(--panel-rule);
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
+	font-family: var(--display);
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	text-wrap: pretty;
+	accent-color: var(--brand);
+	scrollbar-color: var(--panel-rule) transparent;
+	-webkit-text-size-adjust: 100%;
+}
+
+.bench *,
+.bench *::before,
+.bench *::after,
+.bboard *,
+.bboard *::before,
+.bboard *::after {
+	box-sizing: border-box;
+}
+
+.bench :is(h3, h4, p, ul, ol, dl, dd, figure, table, fieldset),
+.bboard :is(h3, h4, p, ul, ol, dl, dd, figure, table) {
+	margin: 0;
+	padding: 0;
+}
+
+.bench ::selection,
+.bboard ::selection {
+	background: color-mix(in srgb, var(--panel-accent) 38%, transparent);
+	color: var(--panel-ink);
+}
+
+.bench a,
+.bboard a {
+	color: var(--panel-accent);
+	text-underline-offset: 0.18em;
+	text-decoration-thickness: 1px;
+}
+
+.bench a:hover,
+.bboard a:hover {
+	text-decoration-thickness: 2px;
+}
+
+.bench :focus-visible,
+.bboard :focus-visible {
+	outline: 2px solid var(--panel-accent);
+	outline-offset: 3px;
+}
+
+.bench code,
+.bboard code {
+	font: 400 0.8125em/1.4 var(--mono);
+	background: none;
+	border: 0;
+	padding: 0;
+	color: inherit;
+}
+
+.bench [hidden],
+.bboard [hidden] {
+	display: none !important;
+}
+
+.bench__top .seg {
+	display: flex;
+}
+
+.bench__top {
+	padding: 14px 16px;
+	border-bottom: 1px dashed var(--panel-rule);
+}
+
+/* Without JavaScript every panel shows, one under the other. With it, only the selected one. */
+.bench-js .bench [role='tabpanel']:not(.is-on) {
+	display: none;
+}
+
+.bench__panel + .bench__panel {
+	border-top: 1px dashed var(--panel-rule);
+}
+
+.bench-js .bench .bench__panel + .bench__panel {
+	border-top: 0;
+}
+
+.bench__panel {
+	padding: 18px 16px 20px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 18px;
+}
+
+.bench__title {
+	font-size: 1.25rem;
+	font-weight: 650;
+	line-height: 1.2;
+}
+
+.bench__blurb {
+	margin-top: 4px;
+	color: var(--panel-ink-2);
+	font-size: 0.875rem;
+}
+
+/* ---- caption: the Go call that makes the rows ---- */
+
+.bcaption {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--panel-2);
+}
+
+.bcaption__tag {
+	flex: none;
+	padding: 3px 6px;
+	border-radius: 4px;
+	background: var(--panel-fill-2);
+	font: 500 0.6875rem/1 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--panel-ink-2);
+	margin-top: 3px;
+}
+
+.bcmd {
+	flex: 1;
+	min-width: 0;
+	display: block;
+	font: 400 0.8125rem/1.55 var(--mono);
+	color: var(--panel-ink);
+	overflow-wrap: anywhere;
+}
+
+.bcmd__line {
+	display: block;
+}
+
+/* ---- meta and environment ---- */
+
+.bmeta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 22px;
+	font: 400 0.75rem/1.5 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+.bmeta div {
+	display: flex;
+	gap: 6px;
+}
+
+.bmeta dt {
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.bmeta dd {
+	color: var(--panel-ink);
+}
+
+.bdet {
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--panel-2);
+}
+
+.bdet > summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 10px 14px;
+	min-height: 44px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font: 600 0.875rem/1.3 var(--display);
+}
+
+.bdet > summary::-webkit-details-marker {
+	display: none;
+}
+
+.bdet > summary::before {
+	content: '';
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-right: 2px solid var(--panel-ink-2);
+	border-bottom: 2px solid var(--panel-ink-2);
+	transform: rotate(-45deg);
+	transition: transform 0.2s var(--ease);
+}
+
+.bdet[open] > summary::before {
+	transform: rotate(45deg);
+}
+
+.bdet__body {
+	padding: 4px 14px 14px;
+	display: grid;
+	gap: 10px;
+	color: var(--panel-ink-2);
+	font-size: 0.875rem;
+}
+
+.bdet > .btable {
+	margin: 0 14px 14px;
+}
+
+/* ---- controls ---- */
+
+.bctl {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px 26px;
+	align-items: flex-start;
+}
+
+.bfs {
+	border: 0;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+}
+
+.bfs legend,
+.blabel {
+	float: none;
+	display: block;
+	padding: 0;
+	margin-bottom: 6px;
+	font: 500 0.6875rem/1 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--panel-ink-2);
+}
+
+.bopts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.bopt {
+	position: relative;
+	display: inline-block;
+}
+
+.bopt input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.bopt span {
+	display: inline-flex;
+	align-items: center;
+	min-height: 36px;
+	padding: 6px 12px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	color: var(--panel-ink-2);
+	font: 600 0.8125rem/1.1 var(--display);
+	transition: background-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.bopt:hover span {
+	background: var(--panel-fill-2);
+}
+
+.bopt input:checked + span {
+	background: var(--panel-ink);
+	border-color: var(--panel-ink);
+	color: var(--panel);
+}
+
+.bopt input:focus-visible + span {
+	outline: 2px solid var(--panel-accent);
+	outline-offset: 3px;
+}
+
+.bopt input:disabled {
+	cursor: not-allowed;
+}
+
+.bopt input:disabled + span {
+	opacity: 0.35;
+}
+
+.bopt--check input:checked + span {
+	background: transparent;
+	color: var(--panel-ink);
+	border-color: var(--panel-accent);
+}
+
+.bopt--check span::before {
+	content: '';
+	width: 14px;
+	height: 14px;
+	margin-right: 8px;
+	border: 1.5px solid var(--panel-ink-2);
+	border-radius: 4px;
+}
+
+.bopt--check input:checked + span::before {
+	background: var(--brand);
+	border-color: var(--brand);
+	box-shadow: inset 0 0 0 2px var(--panel);
+}
+
+.bpre {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.bpre .blabel {
+	margin: 0 4px 0 0;
+}
+
+/* ---- scope ---- */
+
+.bscope {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px 16px;
+	padding-block: 10px;
+	border-block: 1px dashed var(--panel-rule);
+	font: 400 0.8125rem/1.5 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+.bscope strong {
+	color: var(--panel-ink);
+	font-weight: 600;
+}
+
+.bscope--empty {
+	color: var(--amber);
+}
+
+/* ---- lanes ---- */
+
+.bsec {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 12px;
+	min-width: 0;
+}
+
+.bench .rg__title {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px dashed var(--panel-rule);
+}
+
+.bench .rg__title h4 {
+	font-size: 1rem;
+	font-weight: 650;
+	line-height: 1.2;
+}
+
+.bench .rg__title span {
+	font: 400 0.75rem/1.3 var(--mono);
+	color: var(--panel-ink-2);
+	text-align: right;
+}
+
+.bench .rlanes {
+	list-style: none;
+	display: grid;
+	gap: 6px;
+}
+
+.bench .rlane,
+.bench .rlane__head {
+	display: grid;
+	grid-template-columns: minmax(104px, 150px) minmax(0, 1fr) 96px 64px;
+	align-items: center;
+	gap: 12px;
+}
+
+.bench .rlane {
+	min-height: 40px;
+	font: 400 0.8125rem/1.2 var(--mono);
+}
+
+.bench .rlane__head {
+	font: 400 0.6875rem/1 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--panel-ink-2);
+}
+
+.bench .rlane__head span:nth-child(3),
+.bench .rlane__head span:nth-child(4) {
+	text-align: right;
+}
+
+.bench .rlane__name {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+	color: var(--panel-ink-2);
+	overflow-wrap: anywhere;
+}
+
+.bench .rlane__sub {
+	font-size: 0.6875rem;
+	color: var(--panel-ink-2);
+	opacity: 0.85;
+}
+
+.bench .rlane__track {
+	position: relative;
+	height: 18px;
+	border-radius: 4px;
+	background: var(--panel-fill);
+}
+
+/* The dashed line is the baseline subject's value. A lane that passes it is ahead. */
+.bench .rlane__track::after {
+	content: '';
+	position: absolute;
+	inset-block: -3px;
+	left: calc(var(--ref, 0) * 100% - 1px);
+	border-left: 1px dashed var(--panel-ink);
+	opacity: 0.75;
+	pointer-events: none;
+}
+
+.bench .rlane__bar {
+	display: block;
+	height: 100%;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--panel-ink) 38%, transparent);
+	transform-origin: left center;
+	transform: scaleX(max(var(--s, 1), 0.006));
+}
+
+.bench .rlane.is-baseline .rlane__bar {
+	background: repeating-linear-gradient(
+		135deg,
+		color-mix(in srgb, var(--panel-ink) 38%, transparent) 0 4px,
+		color-mix(in srgb, var(--panel-ink) 16%, transparent) 4px 8px
+	);
+}
+
+.bench .rlane__val {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--panel-ink);
+}
+
+.bench .rlane__unit {
+	color: var(--panel-ink-2);
+}
+
+.bench .rlane__x {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--panel-ink-2);
+}
+
+.bench .rlane.is-ahead .rlane__x {
+	color: var(--amber);
+	font-weight: 600;
+}
+
+.bench .rlane.is-varmq .rlane__subject,
+.bench .rlane.is-varmq .rlane__val {
+	color: var(--panel-accent);
+	font-weight: 700;
+}
+
+.bench .rlane.is-varmq .rlane__bar {
+	background: var(--brand);
+}
+
+.bnote {
+	display: grid;
+	gap: 4px;
+	max-width: 76ch;
+	font: 400 0.75rem/1.6 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+@keyframes bgrow {
+	from {
+		transform: scaleX(0);
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.bench .rlanes.is-enter .rlane__bar {
+		animation: bgrow 0.6s var(--ease) backwards;
+		animation-delay: calc(var(--i, 0) * 30ms);
+	}
+}
+
+/* ---- win map ---- */
+
+.bmap__scroll {
+	/* A positioned box clips the absolute `.sr` text in the cells. Without it the page scrolls sideways. */
+	position: relative;
+	overflow-x: auto;
+	padding-bottom: 4px;
+	/* Edge fades that show only while there is more to scroll to. */
+	background:
+		linear-gradient(to right, var(--panel) 30%, transparent) left center / 28px 100% no-repeat local,
+		linear-gradient(to left, var(--panel) 30%, transparent) right center / 28px 100% no-repeat local,
+		linear-gradient(to right, var(--panel-fill-2), transparent) left center / 14px 100% no-repeat scroll,
+		linear-gradient(to left, var(--panel-fill-2), transparent) right center / 14px 100% no-repeat scroll;
+}
+
+.bmap__t {
+	border-collapse: separate;
+	border-spacing: 3px;
+	margin-inline: -3px;
+}
+
+.bmap__t th,
+.bmap__t td {
+	padding: 0;
+}
+
+.bmap__t th {
+	font: 400 0.6875rem/1.2 var(--mono);
+	color: var(--panel-ink-2);
+	font-weight: 400;
+}
+
+.bmap__corner {
+	text-align: left;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	vertical-align: bottom;
+	padding-right: 10px !important;
+	white-space: nowrap;
+}
+
+.bmap__cpu {
+	padding-bottom: 2px;
+	border-bottom: 1px dashed var(--panel-rule);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.bmap__col {
+	text-align: center;
+	min-width: var(--local-cell);
+	padding-bottom: 2px;
+}
+
+.bmap__row {
+	text-align: left;
+	white-space: nowrap;
+	padding-right: 12px !important;
+	position: sticky;
+	left: 0;
+	background: var(--panel);
+	z-index: 1;
+}
+
+.bmap__empty {
+	min-width: var(--local-cell);
+}
+
+.bcell {
+	display: block;
+	width: var(--local-cell);
+	height: 26px;
+	padding: 0;
+	border: 1.5px solid transparent;
+	border-radius: 4px;
+	font: 700 0.625rem/1 var(--mono);
+	letter-spacing: 0.02em;
+	cursor: pointer;
+	transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.bcell.is-varmq {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+
+.bcell.is-other {
+	background: transparent;
+	border-color: var(--amber);
+	color: var(--amber);
+}
+
+/* A VarMQ subject tied with another for the best value: neither side leads. The "=" carries the meaning. */
+.bcell.is-tie {
+	background: transparent;
+	border-color: var(--brand);
+	border-style: dashed;
+	color: var(--panel-ink);
+}
+
+.bcell:hover {
+	transform: translateY(-1px);
+}
+
+.bcell[aria-pressed='true'] {
+	box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--panel-ink);
+}
+
+.bmap__read {
+	min-height: 2.8em;
+	margin-top: 8px;
+	font: 400 0.75rem/1.4 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+.blegend {
+	list-style: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	font: 400 0.75rem/1.2 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+.blegend li {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.blegend strong {
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.blegend__code {
+	display: inline-grid;
+	place-items: center;
+	width: 26px;
+	height: 20px;
+	border: 1.5px solid var(--amber);
+	border-radius: 4px;
+	color: var(--amber);
+	font-weight: 700;
+	font-size: 0.625rem;
+}
+
+.blegend .is-varmq .blegend__code {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+
+.blegend .is-tie .blegend__code {
+	border-color: var(--brand);
+	border-style: dashed;
+	color: var(--panel-ink);
+}
+
+.bkey {
+	font: 400 0.75rem/1.6 var(--mono);
+	color: var(--panel-ink-2);
+	max-width: 76ch;
+}
+
+/* ---- where VarMQ does not win ---- */
+
+.bloss {
+	display: grid;
+	gap: 12px;
+	padding: 16px 18px;
+	border: 1px solid color-mix(in srgb, var(--amber) 50%, var(--panel-rule));
+	border-radius: 10px;
+	background: var(--panel-2);
+}
+
+.bloss h4 {
+	font-size: 1rem;
+	font-weight: 650;
+	color: var(--amber);
+}
+
+.bloss__lead strong {
+	font-weight: 650;
+}
+
+.bloss__counts {
+	list-style: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.bloss__counts li {
+	display: inline-flex;
+	gap: 8px;
+	padding: 4px 10px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 4px;
+	font: 400 0.75rem/1.4 var(--mono);
+	color: var(--panel-ink-2);
+}
+
+.bloss__counts strong {
+	color: var(--panel-ink);
+	font-weight: 600;
+}
+
+.bloss .bdet {
+	background: var(--panel);
+}
+
+/* ---- tables ---- */
+
+.btable {
+	position: relative;
+	overflow-x: auto;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--panel);
+}
+
+.btable__t {
+	width: 100%;
+	border-collapse: collapse;
+	font: 400 0.75rem/1.4 var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.btable__t th,
+.btable__t td {
+	padding: 7px 10px;
+	text-align: left;
+	vertical-align: baseline;
+	border-bottom: 1px solid var(--panel-rule);
+	white-space: nowrap;
+	font-weight: 400;
+}
+
+.btable__t tbody tr:last-child > * {
+	border-bottom: 0;
+}
+
+.btable__t thead th {
+	font-size: 0.6875rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--panel-ink-2);
+	text-align: right;
+}
+
+.btable__t thead th:first-child,
+.btable__t thead th:last-child {
+	text-align: left;
+}
+
+.btable__t thead th.is-varmq {
+	color: var(--panel-accent);
+}
+
+.btable__t tbody th {
+	position: sticky;
+	left: 0;
+	background: var(--panel);
+	color: var(--panel-ink);
+	white-space: normal;
+	min-width: 190px;
+}
+
+.btable__t td.n {
+	text-align: right;
+	color: var(--panel-ink);
+}
+
+.btable__t td.is-best {
+	color: var(--panel-accent);
+	font-weight: 700;
+}
+
+.btable__t td.bmiss {
+	color: var(--panel-ink-2);
+}
+
+.bamber {
+	color: var(--amber) !important;
+	font-weight: 600;
+}
+
+.rank {
+	color: var(--panel-ink-2);
+}
+
+.blink {
+	min-height: 28px;
+	padding: 2px 8px;
+	margin-left: 4px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 4px;
+	background: var(--panel-fill);
+	color: var(--panel-accent);
+	font: 500 0.6875rem/1 var(--mono);
+	cursor: pointer;
+}
+
+.blink:hover {
+	background: var(--panel-fill-2);
+}
+
+.bsrc {
+	font-family: var(--mono);
+	font-size: 0.75rem;
+}
+
+/* ---- score board (above the explorer) ---- */
+
+.bboard {
+	padding: 6px 0 0;
+}
+
+.bboard .btable {
+	border: 0;
+	border-radius: 0 0 12px 12px;
+	background: transparent;
+}
+
+.bboard__head {
+	padding: 14px 16px 10px;
+	display: grid;
+	gap: 4px;
+}
+
+.bboard__head h3 {
+	font-size: 1rem;
+	font-weight: 650;
+}
+
+.bboard__head p {
+	font-size: 0.8125rem;
+	color: var(--panel-ink-2);
+	max-width: 76ch;
+}
+
+.bboard .btable__t thead th {
+	vertical-align: bottom;
+	white-space: normal;
+}
+
+.bboard .btable__t td,
+.bboard .btable__t tbody th {
+	vertical-align: middle;
+}
+
+/* The board's dataset names and rival lists wrap; its row names need no sticky width. */
+.bboard .btable__t tbody th {
+	min-width: 0;
+}
+
+.bboard .btable__t td.bwrap {
+	white-space: normal;
+}
+
+.bboard .n strong {
+	font-weight: 600;
+}
+
+.bshare {
+	display: block;
+	width: 120px;
+	height: 8px;
+	margin-top: 5px;
+	border-radius: 4px;
+	/* Green is the share of groups VarMQ leads. Amber is the rest. The counts beside it carry the same numbers. */
+	background: linear-gradient(to right, var(--brand) var(--w, 0%), var(--amber) var(--w, 0%));
+}
+
+.bboard .btable__t thead th:nth-child(2),
+.bboard .btable__t thead th:nth-child(5) {
+	text-align: left;
+}
+
+/* ---- narrow panel: the panel measures itself ---- */
+
+@container bench (max-width: 620px) {
+	.bench .rlane,
+	.bench .rlane__head {
+		grid-template-columns: minmax(0, 1fr) auto 48px;
+		row-gap: 4px;
+		column-gap: 10px;
+	}
+
+	.bench .rlane {
+		padding-block: 4px;
+	}
+
+	.bench .rlane__name {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.bench .rlane__val {
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	.bench .rlane__x {
+		grid-column: 3;
+		grid-row: 1;
+	}
+
+	.bench .rlane__track {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		height: 10px;
+	}
+
+	.bench .rlane__head span:nth-child(2) {
+		display: none;
+	}
+
+	.bench .rlane__head span:nth-child(1) {
+		grid-column: 1;
+	}
+
+	.bench .rlane__head span:nth-child(3) {
+		grid-column: 2;
+	}
+
+	.bench .rlane__head span:nth-child(4) {
+		grid-column: 3;
+	}
+
+	.bench {
+		--local-cell: 24px;
+	}
+
+	.bench__panel,
+	.bench__top {
+		padding-inline: 12px;
+	}
+
+	.bench .rg__title {
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.bench .rg__title span {
+		text-align: left;
+	}
+
+	.btable__t--loss thead {
+		display: none;
+	}
+
+	.btable__t--loss,
+	.btable__t--loss tbody,
+	.btable__t--loss tr,
+	.btable__t--loss th,
+	.btable__t--loss td {
+		display: block;
+		width: 100%;
+	}
+
+	.btable__t--loss tr {
+		padding: 8px 10px;
+		border-bottom: 1px solid var(--panel-rule);
+	}
+
+	.btable__t--loss tbody tr:last-child {
+		border-bottom: 0;
+	}
+
+	.btable__t--loss tbody th,
+	.btable__t--loss td {
+		padding: 2px 0;
+		border: 0;
+		position: static;
+		min-width: 0;
+		text-align: left !important;
+		white-space: normal;
+	}
+
+	.btable__t--loss td::before {
+		content: attr(data-l);
+		display: inline-block;
+		min-width: 6.5em;
+		font-size: 0.6875rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--panel-ink-2);
+	}
+
+	.bloss {
+		padding: 14px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.bench *,
+	.bboard * {
+		transition-duration: 0.01ms !important;
+	}
+}

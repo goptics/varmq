@@ -6,6 +6,8 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import ConcurrencyScene from '../../../components/guides-b/ConcurrencyScene.astro';
+import IdleScene from '../../../components/guides-b/IdleScene.astro';
 
 A worker's concurrency is the most jobs it runs at the same time. This page covers how to set it, how to change it while the worker runs, and the options that decide how many idle goroutines the worker keeps. [How it works](/concepts/how-it-works/#the-worker-pool) shows the pool behind it.
 
@@ -48,6 +50,10 @@ The program below creates a worker with a limit of 100 and holds every job insid
 <GoPlay example="concurrency-limit" />
 
 Before any job, the pool has one idle goroutine. With three jobs running, `NumProcessing` is 3, not 100. The idle goroutine took a job, so `NumIdleWorkers` is 0, and nothing is pending.
+
+Move the limit in the scene below and watch the goroutines. The slider calls `TunePool` on a worker that keeps running: the jobs it already holds are not interrupted.
+
+<ConcurrencyScene />
 
 ## Changing the limit with TunePool
 
@@ -94,5 +100,9 @@ worker := varmq.NewWorker(process, 100,
 	varmq.WithIdleWorkerExpiryDuration(30*time.Second), // drop the rest after they sit idle
 )
 ```
+
+Send a burst below and watch what each setting leaves in the pool.
+
+<IdleScene />
 
 Idle goroutines let the next burst of jobs start without paying to start goroutines. Each one holds a goroutine's memory. [`DefaultMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#DefaultMinIdleWorkerRatio) and [`DefaultIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#DefaultIdleWorkerExpiryDuration) set both for workers created after the call. [Configuration](/guides/configuration/) lists every option and its default.

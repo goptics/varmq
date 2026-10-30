@@ -75,7 +75,7 @@ const chip = (x: number, cy: number, w: number): Box => rect(x, cy - 14, w, 28);
 export const PIECES: Piece[] = [
 	// 1. One worker, left to right along y 390: Add(), the queue, the event loop and the worker.
 	{ id: 'add', kind: 'chip', chapter: 1, box: chip(96, 390, 68), label: 'Add()' },
-	{ id: 'queue', kind: 'lane', chapter: 1, box: lane(190, 368), label: 'QUEUE' },
+	{ id: 'queue', kind: 'lane', chapter: 1, box: lane(190, 368), label: 'ALERTS' },
 	// The loop is a circle of radius 26 centred on (520, 390); its box is the square around it.
 	{ id: 'loop', kind: 'loop', chapter: 1, box: rect(494, 364, 52, 52), label: 'EVENT\nLOOP' },
 	{ id: 'core', kind: 'card', chapter: 1, box: rect(570, 340, 200, 100), label: 'WORKER' },
@@ -87,14 +87,16 @@ export const PIECES: Piece[] = [
 	{ id: 'r-value', kind: 'chip', chapter: 3, box: chip(1280, 354, 60), label: 'value' },
 	{ id: 'r-error', kind: 'chip', chapter: 3, box: chip(1280, 426, 60), label: 'error' },
 
-	// 4. Priority, above the main row. Every queue has an Add() of its own, as each queue handle does.
+	// 4. Priority, above the main row: the priority queue. The core's lanes are named for their handles in the code, as
+	// the docs' strategy examples name them: alerts, reports, emails. Every queue has an Add() of its own, as each handle does.
 	{ id: 'p-add', kind: 'chip', chapter: 4, box: chip(96, 312, 68), label: 'Add()' },
-	{ id: 'prio', kind: 'lane', chapter: 4, box: lane(190, 290), label: 'PRIORITY QUEUE' },
+	{ id: 'prio', kind: 'lane', chapter: 4, box: lane(190, 290), label: 'REPORTS' },
 
-	// 5. Many queues: a third lane below the main row with its Add(), and the strategy chip on the line into the loop.
+	// 5. Many queues: a third lane below the main row with its Add(), and the strategy chip under the event loop, which
+	// picks between them by it. There no line runs through it, and every queue's jobs come by it alike.
 	{ id: 'c-add', kind: 'chip', chapter: 5, box: chip(96, 468, 68), label: 'Add()' },
-	{ id: 'queue-c', kind: 'lane', chapter: 5, box: lane(190, 446), label: 'QUEUE' },
-	{ id: 'strategy', kind: 'chip', chapter: 5, box: chip(380, 390, 92), label: 'RoundRobin' },
+	{ id: 'queue-c', kind: 'lane', chapter: 5, box: lane(190, 446), label: 'EMAILS' },
+	{ id: 'strategy', kind: 'chip', chapter: 5, box: chip(474, 478, 92), label: 'RoundRobin' },
 
 	// 6. Topics: Publish() fills the topic lane, which feeds the core's loop and a second worker.
 	{ id: 'publish', kind: 'chip', chapter: 6, box: chip(79, 180, 85), label: 'Publish()' },

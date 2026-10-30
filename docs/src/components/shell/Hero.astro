@@ -1,0 +1,62 @@
+---
+// The hero slot. The home page opens on the story (Story.astro). Starlight also draws the 404 page with the hero,
+// which keeps its banner and Starlight's own hero.
+import Default from '@astrojs/starlight/components/Hero.astro';
+import Story from '../Story.astro';
+
+const { id } = Astro.locals.starlightRoute.entry;
+const notFound = id === '404' || id.endsWith('/404');
+---
+
+{
+	notFound ? (
+		<>
+			<p class="shell-banner">
+				<span class="shell-banner__id">JOB 404</span>
+				<span class="shell-banner__label">Not found</span>
+				<span class="shell-banner__rule" aria-hidden="true" />
+			</p>
+			<Default {...Astro.props}>
+				<slot />
+			</Default>
+		</>
+	) : (
+		<>
+			<div class="roll roll--l" aria-hidden="true" />
+			<div class="roll roll--r" aria-hidden="true" />
+			<Story />
+		</>
+	)
+}
+
+<script>
+	// The sprocket holes keep feeding (story.css, .roll): the left rail's down and the right rail's up, slowly on their
+	// own, and a third as far as the page moved when it scrolls. The glow runs from the top of the page to the bottom.
+	// Each frame eases toward the scroll position, so the holes glide after a step's snap instead of jumping. The
+	// browser pauses the loop in a hidden tab. Reduced motion keeps them still and unlit.
+	const left = document.querySelector<HTMLElement>('.roll--l');
+	const right = document.querySelector<HTMLElement>('.roll--r');
+	if (left && right && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		const DRIFT = 8; // px per second with no scroll: one hole every 6 s
+		const RATE = 1 / 3; // hole travel per pixel of scroll
+		const EASE = 0.06; // the share of the remaining distance covered in a 60 Hz frame
+		let y = scrollY;
+		let drift = 0;
+		let last = 0;
+		const tick = (now: number) => {
+			const dt = Math.min(64, last ? now - last : 16.7); // a long gap (hidden tab) counts as a few frames
+			last = now;
+			drift += (DRIFT * dt) / 1000;
+			// The same glide at any refresh rate: the share grows with the time since the last frame.
+			y += (scrollY - y) * (1 - Math.pow(1 - EASE, dt / 16.7));
+			const at = y * RATE + drift;
+			const p = y / Math.max(1, document.documentElement.scrollHeight - innerHeight);
+			left.style.setProperty('--y', `${at.toFixed(2)}px`);
+			right.style.setProperty('--y', `${(-at).toFixed(2)}px`);
+			for (const rail of [left, right]) rail.style.setProperty('--p', p.toFixed(4));
+			requestAnimationFrame(tick);
+		};
+		for (const rail of [left, right]) rail.toggleAttribute('data-live', true);
+		requestAnimationFrame(tick);
+	}
+</script>

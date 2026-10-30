@@ -1,0 +1,67 @@
+---
+// The home page's opening: the intro beside the whole map, then varmq's story in ten steps, a caption per scroll. Each
+// step plays its chapter of the map while the one code block morphs into the code behind it (lib/story/main.ts). The
+// title and the lede are the page's hero fields in index.mdx.
+import '@shikijs/magic-move/style.css';
+import '../lib/heromap/map.css';
+import '../styles/story.css';
+import Install from './ui/Install.astro';
+
+const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
+---
+
+<section class="st" data-at="intro" aria-labelledby="_top">
+	<!-- The whole story as text, for screen readers: the stage only ever shows one step. -->
+	<div class="sr-only st-all"></div>
+	<div class="st-track" aria-hidden="true"></div>
+	<div class="st-stage">
+		<div class="st-text">
+			<div class="st-intro">
+				<h1 id="_top" data-page-title>{title}</h1>
+				{tagline && <p class="st-lede" set:html={tagline} />}
+				<Install id="home" />
+				<div class="st-actions">
+					<a class="btn btn--primary" href="/start/quick-start/">Get started</a>
+					<a class="btn btn--ghost" href="https://github.com/goptics/varmq">GitHub</a>
+				</div>
+				<p class="st-hint">
+					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v10M3.5 8 8 12.5 12.5 8"></path></svg>
+					Scroll: ten steps, each run on the map beside the code that does it.
+				</p>
+			</div>
+			<div class="st-step" hidden>
+				<div aria-live="polite">
+					<p class="st-count"></p>
+					<h2 class="st-title"></h2>
+				</div>
+				<ol class="st-notes"></ol>
+				<div class="st-code st-code-wide">
+					<pre class="shiki-magic-move-container"></pre>
+					<div class="st-rows" aria-hidden="true"></div>
+				</div>
+				<div class="st-code st-code-phone">
+					<pre class="shiki-magic-move-container"></pre>
+					<div class="st-rows" aria-hidden="true"></div>
+				</div>
+				<p class="st-source">Full program: <a></a></p>
+			</div>
+		</div>
+		<div class="st-map">
+			<div class="st-frame"><varmq-map aria-hidden="true"></varmq-map></div>
+		</div>
+	</div>
+	<!-- On steps 1 to 9 only: the way past the rest of the story, to the last step, where the page scrolls freely. Its
+	     outline is the story's progress, a segment per step, filled once that step has played (main.ts). -->
+	<button class="st-skip" type="button" aria-label="Skip to step 10" disabled>
+		<svg class="st-skip-ring" viewBox="0 0 48 48" aria-hidden="true"></svg>
+		<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"></path></svg>
+	</button>
+</section>
+
+<script>
+	import { copyButtons, tabs } from './ui/dom';
+	import '../lib/story/main.ts';
+
+	document.querySelectorAll<HTMLElement>('.st-intro [role="tablist"]').forEach((list) => tabs(list));
+	copyButtons();
+</script>

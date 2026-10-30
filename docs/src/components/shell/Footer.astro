@@ -1,0 +1,21 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+const links = [
+	{ label: 'API reference', href: 'https://pkg.go.dev/github.com/goptics/varmq' },
+	{ label: 'Benchmarks', href: '/reference/benchmarks/' },
+	{ label: 'Changelog', href: 'https://github.com/goptics/varmq/blob/main/CHANGELOG.md' },
+	{ label: 'GitHub', href: 'https://github.com/goptics/varmq' },
+];
+---
+
+<Default {...Astro.props}><slot /></Default>
+<div class="shell-foot">
+	<p class="shell-tear" aria-hidden="true">tear here</p>
+	<div class="shell-foot__in">
+		<ul class="shell-foot__links">
+			{links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}
+		</ul>
+		<p class="shell-foot__note">VarMQ is MIT licensed. Benchmark figures come from github.com/goptics/benchmarks.</p>
+	</div>
+</div>

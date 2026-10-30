@@ -1,0 +1,56 @@
+---
+// Scrape replay: the text that /metrics returns while the example program runs, with a clock, a chart of
+// the selected metric, and PromQL for it.
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
+import { highlightShell } from '../ui/go';
+import { METRICS, sample, END } from './metrics-data';
+
+const first = sample(2, null);
+const describe =
+	'A replay of what a Prometheus scrape of /metrics returns while the example program runs 1000 jobs with a concurrency of 10, each job taking 100 milliseconds. ' +
+	'The left side lists the eight metrics in the text format, each with its HELP line, its TYPE line and its value. ' +
+	'A slider sets the time from 0 to 11 seconds, and the values change with it. At 2 seconds the scrape shows completed 190, waiting 800 and processing 10. ' +
+	'Press a metric to see its type, the varmq method behind it, what it means, a chart of its value over the run, and PromQL queries for it. ' +
+	'A checkbox restarts the process at 5 seconds, which zeroes the counters.';
+---
+
+<Scene id="prom" title="Scrape replay" describe={describe}>
+	<code slot="call" class="gocode" data-call set:html={highlightShell("curl -s localhost:8080/metrics | grep '^foo_worker'")} />
+	<div class="prom" data-prom>
+		<div class="prom__clock">
+			<button type="button" class="pbtn pbtn--primary" data-act="play" aria-label="Play the replay">Play</button>
+			<label class="prom__label" for="prom-t">Time</label>
+			<input id="prom-t" type="range" min="0" max={END} step="0.1" value="2" data-t />
+			<output class="prom__t" for="prom-t" data-t-out>2.0 s</output>
+		</div>
+
+		<div class="prom__grid">
+			<div class="prom__text" role="group" aria-label="Scrape output, one block for each metric">
+				{
+					METRICS.map((m, i) => (
+						<button type="button" class="prom__metric" aria-pressed={i === 0 ? 'true' : 'false'} data-metric={m.key}>
+							<span class="prom__line prom__line--c"># HELP foo_worker_{m.name} {m.help}</span>
+							<span class="prom__line prom__line--c"># TYPE foo_worker_{m.name} {m.type}</span>
+							<span class="prom__line">
+								<span class="prom__name">foo_worker_{m.name}</span> <span class="prom__val" data-val={m.key}>{first[m.key]}</span>
+							</span>
+						</button>
+					))
+				}
+			</div>
+
+			<div class="prom__detail" aria-live="polite" data-detail></div>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<label class="ops-check"><input type="checkbox" data-restart /> Restart the process at 5 s</label>
+	</Fragment>
+
+	<p class="sframe__note" slot="note" data-note>Numbers follow a real run of this program.</p>
+</Scene>
+
+<script>
+	import './metrics';
+</script>

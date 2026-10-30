@@ -10,7 +10,7 @@
 // - Job ids are unique across the loop: the renderer makes one element per id, and a store job's record
 //   shares its job's id. Each subscriber makes its own job from a published value, `<value>-<worker>`.
 
-import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan } from './pool.ts';
+import { endState, simulatePool, type JobSpec, type PoolEvent, type PoolPlan, type Strategy } from './pool.ts';
 import {
 	simulateRedis,
 	simulateSqlite,
@@ -36,14 +36,13 @@ export type Part =
 	| { kind: 'redis'; plan: RedisPlan; events: StoreEvent[] };
 
 /**
- * One line under the map. `*word*` is green and `!word!` red, and `#word#` takes its logo's colour (SQLite's or
- * Redis's); a mark may wrap several words.
+ * One of the story's captions, beside the map. `*word*` is green and `!word!` red, and `#word#` takes its logo's
+ * colour (SQLite's or Redis's); a mark may wrap several words.
  */
 export interface Caption {
 	at: number;
-	until: number; // when it starts to leave
 	text: string;
-	swap?: { at: number; text: string }; // at `at`, the last word rolls up out of sight as `text` rolls up into its place
+	swap?: { text: string }; // the story reads it as `text to swap`
 }
 
 export interface Chapter {
@@ -54,8 +53,10 @@ export interface Chapter {
 	parts: Part[];
 	published?: { id: string; at: number }[]; // values published to the topic: one square in its lane each
 	// Transient chips. `id` names the piece whose place a chip takes: chapter 2's TunePool(5) sits where Restart()
-	// switches on in chapter 9.
-	chips?: { id: string; label: string; at: number; until: number }[];
+	// switches on in chapter 9. A chip pops in, or with `fade` takes the place of the chip before it at once while
+	// its name fades in, as chapter 5's strategy names take over from each other; one that leaves under another is
+	// not seen to.
+	chips?: { id: string; label: string; at: number; until: number; fade?: boolean }[];
 }
 
 type PoolPart = Extract<Part, { kind: 'pool' }>;
@@ -68,10 +69,13 @@ const SQLITE_TRAVEL = { takeTravel: 720, ackTravel: 780 };
 const REDIS_TRAVEL = { landAfter: 700, notifyTravel: 420, takeTravel: 720, ackTravel: 730 };
 // Chapters 4 and 5 need the whole burst in the lanes before the first dispatch: there the loop looks later.
 const LATE = { ...PACE, wake: 900 };
+// Chapter 5's four bursts must each land, run and finish before the next lands, so there it runs a little quicker.
+const VOLLEY = { ...PACE, wake: 400, gap: 200 };
 
-// The core's sources in bind order: the queue from chapter 1, the priority queue from 4, a third queue from 5
-// and the topic from 6. The core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip.
-// The result worker has a queue of its own, and the second worker the topic alone.
+// The core's sources in bind order: the queue from chapter 1 (alerts), the priority queue from 4 (reports), a third
+// queue from 5 (emails) and the topic from 6. None is bound with a priority, so the worker holds them in that order. The
+// core is a NewWorker with RoundRobin from the start, and chapter 5 shows the chip, after showing what each of the
+// other strategies would do. The result worker has a queue of its own, and the second worker the topic alone.
 const QUEUE = { id: 'queue' };
 const PRIO = { id: 'prio', priority: true };
 const QUEUE_C = { id: 'queue-c' };
@@ -134,8 +138,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// is busy. A burst would be handed over as one batch.
 	(carry) => ({
 		title: 'One worker',
-		duration: 8000,
-		captions: [{ at: 300, until: 7400, text: '*Add()* puts jobs in a queue' }],
+		duration: 8300,
+		captions: [{ at: 300, text: '*Add* puts jobs in a queue' }],
 		parts: [
 			pool(carry, 'core', {
 				...PACE,
@@ -156,8 +160,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'The pool',
 		duration: 9000,
 		captions: [
-			{ at: 300, until: 4800, text: 'The pool *grows* while jobs wait' },
-			{ at: 5300, until: 8400, text: 'and *shrinks* when the queue empties' },
+			{ at: 300, text: 'The pool *grows* while jobs wait' },
+			{ at: 5300, text: 'and *shrinks* when the queue empties' },
 		],
 		chips: [{ id: 'ctl-restart', label: 'TunePool(5)', at: 1300, until: 2500 }],
 		parts: [
@@ -180,8 +184,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 3. A result worker of its own, beside the core: the core has to stay a plain worker to take a topic.
 	(carry) => ({
 		title: 'Results and errors',
-		duration: 6000,
-		captions: [{ at: 300, until: 5400, text: 'Jobs hand back a *value* or an *error*' }],
+		duration: 6200,
+		captions: [{ at: 300, text: 'Jobs hand back a *value* or an *error*' }],
 		parts: [
 			{
 				...pool(carry, 'result', {
@@ -202,7 +206,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'Priority',
 		duration: 7000,
-		captions: [{ at: 300, until: 6400, text: 'The *lowest* number runs first' }],
+		captions: [{ at: 300, text: 'The *lowest* number runs first' }],
 		parts: [
 			pool(carry, 'core', {
 				...LATE,
@@ -219,29 +223,57 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 5. Jobs wait in two of the three queues, and round robin takes from them in turn, skipping the empty one.
-	(carry) => ({
-		title: 'Many queues, one worker',
-		duration: 7000,
-		captions: [{ at: 300, until: 6400, text: '*RoundRobin* picks the next queue' }],
-		parts: [
-			pool(carry, 'core', {
-				...LATE,
-				sources: [QUEUE, PRIO, QUEUE_C],
-				strategy: 'roundrobin',
-				jobs: [
-					...queued(QUEUE.id, [
-						['q0', 1900, 2000],
-						['q1', 2200, 1600],
-					]),
-					...queued(QUEUE_C.id, [
-						['c0', 2050, 1400],
-						['c1', 2350, 1500],
-					]),
-				],
-			}),
-		],
-	}),
+	// 5. Each strategy in turn, on the same three queues. A burst lands in them a second after its caption, before the
+	// event loop looks, so the order its jobs leave in is the strategy's: Priority goes in bind order, as no queue is
+	// bound with a priority, so it empties alerts first though reports is longer and emails shorter; MaxLen takes from
+	// the longest, MinLen from the shortest, and RoundRobin from each in turn. The counts keep each burst's first
+	// picks free of ties. A worker has one strategy for life (`WithStrategy`): this shows what each would do, and ends
+	// on RoundRobin, which the worker keeps.
+	(carry) => {
+		const bursts: [Strategy, number, Record<string, number>][] = [
+			['priority', 300, { [QUEUE.id]: 2, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
+			['maxlen', 4650, { [QUEUE.id]: 1, [PRIO.id]: 3, [QUEUE_C.id]: 1 }],
+			['minlen', 9000, { [QUEUE.id]: 3, [PRIO.id]: 1, [QUEUE_C.id]: 2 }],
+			['roundrobin', 13350, { [QUEUE.id]: 2, [PRIO.id]: 2, [QUEUE_C.id]: 2 }],
+		];
+		// A burst's jobs land 60 ms apart, taking the three lanes in turn, all before the loop looks 400 ms on. Each
+		// burst, the last check included, is done before the next caption, which comes 4350 ms after its own.
+		const jobs = bursts.flatMap(([, at, counts], b) => {
+			const left = { ...counts };
+			const order: string[] = [];
+			while (order.length < Object.values(counts).reduce((n, c) => n + c, 0)) {
+				for (const id of [QUEUE.id, PRIO.id, QUEUE_C.id]) if (left[id]-- > 0) order.push(id);
+			}
+			return order.map((source, k) => ({ id: `st${b}.${k}`, source, at: at + 1000 + 60 * k, work: [650, 750, 700, 800, 650, 750][k] }));
+		});
+		return {
+			title: 'Many queues, one worker',
+			duration: 17900,
+			captions: [
+				{ at: 300, text: '*Priority*, the default, goes in bind order' },
+				{ at: 4650, text: '*MaxLen* takes from the longest queue' },
+				{ at: 9000, text: '*MinLen* takes from the shortest queue' },
+				{ at: 13350, text: '*RoundRobin* takes from each queue in turn' },
+			],
+			// Each strategy's name takes the chip in turn. Priority pops in with the chip, and no later, so the chip's own
+			// RoundRobin never shows beneath it; each after it covers the one before and fades its name in. RoundRobin
+			// does too, and gives way to the chip's own, the same, as the chapter ends.
+			chips: [
+				{ id: 'strategy', label: 'Priority', at: 300, until: 5250 },
+				{ id: 'strategy', label: 'MaxLen', at: 4650, until: 9600, fade: true },
+				{ id: 'strategy', label: 'MinLen', at: 9000, until: 13950, fade: true },
+				{ id: 'strategy', label: 'RoundRobin', at: 13350, until: 17900, fade: true },
+			],
+			parts: [
+				pool(carry, 'core', {
+					...VOLLEY,
+					sources: [QUEUE, PRIO, QUEUE_C],
+					strategy: bursts.map(([strategy, at]) => [at, strategy]),
+					jobs,
+				}),
+			],
+		};
+	},
 
 	// 6. Each value is published once, and both subscribers get it at once and make their own job from it. The
 	// second worker runs at concurrency 1, so its copy of the second value waits at it until the first is done.
@@ -252,8 +284,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		];
 		return {
 			title: 'Topics',
-			duration: 6000,
-			captions: [{ at: 300, until: 5400, text: '*Publish* once, every subscriber gets a copy' }],
+			duration: 6200,
+			captions: [{ at: 300, text: '*Publish* once, every subscriber gets a copy' }],
 			published,
 			parts: [
 				pool(carry, 'core', {
@@ -269,32 +301,34 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
 	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
-	// down 2600 ms, its box red and its card empty.
+	// down 2600 ms, its box red and its card empty. The first caption ends as the store has drawn in (the camera
+	// lands at 1200), and the rerun waits for the last caption, so the one before it ends on the jobs in the queue.
 	(carry) => ({
 		title: 'SQLite',
-		duration: 17000,
+		duration: 16900,
 		captions: [
-			{ at: 300, until: 1700, text: 'SQLite keeps the *queue* in a file' },
-			{ at: 2200, until: 3700, text: '*Add()* writes each job to jobs.db' },
-			{ at: 4200, until: 7200, text: 'Taken jobs stay *in flight* until acked' },
-			{ at: 7700, until: 9100, text: 'The program !dies! mid-job' },
-			{ at: 10200, until: 11700, text: 'On restart they go *back* to the queue' },
-			{ at: 12200, until: 16500, text: 'and run again. Nothing is *lost*' },
+			{ at: 300, text: 'SQLite keeps the *queue* in a file' },
+			{ at: 1300, text: '*Add* writes each job to jobs.db' },
+			{ at: 3300, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 6800, text: 'The program !dies! mid-job' },
+			{ at: 9300, text: 'On restart they go *back* to the queue' },
+			{ at: 10900, text: 'and run again. Nothing is *lost*' },
 		],
 		parts: [
 			sqlite(carry, {
 				...SQLITE_TRAVEL,
 				limit: 2,
 				jobs: stored([
-					['s0', 2400, 4200],
-					['s1', 2600, 800],
-					['s2', 2800, 3000],
-					['s3', 3000, 1000],
+					['s0', 1900, 4200],
+					['s1', 2100, 800],
+					['s2', 2300, 3000],
+					['s3', 2500, 1000],
 				]),
-				firstClaim: 4200,
-				crashAt: 7700,
-				restartAt: 10300,
+				firstClaim: 3300,
+				crashAt: 6800,
+				restartAt: 9400,
 				requeueAfter: 900,
+				rerunAfter: 600, // the jobs wait in the queue for the last caption, which takes them
 				rework: { s0: 1600, s2: 1000 }, // s3 never ran, so it takes its work
 			}),
 		],
@@ -303,16 +337,18 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	// 8. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
 	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
 	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
-	// about six seconds after the crash; here 2.7 s.) B comes back at the end, with nothing left to take.
+	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take. The first
+	// caption ends as Redis has drawn in, and the one before the last ends on B's jobs back in the queue: the wake
+	// comes 400 ms later, with the last.
 	(carry) => ({
 		title: 'Redis',
-		duration: 12000,
+		duration: 11500,
 		captions: [
-			{ at: 300, until: 1700, text: 'Redis holds *one queue* for many programs' },
-			{ at: 2200, until: 3800, text: 'Program A adds. Redis *notifies* workers' },
-			{ at: 4300, until: 5900, text: 'Program B !dies! mid-job' },
-			{ at: 6400, until: 8300, text: 'Its jobs go *back*, and Redis wakes C' },
-			{ at: 8800, until: 11400, text: 'C runs them. Nothing is *lost*' },
+			{ at: 300, text: 'Redis holds *one queue* for many programs' },
+			{ at: 1300, text: 'Program A adds. Redis *notifies* workers' },
+			{ at: 3800, text: 'Program B !dies! mid-job' },
+			{ at: 5900, text: 'Its jobs go *back* to the front' },
+			{ at: 6900, text: 'Redis wakes C, which runs them. Nothing is *lost*' },
 		],
 		parts: [
 			redis(carry, {
@@ -322,27 +358,28 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					{ id: 'c', limit: 2 },
 				],
 				jobs: stored([
-					['r0', 1800, 2200],
-					['r1', 2000, 1900],
-					['r2', 2200, 2500],
-					['r3', 2400, 1900],
+					['r0', 1300, 2200],
+					['r1', 1400, 1900],
+					['r2', 1500, 1400],
+					['r3', 1600, 1000],
 				]),
-				crash: { consumer: 'b', at: 4600, backAfter: 2700, restartAt: 9800, rework: { r0: 1600, r1: 1300 } },
+				crash: { consumer: 'b', at: 4000, backAfter: 2500, wakeAfter: 400, restartAt: 9000, rework: { r0: 1600, r1: 1300 } },
 			}),
 		],
 	}),
 
-	// 9. Pause while two jobs run: they finish, and the jobs added meanwhile wait. Resume once nothing runs (a
-	// pausing worker refuses it), and they start. Stop as the third is due: the two running finish and every
-	// goroutine goes, and the third waits with the two added while the worker is stopped. Restart starts it again
-	// with one idle goroutine, and the three run.
+	// 9. Pause while two jobs run: they finish, and the two added meanwhile wait. Resume once nothing runs (a
+	// pausing worker refuses it), and they start. A third is added while they run, and Stop comes as it is due: the
+	// two running finish and every goroutine goes, and the third waits with the two added while the worker is
+	// stopped. Restart starts it again with one idle goroutine, and the three run. Each press starts its caption.
 	(carry) => ({
 		title: 'Control',
-		duration: 12000,
+		duration: 11600,
 		captions: [
-			{ at: 300, until: 4700, text: '*Pause* and *resume* while it runs' },
-			{ at: 5200, until: 7600, text: '*Stop()* lets running jobs finish' },
-			{ at: 8100, until: 11200, text: '*Restart()* runs the jobs that waited' },
+			{ at: 2300, text: '*Pause* holds new jobs back' },
+			{ at: 4000, text: '*Resume* starts the jobs that waited' },
+			{ at: 6100, text: '*Stop* ends the loop once jobs finish' },
+			{ at: 7900, text: '*Restart* runs the jobs that waited' },
 		],
 		parts: [
 			pool(carry, 'core', {
@@ -350,35 +387,34 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				sources: BOUND,
 				strategy: 'roundrobin',
 				controls: [
-					{ at: 2900, op: 'pause' },
-					{ at: 4400, op: 'resume' },
-					{ at: 5400, op: 'stop' },
-					{ at: 8300, op: 'restart' },
+					{ at: 2300, op: 'pause' },
+					{ at: 4000, op: 'resume' },
+					{ at: 6100, op: 'stop' },
+					{ at: 7900, op: 'restart' },
 				],
 				jobs: queued(QUEUE.id, [
-					['k0', 1900, 1700],
-					['k1', 2100, 1300],
-					['k2', 3100, 2400],
-					['k3', 3300, 2200],
-					['k4', 3500, 2000],
-					['k5', 6300, 1600],
-					['k6', 6500, 1500],
+					['k0', 1300, 1300],
+					['k1', 1500, 1000],
+					['k2', 2500, 2400],
+					['k3', 2700, 2200],
+					['k4', 5800, 2000],
+					['k5', 6700, 1600],
+					['k6', 6900, 1500],
 				]),
 			}),
 		],
 	}),
 
 	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
-	// and then its goroutines go. Nothing waits in its queue at the stop. The one caption stays up until the map is
-	// still, its last word SQLite giving way to Redis halfway; the stop only winds the map down. From 7800 ms the
-	// camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
+	// and then its goroutines go. Nothing waits in its queue at the stop; the stop only winds the map down. From 7800 ms
+	// the camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
 	(carry) => {
 		const published = [{ id: 'zt0', at: 2200 }];
 		return {
 			title: 'Everything together',
 			duration: 9000,
 			captions: [
-				{ at: 300, until: 7500, text: 'One worker model, from memory to #SQLite#', swap: { at: 3900, text: '#Redis#' } },
+				{ at: 300, text: 'One worker model, from memory to #SQLite#', swap: { text: '#Redis#' } },
 			],
 			published,
 			parts: [
@@ -461,10 +497,16 @@ export function starts(): number[] {
 
 export const TOTAL = CHAPTERS.reduce((t, c) => t + c.duration, 0);
 
+/** Each chapter's camera move, its first CAMERA ms, and the finale's zoom into chapter 1's frame, its last. */
+export const CAMERA = 1200;
+
 /** The still frame for reduced motion: the finale once the camera has pulled back, before anything moves. */
 export const STATIC_AT = starts()[CHAPTERS.length - 1] + 1300;
 
 /** A caption's text without its colour marks. */
+/** A transient chip's element: chapter n's chip i, in its piece's place. A chapter may have several in one place. */
+export const chipKey = (n: number, i: number, id: string) => `${id}@${n}:${i}`;
+
 export function plain(text: string): string {
 	return text.replace(/[*!#]/g, '');
 }

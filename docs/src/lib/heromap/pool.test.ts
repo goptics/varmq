@@ -167,9 +167,29 @@ describe('pool rules', () => {
 		assert.throws(() => simulatePool(plan({ controls: [{ at: 1000, op: 'pause' }, { at: 1500, op: 'tune', to: 5 }] })), /tune/);
 		for (const to of [3, 2]) assert.throws(() => simulatePool(plan({ controls: [{ at: 50, op: 'tune', to }] })), /tune/);
 	});
-	it('refuses several sources without a strategy, which varmq would read by priority', () => {
-		assert.throws(() => simulatePool(plan({ sources: [{ id: 'a' }, { id: 'b' }] })), /strategy/);
-		assert.deepEqual(simulatePool(plan({ strategy: 'roundrobin' })), []); // one source needs none, but may name one
+	// Three sources with 3, 1 and 2 jobs, all waiting before the first pick, and room to run them all at once.
+	const sources = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+	const lanes = [['a', 3], ['b', 1], ['c', 2]].flatMap(([source, n]) =>
+		Array.from({ length: n }, (_, k) => ({ id: `${source}${k}`, source, at: 100, work: 5000 })));
+	const order = (p: Partial<PoolPlan>) => dispatches(simulatePool(plan({ limit: 6, sources, jobs: lanes, ...p }))).map(e => e.source).join('');
+	it('reads several sources by Priority when none is named: the first bound with a job', () => {
+		assert.equal(order({}), 'aaabcc');
+		assert.equal(dispatches(simulatePool(plan({ jobs: burst(1) })))[0].strategy, undefined); // one source has none
+	});
+	it('MaxLen takes the longest source and MinLen the shortest with a job, the first of equals', () => {
+		assert.equal(order({ strategy: 'maxlen' }), 'aacabc');
+		assert.equal(order({ strategy: 'minlen' }), 'bccaaa');
+		assert.equal(order({ strategy: 'roundrobin' }), 'abcaca');
+	});
+	it('moves the round-robin turn only under RoundRobin', () => {
+		const turn = (p: Partial<PoolPlan>) => { const q = plan({ limit: 6, sources, jobs: lanes, ...p }); return endState(q, simulatePool(q)).turn; };
+		assert.equal(turn({ strategy: 'maxlen' }), 0);
+		assert.equal(turn({ strategy: 'roundrobin' }), 1); // last served a
+	});
+	it('can show each strategy in turn on one worker, from the times given', () => {
+		const again = lanes.map(j => ({ ...j, id: `${j.id}'`, at: 20000 }));
+		const ev = simulatePool(plan({ limit: 6, sources, strategy: [[0, 'maxlen'], [10000, 'minlen']], jobs: [...lanes, ...again] }));
+		assert.equal(dispatches(ev).map(e => e.source).join(''), 'aacabc' + 'bccaaa');
 	});
 });
 

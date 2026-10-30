@@ -1,0 +1,644 @@
+/* Scenes for the worker pool guides (concurrency, configuration, context, errors, metrics, waiting).
+   The frame, buttons, tabs, fields and the Go strip are the shared ones in ui.css (`.sframe`, `.pbtn`,
+   `.seg`, `.sfield`, `.gocode`, `.call`). This file keeps what only these scenes draw. Names start with `gb-`.
+   Every value comes from tokens.css. The scene root carries `gb` next to `sframe`. */
+
+.gb > .sframe__stage {
+	--local-pad: 14px;
+	padding: 0;
+	min-width: 0;
+}
+
+/* A flex or grid row that has `hidden` still needs to disappear. */
+.gb [hidden] {
+	display: none !important;
+}
+
+.gb .sframe__stats dd[data-warn='true'] {
+	color: var(--amber);
+}
+
+.gb-sub {
+	padding-top: 14px;
+}
+
+.gb .slabel b {
+	margin-left: 4px;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	text-transform: none;
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-col .slabel {
+	padding-inline: var(--local-pad);
+}
+
+/* ---- Pool: queue, lanes, done ---- */
+
+.gb-pool {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 0.6fr);
+	min-height: 220px;
+}
+
+.gb-col {
+	padding: 12px 0 14px;
+	min-width: 0;
+}
+
+.gb-col + .gb-col {
+	border-left: 1px solid var(--panel-rule);
+}
+
+.gb-jobs {
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 6px;
+	padding: 0 var(--local-pad);
+	min-height: 28px;
+}
+
+.gb-jobs[data-empty='true']::after {
+	content: 'empty';
+	align-self: center;
+	font-size: 0.6875rem;
+	color: var(--panel-ink-2);
+	opacity: 0.7;
+}
+
+.gb-job {
+	display: inline-grid;
+	place-items: center;
+	min-width: 36px;
+	height: 28px;
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--brand);
+	color: var(--brand-ink);
+	font: 600 0.6875rem/1 var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-job.is-next {
+	outline: 2px solid var(--panel-ink);
+	outline-offset: 2px;
+}
+
+.gb-job.is-held {
+	min-width: 28px;
+	height: 22px;
+	background: transparent;
+	border: 1px solid var(--brand);
+	color: var(--panel-ink);
+}
+
+.gb-job.is-parked {
+	background: transparent;
+	border: 1px dashed var(--cobalt);
+	color: var(--cobalt);
+}
+
+.gb-job--more {
+	background: transparent;
+	color: var(--panel-ink-2);
+	border: 1px dashed var(--panel-rule);
+}
+
+/* Live goroutines only: one block each, filled while it runs a job. */
+.gb-pool:has(.gb-blocks) {
+	min-height: 120px;
+}
+
+.gb-blocks {
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	gap: 8px;
+	padding: 0 var(--local-pad);
+}
+
+.gb-block {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 6px;
+	border: 1px solid var(--panel-rule);
+	background: var(--panel-fill);
+	overflow: hidden;
+	animation: gb-pop 0.24s var(--ease);
+}
+
+.gb-block::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--brand) 34%, transparent);
+	transform-origin: bottom;
+	transform: scaleY(var(--p, 0));
+}
+
+.gb-block[data-s='busy'] {
+	border-color: var(--brand);
+}
+
+.gb-block[data-over='true'] {
+	border-color: var(--amber);
+}
+
+.gb-block {
+	gap: 3px;
+	place-content: center;
+	justify-items: center;
+	font: 600 0.6875rem/1 var(--mono);
+	color: var(--panel-ink);
+}
+
+.gb-block > * {
+	position: relative;
+}
+
+.gb-block__job {
+	font-weight: 500;
+	color: var(--panel-ink-2);
+}
+
+.gb-block__job:empty,
+.gb-block__held:empty {
+	display: none;
+}
+
+.gb-block__job[data-fail='error'],
+.gb-block__job[data-fail='panic'] {
+	color: var(--danger);
+}
+
+.gb-block__held {
+	position: absolute;
+	top: 2px;
+	right: 3px;
+	font-size: 0.5625rem;
+	color: var(--panel-ink-2);
+}
+
+@keyframes gb-pop {
+	from {
+		opacity: 0;
+		scale: 0.8;
+	}
+}
+
+.gb-dots {
+	display: grid;
+	grid-template-columns: repeat(6, 1fr);
+	gap: 5px;
+	padding: 0 var(--local-pad);
+	max-width: 150px;
+}
+
+.gb-dots i {
+	aspect-ratio: 1;
+	border-radius: 4px;
+	background: var(--panel-fill);
+}
+
+.gb-dots i.ok {
+	background: var(--brand);
+}
+
+.gb-dots i.fail {
+	background: repeating-linear-gradient(135deg, var(--danger) 0 2px, transparent 2px 4px);
+	outline: 1px solid var(--danger);
+	outline-offset: -1px;
+}
+
+.gb-tally {
+	margin: 0;
+	padding: 10px var(--local-pad) 0;
+	font-size: 0.75rem;
+	color: var(--panel-ink-2);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Meter ---- */
+
+.gb-meter {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 6px 14px;
+	padding: 12px var(--local-pad) 14px;
+	border-top: 1px solid var(--panel-rule);
+}
+
+.gb-meter .slabel {
+	margin: 0;
+}
+
+.gb-meter__track {
+	position: relative;
+	height: 12px;
+	border-radius: 4px;
+	background: var(--panel-fill);
+}
+
+.gb-meter__fill {
+	position: absolute;
+	inset: 0;
+	border-radius: 4px;
+	background: var(--brand);
+	transform-origin: left center;
+	transform: scaleX(var(--f, 0));
+	transition: transform 0.4s var(--ease);
+}
+
+.gb-meter__tick {
+	position: absolute;
+	top: -5px;
+	bottom: -5px;
+	left: var(--v, 0%);
+	width: 2px;
+	margin-left: -1px;
+	background: var(--panel-ink);
+}
+
+.gb-meter__tick--arr {
+	background: var(--amber);
+	top: -2px;
+	bottom: -2px;
+}
+
+.gb-meter__text {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--panel-ink-2);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-meter__text b {
+	font-weight: 500;
+	color: var(--panel-ink);
+}
+
+/* ---- Narrow containers ---- */
+
+@container sframe (max-width: 640px) {
+	.gb-pool {
+		grid-template-columns: minmax(0, 1fr);
+		min-height: 0;
+	}
+	.gb-col + .gb-col {
+		border-left: 0;
+		border-top: 1px solid var(--panel-rule);
+	}
+	.gb-col--queue {
+		min-height: 88px;
+	}
+	.gb-dots {
+		grid-template-columns: repeat(18, 1fr);
+		max-width: none;
+	}
+}
+
+@container sframe (max-width: 420px) {
+	.gb > .sframe__stage {
+		--local-pad: 12px;
+	}
+	.gb .sfield {
+		flex: 1 1 100%;
+	}
+	.gb .sfield input[type='range'] {
+		flex: 1;
+		width: auto;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.gb-block {
+		animation: none;
+	}
+	.gb-meter__fill,
+	.gb-meter__tick {
+		transition: none;
+	}
+}
+
+/* ---- Timeline (waiting) ---- */
+
+.gb-tl {
+	padding: 12px var(--local-pad) 8px;
+	display: grid;
+	gap: 14px;
+}
+
+.gb-tl__axis {
+	position: relative;
+	height: 14px;
+	margin-left: var(--local-label, 9.5rem);
+	font-size: 0.625rem;
+	color: var(--panel-ink-2);
+}
+
+.gb-tl__axis span {
+	white-space: nowrap;
+	position: absolute;
+	top: 0;
+	transform: translateX(-50%);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-tl__group {
+	display: grid;
+	gap: 6px;
+}
+
+.gb-tl__name {
+	margin: 0;
+	font-size: 0.6875rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--panel-accent);
+}
+
+.gb-tl__row {
+	display: grid;
+	grid-template-columns: var(--local-label, 9.5rem) minmax(0, 1fr);
+	align-items: center;
+	gap: 0;
+	min-height: 28px;
+}
+
+.gb-tl__label {
+	padding-right: 8px;
+	font-size: 0.6875rem;
+	color: var(--panel-ink-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.gb-tl__track {
+	position: relative;
+	height: 24px;
+	border-radius: 4px;
+	background: var(--panel-fill);
+	overflow: hidden;
+}
+
+.gb-tl__seg {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	padding: 0 6px;
+	font-size: 0.6875rem;
+	line-height: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-tl__seg[data-status='Idle'] { background: var(--panel-fill-2); color: var(--panel-ink-2); }
+.gb-tl__seg[data-status='Running'] { background: color-mix(in srgb, var(--brand) 34%, transparent); }
+.gb-tl__seg[data-status='Pausing'] { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--amber) 42%, transparent) 0 4px, transparent 4px 8px); }
+.gb-tl__seg[data-status='Paused'] { background: color-mix(in srgb, var(--amber) 38%, transparent); }
+.gb-tl__seg[data-status='Stopping'] { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 42%, transparent) 0 4px, transparent 4px 8px); }
+.gb-tl__seg[data-status='Stopped'] { background: color-mix(in srgb, var(--danger) 36%, transparent); }
+.gb-tl__seg[data-status='Initiated'] { background: transparent; outline: 1px dashed var(--panel-rule); outline-offset: -1px; color: var(--panel-ink-2); }
+
+.gb-tl__seg.is-job {
+	background: var(--brand);
+	color: var(--brand-ink);
+	font-weight: 600;
+	border-radius: 4px;
+	top: 2px;
+	bottom: 2px;
+	justify-content: center;
+	padding: 0 2px;
+}
+
+.gb-tl__seg.is-blocked {
+	background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--cobalt) 40%, transparent) 0 4px, transparent 4px 8px);
+	border-radius: 4px;
+	top: 3px;
+	bottom: 3px;
+	color: var(--panel-ink);
+}
+
+.gb-tl__seg.is-blocked[data-done='true'] {
+	background: color-mix(in srgb, var(--cobalt) 34%, transparent);
+	box-shadow: inset -3px 0 0 var(--cobalt);
+}
+
+.gb-tl__out {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	font-size: 0.6875rem;
+	white-space: nowrap;
+	color: var(--panel-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.gb-tl__mark {
+	position: absolute;
+	top: 2px;
+	bottom: 2px;
+	width: 2px;
+	margin-left: -1px;
+	background: var(--panel-ink);
+}
+
+.gb-tl__now {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: var(--panel-ink);
+	opacity: 0.55;
+}
+
+.gb-log {
+	margin: 0;
+	padding: 10px var(--local-pad) 14px;
+	list-style: none;
+	display: grid;
+	gap: 4px;
+	border-top: 1px solid var(--panel-rule);
+	font-size: 0.75rem;
+	line-height: 1.45;
+	color: var(--panel-ink-2);
+	min-height: 5.2em;
+}
+
+.gb-log li b {
+	font-weight: 500;
+	color: var(--panel-ink);
+}
+
+.gb-log li[data-tone='warn'] b {
+	color: var(--amber);
+}
+
+@container sframe (max-width: 560px) {
+	.gb > .sframe__stage {
+		--local-label: 100%;
+	}
+	.gb-tl__axis {
+		margin-left: 0;
+	}
+	.gb-tl__row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 2px;
+	}
+	.gb-tl__label {
+		overflow: visible;
+	}
+}
+
+/* ---- Option explorer and argument list (configuration) ---- */
+
+.gb-cfg {
+	display: grid;
+	grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.gb-cfg > * {
+	min-width: 0;
+	padding: 12px var(--local-pad) 14px;
+}
+
+.gb-cfg > * + * {
+	border-left: 1px solid var(--panel-rule);
+}
+
+.gb-opts {
+	display: grid;
+	gap: 2px;
+	margin: 10px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.gb-opt {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	min-height: 38px;
+	padding: 2px 8px;
+	border-radius: 8px;
+	font-size: 0.75rem;
+	color: var(--panel-ink);
+}
+
+.gb-opt:hover {
+	background: var(--panel-fill);
+}
+
+.gb-opt input[type='checkbox'] {
+	flex: none;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	cursor: pointer;
+	accent-color: var(--brand);
+}
+
+.gb-opt label {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	cursor: pointer;
+	min-height: 32px;
+}
+
+.gb-opt .gb-opt__args {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	color: var(--panel-ink-2);
+}
+
+/* Compact fields in a row of options: the shared field look at a smaller size. */
+.gb .gb-opt input[type='number'],
+.gb .gb-opt input[type='text'],
+.gb .gb-opt select {
+	min-height: 30px;
+	padding: 0 6px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 4px;
+	background: var(--panel-2);
+	color: var(--panel-ink);
+	font: 500 0.75rem/1 var(--mono);
+	color-scheme: dark;
+}
+
+.gb-opt input[type='number'] {
+	width: 8ch;
+}
+
+.gb-opt input[type='text'] {
+	width: 9ch;
+}
+
+.gb-opt[data-off='true'] .gb-opt__args {
+	opacity: 0.45;
+	pointer-events: none;
+}
+
+.gb-res {
+	display: grid;
+	gap: 8px;
+	margin: 10px 0 0;
+	font-size: 0.75rem;
+	line-height: 1.45;
+}
+
+.gb-res div {
+	display: grid;
+	grid-template-columns: 8.5rem minmax(0, 1fr);
+	gap: 8px;
+}
+
+.gb-res dt {
+	color: var(--panel-ink-2);
+}
+
+.gb-res dd {
+	margin: 0;
+	color: var(--panel-ink);
+	overflow-wrap: anywhere;
+}
+
+.gb-res dd[data-tone='warn'] {
+	color: var(--amber);
+}
+
+.gb-res dd[data-tone='dim'] {
+	color: var(--panel-ink-2);
+}
+
+@container sframe (max-width: 640px) {
+	.gb-cfg {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.gb-cfg > * + * {
+		border-left: 0;
+		border-top: 1px solid var(--panel-rule);
+	}
+	.gb-res div {
+		grid-template-columns: 7.5rem minmax(0, 1fr);
+	}
+}
