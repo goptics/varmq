@@ -586,7 +586,7 @@
 	margin-top: 28px;
 	font: 400 0.75rem/1.7 var(--mono);
 	color: var(--ink-2);
-	max-width: 100ch;
+	max-width: 75ch;
 }
 
 /* ---- JOB 05: the programs (Examples.astro) ---- */

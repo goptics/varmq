@@ -659,7 +659,7 @@
 	padding: 0;
 	border: 1.5px solid transparent;
 	border-radius: 4px;
-	font: 700 0.625rem/1 var(--mono);
+	font: 700 0.6875rem/1 var(--mono);
 	letter-spacing: 0.02em;
 	cursor: pointer;
 	transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
@@ -794,7 +794,20 @@
 }
 
 .bloss .bdet {
-	background: var(--panel);
+	border: 0;
+	border-top: 1px solid var(--panel-rule);
+	border-radius: 0;
+	background: none;
+}
+
+.bloss .bdet > summary {
+	padding-inline: 0;
+}
+
+.bloss .bdet__body,
+.bloss .bdet > .btable {
+	padding-inline: 0;
+	margin-inline: 0;
 }
 
 /* ---- tables ---- */
