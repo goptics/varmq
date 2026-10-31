@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "test": "node --test \"src/**/*.test.ts\"",
-    "coverage": "bash scripts/api-coverage.sh"
+    "coverage": "bash scripts/api-coverage.sh",
+    "og": "google-chrome --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 --virtual-time-budget=8000 --screenshot=public/og.png http://127.0.0.1:4321/og-card/"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.4",
