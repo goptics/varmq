@@ -8,39 +8,13 @@ const { id } = Astro.locals.starlightRoute.entry;
 const notFound = id === '404' || id.endsWith('/404');
 ---
 
-{
-	notFound ? (
-		<>
-			<p class="shell-banner">
-				<span class="shell-banner__id">JOB 404</span>
-				<span class="shell-banner__label">Not found</span>
-				<span class="shell-banner__rule" aria-hidden="true" />
-			</p>
-			<Default {...Astro.props}>
-				<slot />
-			</Default>
-		</>
-	) : (
-		<>
-			{['roll--l', 'roll--r'].map((side) => (
-				<div class:list={['roll', side]} aria-hidden="true">
-					<div class="roll-holes" />
-					<div class="roll-band">
-						<div class="roll-lit" />
-					</div>
-				</div>
-			))}
-			<Story />
-		</>
-	)
-}
-
 <script>
 	// The sprocket holes keep feeding (story.css, .roll): the left rail's down and the right rail's up, slowly on their
 	// own, and a third as far as the page moved when it scrolls. The glow runs from the top of the page to the bottom.
 	// Each frame eases toward the scroll position, so the holes glide after a step's snap instead of jumping. The
-	// browser pauses the loop in a hidden tab. The loop runs only where the rails show (1180px and up), and reduced
-	// motion keeps them still and unlit.
+	// browser pauses the loop in a hidden tab. The loop runs only where the rails show (1180px and up), and not with
+	// reduced motion (story.css keeps them still and unlit there). This script comes before <Story /> so the browser
+	// runs it without waiting for the story's larger module, as module scripts run in document order.
 	const rails = Array.from(document.querySelectorAll<HTMLElement>('.roll'));
 	const story = document.querySelector('.st');
 	const wide = matchMedia('(min-width: 1180px)');
@@ -100,7 +74,6 @@ const notFound = id === '404' || id.endsWith('/404');
 		const update = () => {
 			const on = wide.matches && !reduce.matches;
 			if (on === frame > 0) return;
-			for (const rail of rails) rail.toggleAttribute('data-live', on);
 			if (on) {
 				y = scrollY;
 				last = 0;
@@ -116,3 +89,30 @@ const notFound = id === '404' || id.endsWith('/404');
 		update();
 	}
 </script>
+
+{
+	notFound ? (
+		<>
+			<p class="shell-banner">
+				<span class="shell-banner__id">JOB 404</span>
+				<span class="shell-banner__label">Not found</span>
+				<span class="shell-banner__rule" aria-hidden="true" />
+			</p>
+			<Default {...Astro.props}>
+				<slot />
+			</Default>
+		</>
+	) : (
+		<>
+			{['roll--l', 'roll--r'].map((side) => (
+				<div class:list={['roll', side]} aria-hidden="true">
+					<div class="roll-holes" />
+					<div class="roll-band">
+						<div class="roll-lit" />
+					</div>
+				</div>
+			))}
+			<Story />
+		</>
+	)
+}

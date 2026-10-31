@@ -1,12 +1,19 @@
 ---
 import Default from '@astrojs/starlight/components/Head.astro';
+import logoDark from '../../assets/logo-dark.svg';
+import logoLight from '../../assets/logo-light.svg';
 
 // The fonts load without blocking the first paint: the stylesheet applies once it arrives, and display=swap shows the fallback until then.
 const fonts =
 	'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap';
+
+// The header logo (astro.config.mjs, logo) is fetched early, so it paints with the header text. The theme shows one of
+// the two, but both images load either way.
+const logos = [logoLight.src, logoDark.src];
 ---
 
 <Default {...Astro.props}><slot /></Default>
+{logos.map((href) => <link rel="preload" as="image" type="image/svg+xml" href={href} />)}
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preload" as="style" href={fonts} />

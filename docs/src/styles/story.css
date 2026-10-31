@@ -998,7 +998,9 @@
    third as far as the page moved, and one glow runs down both rails from the top of the page to the bottom.
    Hero.astro eases the holes' offset (within one pitch) and the glow's place toward the scroll position each frame, so
    both glide. It moves three layers by transform (.roll-holes, .roll-band, .roll-lit), each on its own compositor
-   layer, so a frame repaints nothing. With reduced motion the holes stand still and unlit. */
+   layer, so a frame repaints nothing. The first paint already shows them as that script's first frame does at the top
+   of the page: holes at offset 0, glow at the top of the rail. With reduced motion the script does not run and the
+   holes stand still and unlit. */
 .roll {
 	display: none;
 }
@@ -1076,7 +1078,6 @@
 		top: 0;
 		right: 0;
 		left: 0;
-		display: none;
 		height: var(--band);
 		overflow: hidden;
 		will-change: transform;
@@ -1095,8 +1096,10 @@
 			0 0 / 100% var(--pitch) repeat-y;
 	}
 
-	.roll[data-live] .roll-band {
-		display: block;
+	@media (prefers-reduced-motion: reduce) {
+		.roll-band {
+			display: none;
+		}
 	}
 }
 
