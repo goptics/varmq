@@ -371,8 +371,8 @@ function startTour() {
 /**
  * Ends the tour: the track gives up its stops, so the page is the intro and the sections under it again. Kept in place
  * (scrolled out at either end, or tabbed out), the page moves by what the track gave up, so what is in view stays
- * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to JOB 05's
- * heading, #try-it, at the top of the screen, and focuses it. Back up at the intro from step 1 (`back`), the map plays
+ * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to JOB 02's
+ * heading, #sched-title, at the top of the screen, and focuses it. Back up at the intro from step 1 (`back`), the map plays
  * back to its run.
  */
 function endTour(keep: boolean, back = false) {
@@ -392,7 +392,7 @@ function endTour(keep: boolean, back = false) {
 	showIntro(back);
 	// html scrolls smoothly (scroll-behavior), so these jumps say instant. The current scrollY already holds any
 	// adjustment the browser's scroll anchoring made.
-	const heading = document.getElementById('try-it');
+	const heading = document.getElementById('sched-title');
 	if (heading && !heading.hasAttribute('tabindex')) heading.tabIndex = -1;
 	if (keep) {
 		if (row) scrollTo({ top: scrollY + row.getBoundingClientRect().top - was, behavior: 'instant' });
