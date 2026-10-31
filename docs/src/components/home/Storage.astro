@@ -1,0 +1,138 @@
+---
+// JOB 03 on the home page: what a process restart does to the jobs, for each place they can live, on a piece of the
+// hero map (store.ts), beside the code that picks it. The page ships the stage's first frame, drawn here at build time.
+import '../../lib/heromap/map.css';
+import '../../styles/home.css';
+import { StillDocument } from '../../lib/heromap/still';
+import { highlightGo } from '../ui/go';
+import { still } from './store';
+
+const stage = (still(new StillDocument() as unknown as Document).stage.svg as unknown as { outerHTML: string }).outerHTML;
+
+const tabs = [
+	{
+		key: 'memory',
+		label: 'In memory',
+		text: 'Built in. Plain queues, priority queues and topics live in your process. They have nothing to set up, and they end when the process ends.',
+		note: 'Use it when a lost job is fine, or when you can add it again.',
+		file: 'main.go',
+		code: `queue := worker.BindQueue()
+
+// or, ordered by a number:
+pq := worker.BindPriorityQueue()`,
+		href: '/guides/queues/',
+		more: 'Queues guide',
+	},
+	{
+		key: 'redis',
+		label: 'Redis',
+		text: 'redisq keeps jobs in Redis. A persistent queue lets one process keep its jobs across a restart. A distributed queue lets several processes consume one queue, and each job goes to one of them.',
+		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
+		file: 'main.go',
+		code: `rdb := redisq.New("redis://localhost:6375")
+defer rdb.Close()
+
+pq := rdb.NewQueue("persistent_queue")
+queue := worker.WithPersistentQueue(pq)
+
+// several processes: rdb.NewDistributedQueue(name)
+// with worker.WithDistributedQueue`,
+		href: '/persistence/redis/',
+		more: 'Redis guide',
+	},
+	{
+		key: 'sqlite',
+		label: 'SQLite',
+		text: 'sqliteq keeps jobs in local SQLite files, so a single process keeps them across a restart with no server to run.',
+		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
+		file: 'main.go',
+		code: `sdb, err := sqliteq.New("data")
+if err != nil {
+	panic(err)
+}
+defer sdb.Close()
+
+pq, err := sdb.NewQueue("jobs")
+if err != nil {
+	panic(err)
+}
+queue := worker.WithPersistentQueue(pq)`,
+		href: '/persistence/sqlite/',
+		more: 'SQLite guide',
+	},
+];
+---
+
+<section class="home-row section wrap" aria-labelledby="store-title" style="padding-top:0">
+	<div class="banner">
+		<span class="banner__id">JOB 03</span><span>Where jobs live</span><span class="banner__rule"></span><span class="banner__meta">same worker, three homes</span>
+	</div>
+	<div class="section__head">
+		<h2 class="h2" id="store-title">Same worker. You choose where the jobs live.</h2>
+		<p>
+			Press Restart process. A queue in memory ends with the process. A queue in Redis or SQLite keeps the waiting jobs.
+		</p>
+	</div>
+	<div data-store-tabs>
+		<div class="seg" role="tablist" aria-label="Where jobs live">
+			{
+				tabs.map((t, i) => (
+					<button
+						type="button"
+						role="tab"
+						id={`store-tab-${t.key}`}
+						aria-controls={`store-panel-${t.key}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+						data-key={t.key}
+					>
+						{t.label}
+					</button>
+				))
+			}
+		</div>
+
+		<div class="store-grid" style="margin-top:28px">
+			<div class="store" data-store>
+				<div
+					class="store__stage vm-mini"
+					data-stage
+					role="img"
+					aria-label="Your process, with Add() and a worker, and the storage outside it. In memory the queue is in the process; with Redis or SQLite it is in the store, with the jobs taken and not yet acknowledged in flight."
+					set:html={stage}
+				/>
+				<div class="store__bar">
+					<button type="button" class="pbtn pbtn--primary" data-act="restart">Restart process</button>
+					<button type="button" class="pbtn pbtn--paper" data-act="add">Add 5 jobs</button>
+					<p class="store__result" role="status" data-result></p>
+				</div>
+			</div>
+
+			<div class="store-side">
+				{
+					tabs.map((t, i) => (
+						<div role="tabpanel" id={`store-panel-${t.key}`} aria-labelledby={`store-tab-${t.key}`} hidden={i !== 0}>
+							<p>{t.text}</p>
+							<div class="code" style="margin-block:16px">
+								<div class="code__head">
+									<span>{t.file}</span>
+									<a href={t.href}>{t.more}</a>
+								</div>
+								<pre class="gocode"><code set:html={highlightGo(t.code)} /></pre>
+							</div>
+							<p>{t.note}</p>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</div>
+</section>
+
+<script>
+	import './ui.ts';
+	import { boot } from './store.ts';
+
+	const root = document.querySelector<HTMLElement>('[data-store]');
+	if (root) boot(root);
+</script>

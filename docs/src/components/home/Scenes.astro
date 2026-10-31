@@ -1,0 +1,97 @@
+---
+// JOB 02 on the home page: three small pieces of the hero map (scenes.ts), each looping on its own while it is in
+// view, with the Go call of each step above it. The page ships each scene's still frame, drawn here at build time.
+import '../../lib/heromap/map.css';
+import '../../styles/home.css';
+import { StillDocument } from '../../lib/heromap/still';
+import { build, type SceneKey } from './scenes';
+
+interface Scene {
+	key: SceneKey;
+	title: string;
+	text: string;
+	href: string;
+	more: string;
+}
+
+const scenes: Scene[] = [
+	{
+		key: 'priority',
+		title: 'Priority queues',
+		text: 'Give a job a number. The lowest number runs first, and equal numbers keep the order you added them.',
+		href: '/guides/queues/',
+		more: 'Queues',
+	},
+	{
+		key: 'strategy',
+		title: 'Several queues, one worker',
+		text: 'Bind many queues to one worker. A strategy decides which queue gives the next job: Priority, RoundRobin, MaxLen or MinLen.',
+		href: '/guides/strategies/',
+		more: 'Strategies',
+	},
+	{
+		key: 'topic',
+		title: 'Topics',
+		text: 'Publish once and every subscribed worker gets its own job. A queue gives each job to one worker.',
+		href: '/guides/topics/',
+		more: 'Topics',
+	},
+];
+
+/** A scene's still frame: the moment that shows its order, and the caption that says it. */
+function still(key: SceneKey) {
+	const scene = build(key, new StillDocument() as unknown as Document, false);
+	scene.tl.seek(scene.still.at);
+	scene.stage.render();
+	return { html: (scene.stage.svg as unknown as { outerHTML: string }).outerHTML, cap: scene.still.cap };
+}
+---
+
+<section class="home-row section wrap" aria-labelledby="sched-title">
+	<div class="banner">
+		<span class="banner__id">JOB 02</span><span>Scheduling</span><span class="banner__rule"></span>
+	</div>
+	<div class="section__head">
+		<h2 class="h2" id="sched-title">Order, fairness and fan-out, each in one line.</h2>
+		<p>
+			Each scene shows the order varmq runs the jobs in, with the call that makes it. Typed results and errors, job IDs and deduplication,
+			context cancellation, metrics, a REST API and Prometheus are in the <a href="/guides/queues/">guides</a>.
+		</p>
+	</div>
+	<div class="scenes">
+		{
+			scenes.map((s) => {
+				const frame = still(s.key);
+				return (
+					<article class="scene-card">
+						<p class="scene-cap" data-cap aria-hidden="true">{frame.cap}</p>
+						<div class="scene vm-mini" data-scene={s.key} role="img" aria-label={`${s.title}: ${s.text}`} set:html={frame.html} />
+						<h3 class="h3">{s.title}</h3>
+						<p>{s.text}</p>
+						<p><a href={s.href}>{s.more} guide</a></p>
+					</article>
+				);
+			})
+		}
+	</div>
+</section>
+
+<!-- The glow and the lanes' edge that the scenes and the storage stage (Storage.astro) draw with: map.css's --vm-glow
+     and lane stroke, by these ids under .vm-mini (home.css). The hero's own svg holds its own. -->
+<svg class="vm-mini-defs" width="0" height="0" aria-hidden="true" focusable="false">
+	<defs class="vm-mini">
+		<filter id="vm-mini-glow" x="-80%" y="-80%" width="260%" height="260%">
+			<feGaussianBlur stdDeviation="2.6" result="blur"></feGaussianBlur>
+			<feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+		</filter>
+		<linearGradient id="vm-mini-lane-edge" x1="0" x2="1">
+			<stop class="vm-edge-tail" offset="0"></stop>
+			<stop class="vm-edge-head" offset="1"></stop>
+		</linearGradient>
+	</defs>
+</svg>
+
+<script>
+	import { boot } from './scenes.ts';
+	boot();
+</script>

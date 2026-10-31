@@ -52,7 +52,8 @@
 	max-width: none;
 }
 
-:root:is([data-home], :has(.st)) .sl-container > :not(.st, .roll) {
+/* The sections under the story take this frame from their own `.wrap` (home.css), not from the markdown column. */
+:root:is([data-home], :has(.st)) .sl-container > :not(.st, .roll, .sl-markdown-content) {
 	max-width: var(--st-max);
 	margin-inline: auto;
 	padding-inline: var(--st-gutter);
@@ -62,97 +63,6 @@
    below the header. */
 :root:is([data-home], :has(.st)) .sl-container > .st {
 	margin-top: 0;
-}
-
-/* Each section under the story is a row (index.mdx): a perforation above it, as on any docs page, then its heading and
-   lead in the story's text column and the rest in the map's. Short of room for both, the row stacks at a reading
-   width. */
-.home-row {
-	margin-top: 3rem;
-	padding-top: 1.75rem;
-	border-top: 1px dashed var(--rule);
-}
-
-.home-row:first-child {
-	margin-top: 0.5rem;
-}
-
-.sl-markdown-content .home-row > *,
-.sl-markdown-content .home-row .sl-heading-wrapper.level-h2 {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-
-@media (min-width: 72rem) {
-	.home-row {
-		display: grid;
-		grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
-		column-gap: var(--st-gap);
-		align-items: start;
-	}
-}
-
-/* A store's icon leads its link card's title (components/StoreCard.astro), in the map's colour for it: the brand's green
-   for memory, SQLite's blue, Redis's red. */
-.store-icon {
-	display: inline-block;
-	width: 1.25em;
-	height: 1.25em;
-	margin-right: 0.5em;
-	vertical-align: -0.28em;
-	fill: var(--brand);
-}
-
-.store-icon--sqlite {
-	fill: var(--vm-sqlite);
-}
-
-.store-icon--redis {
-	fill: var(--vm-redis);
-}
-
-/* The footer keeps the rows' columns: its links under the headings, its note under the rest. */
-@media (min-width: 72rem) {
-	:root:is([data-home], :has(.st)) .shell-foot__in {
-		display: grid;
-		grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
-		column-gap: var(--st-gap);
-	}
-}
-
-@media (max-width: 71.99rem) {
-	.home-row > * {
-		max-width: 44rem;
-	}
-
-	.sl-markdown-content .home-row > * + * {
-		margin-top: 1.25rem;
-	}
-}
-
-/* About 70 letters a line. In this face `ch`, a zero, is much wider than an average letter, so the measure is in em. */
-:root:is([data-home], :has(.st)) .sl-markdown-content :is(p, .card .body) {
-	max-width: 34em;
-	text-wrap: pretty;
-}
-
-/* Three link cards share one line where a row stacks, and read as a list beside a heading. The three figures, each
-   with its paragraph, are always a list rather than a two-and-one grid. */
-@media (min-width: 50rem) and (max-width: 71.99rem) {
-	:root:is([data-home], :has(.st)) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-	}
-}
-
-@media (min-width: 72rem) {
-	:root:is([data-home], :has(.st)) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
-		grid-template-columns: minmax(0, 1fr);
-	}
-}
-
-:root:is([data-home], :has(.st)) .card-grid:has(> .card:nth-child(3):last-child) {
-	grid-template-columns: minmax(0, 1fr);
 }
 
 /* On a phone, Starlight keeps the theme switch in the sidebar's menu, which the home page does not have: its header

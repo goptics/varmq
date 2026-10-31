@@ -20,109 +20,21 @@ hero:
   tagline: Add jobs to a queue. A pool of workers runs them. Keep the jobs in memory, or in Redis or SQLite so they survive a restart.
 ---
 
-import { Card, CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
-import GoPlay from '../../components/GoPlay.astro';
-import StoreCard from '../../components/StoreCard.astro';
+import Scenes from '../../components/home/Scenes.astro';
+import Storage from '../../components/home/Storage.astro';
+import Race from '../../components/home/Race.astro';
+import Examples from '../../components/home/Examples.astro';
+import Index from '../../components/home/Index.astro';
+import Close from '../../components/home/Close.astro';
 
-{/* Each section is a row on the story's two columns (styles/story.css): its heading and lead, then the rest. */}
+{/* Under the story, the sections are print jobs, JOB 02 to JOB 06, then the closing (components/home/, styles/home.css).
+    The tour (lib/story/main.ts) ends at the first section.home-row and focuses #try-it, the heading of JOB 05. */}
 
-<section class="home-row">
-<div>
-
-## Try it
-
-Each tab is a full program. Press Run to run it in the Go Playground, or edit it first.
-
+<div class="home-jobs not-content">
+	<Scenes />
+	<Storage />
+	<Race />
+	<Examples />
+	<Index />
+	<Close />
 </div>
-
-<Tabs>
-	<TabItem label="Quick start">
-		A worker with the default concurrency of 1 runs two jobs, one after the other.
-
-		<GoPlay example="quick-start" />
-	</TabItem>
-	<TabItem label="Priority">
-		The worker is started after the three jobs are added, so the lowest number runs first.
-
-		<GoPlay example="queues-priority" />
-	</TabItem>
-	<TabItem label="Round robin">
-		One worker takes jobs from three queues in turn.
-
-		<GoPlay example="strategies-round-robin" />
-	</TabItem>
-	<TabItem label="Topics">
-		Two workers subscribe to one topic, and each gets every order.
-
-		<GoPlay example="topic-subscribe" />
-	</TabItem>
-	<TabItem label="Results">
-		A result worker returns a value and an error, which you read from the job.
-
-		<GoPlay example="worker-types-result" />
-	</TabItem>
-</Tabs>
-
-</section>
-
-<section class="home-row">
-<div>
-
-## Where jobs live
-
-A worker runs its jobs the same way wherever the queue keeps them. Memory is built in. The redisq and sqliteq adapters keep jobs in Redis or SQLite, so they survive a restart, and Redis lets several programs share one queue.
-
-</div>
-
-<CardGrid>
-	<StoreCard store="memory" title="In memory" description="Built in. Plain and priority queues, and topics." href="/guides/queues/" />
-	<StoreCard store="redis" title="Redis" description="redisq gives persistent and distributed queues." href="/persistence/redis/" />
-	<StoreCard store="sqlite" title="SQLite" description="sqliteq keeps persistent queues in local files." href="/persistence/sqlite/" />
-</CardGrid>
-
-</section>
-
-<section class="home-row">
-<div>
-
-## Performance
-
-Measured on an i7-13700 (24 threads) on 2026-10-25. The [benchmarks](/reference/benchmarks/) page has every result, including the ones VarMQ loses. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
-
-The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
-
-</div>
-
-<CardGrid>
-	<Card title="4.89M tasks/s">
-		Mean of 15 runs of 1M tasks (3 task types by 5 producer shapes) at GOMAXPROCS 24, 8 and 4, with
-		50K workers. The next fastest pool, a hand-rolled buffered channel pool, does 2.73M, and ants 2.22M. It uses more memory: 115 MB per 1M
-		tasks against 15 MB for ants, because `Add` never blocks.
-	</Card>
-	<Card title="59,898 jobs/s on Redis">
-		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. With 10
-		workers taking one job at a time, the median time from enqueue to handler is 0.058 ms. With one
-		producer, Rmq leads: 35,708 jobs/s against 20,812.
-	</Card>
-	<Card title="14,725 jobs/s on SQLite">
-		With sqliteq, draining 20K jobs on WAL. goqite does 2,933 and River 3,230 on the same run.
-	</Card>
-</CardGrid>
-
-</section>
-
-<section class="home-row">
-<div>
-
-## Next
-
-</div>
-
-<CardGrid>
-	<LinkCard title="Start" description="Install varmq and run your first worker." href="/start/introduction/" />
-	<LinkCard title="Concepts" description="Workers, queues, jobs and the lifecycle." href="/concepts/workers-and-queues/" />
-	<LinkCard title="Guides" description="Concurrency, errors, waiting, metrics and more." href="/guides/queues/" />
-	<LinkCard title="Persistence" description="Redis and SQLite adapters, and writing your own." href="/persistence/overview/" />
-</CardGrid>
-
-</section>
