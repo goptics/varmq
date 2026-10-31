@@ -60,8 +60,8 @@
 }
 
 /* The rails come before the story in the content, so Starlight's margin between siblings would push the stage 1.5rem
-   below the header. */
-:root:is([data-home], :has(.st)) .sl-container > .st {
+   below the header; after the story it would add to the space above JOB 02, which its own padding sets. */
+:root:is([data-home], :has(.st)) .sl-container > :is(.st, .sl-markdown-content) {
 	margin-top: 0;
 }
 
@@ -840,13 +840,22 @@
 	.st[data-at='step'] .st-text {
 		padding-bottom: 76px;
 	}
-	/* Before the tour the intro comes first and the map under it, at the same size, the two as one block in the middle
-	   of the screen: the reader meets the words, then the picture. The text is as tall as the intro here, so it sizes
+	/* Before the tour the intro comes first and the map under it, at the same size: the reader meets the words, then
+	   the picture. The text is as tall as the intro here, so it sizes
 	   by its width only, and the screen's height steps the intro down instead (below). The tour puts the map back on
 	   top, where every step reads it. */
 	.st:not([data-tour]) .st-stage {
 		grid-template-rows: auto auto;
 		align-content: safe center;
+	}
+
+	/* Not pinned until the tour: the hero is as tall as the intro and the map, with the sections' own space above
+	   it (home.css, .section), and JOB 02's top padding is the space under it, as between any two sections. */
+	.st:not([data-tour]) .st-stage {
+		position: relative;
+		top: 0;
+		height: auto;
+		padding-block: clamp(64px, 9vw, 120px) 0;
 	}
 
 	.st:not([data-tour]) .st-text {
@@ -858,7 +867,7 @@
 
 	.st:not([data-tour]) .st-map {
 		grid-row: 2;
-		padding: 4px 0 8px;
+		padding: 4px 0 0;
 	}
 }
 
