@@ -86,7 +86,7 @@ export function renderAll(data: Data, state: State): Out {
 
 	return {
 		command: renderCommand(state, isFocus ? focused[0] : undefined),
-		scope: renderScope(data, state, cells, focused, isFocus, total, multi),
+		scope: renderScope(data, state, m, cells, focused, isFocus, total, multi),
 		...renderLanes(data, state, m, focused, isFocus),
 		...renderMap(state, m, cells),
 		...renderLosses(data, state, m, cells, multi),
@@ -101,7 +101,7 @@ function renderCommand(state: State, only?: Cell): string {
 		.join('');
 }
 
-function renderScope(data: Data, state: State, cells: Cell[], focused: Cell[], isFocus: boolean, total: number, multi: boolean): string {
+function renderScope(data: Data, state: State, m: Metric, cells: Cell[], focused: Cell[], isFocus: boolean, total: number, multi: boolean): string {
 	if (!cells.length) {
 		return `<p class="bscope bscope--empty">No group matches these filters. The matrix does not have every combination: <code>Loop10K</code> runs with one worker only. Clear a filter to continue.</p>`;
 	}
@@ -110,8 +110,11 @@ function renderScope(data: Data, state: State, cells: Cell[], focused: Cell[], i
 	}
 	const subjects = new Set(cells.flatMap((c) => c.g.rows.map((r) => r[0]))).size;
 	const of = cells.length < total ? ` of ${total.toLocaleString('en-US')}` : '';
-	const what = cells.length === 1 ? 'Each lane is one row of the raw file.' : 'Each lane is the mean over these groups.';
-	return `<p class="bscope"><span><strong>${plural(cells.length, 'group')}</strong>${of} in scope · ${plural(subjects, 'subject')}. ${what}</span></p>`;
+	// The answer first: in how many of these groups VarMQ leads on the metric shown (the callout below lists the rest).
+	const { varmq, tied } = laneSet(cells, m, state).wins;
+	const others = cells.length - varmq - tied;
+	const lead = `VarMQ leads <strong>${varmq.toLocaleString('en-US')}</strong>, others ${others.toLocaleString('en-US')}${tied ? `, tied ${tied.toLocaleString('en-US')}` : ''}`;
+	return `<p class="bscope"><span><strong>${plural(cells.length, 'group')}</strong>${of} in scope · ${lead} · ${plural(subjects, 'subject')}</span></p>`;
 }
 
 // ---- lanes ----

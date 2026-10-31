@@ -72,18 +72,18 @@ export interface View {
 export const VIEWS: View[] = [
 	{
 		id: 'pool-all',
-		tab: 'Pool, all three',
+		tab: 'All pools',
 		title: 'Worker pool, GOMAXPROCS 24, 8 and 4',
 		suite: 'pool',
 		sources: ['pool-24cpu', 'pool-8cpu', 'pool-4cpu'],
 		chart: null,
 		blurb: 'The three pool files read together. A mean here averages the 24, 8 and 4 CPU runs.',
 	},
-	{ id: 'pool-24cpu', tab: 'Pool, 24 CPUs', title: 'Worker pool, GOMAXPROCS 24', suite: 'pool', sources: ['pool-24cpu'], chart: 'pool-24cpu', blurb: 'Nine pools, 1M tasks per run.' },
-	{ id: 'pool-8cpu', tab: 'Pool, 8 CPUs', title: 'Worker pool, GOMAXPROCS 8', suite: 'pool', sources: ['pool-8cpu'], chart: 'pool-8cpu', blurb: 'The same matrix with GOMAXPROCS 8.' },
-	{ id: 'pool-4cpu', tab: 'Pool, 4 CPUs', title: 'Worker pool, GOMAXPROCS 4', suite: 'pool', sources: ['pool-4cpu'], chart: 'pool-4cpu', blurb: 'The same matrix with GOMAXPROCS 4.' },
-	{ id: 'redis', tab: 'Redis queues', title: 'Message queues on Redis', suite: 'redis', sources: ['redis'], chart: 'redis', blurb: 'Six subjects from five libraries on Redis 7.2.' },
-	{ id: 'sqlite', tab: 'SQLite queues', title: 'Message queues on SQLite', suite: 'sqlite', sources: ['sqlite'], chart: 'sqlite', blurb: 'Five subjects from four libraries, WAL checkpoint at 1000 and 10000 pages.' },
+	{ id: 'pool-24cpu', tab: '24 CPUs', title: 'Worker pool, GOMAXPROCS 24', suite: 'pool', sources: ['pool-24cpu'], chart: 'pool-24cpu', blurb: 'Nine pools, 1M tasks per run.' },
+	{ id: 'pool-8cpu', tab: '8 CPUs', title: 'Worker pool, GOMAXPROCS 8', suite: 'pool', sources: ['pool-8cpu'], chart: 'pool-8cpu', blurb: 'The same matrix with GOMAXPROCS 8.' },
+	{ id: 'pool-4cpu', tab: '4 CPUs', title: 'Worker pool, GOMAXPROCS 4', suite: 'pool', sources: ['pool-4cpu'], chart: 'pool-4cpu', blurb: 'The same matrix with GOMAXPROCS 4.' },
+	{ id: 'redis', tab: 'Redis', title: 'Message queues on Redis', suite: 'redis', sources: ['redis'], chart: 'redis', blurb: 'Six subjects from five libraries on Redis 7.2.' },
+	{ id: 'sqlite', tab: 'SQLite', title: 'Message queues on SQLite', suite: 'sqlite', sources: ['sqlite'], chart: 'sqlite', blurb: 'Five subjects from four libraries, WAL checkpoint at 1000 and 10000 pages.' },
 ];
 
 export const viewById = (id: string) => VIEWS.find((v) => v.id === id) ?? VIEWS[0];
@@ -259,29 +259,6 @@ export function defaultState(data: Data, viewId: string): State {
 	for (const d of filterDefs(data, view)) f[d.id] = d.all ? 'all' : d.options[0].value;
 	return { view: view.id, f, metric: 'rate', sort: 'best', baselines: true, focus: null };
 }
-
-export interface Preset {
-	label: string;
-	hint: string;
-	f: Filters;
-}
-
-// Presets that rebuild the figures on the home page. The labels say which rows they select.
-export const PRESETS: Record<string, Preset[]> = {
-	'pool-all': [
-		{ label: '50K workers', hint: 'The rows behind the home page lanes', f: { workers: '50K' } },
-		{ label: 'One worker', hint: 'Loop10 and Loop10K with a pool of one', f: { workers: '1' } },
-	],
-	'pool-24cpu': [{ label: '50K workers', hint: 'Mid-size pools', f: { workers: '50K' } }, { label: 'One worker', hint: 'A pool of one', f: { workers: '1' } }],
-	'pool-8cpu': [{ label: '50K workers', hint: 'Mid-size pools', f: { workers: '50K' } }, { label: 'One worker', hint: 'A pool of one', f: { workers: '1' } }],
-	'pool-4cpu': [{ label: '50K workers', hint: 'Mid-size pools', f: { workers: '50K' } }, { label: 'One worker', hint: 'A pool of one', f: { workers: '1' } }],
-	redis: [
-		{ label: '100 producers, Noop, 100 workers', hint: 'The home page lanes for 100 producers', f: { test: 'durable', task: 'Noop', workers: '100', instances: '1', shape: '100u-1Kt' } },
-		{ label: '1 producer, Noop, 100 workers', hint: 'The home page lanes for one producer', f: { test: 'durable', task: 'Noop', workers: '100', instances: '1', shape: '1u-100Kt' } },
-		{ label: 'Latency', hint: 'Enqueue to handler', f: { test: 'latency' } },
-	],
-	sqlite: [{ label: 'Drain1Q, 1000 pages', hint: 'The home page lanes', f: { scenario: 'Drain1Q', ckpt: '1000' } }],
-};
 
 // ---- scope ----
 

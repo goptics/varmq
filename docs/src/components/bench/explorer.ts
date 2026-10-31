@@ -1,8 +1,8 @@
-// Browser side of the benchmark explorer: the dataset tabs, the filters, the win map and the copy button.
+// Browser side of the benchmark explorer: the dataset tabs, the filter selects, the win map and the copy button.
 // The markup of the results comes from render.ts, the same code the build ran for the default state.
 
 import raw from './data.json';
-import { PRESETS, VIEWS, activeFilters, defaultState, filterDefs, fromHash, metricsFor, normalize, optionCounts, toHash, viewById } from './lib.ts';
+import { VIEWS, activeFilters, defaultState, filterDefs, fromHash, metricsFor, normalize, optionCounts, toHash, viewById } from './lib.ts';
 import type { Data, State } from './lib.ts';
 import { renderAll } from './render.ts';
 import type { Out } from './render.ts';
@@ -78,10 +78,10 @@ function boot(root: HTMLElement) {
 		for (const fs of p.querySelectorAll<HTMLElement>('[data-filter]')) {
 			const id = fs.dataset.filter!;
 			fs.hidden = !live.has(id);
-			for (const input of fs.querySelectorAll<HTMLInputElement>('input')) {
-				input.checked = input.value === s.f[id];
-				input.disabled = counts[id][input.value] === 0 && !input.checked;
-			}
+			const select = fs.querySelector('select')!;
+			// An option that would leave no group is disabled, unless it is the current value.
+			for (const o of select.options) o.disabled = counts[id][o.value] === 0 && o.value !== s.f[id];
+			select.value = s.f[id];
 		}
 		const metrics = metricsFor(view.suite, s.f).map((m) => m.id);
 		for (const label of p.querySelectorAll<HTMLElement>('[data-m]')) {
@@ -89,7 +89,8 @@ function boot(root: HTMLElement) {
 			const input = label.querySelector('input')!;
 			input.checked = input.value === s.metric;
 		}
-		for (const input of p.querySelectorAll<HTMLInputElement>('[data-sort] input')) input.checked = input.value === s.sort;
+		const sort = p.querySelector<HTMLSelectElement>('[data-sort] select');
+		if (sort) sort.value = s.sort;
 		const base = p.querySelector<HTMLInputElement>('[data-baselines] input');
 		if (base) base.checked = s.baselines;
 		const def = defaultState(data, s.view);
@@ -172,7 +173,8 @@ function boot(root: HTMLElement) {
 	root.addEventListener('submit', (e) => e.preventDefault());
 
 	root.addEventListener('change', (e) => {
-		const input = e.target as HTMLInputElement;
+		// A select (filters, order) or an input (show, baselines); both carry the new value.
+		const input = e.target as HTMLInputElement | HTMLSelectElement;
 		const p = input.closest<HTMLElement>('[data-view]');
 		if (!p || !input.closest('[data-controls]')) return;
 		const id = p.dataset.view!;
@@ -181,7 +183,7 @@ function boot(root: HTMLElement) {
 		if (fs) s.f = { ...s.f, [fs.dataset.filter!]: input.value };
 		else if (input.closest('[data-metric]')) s.metric = input.value;
 		else if (input.closest('[data-sort]')) s.sort = input.value as State['sort'];
-		else if (input.closest('[data-baselines]')) s.baselines = input.checked;
+		else if (input.closest('[data-baselines]')) s.baselines = (input as HTMLInputElement).checked;
 		if (fs || input.closest('[data-baselines]')) s.focus = null;
 		update(id, { animate: true, user: true });
 	});
@@ -202,14 +204,6 @@ function boot(root: HTMLElement) {
 		}
 		if (el.closest('[data-unfocus]') && id) {
 			states.get(id)!.focus = null;
-			update(id, { animate: true, user: true });
-			return;
-		}
-		const preset = el.closest<HTMLElement>('[data-preset]');
-		if (preset && id) {
-			const s = defaultState(data, id);
-			const pr = PRESETS[id][Number(preset.dataset.preset)];
-			states.set(id, normalize(data, { ...s, f: { ...s.f, ...pr.f } }));
 			update(id, { animate: true, user: true });
 			return;
 		}

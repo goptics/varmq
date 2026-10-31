@@ -1,10 +1,9 @@
-/* Benchmarks page. The explorer and the score board are dark panels in both themes (docs/DESIGN.md: simulation panels).
-   Every rule is scoped under .bench or .bboard so nothing leaks into the Starlight shell.
+/* Benchmarks page. The explorer is a dark panel in both themes (docs/DESIGN.md: simulation panels).
+   Every rule is scoped under .bench so nothing leaks into the Starlight shell.
    The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
    Tabs and buttons are the shared `seg` and `pbtn` (ui.css). */
 
-.bench,
-.bboard {
+.bench {
 	/* --local-: values the shared tokens do not have. */
 	--local-cell: 26px;
 
@@ -27,45 +26,36 @@
 
 .bench *,
 .bench *::before,
-.bench *::after,
-.bboard *,
-.bboard *::before,
-.bboard *::after {
+.bench *::after {
 	box-sizing: border-box;
 }
 
-.bench :is(h3, h4, p, ul, ol, dl, dd, figure, table, fieldset),
-.bboard :is(h3, h4, p, ul, ol, dl, dd, figure, table) {
+.bench :is(h3, h4, p, ul, ol, dl, dd, figure, table, fieldset) {
 	margin: 0;
 	padding: 0;
 }
 
-.bench ::selection,
-.bboard ::selection {
+.bench ::selection {
 	background: color-mix(in srgb, var(--panel-accent) 38%, transparent);
 	color: var(--panel-ink);
 }
 
-.bench a,
-.bboard a {
+.bench a {
 	color: var(--panel-accent);
 	text-underline-offset: 0.18em;
 	text-decoration-thickness: 1px;
 }
 
-.bench a:hover,
-.bboard a:hover {
+.bench a:hover {
 	text-decoration-thickness: 2px;
 }
 
-.bench :focus-visible,
-.bboard :focus-visible {
+.bench :focus-visible {
 	outline: 2px solid var(--panel-accent);
 	outline-offset: 3px;
 }
 
-.bench code,
-.bboard code {
+.bench code {
 	font: 400 0.8125em/1.4 var(--mono);
 	background: none;
 	border: 0;
@@ -73,13 +63,19 @@
 	color: inherit;
 }
 
-.bench [hidden],
-.bboard [hidden] {
+.bench [hidden] {
 	display: none !important;
 }
 
+/* The six dataset tabs sit on one line in the article column; a narrow panel puts them in two rows of three. */
 .bench__top .seg {
 	display: flex;
+	flex-wrap: nowrap;
+}
+
+.bench__top .seg [role='tab'] {
+	flex: 1 1 auto;
+	white-space: nowrap;
 }
 
 .bench__top {
@@ -107,14 +103,19 @@
 	gap: 18px;
 }
 
+/* Title over blurb on every tab, so switching tabs never moves the controls. */
+.bench__head {
+	display: grid;
+	gap: 2px;
+}
+
 .bench__title {
 	font-size: 1.25rem;
 	font-weight: 650;
-	line-height: 1.2;
+	line-height: 1.25;
 }
 
 .bench__blurb {
-	margin-top: 4px;
 	color: var(--panel-ink-2);
 	font-size: 0.875rem;
 }
@@ -156,7 +157,7 @@
 	display: block;
 }
 
-/* ---- meta and environment ---- */
+/* ---- run details ---- */
 
 .bmeta {
 	display: flex;
@@ -197,6 +198,15 @@
 	font: 600 0.875rem/1.3 var(--display);
 }
 
+.bdet__name {
+	white-space: nowrap;
+}
+
+.bdet__hint {
+	font: 400 0.75rem/1.3 var(--mono);
+	color: var(--panel-ink-2);
+}
+
 .bdet > summary::-webkit-details-marker {
 	display: none;
 }
@@ -228,13 +238,28 @@
 	margin: 0 14px 14px;
 }
 
-/* ---- controls ---- */
+/* ---- controls: one wrapping row of selects, the Show choice, Baselines and Clear ---- */
 
 .bctl {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 14px 26px;
-	align-items: flex-start;
+	gap: 12px 14px;
+	align-items: flex-end;
+}
+
+.bfield label {
+	display: grid;
+	gap: 6px;
+}
+
+/* The filters share the row evenly and reach its right edge; Order keeps its own width. */
+.bfield[data-filter] {
+	flex: 1 1 auto;
+}
+
+.bfield[data-filter] select {
+	width: 100%;
+	min-width: 6.5rem;
 }
 
 .bfs {
@@ -244,22 +269,45 @@
 	min-width: 0;
 }
 
-.bfs legend,
 .blabel {
 	float: none;
 	display: block;
 	padding: 0;
-	margin-bottom: 6px;
 	font: 500 0.6875rem/1 var(--mono);
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--panel-ink-2);
 }
 
-.bopts {
+.bfs legend {
+	margin-bottom: 6px;
+}
+
+/* The explorer is .on-dark, not .sframe, so ui.css's select rule does not reach it. Same look. */
+.bench select {
+	min-height: 40px;
+	max-width: 100%;
+	padding: 6px 10px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 8px;
+	background: var(--panel-2);
+	color: var(--panel-ink);
+	font: 500 0.8125rem/1.2 var(--mono);
+	color-scheme: dark;
+	cursor: pointer;
+}
+
+.bench select:hover {
+	background: var(--panel-fill-2);
+}
+
+/* Show changes what the lanes measure, so it stays a segmented choice: native radios in one box. */
+.bseg {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
 }
 
 .bopt {
@@ -280,12 +328,12 @@
 .bopt span {
 	display: inline-flex;
 	align-items: center;
-	min-height: 36px;
+	min-height: 32px;
 	padding: 6px 12px;
-	border: 1px solid var(--panel-rule);
 	border-radius: 8px;
 	color: var(--panel-ink-2);
-	font: 600 0.8125rem/1.1 var(--display);
+	font: 600 0.875rem/1.1 var(--display);
+	white-space: nowrap;
 	transition: background-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
@@ -295,7 +343,6 @@
 
 .bopt input:checked + span {
 	background: var(--panel-ink);
-	border-color: var(--panel-ink);
 	color: var(--panel);
 }
 
@@ -304,18 +351,16 @@
 	outline-offset: 3px;
 }
 
-.bopt input:disabled {
-	cursor: not-allowed;
+/* Baselines: a checkbox drawn as a button-height toggle. */
+.bopt--check span {
+	min-height: 40px;
+	border: 1px solid var(--panel-rule);
 }
 
-.bopt input:disabled + span {
-	opacity: 0.35;
-}
-
+/* Checked, the filled box carries the state; the border stays quiet, so it is not read as a focus ring. */
 .bopt--check input:checked + span {
 	background: transparent;
 	color: var(--panel-ink);
-	border-color: var(--panel-accent);
 }
 
 .bopt--check span::before {
@@ -333,15 +378,25 @@
 	box-shadow: inset 0 0 0 2px var(--panel);
 }
 
-.bpre {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
+/* Clear shows only while something is filtered, at the row's end. */
+.bctl [data-reset][disabled] {
+	display: none;
 }
 
-.bpre .blabel {
-	margin: 0 4px 0 0;
+@media (pointer: coarse) {
+	.bench select,
+	.bopt span {
+		min-height: 44px;
+	}
+
+	/* Show's box, not each option in it, is the 44px target, so it stands as tall as the selects. */
+	.bseg {
+		min-height: 44px;
+	}
+
+	.bseg .bopt span {
+		min-height: 36px;
+	}
 }
 
 /* ---- scope ---- */
@@ -353,7 +408,7 @@
 	justify-content: space-between;
 	gap: 8px 16px;
 	padding-block: 10px;
-	border-block: 1px dashed var(--panel-rule);
+	border-top: 1px dashed var(--panel-rule);
 	font: 400 0.8125rem/1.5 var(--mono);
 	color: var(--panel-ink-2);
 }
@@ -843,74 +898,31 @@
 	font-size: 0.75rem;
 }
 
-/* ---- score board (above the explorer) ---- */
-
-.bboard {
-	padding: 6px 0 0;
-}
-
-.bboard .btable {
-	border: 0;
-	border-radius: 0 0 12px 12px;
-	background: transparent;
-}
-
-.bboard__head {
-	padding: 14px 16px 10px;
-	display: grid;
-	gap: 4px;
-}
-
-.bboard__head h3 {
-	font-size: 1rem;
-	font-weight: 650;
-}
-
-.bboard__head p {
-	font-size: 0.8125rem;
-	color: var(--panel-ink-2);
-	max-width: 76ch;
-}
-
-.bboard .btable__t thead th {
-	vertical-align: bottom;
-	white-space: normal;
-}
-
-.bboard .btable__t td,
-.bboard .btable__t tbody th {
-	vertical-align: middle;
-}
-
-/* The board's dataset names and rival lists wrap; its row names need no sticky width. */
-.bboard .btable__t tbody th {
-	min-width: 0;
-}
-
-.bboard .btable__t td.bwrap {
-	white-space: normal;
-}
-
-.bboard .n strong {
-	font-weight: 600;
-}
-
-.bshare {
-	display: block;
-	width: 120px;
-	height: 8px;
-	margin-top: 5px;
-	border-radius: 4px;
-	/* Green is the share of groups VarMQ leads. Amber is the rest. The counts beside it carry the same numbers. */
-	background: linear-gradient(to right, var(--brand) var(--w, 0%), var(--amber) var(--w, 0%));
-}
-
-.bboard .btable__t thead th:nth-child(2),
-.bboard .btable__t thead th:nth-child(5) {
-	text-align: left;
-}
-
 /* ---- narrow panel: the panel measures itself ---- */
+
+/* A narrow panel: the tabs in two rows of three, the selects share each row. */
+@container bench (max-width: 560px) {
+	.bench__top .seg {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.bench__top .seg [role='tab'] {
+		padding-inline: 8px;
+	}
+
+	.bfield {
+		flex: 1 1 7.5rem;
+	}
+
+	.bfield select {
+		width: 100%;
+	}
+
+	.bfield[data-sort] {
+		flex: none;
+	}
+}
 
 @container bench (max-width: 620px) {
 	.bench .rlane,
@@ -1027,8 +1039,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.bench *,
-	.bboard * {
+	.bench * {
 		transition-duration: 0.01ms !important;
 	}
+}
+
+/* Run details: the versions table wraps in a narrow panel rather than scrolling. */
+.brun .btable__t tbody th {
+	min-width: 0;
+}
+
+.brun .btable__t td {
+	white-space: normal;
+}
+
+.bench .rlane__head span:nth-child(4) {
+	white-space: nowrap;
 }

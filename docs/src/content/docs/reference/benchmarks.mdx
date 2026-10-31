@@ -3,7 +3,6 @@ title: Benchmarks
 description: How fast VarMQ is against other Go worker pools and against Redis and SQLite job queues. Real numbers from the raw benchmark output, with filters, charts, and the groups where VarMQ does not win.
 ---
 
-import Scoreboard from '../../../components/bench/Scoreboard.astro';
 import Explorer from '../../../components/bench/Explorer.astro';
 import data from '../../../components/bench/data.json';
 
@@ -14,15 +13,9 @@ export const repo = `https://github.com/${data.source.repo}`;
 
 This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every row on it is one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>, and every figure is read from those rows or averaged over them. The run is from {data.source.runDate}, with varmq {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
 
-## Scoreboard
-
-The table counts how many groups VarMQ leads, how many another subject leads, and how many are tied. Read the lines for memory next to the lines for throughput. Over the three pool files VarMQ leads throughput in most groups, but at 4 CPUs the buffered channel leads more of them than VarMQ does. VarMQ leads no pool group on memory.
-
-<Scoreboard />
-
 ## Explore the rows
 
-Choose a dataset, then narrow it with the filters. The lanes show the mean of the rows in scope, and the last column divides each lane by VarMQ. Press a square in the map to see one group, with a link to each row in the raw file. The line at the top is the `go test` command that runs the same rows on your machine.
+Pick a dataset and narrow it with the selects: each lane is one subject's mean over the groups in scope, and its last column divides it by VarMQ. Press a square in the map to see one group, with a link to each of its rows in the raw file.
 
 <Explorer />
 
@@ -62,6 +55,6 @@ task redis:up redis:bench redis:down
 task sqlite:bench
 ```
 
-The caption above the lanes shows the command for one slice. The full run takes hours: the committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.
+Run details, at the foot of the explorer, shows the command for the groups in scope. The full run takes hours: the committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.
 
 See also the [comparison](/reference/comparison/) of features and the [bench log](https://varmq.goptics.org/bench-log/).
