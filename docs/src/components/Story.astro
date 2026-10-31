@@ -1,5 +1,5 @@
 ---
-// The home page's opening: the intro beside the whole map, and the tour of varmq's story in ten steps, a caption per
+// The home page's opening: the intro with the whole map, and the tour of varmq's story in ten steps, a caption per
 // scroll, for the reader who starts it. Each step plays its chapter of the map while the one code block morphs into the
 // code behind it (lib/story/main.ts). The title and the lede are the page's hero fields in index.mdx.
 import '@shikijs/magic-move/style.css';
@@ -9,7 +9,7 @@ import Install from './ui/Install.astro';
 import { stillMap } from '../lib/heromap/still.ts';
 
 const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
-// The h1 names two parts of the map beside it, each in that part's colour (story.css): the worker's goroutines and the
+// The h1 names two parts of the map, each in that part's colour (story.css): the worker's goroutines and the
 // queues' lanes.
 const heading = title
 	?.replace('Worker pools', '<span class="st-pools">Worker pools</span>')
@@ -63,7 +63,7 @@ const still = stillMap();
 			</div>
 		</div>
 	</div>
-	<!-- On the tour's steps only: ends the tour, at the first section under the story. Its outline is the story's
+	<!-- On the tour's steps only: ends the tour at JOB 05's heading, #try-it. Its outline is the story's
 	     progress, a segment per step, filled once that step has played (main.ts). -->
 	<button class="st-skip" type="button" aria-label="Skip the rest of the tour" disabled>
 		<svg class="st-skip-ring" viewBox="0 0 48 48" aria-hidden="true"></svg>

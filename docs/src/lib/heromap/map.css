@@ -7,12 +7,12 @@
    edges. The home page's small maps under the story (components/home/mini.ts) are `.vm-mini`, and draw with these
    same rules; the host rules (the square, its fade and its layer) stay the hero's. */
 
-/* Light: the dark map's hues, as ink on the page's paper. Text and the other hues' strokes share one lightness, OKLCH
-   L 0.50 to 0.56, as the page's own on-paper colours do, so no hue outweighs another, and each one has at least 4.5:1
-   against --paper. The green that marks a worker, its goroutines and their work is the light logo's own (--brand,
-   3.2:1, enough for a mark), as the dark map's is the dark logo's. Fills are the same hues near L 0.96. The greys take
-   the paper's green rather than a cool grey, so the map sits in the page. A job keeps the dark map's amber, with a
-   darker edge for its 3:1 against the paper. */
+/* Light: the dark map's hues, as ink on the page's paper. Text on the paper and the other hues' strokes share one
+   lightness, OKLCH L 0.49 to 0.56, close to the page's own on-paper colours, so no hue outweighs another. The text
+   colours have at least 4.9:1 against --paper; the amber edge has 4.35:1, enough for a stroke. The green that marks a
+   worker, its goroutines and their work is the light logo's own (--brand, 3.1:1, enough for a mark), as the dark map's
+   is the dark logo's. Fills are the same hues near L 0.96. The greys take the paper's green rather than a cool grey, so
+   the map sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
 :root {
 	--vm-dot: #cddbd4;
 	--vm-ink: var(--ink-3);

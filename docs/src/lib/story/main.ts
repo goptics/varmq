@@ -371,8 +371,9 @@ function startTour() {
 /**
  * Ends the tour: the track gives up its stops, so the page is the intro and the sections under it again. Kept in place
  * (scrolled out at either end, or tabbed out), the page moves by what the track gave up, so what is in view stays
- * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to the first
- * section, with focus on its heading. Back up at the intro from step 1 (`back`), the map plays back to its run.
+ * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to JOB 05's
+ * heading, #try-it, at the top of the screen, and focuses it. Back up at the intro from step 1 (`back`), the map plays
+ * back to its run.
  */
 function endTour(keep: boolean, back = false) {
 	const row = document.querySelector('section.home-row');

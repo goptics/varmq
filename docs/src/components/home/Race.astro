@@ -1,9 +1,9 @@
 ---
-// JOB 04 on the home page: the benchmark lanes on a dark band, with the results against VarMQ next to them. Every
-// figure is computed from the committed snapshot of github.com/goptics/benchmarks (bench/data.json) by bench/home.ts,
-// the same means the Benchmarks page shows. Pool figures are the mean over the rows at 50K workers (3 tasks x 5
-// producer shapes) and over GOMAXPROCS 24, 8 and 4. Memory is the benchmark's B/op for the same rows, in MB (10^6).
-// The bars and counters count up when a lane list is first seen, and again on Replay (race.ts).
+// JOB 04 on the home page: the benchmark lanes on the page's own paper, with the results against VarMQ next to them.
+// Every figure is computed from the committed snapshot of github.com/goptics/benchmarks (bench/data.json) by
+// bench/home.ts, the same means the Benchmarks page shows. Pool figures are the mean over the rows at 50K workers (3
+// tasks x 5 producer shapes) and over GOMAXPROCS 24, 8 and 4. Memory is the benchmark's B/op for the same rows, in MB
+// (10^6). The bars and counters count up when a lane list is first seen, and again on Replay (race.ts).
 import '../../styles/home.css';
 import data from '../bench/data.json';
 import { againstVarmq, homeCharts, latencyP50 } from '../bench/home.ts';

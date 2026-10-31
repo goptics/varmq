@@ -218,8 +218,8 @@ site-search button[data-open-modal] {
 }
 
 /* The home page's main links, before the GitHub link (shell/SocialIcons.astro), in the search button's type. They
-   hover as the GitHub link does, with a --bar-2 box. Below 50rem the home header hides them with the GitHub link
-   (story.css); the intro's Get started leads on there. */
+   hover as the GitHub link does, with a --bar-2 box. Below 50rem the home header hides them and keeps the GitHub link
+   and the theme switch (story.css); the intro's Get started leads on there. */
 .social-icons .home-links {
 	display: flex;
 	gap: 0.25rem;

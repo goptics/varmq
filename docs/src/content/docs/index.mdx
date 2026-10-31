@@ -14,7 +14,7 @@ lastUpdated: false
 prev: false
 next: false
 tableOfContents: false
-# The hero is the story (components/Story.astro): its intro shows this title and tagline beside the whole map.
+# The hero is the story (components/Story.astro): its intro shows this title and tagline with the whole map.
 hero:
   title: Worker pools and job queues for Go
   tagline: Add jobs to a queue. A pool of workers runs them. Keep the jobs in memory, or in Redis or SQLite so they survive a restart.
@@ -28,7 +28,7 @@ import Index from '../../components/home/Index.astro';
 import Close from '../../components/home/Close.astro';
 
 {/* Under the story, the sections are print jobs, JOB 02 to JOB 06, then the closing (components/home/, styles/home.css).
-    The tour (lib/story/main.ts) ends at the first section.home-row and focuses #try-it, the heading of JOB 05. */}
+    The tour (lib/story/main.ts) ends with Skip or Esc at #try-it, the heading of JOB 05, and focuses it. */}
 
 <div class="home-jobs not-content">
 	<Scenes />
