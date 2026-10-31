@@ -363,10 +363,15 @@ export function renderMap(host: HTMLElement): MapNodes {
 	// on a 400 px square, so the whole map shows none however wide it is drawn, and they come in as the camera zooms
 	// into a chapter. Most camera moves leave --vm-label as it is, so it is set only when it changes, tested against
 	// what the element holds rather than what was last set here: a rewind (story/map.ts) puts attributes back itself.
+	// --vm-px, a screen pixel in map units, is the light map's line floor (map.css): set the same way, in quarter steps
+	// and never under 1, so a zoom sets it a few times at most and a close-up never at all.
 	const legible = () => {
 		const label = String(Math.min(labelOpacity((zoom * width) / VIEW.w), labelOpacity(zoom)));
-		if (label === 'NaN' || label === world.style.getPropertyValue('--vm-label')) return;
-		world.style.setProperty('--vm-label', label);
+		if (label !== 'NaN' && label !== world.style.getPropertyValue('--vm-label')) world.style.setProperty('--vm-label', label);
+		const px = Math.max(1, Math.round((VIEW.w / (zoom * width)) * 4) / 4);
+		if (Number.isFinite(px) && String(px) !== world.style.getPropertyValue('--vm-px')) {
+			world.style.setProperty('--vm-px', String(px));
+		}
 	};
 	return {
 		svg,

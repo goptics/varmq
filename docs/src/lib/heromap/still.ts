@@ -64,6 +64,9 @@ export class StillDocument {
 export function stillMap(): { html: string; style: string } {
 	const host = new StillDocument().createElementNS('', 'varmq-map');
 	const nodes = renderMap(host as unknown as HTMLElement);
+	// The square's width on screen is the browser's to know: the light map's line floor (render.ts, --vm-px) is set as
+	// for a 400 px square, a phone's, until the client draws its own; on a desktop the lines are a little heavier until
+	// then.
 	nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
 	return { html: host.innerHTML, style: host.getAttribute('style') ?? '' };
 }

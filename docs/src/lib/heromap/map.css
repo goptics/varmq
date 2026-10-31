@@ -20,40 +20,43 @@
 	--vm-sqlite: #196ea9;
 	--vm-redis: #c53227;
 	--vm-glow: none;
+	/* Light has no glow, so a line drawn under a screen pixel wide, as in the whole map, fades into the paper: each
+	   line is at least a screen pixel (--vm-floor, below). Dark lines glow, and read as they are. */
+	--vm-thin: 1;
 	--vm-job: #f2b036;
 	--vm-job-edge: #a26500;
 	--vm-job-ink: #4c2e02;
 	--vm-chip: #fcf0dc;
-	--vm-chip-edge: color-mix(in srgb, #a26500 80%, transparent);
+	--vm-chip-edge: #a26500;
 	--vm-chip-ink: var(--tk-s);
 	--vm-value: #e4f7ee;
-	--vm-value-edge: color-mix(in srgb, var(--brand) 85%, transparent);
+	--vm-value-edge: var(--brand);
 	--vm-error: #ffedea;
-	--vm-error-edge: color-mix(in srgb, #bd3933 60%, transparent);
-	--vm-lane: color-mix(in srgb, #f2b036 12%, transparent);
+	--vm-error-edge: #bd3933;
+	--vm-lane: color-mix(in srgb, #f2b036 22%, transparent);
 	--vm-lane-edge: #a26500;
 	--vm-lane-tail: 0.3;
 	--vm-lane-head: 1;
-	--vm-tray: color-mix(in srgb, #f2b036 5%, transparent);
-	--vm-tray-edge: color-mix(in srgb, #a26500 70%, transparent);
-	--vm-slot: color-mix(in srgb, #a26500 30%, transparent);
+	--vm-tray: color-mix(in srgb, #f2b036 10%, transparent);
+	--vm-tray-edge: #a26500;
+	--vm-slot: color-mix(in srgb, #a26500 45%, transparent);
 	--vm-go: var(--brand);
-	--vm-go-fill: color-mix(in srgb, var(--brand) 12%, transparent);
-	--vm-ghost: color-mix(in srgb, var(--brand) 55%, transparent);
+	--vm-go-fill: color-mix(in srgb, var(--brand) 20%, transparent);
+	--vm-ghost: color-mix(in srgb, var(--brand) 75%, transparent);
 	--vm-check: #095e46;
 	/* A lit control chip's text is green text, so --accent-text, on a lighter tint than the dark map's for its 4.5:1. */
 	--vm-lit: color-mix(in srgb, var(--brand) 8%, var(--vm-chip));
 	--vm-lit-ink: var(--accent-text);
-	--vm-card: color-mix(in srgb, var(--brand) 8%, transparent);
-	--vm-card-edge: color-mix(in srgb, var(--brand) 85%, transparent);
+	--vm-card: color-mix(in srgb, var(--brand) 14%, transparent);
+	--vm-card-edge: var(--brand);
 	--vm-loop: #6b4bb8;
-	--vm-loop-fill: color-mix(in srgb, #6b4bb8 8%, transparent);
+	--vm-loop-fill: color-mix(in srgb, #6b4bb8 14%, transparent);
 	--vm-pulse: #6b4bb8;
-	--vm-store: color-mix(in srgb, #6b4bb8 5%, transparent);
-	--vm-store-edge: color-mix(in srgb, #6b4bb8 75%, transparent);
-	--vm-program: color-mix(in srgb, var(--ink-3) 5%, transparent);
-	--vm-program-edge: color-mix(in srgb, var(--ink-3) 60%, transparent);
-	--vm-line: color-mix(in srgb, var(--ink-3) 55%, transparent);
+	--vm-store: color-mix(in srgb, #6b4bb8 9%, transparent);
+	--vm-store-edge: #6b4bb8;
+	--vm-program: color-mix(in srgb, var(--ink-3) 8%, transparent);
+	--vm-program-edge: var(--ink-3);
+	--vm-line: color-mix(in srgb, var(--ink-3) 80%, transparent);
 	--vm-ack: color-mix(in srgb, var(--brand) 65%, transparent);
 	/* The map's red, SQLite blue and Redis red as text on the page, beside the map. */
 	--vm-red-text: #bd3933;
@@ -63,6 +66,7 @@
 
 /* Dark: the map's original palette. */
 :root[data-theme='dark'] {
+	--vm-thin: 0;
 	--vm-dot: #1e2a38;
 	--vm-ink: #8592a3;
 	--vm-green: #44bf9e;
@@ -113,6 +117,11 @@ varmq-map {
 	position: relative;
 	overflow: hidden;
 	container-type: inline-size;
+}
+
+/* The line floor: --vm-px is a screen pixel in map units, which render.ts sets on the world from the camera's zoom. */
+varmq-map .vm-world {
+	--vm-floor: calc(var(--vm-px, 0) * var(--vm-thin));
 }
 
 /* The map, world and grid, fades into the page at the square's edges, so a piece the edge cuts has no hard edge.
@@ -214,66 +223,66 @@ varmq-map .vm-num {
 varmq-map .vm-program > .vm-shape {
 	fill: var(--vm-program);
 	stroke: var(--vm-program-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
 varmq-map .vm-store > .vm-shape {
 	fill: var(--vm-store);
 	stroke: var(--vm-store-edge);
-	stroke-width: 1.2;
+	stroke-width: max(1.2, var(--vm-floor));
 }
 
 varmq-map .vm-lane > .vm-shape {
 	fill: var(--vm-lane);
 	stroke: url(#vm-lane-edge);
-	stroke-width: 1.2;
+	stroke-width: max(1.2, var(--vm-floor));
 }
 
 varmq-map .vm-tray > .vm-shape {
 	fill: var(--vm-tray);
 	stroke: var(--vm-tray-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 3 3;
 }
 
 varmq-map .vm-slot {
 	fill: none;
 	stroke: var(--vm-slot);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 2 3;
 }
 
 varmq-map .vm-card > .vm-shape {
 	fill: var(--vm-card);
 	stroke: var(--vm-card-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
 varmq-map .vm-loop > .vm-shape {
 	fill: var(--vm-loop-fill);
 	stroke: var(--vm-loop);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 	filter: var(--vm-glow);
 }
 
 varmq-map .vm-pulse {
 	fill: none;
 	stroke: var(--vm-pulse);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 }
 
 /* Chips are opaque: the RoundRobin chip sits on the line into the loop. */
 varmq-map .vm-chip > .vm-shape {
 	fill: var(--vm-chip);
 	stroke: var(--vm-chip-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
 /* A control chip's lit layer: the call in effect. */
 varmq-map .vm-lit > .vm-shape {
 	fill: var(--vm-lit);
 	stroke: var(--vm-go);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
 varmq-map .vm-lit > .vm-text {
@@ -301,13 +310,13 @@ varmq-map .vm-error > .vm-text {
 varmq-map .vm-flash {
 	fill: none;
 	stroke: var(--vm-red);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 }
 
 varmq-map .vm-conn > .vm-shape {
 	fill: none;
 	stroke: var(--vm-line);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
 varmq-map .vm-ack > .vm-shape {
@@ -318,28 +327,28 @@ varmq-map .vm-ack > .vm-shape {
 varmq-map .vm-ghost {
 	fill: none;
 	stroke: var(--vm-ghost);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 2 3;
 }
 
 varmq-map .vm-ring {
 	fill: var(--vm-go-fill);
 	stroke: var(--vm-go);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 	filter: var(--vm-glow);
 }
 
 varmq-map .vm-progress {
 	fill: none;
 	stroke: var(--vm-go);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 	stroke-linecap: round;
 }
 
 varmq-map .vm-check {
 	fill: none;
 	stroke: var(--vm-check);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 	stroke-linecap: round;
 	stroke-linejoin: round;
 }
@@ -348,7 +357,7 @@ varmq-map .vm-check {
 varmq-map .vm-jb {
 	fill: var(--vm-job);
 	stroke: var(--vm-job-edge);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 }
 
 varmq-map :is(.vm-main, .vm-record) > .vm-jb {

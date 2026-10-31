@@ -1,7 +1,7 @@
 import type { Timeline } from 'animejs';
 import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { renderMap } from '../heromap/render.ts';
-import { REGIONS, frame } from '../heromap/scene.ts';
+import { REGIONS, VIEW, frame } from '../heromap/scene.ts';
 
 /** A stretch that plays over: it holds its end `again` ms, then plays again from `restart` (its start by default) to
  * the same end. */
@@ -88,6 +88,8 @@ export function after(tl: Timeline, host: Element, end: number, state: object = 
  */
 export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHandle {
 	const nodes = renderMap(host);
+	// Its width first, so the first frame drawn has the light map's line floor for it (render.ts, --vm-px).
+	nodes.setWidth(host.clientWidth || VIEW.w);
 	nodes.setCamera(frame(REGIONS[REGIONS.length - 1]));
 	new ResizeObserver(([entry]) => nodes.setWidth(entry.contentRect.width)).observe(host);
 
