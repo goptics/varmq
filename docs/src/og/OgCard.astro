@@ -45,11 +45,11 @@ const fonts =
 		</main>
 		<script>
 			// The live map (story/map.ts), held at one moment of its loop: ?at=<chapter>:<ms into it>. By default, the
-			// pool's chapter as its five goroutines run jobs, two of them done.
+			// pool's chapter as jobs wait in the queue, one passes the event loop and the goroutines run others.
 			import { mountMap } from '../lib/story/map.ts';
 			import { starts } from '../lib/heromap/chapters.ts';
 
-			const [n, ms] = (new URLSearchParams(location.search).get('at') ?? '2:6400').split(':').map(Number);
+			const [n, ms] = (new URLSearchParams(location.search).get('at') ?? '2:3400').split(':').map(Number);
 			mountMap(document.querySelector<HTMLElement>('varmq-map')!, () => {}).seek(starts()[n - 1] + ms);
 		</script>
 	</body>
