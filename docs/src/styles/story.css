@@ -243,6 +243,44 @@
 	background: var(--bar-2);
 }
 
+/* A comet of the brand green runs round the button's border without stopping, the way into the tour. It is a conic
+   gradient turned by an animated angle, masked to the 1 px ring of the border. Reduced motion leaves the plain border. */
+@property --st-beam {
+	syntax: '<angle>';
+	inherits: false;
+	initial-value: 0deg;
+}
+
+.st-frame .st-tour::before {
+	content: '';
+	position: absolute;
+	inset: -1px;
+	padding: 1px;
+	border-radius: inherit;
+	background: conic-gradient(from var(--st-beam), transparent 0 72%, var(--brand) 100%);
+	-webkit-mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask:
+		linear-gradient(#000 0 0) content-box exclude,
+		linear-gradient(#000 0 0);
+	pointer-events: none;
+	animation: st-beam 3s linear infinite;
+}
+
+@keyframes st-beam {
+	to {
+		--st-beam: 360deg;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.st-frame .st-tour::before {
+		display: none;
+	}
+}
+
 /* A narrow map keeps the button inside it: the step count goes. */
 @container (max-width: 17rem) {
 	.st-tour-n {
