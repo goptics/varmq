@@ -1,0 +1,18 @@
+import{s as e}from"./scene.7TgpKLMy.js";var t=36,n=class{sim;root;o;queueEl;parkedEl;parkedWrap;lanesEl;doneCol;dotsEl;tallyEl;qLen;blockEls=new Map;ended=[];qSig=``;pSig=``;dSig=``;constructor(e,t,n={}){this.root=e,this.sim=t,this.o={showQueue:16,showDone:!0,...n},this.build()}reset(e){this.sim=e,this.ended=[],this.qSig=this.pSig=this.dSig=``;for(let e of this.blockEls.values())e.remove();this.blockEls.clear()}record(e){e.type===`end`&&this.ended.push(e.job.fail?`fail`:`ok`),this.ended.length>400&&this.ended.splice(0,this.ended.length-t)}build(){this.root.classList.add(`gb-pool`),this.root.innerHTML=`
+			<div class="gb-col gb-col--queue">
+				<span class="slabel">queue <b data-q-len></b></span>
+				<div class="gb-jobs" data-queue></div>
+				<div data-parked-wrap hidden>
+					<span class="slabel gb-sub">parked on the worker</span>
+					<div class="gb-jobs" data-parked></div>
+				</div>
+			</div>
+			<div class="gb-col gb-col--lanes">
+				<span class="slabel">goroutines</span>
+				<div class="gb-blocks" data-lanes></div>
+			</div>
+			${this.o.showDone?`<div class="gb-col gb-col--out">
+				<span class="slabel">done</span>
+				<div class="gb-dots" data-dots></div>
+				<p class="gb-tally" data-tally></p>
+			</div>`:``}`;let e=e=>this.root.querySelector(e);if(this.queueEl=e(`[data-queue]`),this.parkedEl=e(`[data-parked]`),this.parkedWrap=e(`[data-parked-wrap]`),this.lanesEl=e(`[data-lanes]`),this.qLen=e(`[data-q-len]`),this.o.showDone){this.doneCol=e(`.gb-col--out`),this.dotsEl=e(`[data-dots]`),this.tallyEl=e(`[data-tally]`);for(let e=0;e<t;e++)this.dotsEl.append(document.createElement(`i`))}}chip(e,t=``){let n=document.createElement(`span`);return n.className=`gb-job`+(t?` `+t:``),n.textContent=String(e.id),n}more(e){let t=document.createElement(`span`);return t.className=`gb-job gb-job--more`,t.textContent=`+${e}`,t}update(){let n=this.sim,r=n.queue,i=r.length+`:`+(r[0]?.id??0)+`:`+(r[r.length-1]?.id??0);if(i!==this.qSig){this.qSig=i;let e=r.slice(0,this.o.showQueue).map((e,t)=>this.chip(e,t===0?`is-next`:``));r.length>this.o.showQueue&&e.push(this.more(r.length-this.o.showQueue)),this.queueEl.replaceChildren(...e),this.queueEl.dataset.empty=r.length?``:`true`}e(this.qLen,`Len() ${r.length}`);let a=n.parked,o=a.length+`:`+(a[0]?.id??0);if(o!==this.pSig&&(this.pSig=o,this.parkedWrap.hidden=a.length===0,this.parkedEl.replaceChildren(...a.slice(0,12).map(e=>this.chip(e,`is-parked`)))),this.drawBlocks(),this.o.showDone){let n=this.ended.length,r=this.ended.slice(-36),i=n+`:`+r.length;if(i!==this.dSig){this.dSig=i;let a=this.dotsEl.children;for(let e=0;e<t;e++){let t=r[e];a[e].className=t??``}e(this.tallyEl,`${n} ended`)}}}drawBlocks(){let t=[...this.sim.gors].sort((e,t)=>e.slot-t.slot),n=new Set(t.map(e=>e.slot));for(let[e,t]of this.blockEls)n.has(e)||(t.remove(),this.blockEls.delete(e));let r=!1,i=0;for(let n of t){let t=this.blockEls.get(n.slot);t||(t=document.createElement(`span`),t.className=`gb-block`,t.innerHTML=`<b>g${n.slot+1}</b><span class="gb-block__job"></span><span class="gb-block__held"></span>`,this.blockEls.set(n.slot,t),r=!0);let a=n.busy?n.batch[n.i]:void 0;t.dataset.s=a?`busy`:`idle`,t.dataset.over=String(!!a&&++i>this.sim.limit),e(t.children[1],a?String(a.id):``);let o=a?n.batch.length-n.i-1:0;e(t.children[2],o?`+${o}`:``),t.children[1].dataset.fail=a?.fail??``,t.style.setProperty(`--p`,a?Math.max(0,Math.min(1,1-a.left/a.dur)).toFixed(3):`0`)}r&&this.lanesEl.replaceChildren(...t.map(e=>this.blockEls.get(e.slot)))}};export{n as t};

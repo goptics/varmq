@@ -1,0 +1,1 @@
+import{l as e,n as t}from"./dom.DnDNcqGI.js";t(),document.querySelectorAll(`[data-install]`).forEach(t=>{e(t.querySelector(`[role="tablist"]`))});

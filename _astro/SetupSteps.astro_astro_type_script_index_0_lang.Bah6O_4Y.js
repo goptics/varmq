@@ -1,0 +1,1 @@
+import{l as e,n as t}from"./dom.DnDNcqGI.js";document.querySelectorAll(`[data-ops-steps] [role="tablist"]`).forEach(t=>e(t)),t();

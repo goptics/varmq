@@ -1,0 +1,1 @@
+import{i as e}from"./dom.DnDNcqGI.js";var t=(t,n=``)=>e(`span`,{class:`ops-job ${n}`.trim(),text:String(t)});function n(e,t){let n=e=>e.disabled||e.getClientRects().length===0;n(t)&&Array.from(e.querySelectorAll(`[data-act], input`)).find(e=>!n(e))?.focus()}export{n,t};
