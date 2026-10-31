@@ -33,6 +33,18 @@ export default defineConfig({
 				replacesTitle: true,
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/goptics/varmq' }],
+			// The social card on every page (public/og.png, drawn by `pnpm og`, scripts/og.mjs). Starlight sets
+			// the rest of the Open Graph tags and twitter:card summary_large_image.
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://varmq.goptics.org/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{
+					tag: 'meta',
+					attrs: { property: 'og:image:alt', content: 'VarMQ: worker pools and job queues for Go, over a queue of waiting jobs, the event loop and a worker running jobs' },
+				},
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://varmq.goptics.org/og.png' } },
+			],
 			sidebar: [
 				{ label: 'Start here', items: [{ autogenerate: { directory: 'start' } }] },
 				{ label: 'Core concepts', items: [{ autogenerate: { directory: 'concepts' } }] },

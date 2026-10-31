@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "test": "node --test \"src/**/*.test.ts\"",
-    "coverage": "bash scripts/api-coverage.sh"
+    "coverage": "bash scripts/api-coverage.sh",
+    "og": "node scripts/og.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.4",
