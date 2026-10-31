@@ -7,18 +7,19 @@ import { mountMap } from './map.ts';
 import { STEPS, STOPS, STORY_TEXT, until, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
 
-// The home page opens on the intro, beside the whole map running as in the last step. From there the page snaps a
-// caption at a time: each scroll plays the next caption of a step on the map, at the map's own pace, while the one code
-// block morphs into that caption's code and lights the lines it is about. A scroll back up within a step plays its last
-// caption backward; a step reached from another one plays from its start. Under reduced motion a caption shows its last
-// frame. Past the last step the page scrolls on as usual, through the rest of the home page.
+// The home page opens on the intro, beside the whole map running in a loop, and scrolls as any page does. The tour button
+// starts the story: the page then snaps a caption at a time, and each scroll plays the next caption of a step on the
+// map, at the map's own pace, while the one code block morphs into that caption's code and lights the lines it is
+// about. A scroll back up within a step plays its last caption backward; a step reached from another one plays from
+// its start. Under reduced motion a caption shows its last frame. Skip, Esc, or a scroll on past the last step ends the
+// tour, and the page is the intro and the sections under it again.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
 /** The snap positions: the intro, then one per caption (STOPS). */
 const COUNT = STOPS.length + 1;
 /**
- * The whole map's run, as the intro and the last step loop it: from STATIC_AT, where the last step's camera has pulled
- * back, to that step's end, where step 1's zoom begins; held AGAIN.again ms between runs.
+ * The whole map's run, as the intro loops it: from STATIC_AT, where the last step's camera has pulled back, to that
+ * step's end, where step 1's zoom begins; held AGAIN.again ms between runs.
  */
 const RUN_END = STEPS[STEPS.length - 1].from + STEPS[STEPS.length - 1].ms;
 const AGAIN = { again: 1500 };
@@ -26,10 +27,6 @@ const AGAIN = { again: 1500 };
 const SLACK = 0.02;
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-/** Whether the reader has paused the map with its Pause button. */
-let paused = false;
-/** Whether the map holds still: a step shows its last frame, as under reduced motion, rather than playing. */
-const still = () => reduce.matches || paused;
 const motion = (): ScrollBehavior => (reduce.matches ? 'auto' : 'smooth');
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 
@@ -104,8 +101,8 @@ const notes = $('.st-notes');
 const text = $('.st-text');
 const source = $<HTMLAnchorElement>('.st-source a');
 const track = $('.st-track');
+const tour = $<HTMLButtonElement>('.st-tour');
 const skip = $<HTMLButtonElement>('.st-skip');
-const pause = $<HTMLButtonElement>('.st-pause');
 const live = $('.st-live');
 /** The skip's outline: a segment per step, each a track and the fill over it. */
 const segments = STEPS.map((_, n) => {
@@ -116,10 +113,11 @@ const segments = STEPS.map((_, n) => {
 });
 $('.st-skip-ring').append(...segments);
 $('.st-all').insertAdjacentHTML('beforeend', STORY_TEXT);
-track.append(...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-stop' })));
 
+/** Whether the reader is on the tour: the track holds its stops, and the page snaps through them. */
+let touring = false;
 /** The snap position shown: 0 for the intro, n + 1 for STOPS[n]. */
-let at = -1;
+let at = 0;
 let step = -1;
 let caption = -1;
 /** The caption the step stops at: the map may run up to its end, and no further. */
@@ -164,7 +162,7 @@ function setCaption(i: number) {
 	}
 }
 
-/** Time t of the loop as ms into step s. */
+/** Time t of the map's timeline as ms into step s. */
 const into = (s: Step, t: number) => (((t - s.from) % TOTAL) + TOTAL) % TOTAL;
 
 const map = mountMap($('varmq-map'), (t) => {
@@ -201,50 +199,21 @@ function tell(text: string) {
 	rest();
 }
 
-/** Plays the map on from where Pause held it, as the intro or step shown would have. */
-function resume() {
-	const t = map.now();
-	const loop = { ...AGAIN, restart: STATIC_AT };
-	if (step < 0) {
-		// The intro's run, or the rewind from step 1 on its way back to it.
-		if (t >= STATIC_AT && t <= RUN_END) map.play(t, RUN_END - t, loop);
-		else map.rewind(RUN_END, STEPS[0].ms, () => map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN));
-		return;
-	}
-	const s = STEPS[step];
-	const left = until(s, limit) - into(s, t);
-	if (step === STEPS.length - 1) {
-		// Out of view below the story, the loop rests (tick).
-		if (!away) map.play(t, Math.max(0, left), loop);
-	} else if (left > 0) map.play(t, left);
-	else if (left < 0) map.rewind(s.from + until(s, limit), -left);
-}
-
-pause.addEventListener('click', () => {
-	paused = !paused;
-	pause.setAttribute('aria-pressed', String(paused));
-	pause.textContent = paused ? 'Play' : 'Pause';
-	root.toggleAttribute('data-paused', paused);
-	if (paused) map.seek(map.now());
-	else resume();
-});
-
 /**
- * Shows the intro, beside the whole map. The map runs as in the last step, from where its camera has pulled back, holds
- * a moment once it is still, and runs again, until the reader scrolls on. Back up from step 1, the map first plays
- * step 1 backward to the run's end, and the run starts again from there at once. Under reduced motion it stands still.
+ * Shows the intro, beside the whole map running as in the last step: from where its camera has pulled back, held a
+ * moment once it is still, and run again, until the reader takes the tour. Back up from step 1, the map first plays
+ * backward to the end of the run, then runs. Under reduced motion it shows its still frame, the one the HTML ships
+ * (heromap/still.ts).
  */
 function showIntro(back = false) {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
-	// Focus in the step, which is about to go, moves to the h1.
-	const focused = stepView.contains(document.activeElement);
+	// Focus in the step, which is about to go, is endTour's to move.
 	stepView.hidden = true;
-	if (focused) h1.focus({ preventScroll: true });
 	news = said = '';
 	const run = () => map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN);
-	if (still()) map.seek(STATIC_AT);
+	if (reduce.matches) map.seek(STATIC_AT);
 	else if (back) map.rewind(RUN_END, STEPS[0].ms, run);
 	else run();
 }
@@ -283,9 +252,9 @@ function show(k: number, c: number, back = false) {
 	// The code block reaches its new height when the morph ends: keep the lit lines in view then too.
 	clearTimeout(settled);
 	settled = window.setTimeout(() => codes.forEach((code) => follow(code, s, caption)), MORPH.duration);
-	if (still()) map.seek(s.from + until(s, c));
+	if (reduce.matches) map.seek(s.from + until(s, c));
 	else if (back) map.rewind(s.from + until(s, c), STEPS[k + 1]?.ms ?? s.ms);
-	else map.play(s.from, until(s, c), k === STEPS.length - 1 ? { ...AGAIN, restart: STATIC_AT } : undefined);
+	else map.play(s.from, until(s, c));
 }
 
 /**
@@ -296,7 +265,7 @@ function move(c: number, back: boolean) {
 	const s = STEPS[step];
 	limit = c;
 	const left = until(s, c) - into(s, map.now());
-	if (still()) map.seek(s.from + until(s, c));
+	if (reduce.matches) map.seek(s.from + until(s, c));
 	else if (back && left > 0) map.play(map.now(), left);
 	// From wherever it is in the step: a rewind still on its way back from the caption below goes on from there.
 	else if (back) map.rewind(s.from + until(s, c), s.ms);
@@ -308,16 +277,18 @@ notes.addEventListener('click', (e) => {
 	const i = Number((e.target as Element).closest('button')?.dataset.i);
 	if (step < 0 || Number.isNaN(i)) return;
 	const k = STOPS.findIndex((stop) => stop.step === step && stop.caption === i) + 1;
-	// The last step's one caption plays its loop again, as show() starts it.
-	if (k === at) step === STEPS.length - 1 ? show(step, i) : move(i, false);
+	if (k === at) move(i, false);
 	else go(k);
 });
 
-// The stage is pinned under the header, and each snap position is one stage's height down the track.
-const height = () => (track.firstElementChild as HTMLElement).offsetHeight;
-const top = () => track.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(stage).top);
+// The stage is pinned under the header, and each snap position is one stage's height down the track. Off the tour the
+// track is empty, and the page is at the intro.
+const height = () => (track.firstElementChild as HTMLElement | null)?.offsetHeight ?? stage.offsetHeight;
+/** Where the stage pins, under the header. */
+const stageTop = () => parseFloat(getComputedStyle(stage).top);
+const top = () => track.getBoundingClientRect().top + scrollY - stageTop();
 /** Where the page is, in snap positions: 0 at the intro, COUNT - 1 at the last step, more past it. */
-const position = () => (scrollY - top()) / height();
+const position = () => (track.firstElementChild ? (scrollY - top()) / height() : 0);
 const nearest = () => Math.min(COUNT - 1, Math.max(0, Math.round(position())));
 
 /** The position a wheel or key scroll is heading to, until it gets there, so a turn made on the way goes on from it. */
@@ -332,37 +303,30 @@ function snapping(on?: boolean) {
 	document.documentElement.classList.toggle('st-snap', on);
 }
 
-/** Whether the stage has scrolled out of view below the story. */
-let away = false;
 let frameId = 0;
 const tick = () => {
 	frameId = 0;
+	if (!touring) return;
+	// Scrolled on past the last step, out of the story, the tour ends where the reader is; so it does at the foot of the
+	// page below the last step, where a screen taller than what follows the story cannot scroll a whole stop past it.
+	const p = position();
+	const foot = scrollY >= document.documentElement.scrollHeight - innerHeight - 1;
+	if (p >= COUNT || (foot && p > COUNT - 1 + SLACK)) return endTour(true);
 	snapping();
 	const k = nearest();
-	// On the way to a stop further than the next, as a skip goes, the stops passed are not shown.
+	// On the way to a stop further than the next, as a caption's button can go, the stops passed are not shown.
 	if (k !== at && (target < 0 || k === target)) {
 		// The next or the previous caption of the same step moves to it. A step reached going down plays from its start;
 		// going up, the map plays back to where it stops, and holds.
 		const was = STOPS[at - 1];
 		const stop = STOPS[k - 1];
+		// Back up at the intro, the tour ends there.
+		if (!stop) return endTour(true, true);
 		const up = k < at;
 		at = k;
-		if (!stop) showIntro(up);
-		else if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
+		if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
 		} else show(stop.step, stop.caption, up);
-		// The skip shows from step 1 to the step before the last.
-		skip.disabled = !stop || stop.step === STEPS.length - 1;
-		// Focus on the skip, which has just gone, moves to the last step's title, as a skip lands, or to the intro's h1.
-		if (skip.disabled && document.activeElement === skip) (stop ? title : h1).focus({ preventScroll: true });
-	}
-	// Out of view below the story, the last step's loop rests on its end; back in view, the step plays from its start.
-	if (away !== position() >= COUNT) {
-		away = !away;
-		if (at === COUNT - 1 && !still()) {
-			if (away) map.seek(RUN_END);
-			else show(STEPS.length - 1, 0);
-		}
 	}
 	if (Math.abs(position() - target) < 1 / height()) target = -1;
 };
@@ -375,7 +339,7 @@ addEventListener('resize', () => {
 	schedule();
 	if (step >= 0) for (const code of codes) follow(code, STEPS[step], caption);
 });
-tick();
+showIntro();
 
 /** Scrolls to snap position k, snapping on the way if k is in the story above its last step. */
 function go(k: number) {
@@ -384,46 +348,112 @@ function go(k: number) {
 	scrollTo({ top: top() + k * height(), behavior: motion() });
 }
 
+/** Starts the tour: the track takes its stops, and step 1 shows and plays. */
+function startTour() {
+	touring = true;
+	root.dataset.tour = '';
+	// From here on the text fades in as it changes (story.css); the first paint does not fade.
+	root.dataset.moved = '';
+	addEventListener('wheel', onWheel, { passive: false });
+	// A reload mid-tour opens on the page without it, at its top, not at the tour's scroll position.
+	history.scrollRestoration = 'manual';
+	track.append(
+		...Array.from({ length: COUNT }, () => Object.assign(document.createElement('div'), { className: 'st-stop' })),
+	);
+	// Step 1 shows at once, so focus can move to its title; the stage stays pinned while the page scrolls to its stop.
+	at = 1;
+	show(STOPS[0].step, STOPS[0].caption);
+	skip.disabled = false;
+	go(1);
+	title.focus({ preventScroll: true });
+}
+
+/**
+ * Ends the tour: the track gives up its stops, so the page is the intro and the sections under it again. Kept in place
+ * (scrolled out at either end, or tabbed out), the page moves by what the track gave up, so what is in view stays
+ * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to the first
+ * section, with focus on its heading. Back up at the intro from step 1 (`back`), the map plays back to its run.
+ */
+function endTour(keep: boolean, back = false) {
+	const row = document.querySelector('section.home-row');
+	const was = row?.getBoundingClientRect().top ?? 0;
+	const past = position() > COUNT - 1;
+	const inside = root.contains(document.activeElement);
+	touring = false;
+	removeEventListener('wheel', onWheel);
+	history.scrollRestoration = 'auto';
+	delete root.dataset.tour;
+	track.replaceChildren();
+	snapping(false);
+	target = -1;
+	at = 0;
+	skip.disabled = true;
+	showIntro(back);
+	// html scrolls smoothly (scroll-behavior), so these jumps say instant. The current scrollY already holds any
+	// adjustment the browser's scroll anchoring made.
+	const heading = document.getElementById('try-it');
+	if (heading && !heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+	if (keep) {
+		if (row) scrollTo({ top: scrollY + row.getBoundingClientRect().top - was, behavior: 'instant' });
+		// Never to something out of view: past the end, the first section heading wholly between the header and the
+		// screen's foot, if any.
+		const seen = (el: Element) => {
+			const r = el.getBoundingClientRect();
+			return r.top >= stageTop() && r.bottom <= innerHeight;
+		};
+		const shown = past ? [...document.querySelectorAll<HTMLElement>('section.home-row h2')].find(seen) : h1;
+		if (inside && shown) {
+			if (!shown.hasAttribute('tabindex')) shown.tabIndex = -1;
+			shown.focus({ preventScroll: true });
+		}
+		return;
+	}
+	heading?.focus({ preventScroll: true });
+	heading?.scrollIntoView({ behavior: 'instant', block: 'start' });
+}
+
+tour.addEventListener('click', startTour);
+skip.addEventListener('click', () => endTour(false));
+
 // Keyboard and touch scroll natively and snap a stop at a time. The wheel is taken over, so that one turn is one stop
 // (wheel.ts): snapping alone lets a short notch fall back to where it was. From the last step down, the page scrolls as
 // usual with every input; on the way back up, the story takes over again at the last step.
+// It listens only on the tour (startTour), so the page off the tour scrolls on the browser's own thread.
 const turn = wheelSteps();
-addEventListener(
-	'wheel',
-	(e) => {
-		if (e.ctrlKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
-		const p = position();
-		const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
-		// Where the text column scrolls on its own, as at 400% zoom (story.css), the wheel scrolls it to its end first.
-		const room = delta > 0 ? text.scrollHeight - text.clientHeight - text.scrollTop : text.scrollTop;
-		if (room > 1 && text.contains(e.target as Node)) return;
-		// From the last step down, the wheel is the reader's, both ways, until a turn up would pass the last step.
-		if (p >= COUNT - 1 - SLACK && (delta > 0 || p + delta / height() > COUNT - 1 + SLACK)) return;
-		const from = target >= 0 ? target : p > COUNT - 1 + SLACK ? COUNT : nearest();
-		const next = from + Math.sign(delta);
-		if (next < 0) return;
-		e.preventDefault();
-		// A turn down on the way to the last step waits until the page is there.
-		if (turn(e.timeStamp, delta) && next < COUNT) go(next);
-	},
-	{ passive: false },
-);
+function onWheel(e: WheelEvent) {
+	if (e.ctrlKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+	const p = position();
+	const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+	// Where the text column scrolls on its own, as at 400% zoom (story.css), the wheel scrolls it to its end first.
+	const room = delta > 0 ? text.scrollHeight - text.clientHeight - text.scrollTop : text.scrollTop;
+	if (room > 1 && text.contains(e.target as Node)) return;
+	// From the last step down, the wheel is the reader's, both ways, until a turn up would pass the last step.
+	if (p >= COUNT - 1 - SLACK && (delta > 0 || p + delta / height() > COUNT - 1 + SLACK)) return;
+	const from = target >= 0 ? target : p > COUNT - 1 + SLACK ? COUNT : nearest();
+	const next = from + Math.sign(delta);
+	if (next < 0) return;
+	e.preventDefault();
+	// A turn down on the way to the last step waits until the page is there.
+	if (turn(e.timeStamp, delta) && next < COUNT) go(next);
+}
 // A scroll that stops short of where it was heading, as when the reader takes over, heads nowhere any more: show the
 // stop it is at.
 addEventListener('scrollend', () => {
+	if (!touring) return;
 	target = -1;
 	snapping();
 	schedule();
 });
 
-skip.addEventListener('click', () => go(COUNT - 1));
-// End goes to the foot of the page, so it stops the snapping first. From the last step down the keys scroll as usual,
-// but the keys that scroll up go to the last step from just below it, and from it to the stop before, as the wheel
-// does.
+// Esc ends the tour, as Skip does. End goes to the foot of the page, so it stops the snapping first. From the last step
+// down the keys scroll as usual, but the keys that scroll up go to the last step from just below it, and from it to the
+// stop before, as the wheel does.
 addEventListener('keydown', (e) => {
-	if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+	if (!touring || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
 	const on = e.target as Element;
-	if (on.closest('input, textarea, select, [contenteditable]')) return;
+	// Esc in the search dialog closes the dialog, not the tour.
+	if (on.closest('input, textarea, select, [contenteditable], dialog') || document.querySelector('dialog[open]')) return;
+	if (e.key === 'Escape') return endTour(false);
 	if (e.key === 'End') return snapping(false);
 	if (e.key === ' ' && on.closest('button, a')) return;
 	const up = e.key === 'ArrowUp' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey);
@@ -432,3 +462,29 @@ addEventListener('keydown', (e) => {
 	e.preventDefault();
 	go(p > COUNT - 1 + SLACK ? COUNT - 1 : COUNT - 2);
 });
+
+// Tabbing on out of the story, into what follows it, ends the tour where the reader is.
+addEventListener('focusin', (e) => {
+	const to = e.target as Element;
+	if (!touring || root.contains(to) || !(root.compareDocumentPosition(to) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+	endTour(true);
+	// html scrolls smoothly, so the browser brings focus into view only after this; the scroll endTour made cancels it.
+	to.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+});
+
+// A reload mid-tour opened at the top (startTour); once loaded, the page keeps its scroll on a reload again.
+if (history.scrollRestoration === 'manual') {
+	addEventListener('load', () => requestAnimationFrame(() => (history.scrollRestoration = 'auto')), { once: true });
+}
+
+// Off the tour, the intro's run rests while the hero is out of view, under the header too, and runs again from its
+// start once it is back.
+new IntersectionObserver(
+	([entry]) => {
+		if (touring || reduce.matches) return;
+		if (entry.isIntersecting) showIntro();
+		else map.seek(map.now());
+	},
+	// A pixel more than the header, so a stage whose foot only touches the header's edge counts as out of view.
+	{ rootMargin: `-${stageTop() + 1}px 0px 0px 0px` },
+).observe(stage);

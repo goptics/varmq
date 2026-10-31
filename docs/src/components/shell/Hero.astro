@@ -1,6 +1,6 @@
 ---
-// The hero slot. The home page opens on the story (Story.astro). Starlight also draws the 404 page with the hero,
-// which keeps its banner and Starlight's own hero.
+// The hero slot. The home page opens on the intro beside the map, with the story as a tour (Story.astro). Starlight
+// also draws the 404 page with the hero, which keeps its banner and Starlight's own hero.
 import Default from '@astrojs/starlight/components/Hero.astro';
 import Story from '../Story.astro';
 
@@ -16,7 +16,6 @@ const notFound = id === '404' || id.endsWith('/404');
 	// reduced motion (story.css keeps them still and unlit there). This script comes before <Story /> so the browser
 	// runs it without waiting for the story's larger module, as module scripts run in document order.
 	const rails = Array.from(document.querySelectorAll<HTMLElement>('.roll'));
-	const story = document.querySelector('.st');
 	const wide = matchMedia('(min-width: 1180px)');
 	const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 	if (rails.length === 2) {
@@ -55,8 +54,7 @@ const notFound = id === '404' || id.endsWith('/404');
 		const tick = (now: number) => {
 			const dt = Math.min(64, last ? now - last : 16.7); // a long gap (hidden tab) counts as a few frames
 			last = now;
-			// The map's Pause holds the drift too (main.ts sets data-paused); the holes still follow the scroll.
-			if (!story?.hasAttribute('data-paused')) drift += (DRIFT * dt) / 1000;
+			drift += (DRIFT * dt) / 1000;
 			// The same glide at any refresh rate: the share grows with the time since the last frame.
 			y += (scrollY - y) * (1 - Math.pow(1 - EASE, dt / 16.7));
 			const at = y * RATE + drift;

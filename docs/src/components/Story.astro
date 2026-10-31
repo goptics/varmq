@@ -1,7 +1,7 @@
 ---
-// The home page's opening: the intro beside the whole map, then varmq's story in ten steps, a caption per scroll. Each
-// step plays its chapter of the map while the one code block morphs into the code behind it (lib/story/main.ts). The
-// title and the lede are the page's hero fields in index.mdx.
+// The home page's opening: the intro beside the whole map, and the tour of varmq's story in ten steps, a caption per
+// scroll, for the reader who starts it. Each step plays its chapter of the map while the one code block morphs into the
+// code behind it (lib/story/main.ts). The title and the lede are the page's hero fields in index.mdx.
 import '@shikijs/magic-move/style.css';
 import '../lib/heromap/map.css';
 import '../styles/story.css';
@@ -9,6 +9,11 @@ import Install from './ui/Install.astro';
 import { stillMap } from '../lib/heromap/still.ts';
 
 const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
+// The h1 names two parts of the map beside it, each in that part's colour (story.css): the worker's goroutines and the
+// queues' lanes.
+const heading = title
+	?.replace('Worker pools', '<span class="st-pools">Worker pools</span>')
+	.replace('job queues', '<span class="st-queues">job queues</span>');
 // The map's still frame, in the HTML so it shows at first paint; the story's code swaps in live nodes (render.ts).
 const still = stillMap();
 ---
@@ -18,17 +23,13 @@ const still = stillMap();
 	<div class="st-stage">
 		<div class="st-text">
 			<div class="st-intro">
-				<h1 id="_top" tabindex="-1" data-page-title>{title}</h1>
+				<h1 id="_top" tabindex="-1" data-page-title set:html={heading} />
 				{tagline && <p class="st-lede" set:html={tagline} />}
 				<Install id="home" />
 				<div class="st-actions">
 					<a class="btn btn--primary" href="/start/quick-start/">Get started</a>
 					<a class="btn btn--ghost" href="https://github.com/goptics/varmq">GitHub</a>
 				</div>
-				<p class="st-hint">
-					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v10M3.5 8 8 12.5 12.5 8"></path></svg>
-					Scroll: ten steps, each run on the map beside the code that does it.
-				</p>
 			</div>
 			<div class="st-step" hidden>
 				<div>
@@ -53,14 +54,17 @@ const still = stillMap();
 		<div class="st-map">
 			<div class="st-frame">
 				<varmq-map aria-hidden="true" style={still.style} set:html={still.html}></varmq-map>
-				<!-- Holds the map still, and the hint's arrow; the steps still change, each shown at its end (main.ts). -->
-				<button class="pbtn pbtn--paper st-pause" type="button" aria-pressed="false">Pause</button>
+				<!-- Starts the tour, on the map it plays: the track takes its stops and the page snaps through them (main.ts). -->
+				<button class="pbtn pbtn--paper st-tour" type="button">
+					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.25v9.5L12.5 8z"></path></svg>
+					Take the tour<span class="st-tour-n">&nbsp;· 10 steps</span>
+				</button>
 			</div>
 		</div>
 	</div>
-	<!-- On steps 1 to 9 only: the way past the rest of the story, to the last step, where the page scrolls freely. Its
-	     outline is the story's progress, a segment per step, filled once that step has played (main.ts). -->
-	<button class="st-skip" type="button" aria-label="Skip to step 10" disabled>
+	<!-- On the tour's steps only: ends the tour, at the first section under the story. Its outline is the story's
+	     progress, a segment per step, filled once that step has played (main.ts). -->
+	<button class="st-skip" type="button" aria-label="Skip the rest of the tour" disabled>
 		<svg class="st-skip-ring" viewBox="0 0 48 48" aria-hidden="true"></svg>
 		<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"></path></svg>
 	</button>

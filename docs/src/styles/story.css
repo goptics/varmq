@@ -1,9 +1,10 @@
-/* The home page's opening (components/Story.astro, lib/story/main.ts): the intro, then varmq's story in ten steps,
-   one per scroll. A stage is pinned under the header for a track of one-stage steps. Its text column is a size
-   container, so the text sets itself by the room it has. The map draws in its own palette (lib/heromap/map.css),
-   the code is a dark panel in both themes, and green marks what is happening now. */
+/* The home page's opening (components/Story.astro, lib/story/main.ts): the intro, and the tour of varmq's story in ten
+   steps, one per scroll, for the reader who starts it. On the tour the stage is pinned under the header for a track of
+   one-stage steps, and its text column is a size container, so the text sets itself by the room it has. The map draws
+   in its own palette (lib/heromap/map.css), the code is a dark panel in both themes, and green marks what is
+   happening now. */
 
-/* While the reader is in the story, the page snaps a step at a time (main.ts turns this on and off). */
+/* While the reader is on the tour, in the story, the page snaps a step at a time (main.ts turns this on and off). */
 :root.st-snap {
 	scroll-snap-type: y mandatory;
 	scroll-padding-top: var(--sl-nav-height);
@@ -12,43 +13,46 @@
 /* The home page is a landing page (docs/DESIGN.md, "Page types"). The story and everything under it share one frame,
    the stage's: as wide, with the same gutters, so their edges line up. Where the sprocket holes show, the gutter
    clears them. */
-:root:has(.st) {
+:root:is([data-home], :has(.st)) {
 	--st-max: 1440px;
 	--st-gutter: var(--gutter);
 }
 
 @media (min-width: 1180px) {
-	:root:has(.st) {
+	:root:is([data-home], :has(.st)) {
 		--st-gutter: max(var(--gutter), 52px);
 	}
 }
 
-/* No scrollbar on the home page: the glow on the sprocket-hole rails shows where the reader is. The page still
-   scrolls with the wheel, keys and touch. */
-:root:has(.st) {
-	scrollbar-width: none;
+/* No scrollbar on the home page where the sprocket-hole rails show (1180px and up): their glow shows where the reader
+   is. The page still scrolls with the wheel, keys and touch. Narrower, the rails are hidden and the browser's own
+   scrollbar shows. */
+@media (min-width: 1180px) {
+	:root:is([data-home], :has(.st)) {
+		scrollbar-width: none;
+	}
+
+	:root:is([data-home], :has(.st))::-webkit-scrollbar {
+		display: none;
+	}
 }
 
-:root:has(.st)::-webkit-scrollbar {
-	display: none;
-}
-
-:root:has(.st) .main-pane > main {
+:root:is([data-home], :has(.st)) .main-pane > main {
 	max-width: none;
 	border-inline: 0;
 }
 
-:root:has(.st) .content-panel {
+:root:is([data-home], :has(.st)) .content-panel {
 	padding-top: 0;
 	padding-inline: 0;
 }
 
-:root:has(.st) .content-panel > .sl-container {
+:root:is([data-home], :has(.st)) .content-panel > .sl-container {
 	--st-gap: clamp(24px, 4vw, 72px);
 	max-width: none;
 }
 
-:root:has(.st) .sl-container > :not(.st, .roll) {
+:root:is([data-home], :has(.st)) .sl-container > :not(.st, .roll) {
 	max-width: var(--st-max);
 	margin-inline: auto;
 	padding-inline: var(--st-gutter);
@@ -56,7 +60,7 @@
 
 /* The rails come before the story in the content, so Starlight's margin between siblings would push the stage 1.5rem
    below the header. */
-:root:has(.st) .sl-container > .st {
+:root:is([data-home], :has(.st)) .sl-container > .st {
 	margin-top: 0;
 }
 
@@ -110,7 +114,7 @@
 
 /* The footer keeps the rows' columns: its links under the headings, its note under the rest. */
 @media (min-width: 72rem) {
-	:root:has(.st) .shell-foot__in {
+	:root:is([data-home], :has(.st)) .shell-foot__in {
 		display: grid;
 		grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
 		column-gap: var(--st-gap);
@@ -128,7 +132,7 @@
 }
 
 /* About 70 letters a line. In this face `ch`, a zero, is much wider than an average letter, so the measure is in em. */
-:root:has(.st) .sl-markdown-content :is(p, .card .body) {
+:root:is([data-home], :has(.st)) .sl-markdown-content :is(p, .card .body) {
 	max-width: 34em;
 	text-wrap: pretty;
 }
@@ -136,29 +140,29 @@
 /* Three link cards share one line where a row stacks, and read as a list beside a heading. The three figures, each
    with its paragraph, are always a list rather than a two-and-one grid. */
 @media (min-width: 50rem) and (max-width: 71.99rem) {
-	:root:has(.st) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
+	:root:is([data-home], :has(.st)) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 }
 
 @media (min-width: 72rem) {
-	:root:has(.st) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
+	:root:is([data-home], :has(.st)) .card-grid:has(> .sl-link-card:nth-child(3):last-child) {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
-:root:has(.st) .card-grid:has(> .card:nth-child(3):last-child) {
+:root:is([data-home], :has(.st)) .card-grid:has(> .card:nth-child(3):last-child) {
 	grid-template-columns: minmax(0, 1fr);
 }
 
 /* On a phone, Starlight keeps the theme switch in the sidebar's menu, which the home page does not have: its header
    shows the switch instead, without the GitHub link, which the intro has. */
 @media (max-width: 49.99rem) {
-	:root:has(.st) .header .right-group {
+	:root:is([data-home], :has(.st)) .header .right-group {
 		display: flex;
 	}
 
-	:root:has(.st) .header .social-icons {
+	:root:is([data-home], :has(.st)) .header .social-icons {
 		display: none;
 	}
 }
@@ -209,12 +213,21 @@
 	container-type: size;
 }
 
+/* On the tour the map plays its steps: the way in goes. */
+.st[data-tour] .st-tour {
+	display: none;
+}
+
 .st-intro,
 .st-step {
 	grid-area: 1 / 1;
 	align-self: center;
 	min-width: 0;
 	max-height: 100%;
+}
+
+/* Once the tour has started, the text fades in as it changes; the first paint shows the intro at once. */
+.st[data-moved] :is(.st-intro, .st-step) {
 	animation: st-in 420ms var(--ease) both;
 }
 
@@ -253,6 +266,17 @@
 	text-wrap: balance;
 }
 
+/* The two parts of the map the h1 names, in the map's own colours: the goroutines' green and the edge of its queue
+   lanes and jobs. The h1 is large text, so 3:1 against the paper is its floor: light 3.1:1 and 4.35:1, dark 8:1
+   and 9.8:1. */
+.st-intro h1 .st-pools {
+	color: var(--vm-go);
+}
+
+.st-intro h1 .st-queues {
+	color: var(--vm-job-edge);
+}
+
 .st-lede {
 	max-width: 40ch;
 	margin-top: 20px;
@@ -289,40 +313,42 @@
 	margin-top: 16px;
 }
 
-.st-hint {
-	display: flex;
+/* The tour's way in, on the map it plays (main.ts): centred at the map's foot, so it is on the first screen wherever
+   the map is. */
+.st-frame .st-tour {
+	position: absolute;
+	z-index: 2;
+	bottom: 10px;
+	left: 50%;
+	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	margin-top: 40px;
-	color: var(--ink-3);
-	font-size: var(--st-small);
+	max-width: calc(100% - 16px);
+	translate: -50% 0;
+	background: var(--paper);
+	white-space: nowrap;
 }
 
-.st-hint svg {
-	flex: none;
-	width: 16px;
-	height: 16px;
-	fill: none;
-	stroke: var(--brand);
-	stroke-width: 1.75;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-	animation: st-nudge 2.4s var(--ease) infinite;
+.st-frame .st-tour:hover {
+	background: var(--bar-2);
 }
 
-/* Paused, the arrow holds still too. */
-.st[data-paused] .st-hint svg {
-	animation: none;
-}
-
-@keyframes st-nudge {
-	50% {
-		transform: translateY(3px);
+/* A narrow map keeps the button inside it: the step count goes. */
+@container (max-width: 17rem) {
+	.st-tour-n {
+		display: none;
 	}
 }
 
-/* ---- Skip: a fixed round button at the foot of the screen, on steps 1 to 9 (main.ts enables it). Its outline is ten
-   segments, one per step, that fill in --brand as the steps play. ---- */
+.st-tour svg {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	fill: var(--brand);
+}
+
+/* ---- Skip: a fixed round button at the foot of the screen, on the tour's steps (main.ts enables it). It ends the
+   tour. Its outline is ten segments, one per step, that fill in --brand as the steps play. ---- */
 
 .st-skip {
 	position: fixed;
@@ -697,13 +723,6 @@
    over the map rather than mask it: a mask would repaint the whole map every frame. */
 .st-map {
 	min-width: 0;
-	animation: st-fade 420ms var(--ease) both;
-}
-
-@keyframes st-fade {
-	from {
-		opacity: 0;
-	}
 }
 
 .st-frame {
@@ -712,6 +731,7 @@
 	aspect-ratio: 400 / 344;
 	margin-left: auto;
 	overflow: hidden;
+	container-type: inline-size;
 }
 
 .st-frame::before,
@@ -739,31 +759,6 @@
 	display: block;
 	width: 100%;
 	aspect-ratio: 1;
-}
-
-/* Pause holds the map still (main.ts). It sits in the frame's top corner, over the fade, away from the skip button.
-   Under reduced motion the map is still already, so it goes. */
-.st-frame .st-pause {
-	position: absolute;
-	z-index: 2;
-	top: 8px;
-	right: 8px;
-	background: var(--paper);
-}
-
-.st-frame .st-pause:hover {
-	background: var(--bar-2);
-}
-
-.st-frame .st-pause:focus-visible {
-	outline: 2px solid var(--accent-text);
-	outline-offset: 3px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.st-frame .st-pause {
-		display: none;
-	}
 }
 
 /* ---- By the room the text has ---- */
@@ -839,14 +834,9 @@
 	.st-notes li::after {
 		display: none;
 	}
-
-	.st-hint {
-		display: none;
-	}
 }
 
-/* The intro on a short place: the hint goes first (above), then the title sets a size down and the gaps close up,
-   then the lede goes. */
+/* The intro on a short place: the title sets a size down and the gaps close up, then the lede goes. */
 @container (max-height: 26rem) {
 	.st-intro h1 {
 		font-size: 1.875rem;
@@ -951,9 +941,9 @@
 	}
 }
 
-/* Too short for the intro, as at 400% zoom: the text column scrolls, so the install box and Get started stay in reach.
-   The intro keeps its full height rather than squeezing the install box, and a step that cannot fit even with its
-   code cut to three lines scrolls too. The stage stays pinned, as the story's scroll positions need it. */
+/* Too short for the intro, as at 400% zoom: the text column scrolls, so the install box and Get started
+   stay in reach. The intro keeps its full height rather than squeezing the install box, and a step that cannot fit
+   even with its code cut to three lines scrolls too. The stage stays pinned, as the story's scroll positions need it. */
 @media (max-height: 22rem) {
 	.st-text {
 		overflow-y: auto;
@@ -1006,7 +996,7 @@
 }
 
 /* The home page's paper is plain: one green bar under the header, alone, read as a stray shade. */
-:root:has(.st) body {
+:root:is([data-home], :has(.st)) body {
 	background-image: none;
 }
 
@@ -1034,13 +1024,13 @@
 		--hole: oklch(from var(--paper) calc(l * 0.78) calc(c * 0.78) h);
 	}
 
-	:root:has(.st) .page > header.header {
+	:root:is([data-home], :has(.st)) .page > header.header {
 		padding-inline: 52px;
 	}
 
 	/* Starlight isolates the main pane, which would keep the rails under the header whatever their z-index. The home
 	   page has no sidebar for that isolation to protect. */
-	:root:has(.st) .main-pane {
+	:root:is([data-home], :has(.st)) .main-pane {
 		isolation: auto;
 	}
 
