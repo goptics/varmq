@@ -256,7 +256,7 @@
 	margin-top: 0;
 }
 
-.ga-panel > h3 + .ga-label {
+.ga-panel > :is(h3, .ga-panel__t) + .ga-label {
 	margin-top: 0;
 }
 
@@ -281,11 +281,12 @@
 	font-weight: 500;
 }
 
-.ga-panel > h3 {
+.ga-panel > :is(h3, .ga-panel__t) {
 	margin: 0 0 8px;
 	color: var(--panel-ink);
 	font: 600 0.75rem/1.3 var(--mono);
 	letter-spacing: 0.04em;
+	text-wrap: balance;
 }
 
 .ga-methods {
@@ -429,8 +430,10 @@
 	border-left-color: var(--panel-accent);
 }
 
-.ga-line.is-skip {
-	opacity: 0.4;
+/* A line that did not run loses its syntax colour; fading it took the text under 4.5:1. */
+.ga-line.is-skip,
+.ga-line.is-skip * {
+	color: var(--panel-ink-2);
 }
 
 /* ---- Phones ---- */

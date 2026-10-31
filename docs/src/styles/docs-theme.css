@@ -440,6 +440,11 @@ site-search button > kbd {
 	overflow-wrap: break-word;
 }
 
+/* No one-word last lines. */
+.sl-markdown-content :is(p, li):not(:where(.not-content *)) {
+	text-wrap: pretty;
+}
+
 .sl-markdown-content :is(h2, h3, h4, h5):not(:where(.not-content *)),
 .sl-markdown-content .sl-heading-wrapper {
 	font-family: var(--display);

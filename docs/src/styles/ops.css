@@ -541,7 +541,7 @@
 	padding: 1px 6px;
 	border: 1px solid var(--panel-rule);
 	border-radius: 4px;
-	font-size: 0.625rem;
+	font-size: 0.6875rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--panel-ink-2);
@@ -1227,23 +1227,15 @@
 }
 .mx__how {
 	margin: 16px 0;
-	padding: 12px 14px;
-	border: 1px solid var(--rule);
-	border-radius: 8px;
+	max-width: 65ch;
 	font-size: 0.9375rem;
 	line-height: 1.55;
 	color: var(--ink-2);
+	text-wrap: pretty;
 }
 .mx__how b {
-	display: inline-block;
-	margin-right: 6px;
-	padding: 0 6px;
-	border-radius: 4px;
-	background: var(--amber);
 	color: var(--ink);
-	font: 700 0.6875rem/1.6 var(--mono);
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	font-weight: 650;
 }
 .mx__how a,
 .mx__limit a,
