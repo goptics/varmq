@@ -1,6 +1,6 @@
 # VarMQ docs design contract
 
-Every page of the docs site follows this file. The values live in `src/styles/tokens.css`. The shared pieces live in `src/styles/ui.css` and `src/components/ui/`. The home page `/` (`src/components/Story.astro`, `src/styles/story.css`) shows the system at its fullest.
+Every page of the docs site follows this file. The values live in `src/styles/tokens.css`. The shared pieces live in `src/styles/ui.css` and `src/components/ui/`. The home page `/` (`src/components/Story.astro`, `src/styles/story.css`, and the sections under it in `src/components/home/`, `src/styles/home.css`) shows the system at its fullest.
 
 ## The idea
 
@@ -29,7 +29,7 @@ All text pairs pass WCAG AA in both themes (lowest ratio 4.75:1).
 - Body and headings use `--display` (Bricolage Grotesque). Code, labels, captions and numbers use `--mono` (JetBrains Mono). The shell `Head` loads both fonts once. A page stylesheet never imports them.
 - Body: 1.0625rem, line height 1.6.
 - H1 on the landing page: `clamp(2.375rem, 4.4vw, 3.75rem)`, weight 700, optical size 96, letter spacing -0.035em, line height 0.98, `text-wrap: balance`. Where the text column is narrow it steps down (1.875rem on a short phone).
-- A step's title on the landing page: `clamp(2rem, 3.2vw, 2.625rem)`, weight 700, optical size 72, letter spacing -0.03em, line height 1.05. The section heads under the story are article h2s (`--local-h2`).
+- A step's title on the landing page: `clamp(2rem, 3.2vw, 2.625rem)`, weight 700, optical size 72, letter spacing -0.03em, line height 1.05. The section heads under the story: `clamp(1.875rem, 4.2vw, 3.25rem)`, weight 700, optical size 72, letter spacing -0.03em, line height 1.02 (`.h2`, `home.css`).
 - Articles use a smaller scale (the shell sets `--local-h1`, `--local-h2` in `docs-theme.css`) because the column is 44 rem wide (`--sl-content-width`).
 - H3: 1.25rem, weight 650.
 - Lede on the landing page: `clamp(1.0625rem, 1.5vw, 1.25rem)`, line height 1.5, `--ink-2`, maximum 40ch.
@@ -57,21 +57,22 @@ Every component has one look. Use the shared piece. Do not write a second copy i
 | Code card | `.code` (+ `.code--dark`), `.code__head` with file name and `.copy` button, then `pre`. `[data-copy]` buttons are served by one handler; `copyText()` copies a computed string. Expressive Code also names each line of a doc code block `.code`, so the card rule skips those. | `ui.css`; `copyButtons()`, `copyText()` in `ui/dom.ts` |
 | Go syntax | `highlightGo`, `highlightShell`, `highlightJson` return `tk-*` spans. | `components/ui/go.ts` |
 | Doc code block | Expressive Code theme `varmq-panel`. Same tokens as the code card. | `ec.config.mjs`, `docs-theme.css` |
-| Lane | Label, bar track, value, and a "× VarMQ" ratio. The VarMQ lane uses `--brand`. | `.rlane` (`bench.css`); scene lanes stay local (`.llane`, `.gb-*`) |
+| Lane | Label, bar track, value, and a "× VarMQ" ratio. The VarMQ lane uses `--brand`. | `.rlane` (`bench.css` under `.bench`, `home.css` under `.home-jobs`); scene lanes stay local (`.llane`, `.gb-*`) |
 | Callout | Card with an `--amber` rule for results against VarMQ and a `--brand` rule for tips. Starlight asides and the matrix notes use it. | `docs-theme.css` |
-| Tear line | Dashed rule with "tear here" between the last section and the closing call to action. | `.shell-tear`, `.tear` |
+| Tear line | Dotted rule with "tear here" between the last section and the closing call to action: the footer's on a docs page, the closing's on `/`, where the footer's is hidden so there is one. | `.shell-tear` (`docs-theme.css`), `.tear` (`home.css`) |
 | Theme switch | Three native radios: Light, Dark, System. The choice is stored under `starlight-theme` (`''` for System). It sits in the header, and in the phone header on `/`, which has no sidebar menu. | `components/ui/ThemeSwitch.astro`, `ui.css` (`.tswitch`) |
 | Header links | Docs, Guides and Benchmarks before the GitHub link, on `/` only, as it has no sidebar. They hover as the GitHub link does, with a `--bar-2` box, and have no underline. Hidden below 50rem with the GitHub link. | `components/shell/SocialIcons.astro`, `docs-theme.css` (`.home-links`) |
-| Main action | `.btn` with `--primary` or `--ghost`, for a page's own call to action on paper (the landing pages). Scene controls stay `.pbtn`. | `ui.css` |
+| Main action | `.btn` with `--primary` or `--ghost` (a `--rule` outline, `--bar-2` on hover), for a page's own call to action on paper (the landing pages). Scene controls stay `.pbtn`. | `ui.css` |
 | Install box | The `go get` commands in tabs: varmq, then varmq with redisq or sqliteq. | `components/ui/Install.astro`, `ui.css` (`.install`) |
-| Store card | Starlight's link card, its title led by the store's icon: a memory stick for in-memory queues, and the map's SQLite and Redis logos, in the map's colours for them. | `components/StoreCard.astro`, `story.css` (`.store-icon`) |
+| Home section | A print job under the story: `.banner` (`JOB nn`, name, dashed rule, then a meta label), `.section__head` (h2 and lead), then the body. `.on-dark` on a dark panel or band. | `components/home/`, `home.css` |
+| Small map | A piece of the hero map in a home section: a `.vm-mini` frame (the map's dot grid, a `--rule` border, no panel) around an SVG drawn by `components/home/mini.ts` with the map's own pieces and classes (chips, lanes, trays, cards, the event loop, stores, goroutine rings, job squares with their trails). `heromap/map.css` styles `.vm-mini` as it styles `varmq-map`, so it takes the map's palette for the theme. The glow and the lanes' edge are `#vm-mini-glow` and `#vm-mini-lane-edge`, once on the page (`Scenes.astro`). The page ships each one's first frame, drawn at build time with `heromap/still.ts`'s small document. | `components/home/mini.ts`, `home.css` (`.vm-mini`) |
 
 Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area folder. They read only tokens.
 
 ## Motion and interaction
 
-- Use `--ease`. Keep each animation under 1.2 s, except a loop: a scene's loop has a Pause, and the home page's intro map is the one exception (below).
-- Every looping animation in a scene has a visible pause button (`.pbtn`). On the home page the intro's map runs the whole network in a loop, with no Pause (the owner's choice; a known gap against WCAG 2.2.2, below), and rests while the hero is out of view or under the header. On the tour each step plays once. The rails, an ornament, drift on their own. Both stop under reduced motion. The first paint does not fade in: the hero and its map show at once. Honor `prefers-reduced-motion`: show the end state and do not loop. A scene that plays steps offers a Step button.
+- Use `--ease`. Keep each animation under 1.2 s, except a loop: a scene's loop has a Pause, and the home page's maps are the exceptions (below).
+- Every looping animation in a scene has a visible pause button (`.pbtn`). On the home page the intro's map runs the whole network in a loop, with no Pause (the owner's choice; a known gap against WCAG 2.2.2, below), and rests while the hero is out of view or under the header. On the tour each step plays once. The small maps under the story have no Pause either (the owner's choice, the same gap): JOB 02's three scenes each loop on their own timeline while in view, and JOB 03's stage runs its jobs while in view; both rest out of view. Under reduced motion each scene shows one still frame that still shows its order, and the stage's buttons jump to their end state. The rails, an ornament, drift on their own. The map and the rails stop under reduced motion. The first paint does not fade in: the hero and its map show at once. Honor `prefers-reduced-motion`: show the end state and do not loop. A scene that plays steps offers a Step button.
 - Interactive scenes work with the keyboard. Each control has a visible focus ring: 2 px, 3 px offset, `--accent-text` on paper and `--panel-accent` on a dark panel.
 - A scene shows the real model. It does not draw a result that the library cannot produce.
 
@@ -94,7 +95,7 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 
 | Type | Used by | Rule |
 |---|---|---|
-| Landing | `/` | Full width. It keeps the Starlight header and opens on the intro beside the map, with the story as a tour the reader can take (below). Everything under the story shares the stage's frame (up to 1440 px, `--st-max`, with `--st-gutter` at each side), so the edges line up: each section is a row with its heading and lead in the story's text column and the rest in the map's, and stacks at 44rem below 72rem. |
+| Landing | `/` | Full width. It keeps the Starlight header and opens on the intro beside the map, with the story as a tour the reader can take (below). Everything under the story shares the stage's frame (up to 1440 px, `--st-max`, with `--st-gutter` at each side), so the edges line up. The sections under it are print jobs (below, "The sections under the story"). |
 | Article | `start`, `concepts`, `guides`, `persistence`, `operations` | Starlight layout restyled by the shell theme. One banner, then the article. Add a scene where a scene explains faster than text. |
 | Reference | `reference/comparison` | Dense tables and a feature matrix that the reader can filter. |
 | Data | `reference/benchmarks` | The explorer on a dark panel, results first: the dataset tabs (one line in the 44 rem column, two rows of three on a phone), one wrapping row of controls, then the scope line, which says in how many groups VarMQ leads, and the lanes, the map of who leads each group, the callout for results against VarMQ, every row, and Run details last. The controls are a labelled `select` per filter of the dataset and for Order, Show as a segmented choice (it changes what the lanes measure), a Channel baselines toggle on the pool datasets, and Clear filters, shown only while something is filtered. Run details is one closed disclosure that holds the shell command for the groups in scope with Copy, the run's date, commit, versions, machine and raw-file links. Data comes from a committed snapshot (`components/bench/data.json`, checked by `scripts/bench-data.mjs`). |
@@ -116,6 +117,17 @@ Scene-specific visuals (job chips, queue rails, tracks, boards) stay in the area
 - **Reduced motion.** The tour is still offered. Each step shows its last frame.
 - **Checks.** Check the hero and every step at the 18 viewport sizes in `home-stage-fit-testing`, both themes. Test the wheel inside the page, not through CDP events alone.
 
+### The sections under the story
+
+Under the hero, `index.mdx` holds one `.home-jobs.not-content` wrapper with a component per section (`src/components/home/`, `src/styles/home.css`). `not-content` keeps the docs' prose rules off them, and every rule in `home.css` is scoped by `.home-jobs`, except the two that hide the footer's tear line on `/`, scoped by `:root:is([data-home], :has(.st))`. The colours are the tokens, so they follow the theme switch with the rest of the page. Each section is a `section.home-row` with a `.wrap` (the story's frame) and its banner: the tour ends at the first one, and focuses `#try-it`, JOB 05's heading.
+
+1. **JOB 02 Scheduling** (`Scenes.astro`, `scenes.ts`, `order.ts`). Three small maps (`mini.ts`), each with its own looping anime.js timeline and the Go call of each step as its caption above it: a priority queue (`WithAutoRun(false)`, Add report 10, alert 1, digest 10, then Start: alert runs, then report and digest in the order added; each square shows its number alone, and the captions name the jobs), three queues on one worker under RoundRobin (alerts 2, reports 1, emails 3, as `examples/strategies-round-robin`), and a topic with two subscribed workers (one Publish, a job for each). The order comes from `order.ts`, which takes jobs as varmq does (the priority queue's ties by insertion, `helpers.Manager.GetRoundRobinItem`), pinned by `order.test.ts`. A job that has run leaves the scene at the worker, as on the hero map, so the order shows in the order jobs reach the worker and in the captions, which end on `// ran: ...`. Each scene plays only while it is in view and holds its end briefly before it runs again; reduced motion shows one still frame, the first job on the worker and the rest waiting, captioned with the order it shows. The scenes and the storage stage draw with the map's classes, which `heromap/map.css` styles under `.vm-mini` as under `varmq-map`, on the page's paper (no dark panel).
+2. **JOB 03 Where jobs live** (`Storage.astro`, `store.ts`). Tabs for memory, Redis and SQLite; a small map with your process (Add() and the worker) and the storage under it, Restart process and Add 5 jobs, the result in an `aria-live` line; the code that picks the store beside it. In memory the queue is in the process, and a restart loses the waiting jobs and the running one. With SQLite or Redis the queue and an IN FLIGHT tray are in the store: the waiting jobs stay. The running job's record stays in flight; sqliteq puts it back when the restarted program opens the queue, and redisq once it sees the crashed run is gone, at the restart in the demo as with SQLite. That is the behaviour of the redisq change that takes a plain queue's owner for gone when its wake-channel subscription drops; redisq v1.5.0 still waits for the 30 s heartbeat, so this ships with that release. A job put back waits at the front for 0.7 s before the worker takes it, and the line adds "Job N runs again now." The worker takes the next job as soon as it is free, during an add too. The result line sits under the buttons, so they never move. Below 480 px the stage stacks the store under the process.
+3. **JOB 04 Measured in public** (`Race.astro`, `race.ts`). On the page's own paper in both themes (no dark band). Tabs for the worker pool, Redis and SQLite, lanes that count up when first seen and on Replay (`Lanes.astro`), the results against VarMQ in one toggle (a `details`, closed by default, its amber summary the heading), then the run. Every figure is computed from `bench/data.json` by `bench/home.ts` (pinned by `home.test.ts`).
+4. **JOB 05 Programs** (`Examples.astro`). Five example programs in segmented tabs (Quick start, Priority, Round robin, Topics, Results), each in a code card with its file name and its Run, Edit, Reset and Playground ↗ buttons in its head, the lines before `func main` folded, and a "Read it in the docs" link after the tab's description. Each one runs in place: the card is a `go-play` element (`src/lib/go-play.ts`, the one `GoPlay.astro` uses; both read the programs through `src/lib/examples.ts`). Run sends the program to the Go Playground and plays its output back in an Output panel beside the card (under it below 900 px); Edit swaps the code for a textarea inside the card, with the same type, and Reset brings the code back; Open in Go Playground opens it there. In the editor Tab inserts a tab, Esc moves focus to Run and Ctrl+Enter runs. The heading is `#try-it`, where the tour ends.
+5. **JOB 06 Index** (`Index.astro`). Seven rows into the docs: Start, Concepts, Guides, Persistence, Operations, Comparison, API reference.
+6. **The closing** (`Close.astro`). The tear line, "Run your first worker.", the install box, Quick start and Read the docs. The footer under it starts with a dashed rule instead of its own tear line.
+
 ### The map's two palettes
 
 The map keeps its own palette (`lib/heromap/map.css`), in both themes:
@@ -128,7 +140,7 @@ The map keeps its own palette (`lib/heromap/map.css`), in both themes:
   - The greys come from the page's green-tinted inks (`--ink-3`, `--ink`) rather than a cool grey, so the map matches the paper around it.
   - A job keeps the dark map's amber (`#f2b036`) with a darker edge (`#a26500`), which gives the square its 3:1 against the paper.
   - The light palette uses tokens where the page has one: `--brand` for green marks, `--accent-text` for green text, `--tk-s` for the amber text, and `--ink-3` for labels and lines.
-- **Where it lives.** The palette is set on `:root`, so the story's text beside the map uses the same red, SQLite blue and Redis red (`--vm-*-text`).
+- **Where it lives.** The palette is set on `:root`, so the story's text beside the map uses the same red, SQLite blue and Redis red (`--vm-*-text`), and the small maps under the story (`.vm-mini`) draw in it.
 
 ## Adding a page or a component
 
@@ -143,10 +155,11 @@ The map keeps its own palette (`lib/heromap/map.css`), in both themes:
 - Theme: Light, Dark or System, from the header's switch; System follows `prefers-color-scheme`. `starlight-theme-rapide` is removed.
 - The Go call strip sits under the stage in every scene (it sat on top in two areas).
 - The home page's intro map loops with no Pause button, by the owner's choice. That falls short of WCAG 2.2.2 (Pause, Stop, Hide) for readers who have not set reduced motion; a small Pause on the map frame would close it.
+- JOB 02's three scenes loop, and JOB 03's stage keeps running jobs, with no Pause, by the owner's choice: the same gap against WCAG 2.2.2 for readers who have not set reduced motion. Both stop out of view. A Pause in each banner would close it.
 - Selected tab = `--panel-ink` fill on a dark panel, `--ink` on paper. The brand fill is for primary buttons only.
 - The map on `/` (`src/lib/heromap/map.css`) keeps its own `--vm-*` palette (see "The map's two palettes"). The dark palette's hex values and the light palette's amber, violet, red and blue are not tokens.
 - Scene chips and lanes (`.ljob`, `.llane`, `.ga-*`, `.gb-*`, `.ops-job`) are still local. They read tokens, but each area has its own markup.
-- `GoPlay.astro` uses Starlight `--sl-*` variables, which the shell maps to the tokens. Its buttons are `.pbtn`.
+- `GoPlay.astro` uses Starlight `--sl-*` variables, which the shell maps to the tokens. Its buttons are `.pbtn`. The `go-play` element itself (Run, Edit, Reset, Open, the output) is `src/lib/go-play.ts`; `GoPlay.astro` and the home page's `Examples.astro` give it their own markup and styles.
 - The explorer on the Benchmarks page and the matrix on the Comparison page keep their own table markup.
 - The rails' values (`--hole`, `--rim`, `--pitch`, `--band`) are local to `.roll` in `story.css`, without the `--local-` prefix. The band's fade mask writes `black`; a mask reads only its alpha, so it is not a colour.
-- The home page has two h2 sizes: a step's title, and the section heads under the story at the article size.
+- The home page has two h2 sizes: a step's title, and the section heads under the story (`.h2`), larger, as the print jobs' titles. The closing's heading uses the display face at `clamp(2.25rem, 6vw, 4.5rem)`.
