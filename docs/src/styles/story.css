@@ -804,10 +804,9 @@
 	}
 }
 
-/* Portrait below desktop, and any screen too narrow for two columns (as at 400% zoom): the map on top, the intro or the
-   step under it. The text keeps 22rem, room for the intro with its lede, and the map takes the rest, between 30% and
-   40% of the stage's height, and no wider than the screen. The map has one size for the intro and every step, so
-   nothing moves when the story starts. */
+/* Portrait below desktop, and any screen too narrow for two columns (as at 400% zoom): on the tour the map on top and the
+   step under it; before it, the intro on top and the map under it (below). The text keeps 22rem, room for the intro with its lede, and the map takes the rest, between 30% and
+   40% of the stage's height, and no wider than the screen. The map has one size for the intro and every step. */
 @media (max-width: 1023px) and (orientation: portrait), (max-width: 29.99rem) {
 	.st-stage {
 		grid-template-columns: minmax(0, 1fr);
@@ -840,6 +839,21 @@
 	   16px up), so its code gives up lines rather than its source link going under the button. */
 	.st[data-at='step'] .st-text {
 		padding-bottom: 76px;
+	}
+	/* Before the tour the intro comes first and the map under it, at the same size: the reader meets the words, then
+	   the picture. The tour puts the map back on top, where every step reads it. */
+	.st:not([data-tour]) .st-stage {
+		grid-template-rows: minmax(0, 1fr) auto;
+	}
+
+	.st:not([data-tour]) .st-text {
+		grid-row: 1;
+		padding-top: 20px;
+	}
+
+	.st:not([data-tour]) .st-map {
+		grid-row: 2;
+		padding: 4px 0 12px;
 	}
 }
 
