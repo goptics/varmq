@@ -840,20 +840,52 @@
 	.st[data-at='step'] .st-text {
 		padding-bottom: 76px;
 	}
-	/* Before the tour the intro comes first and the map under it, at the same size: the reader meets the words, then
-	   the picture. The tour puts the map back on top, where every step reads it. */
+	/* Before the tour the intro comes first and the map under it, at the same size, the two as one block in the middle
+	   of the screen: the reader meets the words, then the picture. The text is as tall as the intro here, so it sizes
+	   by its width only, and the screen's height steps the intro down instead (below). The tour puts the map back on
+	   top, where every step reads it. */
 	.st:not([data-tour]) .st-stage {
-		grid-template-rows: minmax(0, 1fr) auto;
+		grid-template-rows: auto auto;
+		align-content: safe center;
 	}
 
 	.st:not([data-tour]) .st-text {
 		grid-row: 1;
-		padding-top: 20px;
+		height: auto;
+		padding-block: 8px 4px;
+		container-type: inline-size;
 	}
 
 	.st:not([data-tour]) .st-map {
 		grid-row: 2;
-		padding: 4px 0 12px;
+		padding: 4px 0 8px;
+	}
+}
+
+/* The intro's steps down by height, as its container queries take them on the tour's layout: where the text would get
+   under 26rem the title sets a size down and the gaps close up; under 20.6rem the lede goes. */
+@media (max-width: 1023px) and (orientation: portrait) and (max-height: 830px), (max-width: 29.99rem) and (max-height: 830px) {
+	.st:not([data-tour]) .st-intro h1 {
+		font-size: 1.875rem;
+	}
+
+	.st:not([data-tour]) .st-lede {
+		margin-top: 12px;
+		font-size: 1rem;
+	}
+
+	.st:not([data-tour]) .st-intro .install {
+		margin-top: 16px;
+	}
+
+	.st:not([data-tour]) .st-actions {
+		margin-top: 12px;
+	}
+}
+
+@media (max-width: 1023px) and (orientation: portrait) and (max-height: 588px), (max-width: 29.99rem) and (max-height: 588px) {
+	.st:not([data-tour]) .st-lede {
+		display: none;
 	}
 }
 
