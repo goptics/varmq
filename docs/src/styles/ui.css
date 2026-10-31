@@ -264,15 +264,19 @@
 	background: var(--panel-fill-2);
 }
 
+/* Primary actions are white on a darker brand green, so even small type keeps 4.5:1 in both themes (and on panels,
+   where --brand is the on-dark one). */
 .pbtn--primary {
-	background: var(--brand);
-	border-color: var(--brand);
-	color: var(--brand-ink);
+	--primary: color-mix(in oklab, var(--brand), black 24%);
+	background: var(--primary);
+	border-color: var(--primary);
+	color: #fff;
 	font-weight: 600;
 }
 
 .pbtn--primary:hover {
-	background: var(--brand-hover);
+	--primary: color-mix(in oklab, var(--brand), black 34%);
+	background: var(--primary);
 }
 
 /* On paper (outside a dark panel). */
@@ -364,9 +368,9 @@ starlight-tabs .tab > [role='tab'] {
 	transition: background-color 0.15s var(--ease);
 }
 
-.seg [role='tab']:hover,
-.seg [role='radio']:hover,
-starlight-tabs .tab > [role='tab']:hover {
+.seg [role='tab']:not([aria-selected='true']):hover,
+.seg [role='radio']:not([aria-checked='true']):hover,
+starlight-tabs .tab > [role='tab']:not([aria-selected='true']):hover {
 	background: var(--bar-2);
 }
 
@@ -391,10 +395,10 @@ starlight-tabs .tab > [role='tab'][aria-selected='true'] {
 	color: var(--panel-ink-2);
 }
 
-.on-dark .seg [role='tab']:hover,
-.on-dark .seg [role='radio']:hover,
-.sframe .seg [role='tab']:hover,
-.sframe .seg [role='radio']:hover {
+.on-dark .seg [role='tab']:not([aria-selected='true']):hover,
+.on-dark .seg [role='radio']:not([aria-checked='true']):hover,
+.sframe .seg [role='tab']:not([aria-selected='true']):hover,
+.sframe .seg [role='radio']:not([aria-checked='true']):hover {
 	background: var(--panel-fill-2);
 }
 
@@ -565,18 +569,31 @@ button.copy:hover {
 		transform 0.15s var(--ease);
 }
 
+/* As .pbtn--primary: white on a darker brand green. */
 .btn--primary {
-	background: var(--brand);
-	color: var(--brand-ink);
+	--primary: color-mix(in oklab, var(--brand), black 24%);
+	background: var(--primary);
+	color: #fff;
 }
 
 .btn--primary:hover {
-	background: var(--brand-hover);
+	--primary: color-mix(in oklab, var(--brand), black 34%);
 	text-decoration: none;
 }
 
 .btn--primary:active {
 	transform: translateY(1px);
+}
+
+.btn--ghost {
+	border-color: var(--rule);
+	background: transparent;
+	color: var(--ink);
+}
+
+.btn--ghost:hover {
+	background: var(--bar-2);
+	text-decoration: none;
 }
 
 /* A trailing arrow: the button goes to another page. It steps forward on hover. */
