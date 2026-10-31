@@ -82,8 +82,8 @@ export function after(tl: Timeline, host: Element, end: number, state: object = 
 }
 
 /**
- * Draws the map into `host`: its still frame (the whole network, as at STATIC_AT) until the animation's code has
- * loaded, then whatever the page asks of it. It never plays on its own. `onTime` hears the loop's time on every frame
+ * Draws the map into `host`, in place of the same still frame the HTML ships (heromap/still.ts): the whole network,
+ * as at STATIC_AT, until the animation's code has loaded, then whatever the page asks of it. It never plays on its own. `onTime` hears the loop's time on every frame
  * it plays.
  */
 export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHandle {

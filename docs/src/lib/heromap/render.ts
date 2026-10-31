@@ -118,7 +118,7 @@ function add<K extends keyof SVGElementTagNameMap>(
 	attrs: Attrs = {},
 	content?: string,
 ): SVGElementTagNameMap[K] {
-	const node = document.createElementNS(NS, tag);
+	const node = parent.ownerDocument.createElementNS(NS, tag);
 	for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
 	if (content !== undefined) node.textContent = content;
 	parent.append(node);
@@ -275,13 +275,14 @@ export function renderMap(host: HTMLElement): MapNodes {
 	// The dot grid has an svg of its own, under the map's. It changes only as the camera moves, while the map changes
 	// every frame it plays: apart (map.css gives the map's a layer of its own), those frames never repaint the grid,
 	// whose thousands of masked dots, repainted with them, made the browser drop tiles for a frame.
-	const under = document.createElementNS(NS, 'svg');
+	const doc = host.ownerDocument;
+	const under = doc.createElementNS(NS, 'svg');
 	under.setAttribute('class', 'vm-svg vm-under');
 	under.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
 	const dots = gridDefs(under);
 	// The grid covers the square and stays put. Its pattern moves with the camera, and so its dots move with the world.
 	add(under, 'rect', { class: 'vm-grid', width: VIEW.w, height: VIEW.h, mask: 'url(#vm-grid-fade)', fill: 'url(#vm-dots)' });
-	const svg = document.createElementNS(NS, 'svg');
+	const svg = doc.createElementNS(NS, 'svg');
 	svg.setAttribute('class', 'vm-svg');
 	svg.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
 	defs(svg);
@@ -351,7 +352,9 @@ export function renderMap(host: HTMLElement): MapNodes {
 		jobs.set(id, [main, t1, t2]);
 	}
 
-	host.append(under, svg);
+	// In place of whatever the host holds: the page ships this same still frame in its HTML (still.ts), and the swap
+	// happens in one go, so the frame is never empty.
+	host.replaceChildren(under, svg);
 
 	const findRing = lookup(rings, 'ring');
 	let zoom = Number.NaN; // the camera's, until the first setCamera

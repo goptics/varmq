@@ -6,8 +6,11 @@ import '@shikijs/magic-move/style.css';
 import '../lib/heromap/map.css';
 import '../styles/story.css';
 import Install from './ui/Install.astro';
+import { stillMap } from '../lib/heromap/still.ts';
 
 const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
+// The map's still frame, in the HTML so it shows at first paint; the story's code swaps in live nodes (render.ts).
+const still = stillMap();
 ---
 
 <section class="st" data-at="intro" aria-labelledby="_top">
@@ -49,7 +52,7 @@ const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
 		</div>
 		<div class="st-map">
 			<div class="st-frame">
-				<varmq-map aria-hidden="true"></varmq-map>
+				<varmq-map aria-hidden="true" style={still.style} set:html={still.html}></varmq-map>
 				<!-- Holds the map still, and the hint's arrow; the steps still change, each shown at its end (main.ts). -->
 				<button class="pbtn pbtn--paper st-pause" type="button" aria-pressed="false">Pause</button>
 			</div>
