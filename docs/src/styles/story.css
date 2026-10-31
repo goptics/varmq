@@ -156,13 +156,13 @@
 }
 
 /* On a phone, Starlight keeps the theme switch in the sidebar's menu, which the home page does not have: its header
-   shows the switch instead, without the GitHub link, which the intro has. */
+   shows the switch instead, and the GitHub link without the main links, which the intro's Get started leads to. */
 @media (max-width: 49.99rem) {
 	:root:is([data-home], :has(.st)) .header .right-group {
 		display: flex;
 	}
 
-	:root:is([data-home], :has(.st)) .header .social-icons {
+	:root:is([data-home], :has(.st)) .header .home-links {
 		display: none;
 	}
 }

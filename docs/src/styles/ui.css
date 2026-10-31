@@ -579,15 +579,27 @@ button.copy:hover {
 	transform: translateY(1px);
 }
 
-.btn--ghost {
-	color: var(--ink);
-	border-color: var(--rule);
-	background: transparent;
+/* A trailing arrow: the button goes to another page. It steps forward on hover. */
+.btn svg {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: translate 0.15s var(--ease);
 }
 
-.btn--ghost:hover {
-	background: var(--bar-2);
-	text-decoration: none;
+.btn:hover svg {
+	translate: 3px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.btn,
+	.btn svg {
+		transition: none;
+	}
 }
 
 /* ---- Install box: the `go get` commands in tabs (components/ui/Install.astro) ---- */
