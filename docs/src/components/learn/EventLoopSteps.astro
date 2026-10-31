@@ -1,0 +1,338 @@
+---
+// "How it works": one job from Add to done, a step at a time. Mirrors worker_eventloop.go:
+// one loop goroutine, a signal slot that holds one signal, and a pool that starts with one idle goroutine.
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'eloop' } = Astro.props;
+---
+
+<Scene
+	id={id}
+	title="Event loop"
+	tag="step through"
+	class="learn"
+	call={"worker := varmq.NewWorker(process, 1)\nqueue := worker.BindQueue()"}
+	describe="A step-through of one worker. Press Next to move a job from Add, into the queue, through the event loop, to a pool goroutine and back. The concurrency selector switches between a worker that runs one job at a time and one that runs two. Each step names the Go call and says what the loop checks."
+>
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>step</dt><dd data-stat="step">1 / 8</dd></div>
+		<div><dt>busy</dt><dd data-stat="busy">0</dd></div>
+		<div><dt>queued</dt><dd data-stat="queued">0</dd></div>
+		<div><dt>done</dt><dd data-stat="done">0</dd></div>
+	</dl>
+
+	<div data-eloop>
+		<div class="eloop" aria-hidden="true">
+			<div class="eloop__col">
+				<span class="slabel">queue</span>
+				<div class="lstrip" data-queue></div>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">event loop</span>
+				<div class="enode" data-node data-awake="false"><span data-node-text>asleep</span></div>
+				<div class="eslot" data-slot data-full="false">
+					<span class="eslot__cell" data-slot-cell>–</span>
+					<span data-slot-text>signal slot, empty</span>
+				</div>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">pool · up to <span data-limit>1</span></span>
+				<div data-lanes></div>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">done</span>
+				<div class="lstrip" data-done></div>
+			</div>
+		</div>
+
+		<div class="estep" aria-live="polite" aria-atomic="true">
+			<span class="estep__n" data-n>Step 1</span>
+			<p class="estep__title" data-title></p>
+			<p class="estep__text" data-text></p>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn" data-act="back">Back</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="next">Next</button>
+		<button type="button" class="pbtn" data-act="restart">Restart</button>
+		<ol class="epips" aria-label="Jump to a step" data-pips></ol>
+		<span class="sframe__spacer"></span>
+		<div class="lgroup">
+			<span id={`${id}-cl`}>concurrency</span>
+			<div class="seg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
+				<button type="button" role="radio" aria-checked="true" data-key="1">1</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="2">2</button>
+			</div>
+		</div>
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		Use <kbd>←</kbd> and <kbd>→</kbd> to step. A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { tabs, setCall, keyBelongsToControl } from '../ui/dom';
+
+	type Lane = { s: 'none' | 'idle' | 'busy'; job?: number; exited?: boolean };
+	type Frame = {
+		title: string;
+		text: string;
+		call: string;
+		queue: number[];
+		lanes: Lane[];
+		awake: boolean;
+		signal: boolean;
+		done: number[];
+	};
+
+	function frames(c: 1 | 2): Frame[] {
+		const idle: Lane = { s: 'idle' };
+		const none: Lane = { s: 'none' };
+		const exited: Lane = { s: 'none', exited: true }; // started, then left the pool
+		const busy = (job: number): Lane => ({ s: 'busy', job });
+		const pool = (...l: Lane[]) => (c === 2 ? [...l, ...(l.length < 2 ? [none] : [])] : l);
+		const setup = [
+			`worker := varmq.NewWorker(process, ${c})`,
+			'queue := worker.BindQueue()',
+		].join('\n');
+
+		const head: Frame[] = [
+			{
+				title: c === 1 ? 'A worker with one slot' : 'A worker with two slots',
+				text:
+					c === 1
+						? 'The event loop is one goroutine. It sleeps until something signals it. The pool starts with one idle goroutine, Worker 1.'
+						: 'The limit is 2, but the pool starts with one idle goroutine. It adds more only when jobs need them.',
+				call: setup,
+				queue: [],
+				lanes: pool(idle),
+				awake: false,
+				signal: false,
+				done: [],
+			},
+			{
+				title: 'Add returns at once',
+				text: 'Add puts the job in the queue and returns. It also tries to put a signal in the loop’s slot. The slot holds one signal, so a second signal is dropped.',
+				call: 'queue.Add(1) // returns at once',
+				queue: [1],
+				lanes: pool(idle),
+				awake: false,
+				signal: true,
+				done: [],
+			},
+			{
+				title: 'The loop wakes',
+				text: `The loop takes the signal and checks two things. Is a slot free? Busy 0 is below the limit of ${c}. Is there work? The queue has one job. Both answers are yes.`,
+				call: `// event loop: busy 0 < ${c}, queue has 1 job`,
+				queue: [1],
+				lanes: pool(idle),
+				awake: true,
+				signal: false,
+				done: [],
+			},
+			{
+				title: 'The loop hands the job to a goroutine',
+				text:
+					c === 1
+						? 'Job 1 goes to Worker 1. The loop checks again. No slot is free now, so it goes back to sleep.'
+						: 'Job 1 goes to Worker 1. The loop checks again. A slot is free, but the queue is empty, so it goes back to sleep.',
+				call: '// Worker 1 runs process(job 1)',
+				queue: [],
+				lanes: pool(busy(1)),
+				awake: true,
+				signal: false,
+				done: [],
+			},
+		];
+
+		if (c === 1) {
+			return [
+				...head,
+				{
+					title: 'A second Add, while job 1 runs',
+					text: 'Job 2 waits in the queue. Add signals the loop and it wakes, but busy 1 is not below the limit of 1. The loop sleeps again.',
+					call: 'queue.Add(2) // job 1 is still running',
+					queue: [2],
+					lanes: [busy(1)],
+					awake: false,
+					signal: false,
+					done: [],
+				},
+				{
+					title: 'Worker 1 finishes job 1',
+					text: 'Your function returns and the worker closes the job. The goroutine goes back to the pool and signals the loop.',
+					call: '// job 1: Processing → Finished → Closed. Worker 1 signals the loop.',
+					queue: [2],
+					lanes: [idle],
+					awake: false,
+					signal: true,
+					done: [1],
+				},
+				{
+					title: 'The loop hands job 2 to Worker 1',
+					text: 'A slot is free and the queue has work, so the loop wakes and hands over job 2.',
+					call: '// Worker 1 runs process(job 2)',
+					queue: [],
+					lanes: [busy(2)],
+					awake: true,
+					signal: false,
+					done: [1],
+				},
+				{
+					title: 'Job 2 finishes and the loop sleeps',
+					text: 'Worker 1 signals again. The loop wakes, finds the queue empty and sleeps. One idle goroutine stays in the pool.',
+					call: '// back to the start: one idle goroutine, loop asleep',
+					queue: [],
+					lanes: [idle],
+					awake: false,
+					signal: false,
+					done: [1, 2],
+				},
+			];
+		}
+
+		return [
+			...head,
+			{
+				title: 'A second Add, while job 1 runs',
+				text: 'Job 2 goes in the queue and Add signals the loop. This time a slot is free: busy 1 is below the limit of 2.',
+				call: 'queue.Add(2) // job 1 is still running',
+				queue: [2],
+				lanes: [busy(1), none],
+				awake: false,
+				signal: true,
+				done: [],
+			},
+			{
+				title: 'varmq spawns Worker 2',
+				text: 'No goroutine is idle, so the pool starts Worker 2 and the loop hands it job 2. Both jobs run at the same time.',
+				call: '// Worker 2 starts and runs process(job 2)',
+				queue: [],
+				lanes: [busy(1), busy(2)],
+				awake: true,
+				signal: false,
+				done: [],
+			},
+			{
+				title: 'Both jobs finish and the pool shrinks',
+				text: 'One goroutine stays in the pool as the idle one. The other exits. The loop wakes once more, finds nothing to do and sleeps.',
+				call: '// one idle goroutine stays, the other exits',
+				queue: [],
+				lanes: [idle, exited],
+				awake: false,
+				signal: false,
+				done: [1, 2],
+			},
+		];
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-eloop]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.sframe')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+		const stat = (k: string) => q(`[data-stat="${k}"]`);
+
+		let c: 1 | 2 = 1;
+		let list = frames(c);
+		let i = 0;
+
+		const pips = q('[data-pips]');
+		const buildPips = () => {
+			pips.innerHTML = list
+				.map((f, n) => `<li><button type="button" class="epip" data-i="${n}" aria-label="Step ${n + 1}: ${f.title}"></button></li>`)
+				.join('');
+		};
+
+		const chip = (n: number, cls = '') => `<span class="ljob ${cls}">${n}</span>`;
+
+		const render = (animate: boolean) => {
+			const f = list[i];
+			q('[data-queue]').innerHTML = f.queue.length ? f.queue.map((n) => chip(n, animate ? 'ljob--new' : '')).join('') : '<span class="lempty">empty</span>';
+			q('[data-done]').innerHTML = f.done.length ? f.done.map((n) => chip(n, 'ljob--done')).join('') : '<span class="lempty">none yet</span>';
+			q('[data-lanes]').innerHTML = f.lanes
+				.map(
+					(l, n) => `<div class="llane" data-s="${l.s}"><span class="llane__id">W${n + 1}</span><div class="llane__track">${
+						l.s === 'busy' ? chip(l.job!, animate ? 'ljob--new' : '') + '<span>running</span>' : l.s === 'idle' ? 'idle' : l.exited ? 'exited' : 'not started'
+					}</div></div>`,
+				)
+				.join('');
+			q('[data-limit]').textContent = String(c);
+
+			const node = q('[data-node]');
+			node.dataset.awake = String(f.awake);
+			q('[data-node-text]').textContent = f.awake ? 'awake' : 'asleep';
+			q('[data-slot]').dataset.full = String(f.signal);
+			q('[data-slot-cell]').textContent = f.signal ? '1' : '–';
+			q('[data-slot-text]').textContent = f.signal ? 'signal waiting (holds 1)' : 'signal slot, empty';
+
+			q('[data-n]').textContent = `Step ${i + 1} of ${list.length}`;
+			q('[data-title]').textContent = f.title;
+			q('[data-text]').textContent = f.text;
+			setCall(q('[data-call]'), f.call);
+
+			stat('step').textContent = `${i + 1} / ${list.length}`;
+			stat('busy').textContent = String(f.lanes.filter((l) => l.s === 'busy').length);
+			stat('queued').textContent = String(f.queue.length);
+			stat('done').textContent = String(f.done.length);
+
+			const back = q('[data-act="back"]');
+			const next = q('[data-act="next"]');
+			back.setAttribute('aria-disabled', String(i === 0));
+			next.setAttribute('aria-disabled', String(i === list.length - 1));
+			pips.querySelectorAll<HTMLElement>('.epip').forEach((p, n) => {
+				p.setAttribute('aria-current', n === i ? 'step' : 'false');
+				p.dataset.seen = String(n < i);
+			});
+		};
+
+		const go = (n: number) => {
+			const t = Math.max(0, Math.min(list.length - 1, n));
+			if (t === i) return;
+			const forward = t > i;
+			i = t;
+			render(forward);
+		};
+
+		buildPips();
+		render(false);
+
+		scene.addEventListener('click', (e) => {
+			const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act], .epip');
+			if (!t) return;
+			if (t.classList.contains('epip')) return go(Number(t.dataset.i));
+			if (t.getAttribute('aria-disabled') === 'true') return;
+			const act = t.dataset.act;
+			if (act === 'next') go(i + 1);
+			else if (act === 'back') go(i - 1);
+			else if (act === 'restart') {
+				i = 0;
+				render(false);
+			}
+		});
+
+		scene.addEventListener('keydown', (e) => {
+			if (e.altKey || e.ctrlKey || e.metaKey || keyBelongsToControl(e)) return;
+			if (e.key === 'ArrowRight') {
+				e.preventDefault();
+				go(i + 1);
+			} else if (e.key === 'ArrowLeft') {
+				e.preventDefault();
+				go(i - 1);
+			}
+		});
+
+		tabs(q('[data-conc]'), (key) => {
+			c = key === '2' ? 2 : 1;
+			const keep = Math.min(i, frames(c).length - 1);
+			list = frames(c);
+			i = keep;
+			buildPips();
+			render(false);
+		});
+	});
+</script>

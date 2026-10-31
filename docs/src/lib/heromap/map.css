@@ -1,12 +1,75 @@
-/* The hero map's styles, added to the home page by HeroMap.astro (as one injected stylesheet), so no other page
-   loads them. Everything but the reserved square, which the component keeps global so it holds before any script.
+/* The map's styles, imported by the home page's story (components/Story.astro), so no other page loads them. The
+   palette sits on the page root, so the story's text beside the map can use the map's colours too.
 
-   Style A · Glow. Dark is the default; the light palette keeps the hues in darker ink, with no glow. The square
-   has no background of its own: the page's shows through, under a dot grid that fades toward the edges. */
-varmq-map {
+   Style A · Glow. As in tokens.css, light is the default on :root and dark is set on :root[data-theme='dark'], so a
+   page without data-theme gets the light map on the light paper. The light palette keeps the hues in darker ink, with
+   no glow. The square has no background of its own: the page's shows through, under a dot grid that fades toward the
+   edges. The home page's small maps under the story (components/home/mini.ts) are `.vm-mini`, and draw with these
+   same rules; the host rules (the square, its fade and its layer) stay the hero's. */
+
+/* Light: the dark map's hues, as ink on the page's paper. Text on the paper and the other hues' strokes share one
+   lightness, OKLCH L 0.49 to 0.56, close to the page's own on-paper colours, so no hue outweighs another. The text
+   colours have at least 4.9:1 against --paper; the amber edge has 4.35:1, enough for a stroke. The green that marks a
+   worker, its goroutines and their work is the light logo's own (--brand, 3.1:1, enough for a mark), as the dark map's
+   is the dark logo's. Fills are the same hues near L 0.96. The greys take the paper's green rather than a cool grey, so
+   the map sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
+:root {
+	--vm-dot: #cddbd4;
+	--vm-ink: var(--ink-3);
+	--vm-green: var(--accent-text);
+	--vm-red: #bd3933;
+	--vm-sqlite: #196ea9;
+	--vm-redis: #c53227;
+	--vm-glow: none;
+	/* Light has no glow, so a line drawn under a screen pixel wide, as in the whole map, fades into the paper: each
+	   line is at least a screen pixel (--vm-floor, below). Dark lines glow, and read as they are. */
+	--vm-thin: 1;
+	--vm-job: #f2b036;
+	--vm-job-edge: #a26500;
+	--vm-job-ink: #4c2e02;
+	--vm-chip: #fcf0dc;
+	--vm-chip-edge: #a26500;
+	--vm-chip-ink: var(--tk-s);
+	--vm-value: #e4f7ee;
+	--vm-value-edge: var(--brand);
+	--vm-error: #ffedea;
+	--vm-error-edge: #bd3933;
+	--vm-lane: color-mix(in srgb, #f2b036 22%, transparent);
+	--vm-lane-edge: #a26500;
+	--vm-lane-tail: 0.3;
+	--vm-lane-head: 1;
+	--vm-tray: color-mix(in srgb, #f2b036 10%, transparent);
+	--vm-tray-edge: #a26500;
+	--vm-slot: color-mix(in srgb, #a26500 45%, transparent);
+	--vm-go: var(--brand);
+	--vm-go-fill: color-mix(in srgb, var(--brand) 20%, transparent);
+	--vm-ghost: color-mix(in srgb, var(--brand) 75%, transparent);
+	--vm-check: #095e46;
+	/* A lit control chip's text is green text, so --accent-text, on a lighter tint than the dark map's for its 4.5:1. */
+	--vm-lit: color-mix(in srgb, var(--brand) 8%, var(--vm-chip));
+	--vm-lit-ink: var(--accent-text);
+	--vm-card: color-mix(in srgb, var(--brand) 14%, transparent);
+	--vm-card-edge: var(--brand);
+	--vm-loop: #6b4bb8;
+	--vm-loop-fill: color-mix(in srgb, #6b4bb8 14%, transparent);
+	--vm-pulse: #6b4bb8;
+	--vm-store: color-mix(in srgb, #6b4bb8 9%, transparent);
+	--vm-store-edge: #6b4bb8;
+	--vm-program: color-mix(in srgb, var(--ink-3) 8%, transparent);
+	--vm-program-edge: var(--ink-3);
+	--vm-line: color-mix(in srgb, var(--ink-3) 80%, transparent);
+	--vm-ack: color-mix(in srgb, var(--brand) 65%, transparent);
+	/* The map's red, SQLite blue and Redis red as text on the page, beside the map. */
+	--vm-red-text: #bd3933;
+	--vm-sqlite-text: #196ea9;
+	--vm-redis-text: #c53227;
+}
+
+/* Dark: the map's original palette. */
+:root[data-theme='dark'] {
+	--vm-thin: 0;
 	--vm-dot: #1e2a38;
 	--vm-ink: #8592a3;
-	--vm-caption: #cfd8e3;
 	--vm-green: #44bf9e;
 	--vm-red: #ff6b6b;
 	--vm-sqlite: #4aa8e8;
@@ -33,6 +96,8 @@ varmq-map {
 	--vm-go-fill: rgba(68, 191, 158, 0.1);
 	--vm-ghost: rgba(68, 191, 158, 0.3);
 	--vm-check: #d6fff0;
+	--vm-lit: color-mix(in srgb, var(--vm-go) 18%, var(--vm-chip));
+	--vm-lit-ink: var(--vm-go);
 	--vm-card: rgba(68, 191, 158, 0.04);
 	--vm-card-edge: rgba(68, 191, 158, 0.45);
 	--vm-loop: #8b5cf6;
@@ -44,60 +109,24 @@ varmq-map {
 	--vm-program-edge: rgba(150, 175, 200, 0.4);
 	--vm-line: rgba(150, 175, 200, 0.35);
 	--vm-ack: rgba(68, 191, 158, 0.3);
-	--vm-button: rgba(6, 8, 12, 0.6);
-	--vm-button-edge: rgba(150, 175, 200, 0.3);
+	--vm-red-text: #ff6b6b;
+	--vm-sqlite-text: #4aa8e8;
+	--vm-redis-text: #ff4438;
+}
 
+varmq-map {
 	position: relative;
 	overflow: hidden;
 	container-type: inline-size;
 }
 
-:root[data-theme='light'] varmq-map {
-	--vm-dot: #cfd8e3;
-	--vm-ink: #4b5563;
-	--vm-caption: #1f2937;
-	--vm-green: #0f7a5c;
-	--vm-red: #c62828;
-	--vm-sqlite: #0f80cc;
-	--vm-redis: #dc382d;
-	--vm-glow: none;
-	--vm-job: #e09b0c;
-	--vm-job-edge: #b7791f;
-	--vm-chip: #fcf5e7;
-	--vm-chip-edge: rgba(183, 121, 31, 0.7);
-	--vm-chip-ink: #8f5a0b;
-	--vm-value: #eaf5f2;
-	--vm-value-edge: rgba(46, 156, 127, 0.7);
-	--vm-error: #faeeee;
-	--vm-error-edge: rgba(198, 40, 40, 0.6);
-	--vm-lane: rgba(224, 155, 12, 0.07);
-	--vm-lane-edge: #b7791f;
-	--vm-lane-tail: 0.3;
-	--vm-lane-head: 1;
-	--vm-tray: rgba(224, 155, 12, 0.03);
-	--vm-tray-edge: rgba(183, 121, 31, 0.6);
-	--vm-slot: rgba(183, 121, 31, 0.35);
-	--vm-go: #2e9c7f;
-	--vm-go-fill: rgba(46, 156, 127, 0.12);
-	--vm-ghost: rgba(46, 156, 127, 0.45);
-	--vm-check: #0f7a5c;
-	--vm-card: rgba(46, 156, 127, 0.06);
-	--vm-card-edge: rgba(46, 156, 127, 0.6);
-	--vm-loop: #7c3aed;
-	--vm-loop-fill: rgba(124, 58, 237, 0.08);
-	--vm-pulse: #7c3aed;
-	--vm-store: rgba(124, 58, 237, 0.05);
-	--vm-store-edge: rgba(124, 58, 237, 0.6);
-	--vm-program: rgba(71, 85, 105, 0.03);
-	--vm-program-edge: rgba(71, 85, 105, 0.45);
-	--vm-line: rgba(71, 85, 105, 0.45);
-	--vm-ack: rgba(46, 156, 127, 0.55);
-	--vm-button: rgba(255, 255, 255, 0.75);
-	--vm-button-edge: rgba(71, 85, 105, 0.3);
+/* The line floor: --vm-px is a screen pixel in map units, which render.ts sets on the world from the camera's zoom. */
+:is(varmq-map, .vm-mini) .vm-world {
+	--vm-floor: calc(var(--vm-px, 0) * var(--vm-thin));
 }
 
 /* The map, world and grid, fades into the page at the square's edges, so a piece the edge cuts has no hard edge.
-   --vm-feather is 16 world units at the camera's zoom (render.ts). The caption band and the button are not masked. */
+   --vm-feather is 16 world units at the camera's zoom (render.ts). The mask's black sets only its alpha. */
 varmq-map .vm-svg {
 	position: absolute;
 	inset: 0;
@@ -105,9 +134,15 @@ varmq-map .vm-svg {
 	width: 100%;
 	height: 100%;
 	mask-image:
-		linear-gradient(to right, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent),
-		linear-gradient(to bottom, transparent, #000 var(--vm-feather), #000 calc(100% - var(--vm-feather)), transparent);
+		linear-gradient(to right, transparent, black var(--vm-feather), black calc(100% - var(--vm-feather)), transparent),
+		linear-gradient(to bottom, transparent, black var(--vm-feather), black calc(100% - var(--vm-feather)), transparent);
 	mask-composite: intersect;
+}
+
+/* The map's own svg changes every frame it plays, so it has a layer of its own: repainting it never repaints the
+   grid's svg under it (render.ts). */
+varmq-map .vm-svg:not(.vm-under) {
+	will-change: transform;
 }
 
 /* The map draws in its own colours, which keep their meaning (green runs, red failed) in forced colours too. */
@@ -117,352 +152,240 @@ varmq-map .vm-svg {
 	}
 }
 
-varmq-map :is(.vm-go, .vm-job, .vm-record, .vm-chip, .vm-pulse, .vm-flash, .vm-sig) {
+:is(varmq-map, .vm-mini) :is(.vm-go, .vm-job, .vm-record, .vm-chip, .vm-pulse, .vm-flash, .vm-sig) {
 	transform-box: fill-box;
 	transform-origin: center;
 }
 
-varmq-map .vm-dot {
+:is(varmq-map, .vm-mini) .vm-dot {
 	fill: var(--vm-dot);
 }
 
-varmq-map .vm-edge-tail {
+:is(varmq-map, .vm-mini) .vm-edge-tail {
 	stop-color: var(--vm-lane-edge);
 	stop-opacity: var(--vm-lane-tail);
 }
 
-varmq-map .vm-edge-head {
+:is(varmq-map, .vm-mini) .vm-edge-head {
 	stop-color: var(--vm-lane-edge);
 	stop-opacity: var(--vm-lane-head);
 }
 
 /* Text hides while it would be too small to read (--vm-label, from the camera). Its opacity is left free. A store's
    logo, before its label, hides and shows with it. */
-varmq-map .vm-logo {
+:is(varmq-map, .vm-mini) .vm-logo {
 	fill-opacity: var(--vm-label, 1);
 }
 
-varmq-map .vm-logo-sqlite {
+:is(varmq-map, .vm-mini) .vm-logo-sqlite {
 	fill: var(--vm-sqlite);
 }
 
-varmq-map .vm-logo-redis {
+:is(varmq-map, .vm-mini) .vm-logo-redis {
 	fill: var(--vm-redis);
 }
 
-varmq-map :is(.vm-label, .vm-text, .vm-num) {
+:is(varmq-map, .vm-mini) :is(.vm-label, .vm-text, .vm-num) {
 	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
 	font-weight: 600;
 	fill-opacity: var(--vm-label, 1);
 }
 
-varmq-map .vm-label {
+:is(varmq-map, .vm-mini) .vm-label {
 	font-size: 14px;
 	letter-spacing: 0.14em;
 	fill: var(--vm-ink);
 }
 
-varmq-map .vm-label.vm-died {
+:is(varmq-map, .vm-mini) .vm-label.vm-died {
 	fill: var(--vm-red);
 }
 
-varmq-map .vm-text {
+:is(varmq-map, .vm-mini) .vm-text {
 	font-size: 13px;
 	fill: var(--vm-chip-ink);
 }
 
-varmq-map .vm-num {
+/* A Redis record in flight shows the consumer holding it, B or C, until the ack or the requeue. */
+:is(varmq-map, .vm-mini) .vm-tag {
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 12px;
+	font-weight: 700;
+	fill: var(--vm-chip-ink);
+	fill-opacity: var(--vm-label, 1);
+}
+
+:is(varmq-map, .vm-mini) .vm-num {
 	font-size: 13px;
 	font-weight: 700;
 	fill: var(--vm-job-ink);
 }
 
-varmq-map .vm-program > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-program > .vm-shape {
 	fill: var(--vm-program);
 	stroke: var(--vm-program-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
-varmq-map .vm-store > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-store > .vm-shape {
 	fill: var(--vm-store);
 	stroke: var(--vm-store-edge);
-	stroke-width: 1.2;
+	stroke-width: max(1.2, var(--vm-floor));
 }
 
-varmq-map .vm-lane > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-lane > .vm-shape {
 	fill: var(--vm-lane);
 	stroke: url(#vm-lane-edge);
-	stroke-width: 1.2;
+	stroke-width: max(1.2, var(--vm-floor));
 }
 
-varmq-map .vm-tray > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-tray > .vm-shape {
 	fill: var(--vm-tray);
 	stroke: var(--vm-tray-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 3 3;
 }
 
-varmq-map .vm-slot {
+:is(varmq-map, .vm-mini) .vm-slot {
 	fill: none;
 	stroke: var(--vm-slot);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 2 3;
 }
 
-varmq-map .vm-card > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-card > .vm-shape {
 	fill: var(--vm-card);
 	stroke: var(--vm-card-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
-varmq-map .vm-loop > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-loop > .vm-shape {
 	fill: var(--vm-loop-fill);
 	stroke: var(--vm-loop);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 	filter: var(--vm-glow);
 }
 
-varmq-map .vm-pulse {
+:is(varmq-map, .vm-mini) .vm-pulse {
 	fill: none;
 	stroke: var(--vm-pulse);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 }
 
 /* Chips are opaque: the RoundRobin chip sits on the line into the loop. */
-varmq-map .vm-chip > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-chip > .vm-shape {
 	fill: var(--vm-chip);
 	stroke: var(--vm-chip-edge);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
-varmq-map .vm-value > .vm-shape {
+/* A control chip's lit layer: the call in effect. */
+:is(varmq-map, .vm-mini) .vm-lit > .vm-shape {
+	fill: var(--vm-lit);
+	stroke: var(--vm-go);
+	stroke-width: max(1, var(--vm-floor));
+}
+
+:is(varmq-map, .vm-mini) .vm-lit > .vm-text {
+	fill: var(--vm-lit-ink);
+}
+
+:is(varmq-map, .vm-mini) .vm-value > .vm-shape {
 	fill: var(--vm-value);
 	stroke: var(--vm-value-edge);
 }
 
-varmq-map .vm-value > .vm-text {
+:is(varmq-map, .vm-mini) .vm-value > .vm-text {
 	fill: var(--vm-green);
 }
 
-varmq-map .vm-error > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-error > .vm-shape {
 	fill: var(--vm-error);
 	stroke: var(--vm-error-edge);
 }
 
-varmq-map .vm-error > .vm-text {
+:is(varmq-map, .vm-mini) .vm-error > .vm-text {
 	fill: var(--vm-red);
 }
 
-varmq-map .vm-flash {
+:is(varmq-map, .vm-mini) .vm-flash {
 	fill: none;
 	stroke: var(--vm-red);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 }
 
-varmq-map .vm-conn > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-conn > .vm-shape {
 	fill: none;
 	stroke: var(--vm-line);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 }
 
-varmq-map .vm-ack > .vm-shape {
+:is(varmq-map, .vm-mini) .vm-ack > .vm-shape {
 	stroke: var(--vm-ack);
 	stroke-dasharray: 2 3;
 }
 
-varmq-map .vm-ghost {
+:is(varmq-map, .vm-mini) .vm-ghost {
 	fill: none;
 	stroke: var(--vm-ghost);
-	stroke-width: 1;
+	stroke-width: max(1, var(--vm-floor));
 	stroke-dasharray: 2 3;
 }
 
-varmq-map .vm-ring {
+:is(varmq-map, .vm-mini) .vm-ring {
 	fill: var(--vm-go-fill);
 	stroke: var(--vm-go);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 	filter: var(--vm-glow);
 }
 
-varmq-map .vm-progress {
+:is(varmq-map, .vm-mini) .vm-progress {
 	fill: none;
 	stroke: var(--vm-go);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 	stroke-linecap: round;
 }
 
-varmq-map .vm-check {
+:is(varmq-map, .vm-mini) .vm-check {
 	fill: none;
 	stroke: var(--vm-check);
-	stroke-width: 2;
+	stroke-width: max(2, var(--vm-floor));
 	stroke-linecap: round;
 	stroke-linejoin: round;
 }
 
 /* A job's edge matches its fill in the dark, so an in-flight record is its fill-opacity alone. */
-varmq-map .vm-jb {
+:is(varmq-map, .vm-mini) .vm-jb {
 	fill: var(--vm-job);
 	stroke: var(--vm-job-edge);
-	stroke-width: 1.4;
+	stroke-width: max(1.4, var(--vm-floor));
 }
 
-varmq-map :is(.vm-main, .vm-record) > .vm-jb {
+:is(varmq-map, .vm-mini) :is(.vm-main, .vm-record) > .vm-jb {
 	filter: var(--vm-glow);
 }
 
-varmq-map .vm-t1 > .vm-jb {
+:is(varmq-map, .vm-mini) .vm-t1 > .vm-jb {
 	opacity: 0.35;
 }
 
-varmq-map .vm-t2 > .vm-jb {
+:is(varmq-map, .vm-mini) .vm-t2 > .vm-jb {
 	opacity: 0.15;
 }
 
 /* Signals: the notify and ack dots, and a result worker's value or error on its way to the chip. */
-varmq-map .vm-sig {
+:is(varmq-map, .vm-mini) .vm-sig {
 	filter: var(--vm-glow);
 }
 
-varmq-map .vm-sig-notify {
+:is(varmq-map, .vm-mini) .vm-sig-notify {
 	fill: var(--vm-pulse);
 }
 
-varmq-map :is(.vm-sig-ack, .vm-sig-value) {
+:is(varmq-map, .vm-mini) :is(.vm-sig-ack, .vm-sig-value) {
 	fill: var(--vm-green);
 }
 
-varmq-map .vm-sig-error {
+:is(varmq-map, .vm-mini) .vm-sig-error {
 	fill: var(--vm-red);
-}
-
-/* The caption band: the bottom 56 of the square's 400, below the map. The world fades into the page behind it. */
-varmq-map .vm-caption {
-	position: absolute;
-	inset: auto 0 0;
-	height: 14%;
-	display: grid;
-	place-items: center;
-	background: linear-gradient(to bottom, transparent, var(--sl-color-bg) 60%);
-	color: var(--vm-caption);
-	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
-	font-size: 14px;
-	font-size: min(14px, 2.75cqw);
-	font-weight: 600;
-	letter-spacing: 0.12em;
-	line-height: 1.4;
-	text-transform: uppercase;
-	white-space: nowrap;
-	pointer-events: none;
-}
-
-/* Every caption line sits in the same place; the choreographer shows one at a time. */
-varmq-map .vm-cap {
-	grid-area: 1 / 1;
-}
-
-/* A word rises into its box from below, and leaves it upward. */
-varmq-map .vm-w {
-	display: inline-block;
-	overflow: hidden;
-	vertical-align: bottom;
-}
-
-varmq-map .vm-w > span {
-	display: inline-block;
-}
-
-/* A caption's last word and the word that takes its place share a box, stacked. */
-varmq-map .vm-w.vm-swap {
-	display: inline-grid;
-}
-
-varmq-map .vm-swap > span {
-	grid-area: 1 / 1;
-}
-
-varmq-map .vm-caption em {
-	font-style: normal;
-	color: var(--vm-green);
-}
-
-varmq-map .vm-caption b {
-	font-weight: inherit;
-	color: var(--vm-red);
-}
-
-varmq-map .vm-caption .vm-brand-sqlite {
-	color: var(--vm-sqlite);
-}
-
-varmq-map .vm-caption .vm-brand-redis {
-	color: var(--vm-redis);
-}
-
-/* Forced colours paint a backplate behind each line's text, and the lines share one cell, so the hidden lines'
-   backplates would cover the one shown. The band keeps its own colours instead, the system's: text on Canvas, the marks too. */
-@media (forced-colors: active) {
-	varmq-map .vm-caption {
-		forced-color-adjust: none;
-		background: linear-gradient(to bottom, transparent, Canvas 60%);
-		color: CanvasText;
-	}
-
-	varmq-map .vm-caption :is(em, b, [class^='vm-brand-']) {
-		color: CanvasText;
-	}
-}
-
-varmq-map .vm-toggle {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	display: grid;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	border: 1px solid var(--vm-button-edge);
-	border-radius: 50%;
-	background: var(--vm-button);
-	color: var(--vm-ink);
-	cursor: pointer;
-}
-
-/* Hidden until the animation can play: before it has loaded, if it failed to load, and under reduced motion. */
-varmq-map .vm-toggle[hidden] {
-	display: none;
-}
-
-varmq-map .vm-toggle:hover {
-	border-color: var(--vm-ink);
-	color: var(--vm-caption);
-}
-
-varmq-map .vm-toggle:focus-visible {
-	outline: 2px solid var(--sl-color-text-accent);
-	outline-offset: 2px;
-}
-
-varmq-map .vm-toggle svg {
-	width: 12px;
-	height: 12px;
-	fill: currentColor;
-}
-
-/* How much of the loop has played, over the button's edge: from the top, clockwise. */
-varmq-map .vm-toggle .vm-ring {
-	position: absolute;
-	top: -1px;
-	left: -1px;
-	width: 28px;
-	height: 28px;
-	rotate: -90deg;
-	fill: none;
-	stroke: var(--vm-go);
-	stroke-width: 1.5;
-}
-
-varmq-map .vm-toggle[data-state='playing'] .vm-play,
-varmq-map .vm-toggle[data-state='paused'] .vm-pause {
-	display: none;
 }

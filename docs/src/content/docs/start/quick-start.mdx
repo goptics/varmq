@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import QuickTimeline from '../../../components/learn/QuickTimeline.astro';
 
 This program creates a worker, binds a queue to it and adds two jobs. Press **Run** to run it on the Go Playground. Press **Edit** to change it, then **Run** again (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, <kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac).
 
@@ -51,7 +52,9 @@ Press **Edit** and pass a concurrency of 2 as the last argument to `NewWorker`:
 }, 2)
 ```
 
-Run it again: both jobs now start together, so their two lines appear at the same moment, in either order.
+Run it again: both jobs now start together, so their two lines appear at the same moment, in either order. The timeline below shows both runs. Switch the concurrency and drag the time slider.
+
+<QuickTimeline />
 
 :::note
 The Go Playground runs programs on a simulated clock. `time.Sleep` costs it no real time; the page replays the pauses the program recorded. Output pacing on this site says nothing about how fast varmq is.

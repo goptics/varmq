@@ -1,0 +1,38 @@
+---
+// The frame of every scene: a dark panel with a title bar and readouts, the stage, a caption strip that
+// shows the Go call, the controls, and a note. Each scene has a text alternative and a live region.
+// A scene that loops puts a `pbtn` pause button in the controls (DESIGN.md, Motion).
+import '../../styles/ui.css';
+import { highlightGo } from './go';
+
+interface Props {
+	id: string;
+	title: string;
+	tag?: string;
+	/** What the scene shows, for readers who cannot see it. */
+	describe: string;
+	/** The Go call shown in the strip before the reader does anything. The scene's script updates `[data-call]`. */
+	call?: string;
+	class?: string;
+}
+const { id, title, tag = 'simulation', describe, call, class: cls = '' } = Astro.props;
+---
+
+<figure class:list={['sframe', 'not-content', cls]} role="group" aria-labelledby={`${id}-t`} aria-describedby={`${id}-d`} data-scene={id}>
+	<div class="sframe__bar">
+		<p class="sframe__title" id={`${id}-t`}>{title} <b>· {tag}</b></p>
+		<slot name="stats" />
+	</div>
+	<p class="sr-only" id={`${id}-d`}>{describe}</p>
+	<div class="sframe__stage">
+		<slot />
+	</div>
+	<div class="sframe__call">
+		<slot name="call">{call !== undefined && <code class="gocode" data-call set:html={highlightGo(call)} />}</slot>
+	</div>
+	<div class="sframe__controls">
+		<slot name="controls" />
+	</div>
+	<slot name="note" />
+	<p class="sr-only" role="status" aria-live="polite" data-live></p>
+</figure>

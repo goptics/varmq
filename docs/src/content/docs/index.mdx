@@ -1,144 +1,40 @@
 ---
 title: VarMQ
-description: A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program
+description: Worker pools and job queues for Go that keep jobs in memory, or in Redis or SQLite so they survive a restart.
 head:
   - tag: title
     content: VarMQ | Worker pools and job queues for Go
+  - tag: meta
+    attrs:
+      property: og:title
+      content: VarMQ | Worker pools and job queues for Go
 template: splash
 editUrl: false
 lastUpdated: false
 prev: false
 next: false
 tableOfContents: false
+# The hero is the story (components/Story.astro): its intro shows this title and tagline with the whole map.
 hero:
-  tagline: A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program
-  image:
-    html: '<varmq-map></varmq-map>'
-  actions:
-    - text: Get started
-      link: /start/quick-start/
-      variant: primary
-      icon: right-arrow
-    - text: GitHub
-      link: https://github.com/goptics/varmq
-      variant: minimal
-      icon: external
+  title: Worker pools and job queues for Go
+  tagline: Add jobs to a queue. A pool of workers runs them. Keep the jobs in memory, or in Redis or SQLite so they survive a restart.
 ---
 
-import { Card, CardGrid, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
-import GoPlay from '../../components/GoPlay.astro';
-import HeroMap from '../../components/HeroMap.astro';
+import Scenes from '../../components/home/Scenes.astro';
+import Storage from '../../components/home/Storage.astro';
+import Race from '../../components/home/Race.astro';
+import Examples from '../../components/home/Examples.astro';
+import Index from '../../components/home/Index.astro';
+import Close from '../../components/home/Close.astro';
 
-<HeroMap />
+{/* Under the story, the sections are print jobs, JOB 02 to JOB 06, then the closing (components/home/, styles/home.css).
+    The tour (lib/story/main.ts) ends with Skip or Esc at #try-it, the heading of JOB 05, and focuses it. */}
 
-<Code code="go get github.com/goptics/varmq" lang="sh" title="Install" />
-
-## Try it
-
-A worker with the default concurrency of 1 runs two jobs, one after the other. Press Run to run it in the Go Playground, or edit it first.
-
-<GoPlay example="quick-start" />
-
-## What you get
-
-<CardGrid>
-	<Card title="Typed jobs and results" icon="approve-check">
-		A job carries your type. A worker can also return an error, or a result and an error, that you
-		read from the job. See [worker types](/guides/worker-types/).
-	</Card>
-	<Card title="Priority queues" icon="list-format">
-		Add a job with a priority and the lowest number runs first. See [queues](/guides/queues/).
-	</Card>
-	<Card title="Several queues, one pool" icon="random">
-		Bind many queues to one worker and choose how it picks between them. See
-		[strategies](/guides/strategies/).
-	</Card>
-	<Card title="Topics" icon="rss">
-		Publish once and every subscribed worker gets its own job. See [topics](/guides/topics/).
-	</Card>
-	<Card title="Persistent and distributed queues" icon="puzzle">
-		Keep jobs across restarts, or share a queue between processes, with a storage adapter. See
-		[persistence](/persistence/overview/).
-	</Card>
-	<Card title="Control at runtime" icon="setting">
-		Pause, resume, restart or resize a running worker, from code or over HTTP. See
-		[lifecycle](/concepts/lifecycle/) and the [REST API](/operations/rest-api/).
-	</Card>
-</CardGrid>
-
-## A closer look
-
-Each tab is a full program you can run.
-
-<Tabs>
-	<TabItem label="Priority">
-		The worker is started after the three jobs are added, so the lowest number runs first.
-
-		<GoPlay example="queues-priority" />
-	</TabItem>
-	<TabItem label="Round robin">
-		One worker takes jobs from three queues in turn.
-
-		<GoPlay example="strategies-round-robin" />
-	</TabItem>
-	<TabItem label="Topics">
-		Two workers subscribe to one topic, and each gets every order.
-
-		<GoPlay example="topic-subscribe" />
-	</TabItem>
-	<TabItem label="Results">
-		A result worker returns a value and an error, which you read from the job.
-
-		<GoPlay example="worker-types-result" />
-	</TabItem>
-</Tabs>
-
-## Where jobs live
-
-<CardGrid>
-	<LinkCard
-		title="In memory"
-		description="Built in. Plain and priority queues, and topics."
-		href="/guides/queues/"
-	/>
-	<LinkCard
-		title="Redis"
-		description="redisq gives persistent and distributed queues."
-		href="/persistence/redis/"
-	/>
-	<LinkCard
-		title="SQLite"
-		description="sqliteq keeps persistent queues in local files."
-		href="/persistence/sqlite/"
-	/>
-</CardGrid>
-
-## Performance
-
-Measured on an i7-13700 (24 threads) on 2026-10-25. Charts, raw results and the harness are at [benchmarks.goptics.org](https://benchmarks.goptics.org).
-
-<CardGrid>
-	<Card title="4.89M tasks/s">
-		Average over 15M tasks per run, 50K workers, 1 to 1M producers. The next fastest pool, a
-		hand-rolled buffered channel pool, does 2.73M, and ants 2.22M. It uses more memory: 115 MB per 1M
-		tasks against 15 MB for ants, because `Add` never blocks.
-	</Card>
-	<Card title="59,898 jobs/s on Redis">
-		With redisq, one instance with 100 workers, moving 100K no-op jobs from 100 producers. The median
-		time from enqueue to handler is 0.058 ms.
-	</Card>
-	<Card title="14,725 jobs/s on SQLite">
-		With sqliteq, draining 20K jobs on WAL. goqite does 2,933 and River 3,230 on the same run.
-	</Card>
-</CardGrid>
-
-The [comparison](/reference/comparison/) lists features side by side with other Go worker pools.
-
-## Next
-
-<CardGrid>
-	<LinkCard title="Start" description="Install varmq and run your first worker." href="/start/introduction/" />
-	<LinkCard title="Concepts" description="Workers, queues, jobs and the lifecycle." href="/concepts/workers-and-queues/" />
-	<LinkCard title="Guides" description="Concurrency, errors, waiting, metrics and more." href="/guides/queues/" />
-	<LinkCard title="Persistence" description="Redis and SQLite adapters, and writing your own." href="/persistence/overview/" />
-</CardGrid>
+<div class="home-jobs not-content">
+	<Scenes />
+	<Storage />
+	<Race />
+	<Examples />
+	<Index />
+	<Close />
+</div>

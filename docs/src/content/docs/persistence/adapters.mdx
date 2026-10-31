@@ -5,9 +5,15 @@ sidebar:
   order: 4
 ---
 
+import AdapterMap from '../../../components/ops/AdapterMap.astro';
+
 A storage adapter is a type that implements some of varmq's queue interfaces. redisq and sqliteq are adapters, and a type of your own can be one. varmq decides what a queue can do by the interfaces its value implements. It checks them with a type assertion when you bind the queue or add a job, so an interface that is not implemented switches its behaviour off and is not an error. This page lists them all, from [`IBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue) to the small job interfaces. They are all in the `varmq` package.
 
 For using redisq or sqliteq, read [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) instead. [The overview](/persistence/overview/) covers what persistent and distributed queues do.
+
+The map below shows how the interfaces fit together. Press a part to say that your type has it, and the boxes that combine parts switch on. Press a box to read what it adds, what the worker calls on it and when. The start-from buttons load redisq and sqliteq as the table at the end of the page describes them.
+
+<AdapterMap />
 
 ## What you pass and what you get
 

@@ -21,7 +21,7 @@ export type Pt = { x: number; y: number };
 export type Ease = (t: number) => number;
 export type Values = Record<string, number | number[]>;
 
-/** What the score needs from the page: motion paths and drawable outlines (anime.js's `svg` in the browser). */
+/** What the score needs from the page: motion paths and drawable outlines (anime.js's `svg` makes the outlines). */
 export interface Stage {
 	/** Tween values that move a square along a polyline: `translateX` and `translateY`. */
 	path(pts: Pt[]): { translateX: unknown; translateY: unknown };
@@ -128,6 +128,20 @@ export interface Cue {
 export const SET_EARLY = 0.5;
 /** The tween that follows a set that would end its track: this long after it, and this long. */
 export const PAD = { after: 1, duration: 4 };
+
+/**
+ * How many cues `building` adds between its stops. Each add takes longer as the timeline grows (anime.js walks every
+ * tween already in it), up to about 0.2 ms on a slow phone: a step stays under 5 ms.
+ */
+const SLICE = 25;
+
+/** Runs `steps` to its end, at once, and returns what it returns. */
+export function drain<T>(steps: Generator<void, T>): T {
+	for (;;) {
+		const step = steps.next();
+		if (step.done) return step.value;
+	}
+}
 
 const asArray = (v: number | number[]) => (typeof v === 'number' ? [v] : v);
 const format = (prop: string, v: number[]) => (prop === 'draw' ? `${v[0]} ${v[1]}` : v[0]);
@@ -305,6 +319,15 @@ export class Score {
 
 	/** The timeline: every start set at 0, then every cue in time order. */
 	build(onRender: () => void): Timeline {
+		return drain(this.building(onRender));
+	}
+
+	/**
+	 * `build` in steps: it stops after each start it sets and every SLICE cues it adds, so a page can add them between
+	 * frames. Adding renders nothing (the timeline has no composition), so the timeline is the same however the steps
+	 * are spread.
+	 */
+	*building(onRender: () => void): Generator<void, Timeline> {
 		this.finish();
 		const timeline = createTimeline({ loop: true, autoplay: false, composition: false, onRender });
 		// One set per start value, over all the targets that share it.
@@ -317,14 +340,19 @@ export class Score {
 				resets.set(key, reset);
 			}
 		}
-		for (const { prop, value, targets } of resets.values()) timeline.set(targets, { [prop]: value }, 0);
+		for (const { prop, value, targets } of resets.values()) {
+			timeline.set(targets, { [prop]: value }, 0);
+			yield;
+		}
 		// Every frame sought is drawn from 0, where every property is set (see the header).
 		const seek = timeline.seek.bind(timeline);
 		timeline.seek = (time, muteCallbacks, internalRender) => {
 			seek(0, muteCallbacks, internalRender);
 			return seek(time, muteCallbacks, internalRender);
 		};
+		let added = 0;
 		for (const cue of this.ordered()) {
+			if (++added % SLICE === 0) yield;
 			const lag = cue.stagger === undefined ? 0 : cue.stagger * ((cue.targets as object[]).length - 1);
 			if (cue.at + lag + Number(cue.params.duration ?? 0) > this.total + SET_EARLY) {
 				throw new Error(`heromap: a tween at ${cue.at} ms runs past the loop's end`);

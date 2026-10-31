@@ -6,8 +6,13 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import WaitingScene from '../../../components/guides-b/WaitingScene.astro';
 
 [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) returns at once, and the worker runs the job later. A set of calls on the worker block until the worker as a whole reaches a point: drained, paused or stopped. They do not wait for one job. For that, use the job's own handle ([waiting on a job](/concepts/jobs/#waiting-on-a-job)).
+
+The scene below puts the wait calls of this page on one timeline. Pick a case, then press the button to let a blocked call go.
+
+<WaitingScene />
 
 ## Wait and WaitUntilIdle
 

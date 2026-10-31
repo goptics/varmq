@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import WorkerTypes from '../../../components/guides-a/WorkerTypes.astro';
 
 varmq has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
 
@@ -14,6 +15,10 @@ varmq has three worker constructors. In each, your worker function receives a [`
 | [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) | `func(j Job[T])` | [`EnqueuedJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob) | nothing to read |
 | [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | `func(j Job[T]) error` | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | [`Err() error`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) |
 | [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | `func(j Job[T]) (R, error)` | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | [`Result() (R, error)`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) |
+
+Pick a constructor and a job below. The same function runs under all three, so you see what changes: the type `Add` hands back, and where a failure shows up.
+
+<WorkerTypes />
 
 `R` is the type of the result. `Add` returns the handle together with a `bool`, `false` when the queue did not take the job. [Jobs](/concepts/jobs/#two-views-of-a-job) covers both.
 

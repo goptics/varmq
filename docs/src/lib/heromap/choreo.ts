@@ -14,14 +14,16 @@
 //   clear. One that moves ahead of others goes round them, through the gap below the lane.
 
 import { eases, svg, type Timeline } from 'animejs';
-import { CHAPTERS, TOTAL, starts, type Chapter, type Part } from './chapters.ts';
+import { CAMERA, CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
 import type { MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
 import {
 	Score,
+	along,
 	clamp01,
 	dist,
+	drain,
 	lengthOf,
 	pt,
 	solve,
@@ -37,13 +39,13 @@ type Worker = keyof typeof RINGS;
 type PoolPart = Extract<Part, { kind: 'pool' }>;
 type StorePart = Exclude<Part, PoolPart>;
 
-const CAMERA = 1200; // each chapter's camera move
 // How far into its camera move a chapter's new pieces start to draw in: as the view sweeps toward them, so it never
 // arrives on an empty stretch of map.
 const OPENS = 300;
 const DRAW = 650; // a solid outline drawing in
 const POP = 600; // a chip or a ring popping in
 const FADE = 500; // a dashed part fading in
+const SWAP = 350; // a chip's name fading in where the one before was (Chapter.chips)
 const LABEL = 400; // a label fading in
 const ADD_FLIGHT = 600; // the longest flight from Add() or Publish() into a lane
 const QUICK = 250; // the shortest
@@ -61,8 +63,6 @@ const CLEAR = 44; // a copy has left the store's mouth, for the next one, once i
 const NEAR = 16; // a landing square this close to its slot is all but in it: from then on it must not touch
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
-// A caption word rolling out of its box as another rolls in: by more than the box is tall (14 px type, 1.4 lines).
-const ROLL = { by: 20, duration: 420 };
 
 const E = {
 	move: eases.inOutExpo,
@@ -424,27 +424,29 @@ export interface Page extends Stage {
 }
 
 /**
- * The page in the browser: motion along hidden route paths in the world (anime.js measures their length, so they
- * are drawn, with neither fill nor stroke), anime.js's drawable outlines, and dots appended to the world.
+ * The page in the browser: motion along a route worked out from its points (`along`, the point an SVG path's
+ * getPointAtLength gives, without asking the page for it), anime.js's drawable outlines, and dots appended to the
+ * world.
  */
-function browserPage(world: SVGGElement): Page {
-	const layer = document.createElementNS(NS, 'g');
-	layer.setAttribute('fill', 'none');
-	layer.setAttribute('stroke', 'none');
-	world.append(layer);
-	const routes = new Map<string, SVGPathElement>();
+export function browserPage(world: SVGGElement): Page {
 	return {
+		// anime.js tweens the distance along the route, from 0 to its length, and each frame turns it into x and y. Both
+		// read the same distance in a frame, so the point is worked out once for the two.
 		path(pts) {
-			const d = 'M' + pts.map((p) => `${+p.x.toFixed(3)} ${+p.y.toFixed(3)}`).join('L');
-			let path = routes.get(d);
-			if (!path) {
-				path = document.createElementNS(NS, 'path');
-				path.setAttribute('d', d);
-				layer.append(path);
-				routes.set(d, path);
-			}
-			const { translateX, translateY } = svg.createMotionPath(path)!;
-			return { translateX, translateY };
+			const length = lengthOf(pts);
+			let d = NaN;
+			let p = pts[0];
+			const point = (at: number) => {
+				if (at !== d) {
+					d = at;
+					p = along(pts, at);
+				}
+				return p;
+			};
+			return {
+				translateX: { from: 0, to: length, modifier: (at: number) => point(at).x },
+				translateY: { from: 0, to: length, modifier: (at: number) => point(at).y },
+			};
 		},
 		// anime.js draws an outline blank as it makes its stand-in, unless its pathLength is already anime's 1000:
 		// so set, building the timeline leaves the still frame whole.
@@ -482,6 +484,7 @@ export class Choreo {
 	readonly page: Page;
 	readonly score: Score;
 	readonly cam: Camera;
+	private lit?: Element; // the control chip whose call is in effect
 	/** Rings shown, as `<worker>:<place>`. */
 	private readonly shown = new Set<string>();
 	/** Rings on their way out, by when they are gone. */
@@ -505,7 +508,14 @@ export class Choreo {
 		const { score, nodes } = this;
 		score.start(this.cam, { x: this.cam.x, y: this.cam.y, s: this.cam.s });
 		for (const p of PIECES) this.declarePiece(p.id, p.kind, p.chapter === 1);
-		for (const c of CHAPTERS) for (const chip of c.chips ?? []) this.declarePiece(`${chip.id}@${c.n}`, 'chip', false);
+		for (const c of CHAPTERS) {
+			for (const [i, chip] of (c.chips ?? []).entries()) {
+				const key = chipKey(c.n, i, chip.id);
+				this.declarePiece(key, 'chip', false);
+				// A chip that takes another's place fades its name in (see `chapter`).
+				if (chip.fade) for (const label of this.labels(nodes.piece(key))) score.start(label, { opacity: 1 });
+			}
+		}
 		for (const c of CONNS) {
 			const g = nodes.piece(c.id);
 			const on = c.chapter === 1;
@@ -531,12 +541,6 @@ export class Choreo {
 				score.start(score.drawable(r.check), { draw: [0, 0] });
 			});
 		}
-		for (const c of CHAPTERS) {
-			c.captions.forEach((cap, i) => {
-				const words = [...nodes.words(c.n, i), ...(cap.swap ? [nodes.swap(c.n, i)] : [])];
-				for (const word of words) score.start(word, { opacity: 0, translateY: 10 });
-			});
-		}
 		// The rest of the text on the map, a chip's and the ACK line's, shows wherever its piece does (`wrap`).
 		for (const p of [...PIECES, ...CONNS]) for (const text of this.texts(nodes.piece(p.id))) score.start(text, { opacity: 1 });
 	}
@@ -557,6 +561,7 @@ export class Choreo {
 		const v = on ? 1 : 0;
 		if (kind === 'chip') {
 			score.start(g, { opacity: v, scale: v });
+			if (key.startsWith('ctl-')) score.start(g.querySelector(':scope > .vm-lit')!, { opacity: 0 });
 			return;
 		}
 		score.start(g, { opacity: kind === 'tray' ? v : 1 });
@@ -595,6 +600,7 @@ export class Choreo {
 		const el = this.nodes.record(id);
 		this.score.start(el, { pos: [0, 0], opacity: 0, scale: 1 });
 		this.score.start(this.fill(el), { fillOpacity: 1 });
+		for (const tag of el.querySelectorAll('.vm-tag')) this.score.start(tag, { opacity: 0 });
 		const sq = { id, family: id, els: [el] };
 		this.bodies.add(sq);
 		return sq;
@@ -615,11 +621,23 @@ export class Choreo {
 		score.tween(dot, { opacity: 0 }, start + duration, 120, E.linear);
 	}
 
+	/** The whole loop as one anime.js timeline, `TOTAL` long, looping, and paused until played. */
 	build(): Timeline {
+		return drain(this.building());
+	}
+
+	/**
+	 * `build` in steps, so a page can build it between frames: it stops after each chapter and as the score's timeline
+	 * is added (`Score.building`). The whole score is written before the first cue is added, as `build` does.
+	 */
+	*building(): Generator<void, Timeline> {
 		const at = starts();
-		for (const c of CHAPTERS) this.chapter(c, at[c.n - 1]);
+		for (const c of CHAPTERS) {
+			this.chapter(c, at[c.n - 1]);
+			yield;
+		}
 		this.wrap();
-		return this.score.build(() => this.nodes.setCamera(this.cam));
+		return yield* this.score.building(() => this.nodes.setCamera(this.cam));
 	}
 
 	/**
@@ -657,10 +675,17 @@ export class Choreo {
 		const move = c.n === 1 ? 0 : CAMERA;
 		if (move) score.tween(this.cam, { ...frame(REGIONS[c.n - 1]) }, T, move, E.move);
 		this.open(c, move ? T + OPENS : T);
-		this.captions(c, T);
-		for (const chip of c.chips ?? []) {
-			const g = this.nodes.piece(`${chip.id}@${c.n}`);
-			score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
+		for (const [i, chip] of (c.chips ?? []).entries()) {
+			const g = this.nodes.piece(chipKey(c.n, i, chip.id));
+			if (chip.fade) {
+				// It takes the place at once, covering the chip before, and only its name fades in: the chip holds
+				// still, and two names never show at once.
+				score.set(g, { opacity: 1, scale: 1 }, T + chip.at);
+				for (const label of this.labels(g)) {
+					score.set(label, { opacity: 0 }, T + chip.at);
+					score.tween(label, { opacity: 1 }, T + chip.at, SWAP, E.fade);
+				}
+			} else score.tween(g, { opacity: 1, scale: 1 }, T + chip.at, POP, E.pop);
 			score.tween(g, { opacity: 0, scale: 0 }, T + chip.until, 300, E.out);
 		}
 
@@ -744,32 +769,6 @@ export class Choreo {
 			const track = this.score.track(ghost, 'opacity');
 			if (track.at(at)[0] === 0 && track.end <= at) this.score.tween(ghost, { opacity: 1 }, at, FADE, E.fade);
 		}
-	}
-
-	/**
-	 * Words rise in 55 ms apart, each caption once the one before has gone, and leave 30 ms apart. A swap rolls the
-	 * last word up out of its box as its stand-in rolls up into it, together, so the two never overlap.
-	 */
-	private captions(c: Chapter, T: number) {
-		let free = 0; // when the previous caption has left
-		c.captions.forEach((cap, i) => {
-			const words = this.nodes.words(c.n, i);
-			const enter = Math.max(cap.at, free);
-			this.score.stagger(words, { opacity: 1, translateY: 0 }, T + enter, 55, 520, E.pop);
-			let shown = words;
-			if (cap.swap) {
-				const last = words[words.length - 1];
-				const next = this.nodes.swap(c.n, i);
-				const at = T + cap.swap.at;
-				this.score.set(next, { opacity: 1, translateY: ROLL.by }, at);
-				this.score.tween(next, { translateY: 0 }, at, ROLL.duration, E.zoom);
-				this.score.tween(last, { translateY: -ROLL.by }, at, ROLL.duration, E.zoom);
-				this.score.set(last, { opacity: 0 }, at + ROLL.duration);
-				shown = [...words.slice(0, -1), next];
-			}
-			this.score.stagger(shown, { opacity: 0, translateY: -8 }, T + cap.until, 30, 300, E.out);
-			free = cap.until + 300 + 30 * shown.length;
-		});
 	}
 
 	// -- Pools --------------------------------------------------------------------------------------------------
@@ -989,11 +988,17 @@ export class Choreo {
 			this.ghosts(part.worker, e.to!, at + 200);
 			return;
 		}
-		this.press(this.nodes.piece(`ctl-${e.op}`), at);
-		// The event loop hands out nothing while the worker is paused or stopped. A restart brings it back, with the
-		// one idle goroutine `Start` leaves.
-		const on = e.op === 'resume' || e.op === 'restart';
-		this.score.tween(this.loop(), { opacity: on ? 1 : 0.35 }, at, 300, E.fade);
+		const chip = this.nodes.piece(`ctl-${e.op}`);
+		this.press(chip, at);
+		// The call in effect is lit: this one, from its press until the next.
+		if (this.lit) this.score.tween(this.lit, { opacity: 0 }, at, 200, E.fade);
+		this.lit = chip.querySelector(':scope > .vm-lit')!;
+		this.score.tween(this.lit, { opacity: 1 }, at, 200, E.fade);
+		// Stop() ends the event loop, and a restart starts it again, with the one idle goroutine `Start` leaves. A
+		// paused loop still runs: it only hands out nothing.
+		if (e.op === 'stop' || e.op === 'restart') {
+			this.score.tween(this.loop(), { opacity: e.op === 'stop' ? 0.35 : 1 }, at, 300, E.fade);
+		}
 		if (e.op === 'restart') this.spawn(part.worker, 0, at + 300);
 	}
 
@@ -1061,6 +1066,12 @@ export class Choreo {
 						const drop = from.x === to.x ? [to] : [pt(from.x, queue.gap), pt(to.x, queue.gap), to];
 						score.move(rec, drop, at, DROP, E.leave);
 						score.tween(this.fill(rec), { fillOpacity: 0 }, at + 150, 350, E.fade);
+						// Redis keeps the record until the ack, tagged with the consumer that took it.
+						if (part.kind === 'redis') {
+							const tag = rec.querySelector(`.vm-tag-${e.consumer}`)!;
+							score.start(tag, { opacity: 0 });
+							score.tween(tag, { opacity: 1 }, at + 150, 350, E.fade);
+						}
 						// A copy comes out where the queue's line leaves the store, one copy at a time, and flies to its ring.
 						const copy = copies.get(e.job)!.els;
 						owners.set(e.job, consumer(e.consumer));
@@ -1130,6 +1141,7 @@ export class Choreo {
 			const p = score.pos(rec.els[0], start);
 			score.move(rec.els[0], [pt(p.x, queue.gap), pt(to.x, queue.gap), to], start, REQUEUE, E.move);
 			score.tween(this.fill(rec.els[0]), { fillOpacity: 1 }, start + 150, 350, E.fade);
+			for (const tag of rec.els[0].querySelectorAll('.vm-tag')) score.tween(tag, { opacity: 0 }, start, 150, E.fade);
 		}
 		for (const [id, held] of queue.held) {
 			const k = after.indexOf(id);
@@ -1194,12 +1206,3 @@ const consumer = (id: string): Worker => (id === 'sqlite' ? 'sqlite' : (`redis-$
 const valueOf = (copy: string) => copy.slice(0, copy.lastIndexOf('-'));
 
 const isTopicDispatch = (e: PoolEvent): e is Dispatch => e.type === 'dispatch' && e.source === 'topic';
-
-/**
- * The whole loop as one anime.js timeline: `loop: true`, `TOTAL` long, and paused until played
- * (`autoplay: false`). Each frame puts the camera where its tweens have it. `page` is the browser's unless a test
- * gives its own.
- */
-export function buildTimeline(nodes: MapNodes, page: Page = browserPage(nodes.world)): Timeline {
-	return new Choreo(nodes, page).build();
-}

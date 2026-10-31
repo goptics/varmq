@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import MetricsScene from '../../../components/ops/MetricsScene.astro';
+
 varmq imports no metrics library. A worker exposes what Prometheus needs as plain methods: how many jobs are running and waiting, and four counters of what has happened. You wrap those methods in collectors from the [Prometheus Go client](https://github.com/prometheus/client_golang). Its [`GaugeFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeFunc) and [`CounterFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#CounterFunc) call a function each time Prometheus scrapes, so nothing of yours has to poll the worker.
 
 This page follows `examples/prometheus`, which is its own Go module and uses client_golang v1.23.2.
@@ -117,7 +119,9 @@ Leave out `grep` to see the `# HELP` and `# TYPE` lines too, and the Go runtime 
 
 ## The metrics
 
-With the namespace `foo_worker`, each name starts with `foo_worker_`.
+With the namespace `foo_worker`, each name starts with `foo_worker_`. The scene below replays the scrape of the program above. Move the clock, press a metric to read what it is, and see the PromQL for it. The numbers follow a real run of the program: 1000 jobs, 100 milliseconds each, 10 at a time.
+
+<MetricsScene />
 
 | Name | Type | From | What it is |
 |---|---|---|---|
@@ -131,6 +135,20 @@ With the namespace `foo_worker`, each name starts with `foo_worker_`.
 | `failed_total` | counter | [`Failed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Failed) | jobs that returned an error or panicked |
 
 The four counters are the four of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics). [Metrics](/guides/metrics/) explains what each counts. [Waiting](/guides/waiting/) explains what `NumPending` and `NumProcessing` count.
+
+## Queries to start with
+
+These use the namespace `foo_worker`. Change it to the namespace you pass to each collector.
+
+| Question | PromQL |
+|---|---|
+| How many jobs finish each second? | `rate(foo_worker_completed_total[5m])` |
+| What share of finished jobs fail? | `rate(foo_worker_failed_total[5m]) / rate(foo_worker_completed_total[5m])` |
+| How full is the pool? (1 means every slot runs a job) | `foo_worker_workers_processing / foo_worker_workers_concurrency` |
+| How large is the backlog? | `foo_worker_waiting_total` |
+| Do jobs arrive faster than they finish? | `rate(foo_worker_submitted_total[5m]) - rate(foo_worker_completed_total[5m])` |
+
+The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row is above 0 while jobs arrive faster than they finish. On a persistent queue it can mislead: `Submitted` counts only this process's `Add` calls, so a job another process added is not counted, and `Completed` can then be higher than `Submitted`. On a distributed queue the counters may differ from what you expect. [The overview](/persistence/overview/#metrics) says what each counter counts there.
 
 ## What to watch for
 

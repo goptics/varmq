@@ -1,0 +1,98 @@
+---
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
+
+const describe =
+	'The three worker constructors side by side, on the same function that parses a string with strconv.Atoi. Pick a constructor and a job. NewWorker takes a function with no return value, so Add returns a handle with nothing to read, and a failure shows only if the function panics. NewErrWorker takes a function that returns an error, so Add returns a handle with Err. NewResultWorker returns a value and an error, so the handle has Result. A returned error and a panic also reach the worker Errs channel. For the input "42" there is no error. For "forty-two" Atoi fails. For "boom" the function panics.';
+
+const types = [
+	['plain', 'NewWorker'],
+	['err', 'NewErrWorker'],
+	['result', 'NewResultWorker'],
+];
+const inputs = [
+	['42', '"42"'],
+	['forty-two', '"forty-two"'],
+	['boom', '"boom"'],
+];
+---
+
+<Scene id="worker-types" title="Worker types" call={'queue.Add("42")'} describe={describe} class="ga">
+	<div class="ga-stack">
+		<div class="ga-toolbar">
+			<div class="seg" role="tablist" aria-label="Worker constructor">
+				{
+					types.map(([key, name], i) => (
+						<button
+							type="button"
+							role="tab"
+							id={`ga-wt-tab-${key}`}
+							data-key={key}
+							aria-selected={i === 0 ? 'true' : 'false'}
+							aria-controls="ga-wt-panel"
+							tabindex={i === 0 ? 0 : -1}
+						>
+							{name}
+						</button>
+					))
+				}
+			</div>
+			<div class="seg" role="radiogroup" aria-label="The data you add">
+				{
+					inputs.map(([key, label], i) => (
+						<button
+							type="button"
+							role="radio"
+							data-key={key}
+							aria-checked={i === 0 ? 'true' : 'false'}
+							tabindex={i === 0 ? 0 : -1}
+						>
+							{label}
+						</button>
+					))
+				}
+			</div>
+		</div>
+
+		<div role="tabpanel" id="ga-wt-panel" aria-labelledby="ga-wt-tab-plain" class="ga-cols ga-cols--2" data-panel>
+			<section class="ga-panel ga-step-panel ga-span" data-step="1" aria-label="Your function">
+				<h3>1. Your function</h3>
+				<pre class="ga-code"><code data-code></code></pre>
+				<dl class="ga-read ga-read--stack">
+					<dt data-ret-k>returns</dt>
+					<dd data-ret>nothing</dd>
+				</dl>
+			</section>
+			<section class="ga-panel ga-step-panel" data-step="2" aria-label="What Add hands back">
+				<h3>2. <code>Add</code> hands back</h3>
+				<dl class="ga-read ga-read--stack">
+					<dt>type</dt>
+					<dd data-type></dd>
+					<dt>ok</dt>
+					<dd data-ok>true</dd>
+				</dl>
+				<ul class="ga-methods" data-methods></ul>
+			</section>
+			<section class="ga-panel ga-step-panel" data-step="3" aria-label="What you read">
+				<h3>3. You read</h3>
+				<dl class="ga-read ga-read--stack">
+					<dt data-read-k></dt>
+					<dd data-read></dd>
+				</dl>
+				<dl class="ga-read ga-read--stack">
+					<dt><code>Errs()</code> and <code>WithErrHandler</code></dt>
+					<dd data-errs></dd>
+				</dl>
+				<p class="ga-note" data-why></p>
+			</section>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-add>Add the job</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './worker-types';
+</script>

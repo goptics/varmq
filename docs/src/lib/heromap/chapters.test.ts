@@ -14,19 +14,22 @@ describe('chapters', () => {
 			'Many queues, one worker', 'Topics', 'SQLite', 'Redis', 'Control', 'Everything together']);
 	});
 	it('carry the agreed captions', () => {
-		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add() puts jobs in a queue');
+		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 22);
+		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 26);
 	});
-	it('run about 85 seconds', () => {
-		assert.ok(TOTAL >= 80000 && TOTAL <= 95000, String(TOTAL));
+	// The site plays a step per scroll rather than the loop, so the loop may run long enough to show every strategy.
+	it('run about 100 seconds', () => {
+		assert.ok(TOTAL >= 80000 && TOTAL <= 105000, String(TOTAL));
 		assert.equal(starts()[9] + CHAPTERS[9].duration, TOTAL);
 	});
-	it('finish every part before its chapter ends', () => {
+	// The site stops on each chapter's last frame, so its last job's done (a 900 ms pulse and check) must have settled.
+	it('finish every part a second before its chapter ends', () => {
 		for (const c of CHAPTERS) for (const p of c.parts)
-			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 600, `chapter ${c.n}`);
+			assert.ok(Math.max(...p.events.map(e => e.at)) <= c.duration - 1000, `chapter ${c.n}`);
 	});
 	it('chapter 1 never has more than one job waiting at a dispatch', () => {
 		for (const d of dispatches(part(1, 'pool', 'core'))) assert.ok(d.waiting <= 0, String(d.at));
@@ -93,28 +96,12 @@ describe('chapter rules', () => {
 		const ids = CHAPTERS.flatMap(c => [...c.parts.flatMap(p => p.plan.jobs.map(j => j.id)), ...(c.published ?? []).map(v => v.id)]);
 		assert.equal(new Set(ids).size, ids.length);
 	});
-	it('show one caption at a time, each for at least 1.4 s and 500 ms after the last, gone before the chapter ends', () => {
-		// A caption starts to leave at `until`, and leaving takes 300 ms and 30 ms more per word.
+	it('order each chapter\'s captions within it, their marks paired', () => {
 		for (const c of CHAPTERS) c.captions.forEach((cap, i) => {
-			const words = plain(cap.text).split(' ').length;
-			assert.ok(cap.at >= 0 && cap.until - cap.at >= 1400, `chapter ${c.n}: ${cap.text}`);
-			assert.ok(cap.until + 300 + 30 * words <= c.duration, `chapter ${c.n}: ${cap.text}`);
-			if (i > 0) assert.ok(c.captions[i - 1].until + 500 <= cap.at, `chapter ${c.n}: ${cap.text}`);
+			assert.ok(cap.at >= 0 && cap.at < c.duration, `chapter ${c.n}: ${cap.text}`);
+			if (i > 0) assert.ok(c.captions[i - 1].at < cap.at, `chapter ${c.n}: ${cap.text}`);
 			for (const mark of ['*', '!', '#']) assert.equal(cap.text.split(mark).length % 2, 1, `unpaired ${mark} in ${cap.text}`);
-			// A swap waits for every word to have risen, and its roll (420 ms) is over before the line leaves.
-			if (cap.swap) {
-				assert.ok(cap.at + 55 * (words - 1) + 520 <= cap.swap.at, `chapter ${c.n}: ${cap.text}`);
-				assert.ok(cap.swap.at + 420 <= cap.until, `chapter ${c.n}: ${cap.text}`);
-			}
 		});
-	});
-	it('show the finale\'s first caption, fully risen, in the still frame', () => {
-		// Words rise 55 ms apart, each over 520 ms (the choreographer's caption rule).
-		const cap = CHAPTERS[9].captions[0], words = plain(cap.text).split(' ').length;
-		assert.ok(starts()[9] + cap.at + 55 * (words - 1) + 520 <= STATIC_AT, cap.text);
-		assert.ok(STATIC_AT < starts()[9] + cap.until);
-		// The still frame shows the caption's own words, so it comes before the swap.
-		assert.ok(STATIC_AT < starts()[9] + cap.swap.at);
 	});
 	it('start nothing before the camera has arrived', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) assert.ok(p.events[0].at >= 1300, `chapter ${c.n} ${p.kind}`);
@@ -195,10 +182,17 @@ describe('chapter rules', () => {
 		const p = part(3, 'pool', 'result');
 		assert.deepEqual(dispatches(p).map(d => p.outcomes[d.job]), ['value', 'error']);
 	});
-	it('chapter 5 takes from its queues in turn and skips the empty priority queue', () => {
-		const p = part(5, 'pool', 'core');
-		assert.deepEqual(dispatches(p).map(d => d.source), ['queue', 'queue-c', 'queue', 'queue-c']);
-		assert.ok(p.plan.sources.some(s => s.id === 'prio') && !p.plan.jobs.some(j => j.source === 'prio'));
+	it('chapter 5 runs one burst per strategy, each leaving in that strategy\'s order', () => {
+		// a is alerts (the queue), r reports (the priority queue) and e emails (the third queue), bound in that order.
+		const letter = { queue: 'a', prio: 'r', 'queue-c': 'e' };
+		const runs = {};
+		for (const d of dispatches(part(5, 'pool', 'core'))) runs[d.strategy] = (runs[d.strategy] ?? '') + letter[d.source];
+		assert.deepEqual(runs, {
+			priority: 'aarrre', // in bind order, though r is the longest and e the shortest
+			maxlen: 'rrare', // r while it is the longest, then the first of equals
+			minlen: 'reeaaa', // the shortest with a job first
+			roundrobin: 'areare', // each in turn, from the turn chapter 4 left
+		});
 	});
 	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
 		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
@@ -210,7 +204,7 @@ describe('chapter rules', () => {
 	});
 	it('chapter 8 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {
 		const ev = part(8, 'redis').events, index = type => ev.findIndex(e => e.type === type);
-		assert.deepEqual(ev[index('crash')], { at: 4600, type: 'crash', consumer: 'b' });
+		assert.deepEqual(ev[index('crash')], { at: 4000, type: 'crash', consumer: 'b' });
 		// B's two jobs and C's two are in flight when B dies, and C finishes its own before B's come back.
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['r0', 'r1', 'r2', 'r3']);
 		assert.ok(ev.filter(e => e.type === 'ack' && ['r2', 'r3'].includes(e.job)).every(e => e.at < ev[index('requeue')].at));
@@ -218,7 +212,7 @@ describe('chapter rules', () => {
 		// One wake, to C, which takes both at once.
 		const after = ev.slice(index('requeue'));
 		assert.deepEqual(after.filter(e => e.type === 'notify').map(e => e.consumer), ['c']);
-		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[7720, 'r0', 'c'], [7720, 'r1', 'c']]);
+		assert.deepEqual(after.filter(e => e.type === 'take').map(e => [e.at, e.job, e.consumer]), [[7320, 'r0', 'c'], [7320, 'r1', 'c']]);
 	});
 	it('run each store worker as a pool, ending every chapter with one idle goroutine', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
@@ -231,19 +225,19 @@ describe('chapter rules', () => {
 		const changes = (n, kind) => part(n, kind).events.filter(e => e.type === 'spawn' || e.type === 'exit')
 			.map(e => `${e.at} ${e.type} ${e.consumer} ${e.ring}`);
 		assert.deepEqual(changes(7, 'sqlite'), [
-			'4200 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
-			'7700 exit sqlite 0', '7700 exit sqlite 1', // the program dies with both
-			'10300 spawn sqlite 0', // and restarts with one
-			'11200 spawn sqlite 1', // the requeue's claim takes two again
-			'16200 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
+			'3300 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
+			'6800 exit sqlite 0', '6800 exit sqlite 1', // the program dies with both
+			'9400 spawn sqlite 0', // and restarts with one
+			'10900 spawn sqlite 1', // the claim after the requeue takes two again
+			'15900 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
 		]);
 		assert.deepEqual(changes(8, 'redis'), [
-			'2920 spawn b 1', '3120 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
-			'4600 exit b 0', '4600 exit b 1', // program B dies with both
-			'7070 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
-			'7720 spawn c 0', // woken for B's jobs, C pulls both
-			'9800 spawn b 0', // B restarts with one
-			'10770 exit c 1',
+			'2420 spawn b 1', '2520 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
+			'4000 exit b 0', '4000 exit b 1', // program B dies with both
+			'5370 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
+			'7320 spawn c 0', // woken for B's jobs, C pulls both
+			'9000 spawn b 0', // B restarts with one
+			'10370 exit c 1',
 		]);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
 		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);

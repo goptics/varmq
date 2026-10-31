@@ -1,0 +1,173 @@
+---
+// JOB 04 on the home page: the benchmark lanes on the page's own paper, with the results against VarMQ next to them.
+// Every figure is computed from the committed snapshot of github.com/goptics/benchmarks (bench/data.json) by
+// bench/home.ts, the same means the Benchmarks page shows. Pool figures are the mean over the rows at 50K workers (3
+// tasks x 5 producer shapes) and over GOMAXPROCS 24, 8 and 4. Memory is the benchmark's B/op for the same rows, in MB
+// (10^6). The bars and counters count up when a lane list is first seen, and again on Replay (race.ts).
+import '../../styles/home.css';
+import data from '../bench/data.json';
+import { againstVarmq, homeCharts, latencyP50 } from '../bench/home.ts';
+import type { Chart } from '../bench/home.ts';
+import type { Data } from '../bench/lib.ts';
+import Lanes, { type Lane } from './Lanes.astro';
+
+const d = data as unknown as Data;
+const charts = homeCharts(d);
+const against = againstVarmq(d);
+
+// The libraries by the names their users know; the two channel baselines are marked †, as on the Benchmarks page.
+const NAMES: Record<string, string> = {
+	BufferedPool: 'Buffered channel †',
+	GoroutinePool: 'Channel †',
+	ErrGroup: 'errgroup',
+	Ants: 'ants',
+	Gopool: 'gopool',
+	Conc: 'conc',
+	WorkerPool: 'workerpool',
+	Pond: 'pond',
+	GocraftWork: 'gocraft/work',
+	Taskq: 'taskq',
+	Rmq: 'rmq',
+	Goqite: 'goqite',
+	Backlite: 'backlite',
+};
+const name = (s: string) => NAMES[s] ?? s;
+
+// One lane per library: its bar is its share of the longest, and its last column its value divided by VarMQ's.
+const lanes = (c: Chart, opts: { dec?: number; suffix?: string; div?: number } = {}): Lane[] => {
+	const { dec = 0, suffix = '', div = 1 } = opts;
+	const max = Math.max(...c.lanes.map((l) => l.value));
+	const base = c.lanes.find((l) => l.subject === 'VarMQ')!.value;
+	return c.lanes.map((l) => ({
+		name: name(l.subject),
+		varmq: l.subject === 'VarMQ',
+		s: (l.value / max).toFixed(4),
+		v: l.value / div,
+		dec,
+		suffix,
+		text: (l.value / div).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suffix,
+		x: (l.value / base).toFixed(2) + '×',
+	}));
+};
+
+const poolRate = lanes(charts.pool[0], { dec: 2, suffix: 'M', div: 1e6 });
+const poolMem = lanes(charts.pool[1], { dec: 1, suffix: ' MB' });
+const redisMany = lanes(charts.redis[0]);
+const redisOne = lanes(charts.redis[1]);
+const sqlite = lanes(charts.sqlite[0]);
+
+// Median enqueue-to-handler latency: three decimals under a millisecond, else three significant digits.
+const ms = (v: number) => (v < 1 ? v.toFixed(3) : String(Number(v.toPrecision(3))));
+const p50 = (s: string) => latencyP50(d, s);
+const varmqP50 = p50('VarMQ');
+const others = ['Taskq', 'GocraftWork', 'Rmq', 'Asynq'].map((s) => `${name(s)} ${ms(p50(s).value)} ms`).join(', ');
+
+const n = (v: number) => v.toLocaleString('en-US');
+const { memory, oneWorker, cpu4, cpu24, redisOne: r1, sqlite: sq } = against;
+const workers = against.redisManyWorkers.map((w) => n(Number(w))).join(' and ');
+const varmqVersion = d.env.versions.find((v) => v.name === 'varmq')?.version;
+// The pool's rows per GOMAXPROCS (3 tasks x 5 producer shapes), and the machine without the SQLite disk note.
+const poolRows = charts.pool[0].groups / 3;
+const machine = d.env.machine.split(', SQLite')[0];
+---
+
+<section class="home-row race section" id="benchmarks" aria-labelledby="bench-title" data-race style="padding-top:0">
+	<div class="wrap">
+		<div class="banner"><span class="banner__id">JOB 04</span><span>Measured in public</span><span class="banner__rule"></span><span class="banner__meta">raw output published</span></div>
+		<div class="section__head">
+			<h2 class="h2" id="bench-title">The numbers, and where they do not favor VarMQ.</h2>
+			<p>
+				Each lane is one library on the same harness, same machine and same run. The longest bar is the highest value.
+				The last column is the lane's value divided by VarMQ's.
+			</p>
+		</div>
+
+		<div>
+			<div class="race__top">
+				<div class="seg" role="tablist" aria-label="Benchmark suite">
+					<button type="button" role="tab" id="race-tab-pool" aria-controls="race-panel-pool" aria-selected="true" data-key="pool">Worker pool</button>
+					<button type="button" role="tab" id="race-tab-redis" aria-controls="race-panel-redis" aria-selected="false" tabindex="-1" data-key="redis">Redis queues</button>
+					<button type="button" role="tab" id="race-tab-sqlite" aria-controls="race-panel-sqlite" aria-selected="false" tabindex="-1" data-key="sqlite">SQLite queues</button>
+				</div>
+				<button type="button" class="pbtn pbtn--paper" data-replay>Replay</button>
+			</div>
+
+			<div role="tabpanel" id="race-panel-pool" aria-labelledby="race-tab-pool">
+				<p class="race__spec">
+					Mean tasks per second over {poolRows} rows: 3 task types × 5 producer shapes (1 to 1,000,000 producers),
+					50K workers, 1M tasks per run. Averaged over GOMAXPROCS 24, 8 and 4.
+					Memory is bytes allocated per run of 1M tasks, from the same rows.
+				</p>
+				<div class="race__groups">
+					<Lanes title="Throughput" unit="tasks per second · higher is better" head="Rate" lanes={poolRate} />
+					<Lanes title="Memory" unit="MB allocated per 1M tasks · lower is better" head="Allocated" lanes={poolMem} />
+				</div>
+				<p class="race__foot" style="margin-top:20px">
+					† Baselines, not libraries: N goroutines reading one channel. The buffered one has a channel that holds all 1M tasks.
+				</p>
+			</div>
+
+			<div role="tabpanel" id="race-panel-redis" aria-labelledby="race-tab-redis" hidden>
+				<p class="race__spec">
+					100,000 no-op jobs through one library instance with 100 workers, Redis 7.2 on one pinned core.
+					VarMQ runs on redisq. Median time from enqueue to handler, one job at a time: VarMQ {ms(varmqP50.value)} ms{varmqP50.lowest && ', the lowest of the run'}.{' '}
+					{others}.
+				</p>
+				<div>
+					<div class="seg" role="tablist" aria-label="Producers" style="margin-bottom:24px">
+						<button type="button" role="tab" id="redis-tab-many" aria-controls="redis-panel-many" aria-selected="true" data-key="many">100 producers</button>
+						<button type="button" role="tab" id="redis-tab-one" aria-controls="redis-panel-one" aria-selected="false" tabindex="-1" data-key="one">1 producer</button>
+					</div>
+					<div class="race__groups race__groups--one" role="tabpanel" id="redis-panel-many" aria-labelledby="redis-tab-many">
+						<Lanes title="100 producers enqueue at once" unit="jobs per second · higher is better" head="Rate" lanes={redisMany} />
+					</div>
+					<div class="race__groups race__groups--one" role="tabpanel" id="redis-panel-one" aria-labelledby="redis-tab-one" hidden>
+						<Lanes title="One producer enqueues 100,000 jobs" unit="jobs per second · higher is better" head="Rate" lanes={redisOne} />
+					</div>
+				</div>
+			</div>
+
+			<div role="tabpanel" id="race-panel-sqlite" aria-labelledby="race-tab-sqlite" hidden>
+				<p class="race__spec">
+					Drain 20,000 jobs added by 4 producers, WAL checkpoint every 1,000 pages. VarMQ runs on sqliteq.
+					In this run VarMQ was the fastest subject in {sq.varmq === sq.groups ? `all ${sq.groups}` : `${sq.varmq} of ${sq.groups}`} scenario and checkpoint groups.
+				</p>
+				<div class="race__groups race__groups--one">
+					<Lanes title="Drain one queue" unit="jobs per second · higher is better" head="Rate" lanes={sqlite} />
+				</div>
+			</div>
+		</div>
+
+		<details class="race__trade">
+			<summary>What the same run says against VarMQ</summary>
+			<ul>
+				<li>
+					<strong>Memory.</strong> VarMQ allocates {Math.round(memory.varmq)} MB per 1M tasks. ants allocates {Math.round(memory.ants)} MB, which is {memory.ratio.toFixed(1)}× less.{' '}
+					<code>Add</code> never blocks, so waiting tasks sit in an unbounded queue.
+				</li>
+				<li>
+					<strong>One worker.</strong> On the {oneWorker.groups} one-worker <code>Loop10</code> rows, a plain buffered channel is fastest in{' '}
+					{oneWorker.buffered === oneWorker.groups ? `all ${oneWorker.groups}` : `${oneWorker.buffered} of ${oneWorker.groups}`}.
+				</li>
+				<li>
+					<strong>4 CPUs.</strong> The buffered channel wins {cpu4.buffered} of {cpu4.groups} rows and VarMQ wins {cpu4.varmq}. At 24 CPUs VarMQ wins {cpu24.varmq} and the channel {cpu24.buffered}.
+				</li>
+				<li>
+					<strong>Redis, one producer.</strong> rmq leads {r1.rmq} of the {r1.groups} single-producer rows.{r1.varmqEnqueue && ' VarMQ leads the enqueue-only row, and'}{r1.varmqEnqueue ? ' leads' : ' VarMQ leads'} the 100-producer rows with one instance at {workers} workers.
+				</li>
+			</ul>
+		</details>
+
+		<p class="race__foot">
+			Run of {d.source.runDate} · varmq {varmqVersion} · {machine} · Absolute numbers vary between
+			runs, so compare ratios within one run. Figures come from the raw output in{' '}
+			<a href="https://github.com/goptics/benchmarks">github.com/goptics/benchmarks</a>;
+			charts and the harness are at <a href="https://benchmarks.goptics.org">benchmarks.goptics.org</a>.
+		</p>
+	</div>
+</section>
+
+<script>
+	import './ui.ts';
+	import './race.ts';
+</script>

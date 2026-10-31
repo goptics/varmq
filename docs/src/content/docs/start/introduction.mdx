@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import PoolScene from '../../../components/learn/PoolScene.astro';
+
 varmq is a typed worker pool and message queue for Go. You give a worker a function and a concurrency limit, bind one or more queues to it, and add jobs to those queues. The worker runs each job through your function, never more at once than the limit allows.
 
 ## When to use it
@@ -30,6 +32,6 @@ varmq splits the work between two things.
 
 Below, six jobs are added to a worker with concurrency 4. Four start right away, two wait in the queue, and the pool shrinks back to one idle goroutine once the queue is empty.
 
-![A varmq worker with concurrency 4: six jobs are added, four run at once, two wait in the queue, and the pool shrinks back to one idle goroutine when the queue drains](../../../../../assets/diagrams/varmq-worker-pool.svg)
+<PoolScene />
 
 Next: [install varmq](/start/installation/), then run the [quick start](/start/quick-start/) in your browser.

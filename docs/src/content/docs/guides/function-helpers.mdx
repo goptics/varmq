@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import HelperWrap from '../../../components/guides-a/HelperWrap.astro';
 
 A worker usually knows what its data means: a `string` is an email address, an `int` is a user ID, and the worker function knows what to do with it. When you only want to run pieces of code on a pool, the data can be a function instead. [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) each return a ready-made worker function that calls the job's function.
 
@@ -26,6 +27,10 @@ queue.Add(func() { fmt.Println("hello") })
 Go works out the data type from the helper, so there is nothing to spell out for `Func` and `ErrFunc`. `ResultFunc` returns a function for any result type, so you name it yourself: `varmq.ResultFunc[string]()`. [Worker types](/guides/worker-types/) covers what each handle gives back.
 
 ## Try it
+
+The scene below shows what each helper wraps. Pick a helper and a closure, then add it. The lines that run are marked.
+
+<HelperWrap />
 
 The program below runs all three helpers, each on a worker with concurrency 1.
 

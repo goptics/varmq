@@ -6,10 +6,13 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import LifecycleScene from '../../../components/learn/LifecycleScene.astro';
 
 A worker is always in one of seven states. [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Status) returns the current one as a string, and five `Is*` methods answer yes or no for some of them.
 
-![The seven worker states beside a worker that walks through them: created with WithAutoRun(false) it is Initiated with three jobs waiting; Start makes it Idle, then Running; Pause while job 1 runs makes it Pausing, then Paused; Resume runs job 2; Stop while job 2 runs makes it Stopping, then Stopped with job 3 still waiting; Restart runs job 3](../../../../../assets/diagrams/varmq-lifecycle.svg)
+The diagram below is a worker you can drive. Click a state to read about it. Press a method to call it. The worker has three jobs waiting and runs one at a time, taking every waiting job into one batch. Pause and Stop never interrupt a running job, so press Finish to end it.
+
+<LifecycleScene />
 
 ## The seven states
 

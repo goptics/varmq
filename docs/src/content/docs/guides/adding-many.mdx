@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import AddAllCompare from '../../../components/guides-a/AddAllCompare.astro';
 
 [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) queues a slice of [`Item`](https://pkg.go.dev/github.com/goptics/varmq#Item) values in one call. It returns one handle for the whole group, not one per job. It is a method of the in-memory queues: persistent and distributed queues have only [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add).
 
@@ -43,6 +44,10 @@ All three have [`NumPending()`](https://pkg.go.dev/github.com/goptics/varmq#Pend
 There is no [`Close`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) on a group handle, and no status for a single item. To close one job, add it with `Add` instead, which gives you a handle of its own.
 
 ## Items the queue refuses
+
+The scene shows the same items added both ways. Add the items, then start the worker.
+
+<AddAllCompare />
 
 `AddAll` adds the items one at a time, and skips each one the queue does not take: the queue is full or closed, or the item's ID belongs to a job still in the queue. That includes a repeated ID inside the same slice, while the first copy is still in the queue (a running worker may already have taken it). A skipped item never runs and sends nothing to `Results()` or `Errs()`. It does not count in `NumPending`, so `NumPending` can start below `len(items)`.
 

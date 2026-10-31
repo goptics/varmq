@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import BindScene from '../../../components/learn/BindScene.astro';
 
 A worker runs jobs; a queue holds them until the worker has a free slot. Apart from a producer-only distributed queue ([`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue)), you ask a worker for a queue, and that binds the two.
 
@@ -32,7 +33,11 @@ queue.Add("hello")
 
 ## One worker, several queues
 
-A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from.
+A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from. Press Play below to watch two queues share a worker with concurrency 2, then switch to `RoundRobin` or bind a third queue.
+
+<BindScene />
+
+The program below is the scene's starting state: two queues, three jobs each, concurrency 2.
 
 <GoPlay example="workers-and-queues" />
 

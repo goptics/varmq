@@ -5,17 +5,11 @@ sidebar:
   order: 2
 ---
 
-varmq needs Go 1.24 or newer. Add it to your module:
+import InstallTabs from '../../../components/learn/InstallTabs.astro';
 
-```bash
-go get github.com/goptics/varmq
-```
+varmq needs Go 1.24 or newer. Add it to your module with `go get`, then import it. Pick the variant you need:
 
-Then import it:
-
-```go
-import "github.com/goptics/varmq"
-```
+<InstallTabs />
 
 The in-memory worker pool, queues and topics are all in this one package. Persistent and distributed queues also need a storage adapter, which is its own module: [redisq](https://github.com/goptics/redisq) for Redis or [sqliteq](https://github.com/goptics/sqliteq) for SQLite.
 
