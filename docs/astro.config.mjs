@@ -24,16 +24,6 @@ export default defineConfig({
 		},
 	},
 	integrations: [
-		// The social card's page (src/og/OgCard.astro), for `pnpm og` to screenshot into public/og.png: served by
-		// `astro dev` only, so the built site has no such page.
-		{
-			name: 'og-card',
-			hooks: {
-				'astro:config:setup': ({ command, injectRoute }) => {
-					if (command === 'dev') injectRoute({ pattern: '/og-card', entrypoint: './src/og/OgCard.astro' });
-				},
-			},
-		},
 		starlight({
 			title: 'VarMQ',
 			description: 'A Simplest in-memory and Distributed Storage-Agnostic Message Queue for Your Concurrent Go Program',
@@ -43,7 +33,7 @@ export default defineConfig({
 				replacesTitle: true,
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/goptics/varmq' }],
-			// The social card on every page (public/og.png, made by `pnpm og` from src/og/OgCard.astro). Starlight sets
+			// The social card on every page (public/og.png, drawn by `pnpm og`, scripts/og.mjs). Starlight sets
 			// the rest of the Open Graph tags and twitter:card summary_large_image.
 			head: [
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://varmq.goptics.org/og.png' } },
@@ -51,7 +41,7 @@ export default defineConfig({
 				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
 				{
 					tag: 'meta',
-					attrs: { property: 'og:image:alt', content: 'VarMQ: worker pools and job queues for Go, over a map of a worker pool running jobs' },
+					attrs: { property: 'og:image:alt', content: 'VarMQ: worker pools and job queues for Go, over a queue of waiting jobs, the event loop and a worker running jobs' },
 				},
 				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://varmq.goptics.org/og.png' } },
 			],
