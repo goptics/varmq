@@ -61,6 +61,7 @@ Every component has one look. Use the shared piece. Do not write a second copy i
 | Callout | Card with an `--amber` rule for results against VarMQ and a `--brand` rule for tips. Starlight asides, `.bboard` and the matrix notes use it. | `docs-theme.css` |
 | Tear line | Dashed rule with "tear here" between the last section and the closing call to action. | `.shell-tear`, `.tear` |
 | Theme switch | Three native radios: Light, Dark, System. The choice is stored under `starlight-theme` (`''` for System). It sits in the header, and in the phone header on `/`, which has no sidebar menu. | `components/ui/ThemeSwitch.astro`, `ui.css` (`.tswitch`) |
+| Header links | Docs, Guides and Benchmarks before the GitHub link, on `/` only, as it has no sidebar. They hover as the GitHub link does, with a `--bar-2` box, and have no underline. Hidden below 50rem with the GitHub link. | `components/shell/SocialIcons.astro`, `docs-theme.css` (`.home-links`) |
 | Main action | `.btn` with `--primary` or `--ghost`, for a page's own call to action on paper (the landing pages). Scene controls stay `.pbtn`. | `ui.css` |
 | Install box | The `go get` commands in tabs: varmq, then varmq with redisq or sqliteq. | `components/ui/Install.astro`, `ui.css` (`.install`) |
 | Store card | Starlight's link card, its title led by the store's icon: a memory stick for in-memory queues, and the map's SQLite and Redis logos, in the map's colours for them. | `components/StoreCard.astro`, `story.css` (`.store-icon`) |

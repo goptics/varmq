@@ -62,6 +62,7 @@ export default defineConfig({
 				PageTitle: './src/components/shell/PageTitle.astro',
 				Hero: './src/components/shell/Hero.astro',
 				Footer: './src/components/shell/Footer.astro',
+				SocialIcons: './src/components/shell/SocialIcons.astro',
 			},
 		}),
 		// With a sitemap here, Starlight does not add its own.
