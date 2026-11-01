@@ -5,6 +5,7 @@ import '../../lib/heromap/map.css';
 import '../../styles/home.css';
 import { StillDocument } from '../../lib/heromap/still';
 import { highlightGo } from '../ui/go';
+import { LOGOS } from '../../lib/heromap/render';
 import { still } from './store';
 
 const stage = (still(new StillDocument() as unknown as Document).stage.svg as unknown as { outerHTML: string }).outerHTML;
@@ -13,6 +14,8 @@ const tabs = [
 	{
 		key: 'memory',
 		label: 'In memory',
+		// A memory chip, drawn on the logos' 24-unit grid.
+		icon: 'M5 5h14v14H5zm3 3v8h8V8zM8 1h2v3H8zm3 0h2v3h-2zm3 0h2v3h-2zM8 20h2v3H8zm3 0h2v3h-2zm3 0h2v3h-2zM1 8h3v2H1zm0 3h3v2H1zm0 3h3v2H1zm19-6h3v2h-3zm0 3h3v2h-3zm0 3h3v2h-3z',
 		text: 'Built in. Plain queues, priority queues and topics live in your process. They have nothing to set up, and they end when the process ends.',
 		note: 'Use it when a lost job is fine, or when you can add it again.',
 		file: 'main.go',
@@ -24,25 +27,9 @@ pq := worker.BindPriorityQueue()`,
 		more: 'Queues guide',
 	},
 	{
-		key: 'redis',
-		label: 'Redis',
-		text: 'redisq keeps jobs in Redis. A persistent queue lets one process keep its jobs across a restart. A distributed queue lets several processes consume one queue, and each job goes to one of them.',
-		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
-		file: 'main.go',
-		code: `rdb := redisq.New("redis://localhost:6375")
-defer rdb.Close()
-
-pq := rdb.NewQueue("persistent_queue")
-queue := worker.WithPersistentQueue(pq)
-
-// several processes: rdb.NewDistributedQueue(name)
-// with worker.WithDistributedQueue`,
-		href: '/persistence/redis/',
-		more: 'Redis guide',
-	},
-	{
 		key: 'sqlite',
 		label: 'SQLite',
+		icon: LOGOS['s-store'].d,
 		text: 'sqliteq keeps jobs in local SQLite files, so a single process keeps them across a restart with no server to run.',
 		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
 		file: 'main.go',
@@ -59,6 +46,24 @@ if err != nil {
 queue := worker.WithPersistentQueue(pq)`,
 		href: '/persistence/sqlite/',
 		more: 'SQLite guide',
+	},
+	{
+		key: 'redis',
+		label: 'Redis',
+		icon: LOGOS['r-store'].d,
+		text: 'redisq keeps jobs in Redis. A persistent queue lets one process keep its jobs across a restart. A distributed queue lets several processes consume one queue, and each job goes to one of them.',
+		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
+		file: 'main.go',
+		code: `rdb := redisq.New("redis://localhost:6375")
+defer rdb.Close()
+
+pq := rdb.NewQueue("persistent_queue")
+queue := worker.WithPersistentQueue(pq)
+
+// several processes: rdb.NewDistributedQueue(name)
+// with worker.WithDistributedQueue`,
+		href: '/persistence/redis/',
+		more: 'Redis guide',
 	},
 ];
 ---
@@ -86,6 +91,7 @@ queue := worker.WithPersistentQueue(pq)`,
 						tabindex={i === 0 ? 0 : -1}
 						data-key={t.key}
 					>
+						<svg class="store-tab__icon" viewBox="0 0 24 24" aria-hidden="true"><path d={t.icon} /></svg>
 						{t.label}
 					</button>
 				))
