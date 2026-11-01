@@ -16,7 +16,7 @@
 	--shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
 	--shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
 	/* The dark panels lift off the light page; in dark they sit in it. */
-	--panel-shadow: 0 1px 0 0 color-mix(in srgb, white 6%, transparent) inset, 0 24px 48px -28px rgb(17 20 19 / 0.45);
+	--panel-shadow: 0 1px 0 0 color-mix(in srgb, var(--panel-ink) 6%, transparent) inset, 0 24px 48px -28px var(--panel-drop);
 
 	--default-font-family: var(--display);
 	--default-mono-font-family: var(--mono);
@@ -802,7 +802,7 @@ body {
 }
 
 :root[data-theme='dark'] {
-	--panel-shadow: 0 1px 0 0 color-mix(in srgb, white 5%, transparent) inset;
+	--panel-shadow: 0 1px 0 0 color-mix(in srgb, var(--panel-ink) 5%, transparent) inset;
 }
 
 /* ---- Home: a soft light behind the story; the only colour field on the site ---- */

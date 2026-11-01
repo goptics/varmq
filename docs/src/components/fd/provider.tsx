@@ -16,8 +16,8 @@ export function Provider({ pathname, params, children }: ProviderProps) {
 			pathname={pathname}
 			params={params}
 			search={{ SearchDialog }}
-			// tokens.css switches on :root[data-theme]; Fumadocs' own styles on .dark.
-			theme={{ attribute: ['class', 'data-theme'], defaultTheme: 'system', enableSystem: true }}
+			// tokens.css switches on :root[data-theme]; Fumadocs' own styles on .dark. No `d` shortcut: the site never had one.
+			theme={{ attribute: ['class', 'data-theme'], defaultTheme: 'system', enableSystem: true, hotKey: false }}
 		>
 			{children}
 		</RootProvider>

@@ -38,6 +38,8 @@
 	/* Translucent fills for controls and tracks on a dark panel. */
 	--panel-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
 	--panel-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
+	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow). */
+	--panel-drop: color-mix(in srgb, var(--ink) 45%, transparent);
 
 	--display: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
