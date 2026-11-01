@@ -434,6 +434,11 @@
 	overflow-wrap: anywhere;
 }
 
+/* A library's name links to its source in the lane's own colour, so only VarMQ's lane is green. */
+.home-jobs .rlane__name a {
+	color: inherit;
+}
+
 .home-jobs .rlane__track {
 	height: 18px;
 	border-radius: 4px;
@@ -815,7 +820,7 @@
 
 /* The links that stand alone (a code card's head, a scene's guide) are 44 px tall on a touch screen. */
 @media (pointer: coarse) {
-	.home-jobs :is(.code__head a, .scene-card p > a:only-child) {
+	.home-jobs :is(.code__head a, .scene-card p > a:only-child, .rlane__name a) {
 		display: inline-flex;
 		align-items: center;
 		min-height: 44px;
