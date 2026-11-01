@@ -143,10 +143,10 @@
    right and a job's amber from the bottom left. In light the paper itself is the mascot's green, faint, not cream. */
 
 :root {
-	--paper: #f3f8f3;
-	--bar: #e7f0e9;
-	--bar-2: #dae7dd;
-	--rule: #cbdccf;
+	--paper: #e9faf2;
+	--bar: #dcf2e8;
+	--bar-2: #d0e9de;
+	--rule: #c4ddd2;
 
 	--glow-brand: 28%;
 	--page-pattern:
@@ -155,12 +155,12 @@
 	--page-pattern-size: 100% 100%;
 	--page-pattern-attach: fixed;
 
-	--chrome: #eaf3ec;
-	--chrome-2: #dde9e0;
-	--chrome-3: #d0e0d4;
+	--chrome: #dff5ec;
+	--chrome-2: #d4ede2;
+	--chrome-3: #cae5da;
 	--chrome-ink: #0c1f19;
 	--chrome-ink-2: #364a43;
-	--chrome-rule: #cbdccf;
+	--chrome-rule: #c4ddd2;
 	--chrome-scheme: light;
 	--chrome-logo: none;
 	--chrome-logo-light: block;

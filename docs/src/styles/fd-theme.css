@@ -828,6 +828,8 @@ body {
 .shell-foot {
 	margin-top: 3rem;
 	padding-top: 1.5rem;
+	/* The note is the page's last line: keep it off the window's edge, and clear of a phone's home bar. */
+	padding-bottom: calc(3rem + env(safe-area-inset-bottom));
 	border-top: 4px solid var(--chrome);
 }
 
@@ -897,18 +899,10 @@ body {
 	color: var(--signal-ink);
 }
 
-:root .btn--primary {
+/* One shape for every main action, square-cornered like the ticket stub. No offset shadow: on paper chrome it
+   would be the paper's own colour, so the button would lift onto nothing. */
+:root .btn {
 	border-radius: 2px;
-	box-shadow: 4px 4px 0 0 var(--chrome);
-	transition:
-		translate 0.12s var(--ease),
-		box-shadow 0.12s var(--ease),
-		background-color 0.12s var(--ease);
-}
-
-:root .btn--primary:hover {
-	translate: -2px -2px;
-	box-shadow: 6px 6px 0 0 var(--chrome);
 }
 
 /* ---- Home ---- */

@@ -924,8 +924,11 @@
 		padding 0.2s var(--ease);
 }
 
+/* The row keeps its ink: the plain-link hover's --signal-ink is for a --signal fill, and on --bar-2 in dark it
+   would vanish. */
 .home-jobs .index a:hover {
 	background: var(--bar-2);
+	color: var(--ink);
 	padding-inline: 12px;
 }
 
@@ -944,10 +947,28 @@
 	color: var(--ink-2);
 }
 
+/* The same drawn arrow as a main action's (.btn svg in ui.css), stepping forward as the row is hovered. */
 .home-jobs .index__go {
-	color: var(--accent-text);
-	font-family: var(--mono);
-	text-align: right;
+	align-self: center;
+	justify-self: end;
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: var(--accent-text);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: translate 0.15s var(--ease);
+}
+
+.home-jobs .index a:hover .index__go {
+	translate: 3px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-jobs .index__go {
+		transition: none;
+	}
 }
 
 @media (max-width: 719px) {
@@ -969,22 +990,29 @@
 
 /* ---- The closing (Close.astro): a tear line, then the install box and the way in ---- */
 
+/* A ticket's perforation, in the stub's language (.banner__id): a dashed line, and at each end a punched notch, a
+   little darker than the paper with a hairline rim, as the rails' holes are. */
 .home-jobs .tear {
+	--notch: radial-gradient(circle, var(--bar-2) 5.5px, var(--rule) 6px 6.75px, transparent 7.25px);
 	display: flex;
 	align-items: center;
 	gap: 14px;
 	margin-bottom: 40px;
+	padding-inline: 14px;
 	font: 400 0.75rem/1 var(--mono);
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--ink-3);
+	background:
+		var(--notch) -7px 50% / 14px 14px no-repeat,
+		var(--notch) calc(100% + 7px) 50% / 14px 14px no-repeat;
 }
 
 .home-jobs .tear::before,
 .home-jobs .tear::after {
 	content: '';
 	flex: 1;
-	border-top: 1px solid var(--rule);
+	border-top: 1px dashed var(--ink-3);
 }
 
 .home-jobs .close {
