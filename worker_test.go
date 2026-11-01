@@ -937,7 +937,7 @@ func TestWorkers(t *testing.T) {
 			// Context reads it; run with -race.
 			t.Run("Restart does not race with Add or Context", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {}, 2)
-				q := newQueue(w, queues.NewQueue[any]())
+				q := newQueue(w, queues.NewQueue[any](), WithQueueCapacity(64))
 
 				stop := make(chan struct{})
 				var wg sync.WaitGroup
