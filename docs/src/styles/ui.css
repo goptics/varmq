@@ -111,7 +111,7 @@
 	background: var(--panel);
 	color: var(--panel-ink);
 	border: 1px solid var(--panel-rule);
-	border-radius: 16px;
+	border-radius: var(--corner);
 	overflow: hidden;
 	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
 	font-family: var(--mono);
@@ -247,7 +247,7 @@
 .sframe__note kbd {
 	padding: 1px 5px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 	font: inherit;
 	color: var(--panel-ink);
@@ -272,7 +272,7 @@
 	min-height: 40px;
 	padding: 8px 14px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 	color: var(--panel-ink);
 	font: 500 0.8125rem/1 var(--mono);
@@ -341,7 +341,7 @@
 	align-items: center;
 	gap: 0;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	overflow: hidden;
 }
 
@@ -369,7 +369,7 @@
 	gap: 4px;
 	padding: 4px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: color-mix(in srgb, var(--paper) 80%, transparent);
 }
 
@@ -378,7 +378,7 @@
 	min-height: 40px;
 	padding: 8px 16px;
 	border: 0;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: transparent;
 	color: var(--ink-2);
 	font: 600 0.875rem/1 var(--display);
@@ -437,7 +437,7 @@
 
 .code {
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: color-mix(in srgb, var(--paper) 86%, var(--bar-2));
 	overflow: hidden;
 }
@@ -495,7 +495,7 @@ button.copy {
 	min-width: 64px;
 	padding: 6px 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: transparent;
 	color: var(--panel-ink);
 	font: 500 0.8125rem/1 var(--mono);
@@ -516,7 +516,7 @@ button.copy:hover {
 	min-height: 40px;
 	padding: 0 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	font-size: 0.8125rem;
 	color: var(--panel-ink-2);
 }
@@ -525,7 +525,6 @@ button.copy:hover {
 	width: clamp(110px, 22cqi, 190px);
 	margin: 0;
 	height: 24px;
-	accent-color: var(--brand);
 }
 
 .sfield output {
@@ -535,13 +534,16 @@ button.copy:hover {
 	font-weight: 600;
 }
 
-.sframe select,
+/* One look for every select, in a scene or not: the dropdown is lib/select.ts, and a native select shows only without JS. */
+select,
+.select,
+.api__path,
 .sfield input[type='number'],
 .sfield input[type='text'] {
 	min-height: 32px;
 	padding: 0 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 	color: var(--panel-ink);
 	font: 500 0.8125rem/1.2 var(--mono);
@@ -550,11 +552,105 @@ button.copy:hover {
 	color-scheme: dark;
 }
 
-.sframe select {
+select,
+.select {
 	min-height: 40px;
 	padding: 6px 10px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	cursor: pointer;
+}
+
+.select {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	max-width: 100%;
+	text-align: start;
+}
+
+.select:hover:not(:disabled) {
+	background: var(--panel-fill-2);
+}
+
+.select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.select__native {
+	display: none !important;
+}
+
+.select__label {
+	display: grid;
+	min-width: 0;
+}
+
+.select__label > * {
+	grid-area: 1 / 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.select__label > [aria-hidden] {
+	visibility: hidden;
+}
+
+.select svg {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: var(--panel-accent);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.select[aria-expanded='true'] svg {
+	rotate: 180deg;
+}
+
+.select__list {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	padding: 4px;
+	overflow-y: auto;
+	list-style: none;
+	border: 1px solid var(--panel-rule);
+	border-radius: var(--corner);
+	background: var(--panel);
+	color: var(--panel-ink);
+	font: 500 0.8125rem/1.2 var(--mono);
+	scrollbar-width: thin;
+	scrollbar-color: var(--panel-rule) transparent;
+}
+
+.select__list [role='option'] {
+	margin: 0;
+	padding: 8px 10px;
+	border-radius: var(--corner);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.select__list [role='option']:hover,
+.select__list [data-active] {
+	background: var(--panel-fill-2);
+}
+
+.select__list [aria-selected='true'] {
+	color: var(--panel-accent);
+}
+
+.select__list [aria-disabled='true'] {
+	background: none;
+	color: var(--panel-ink-2);
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .sfield input[type='number'] {
@@ -563,6 +659,86 @@ button.copy:hover {
 
 .sfield input[type='text'] {
 	width: 11ch;
+}
+
+/* The browser's own controls, drawn in one place. `:where`, so a component can still size them. Each sits on a dark
+   panel, in both themes. */
+:where(input[type='checkbox']) {
+	appearance: none;
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	border: 1px solid var(--panel-ink-2);
+	border-radius: var(--corner);
+	background: var(--panel-2) center / 100% no-repeat;
+	cursor: pointer;
+}
+
+:where(input[type='checkbox']:checked) {
+	border-color: var(--brand-on-dark);
+	background-color: var(--brand-on-dark);
+	/* The tick is --signal-ink: an image cannot read a variable. */
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%2304221a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:where(input[type='range']) {
+	appearance: none;
+	height: 24px;
+	margin: 0;
+	background: none;
+	cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: var(--corner);
+	background: var(--panel-fill-2);
+}
+
+input[type='range']::-moz-range-track {
+	height: 4px;
+	border-radius: var(--corner);
+	background: var(--panel-fill-2);
+}
+
+input[type='range']::-webkit-slider-thumb {
+	appearance: none;
+	width: 12px;
+	height: 20px;
+	margin-top: -8px;
+	border: 0;
+	border-radius: var(--corner);
+	background: var(--brand-on-dark);
+}
+
+input[type='range']::-moz-range-thumb {
+	width: 12px;
+	height: 20px;
+	border: 0;
+	border-radius: var(--corner);
+	background: var(--brand-on-dark);
+}
+
+:where(input[type='number']) {
+	appearance: textfield;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
+}
+
+/* Search's clear button: a drawn cross in the field's own colour. */
+input[type='search']::-webkit-search-cancel-button {
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	background:
+		linear-gradient(45deg, transparent 44%, currentColor 44% 56%, transparent 56%),
+		linear-gradient(-45deg, transparent 44%, currentColor 44% 56%, transparent 56%);
+	cursor: pointer;
 }
 
 /* ---- Buttons for a page's main actions, on paper (the landing pages) ---- */
@@ -575,7 +751,7 @@ button.copy:hover {
 	min-height: 44px;
 	padding: 10px 18px;
 	border: 1px solid transparent;
-	border-radius: 10px;
+	border-radius: var(--corner);
 	font: 600 0.9375rem/1 var(--display);
 	text-decoration: none;
 	cursor: pointer;
@@ -643,7 +819,7 @@ button.copy:hover {
 .install {
 	width: min(100%, 640px);
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
 	overflow: hidden;
@@ -662,7 +838,7 @@ button.copy:hover {
 	min-height: 36px;
 	padding: 8px 12px;
 	border: 0;
-	border-radius: 8px 8px 0 0;
+	border-radius: var(--corner) var(--corner) 0 0;
 	background: transparent;
 	color: var(--panel-ink-2);
 	font: 500 0.8125rem/1 var(--mono);
@@ -703,7 +879,7 @@ button.copy:hover {
 	margin: 0;
 	padding: 3px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 }
 
 .tswitch label {
@@ -712,7 +888,7 @@ button.copy:hover {
 	place-items: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	color: var(--ink-3);
 	cursor: pointer;
 	transition:
@@ -753,7 +929,9 @@ button.copy:hover {
 	.sframe .seg [role='radio'],
 	.install [role='tab'],
 	.sfield,
-	.sframe select,
+	select,
+	.select,
+	.select__list [role='option'],
 	button.copy,
 	.code__head button.copy {
 		min-height: 44px;

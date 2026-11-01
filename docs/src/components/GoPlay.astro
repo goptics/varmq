@@ -68,7 +68,7 @@ const html = await highlight(src, 'go', meta);
 		padding: 0.75rem 1rem;
 		/* The editor and the output are dark panels in both themes, like the code block they replace. */
 		border: 1px solid var(--panel-rule);
-		border-radius: 12px;
+		border-radius: var(--corner);
 		background: var(--panel);
 		color: var(--panel-ink);
 		caret-color: var(--panel-accent);
@@ -113,7 +113,7 @@ const html = await highlight(src, 'go', meta);
 		margin: 0.75rem 0 0;
 		padding: 0.75rem 1rem;
 		border: 1px solid var(--panel-rule);
-		border-radius: 12px;
+		border-radius: var(--corner);
 		background: var(--panel);
 		color: var(--panel-ink);
 		font-family: var(--mono);

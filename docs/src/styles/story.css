@@ -21,6 +21,8 @@
 @media (min-width: 1180px) {
 	:root:is([data-home], :has(.st)) {
 		--st-gutter: max(var(--gutter), 52px);
+		/* A rail of sprocket holes (.roll); what runs edge to edge keeps its controls clear of it. */
+		--roll-width: 36px;
 	}
 }
 
@@ -457,7 +459,7 @@
 .st-notes button:focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 }
 
 /* Each caption's point is a ring, like a goroutine's on the map and in the logo's green: its arc grows from the top
@@ -574,7 +576,7 @@
 	min-height: calc(2 * var(--pad) + 3 * var(--lh));
 	overflow: hidden;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
 	box-shadow: var(--shadow-md);
@@ -983,7 +985,7 @@
 		position: fixed;
 		top: 0;
 		bottom: 0;
-		width: 36px;
+		width: var(--roll-width);
 		margin: 0; /* the content stack's margin between siblings would push the right rail down */
 		z-index: calc(var(--z-nav) + 1);
 		overflow: hidden;

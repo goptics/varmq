@@ -18,8 +18,9 @@
 	--shadow-sm: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
 	--shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
 	--shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
-	/* A dark panel sits on the page like a card on a desk: a hard offset shadow in light, a hairline in dark. */
-	--panel-shadow: 6px 6px 0 0 var(--panel-drop);
+	/* A dark panel needs no shadow on the light paper: a hard offset in the paper chrome's colour would not show. In
+	   dark a hairline sets it off the dark paper. */
+	--panel-shadow: none;
 
 	--default-font-family: var(--display);
 	--default-mono-font-family: var(--mono);
@@ -121,13 +122,18 @@ body {
 	outline-offset: 3px;
 }
 
+/* The search dialog is this one field, which opens focused: its caret shows that, so a ring would only box it in. */
+input[aria-controls='fd-search-list']:focus-visible {
+	outline: none;
+}
+
 .codeblock :focus-visible {
 	outline-color: var(--signal);
 }
 
 #nd-sidebar,
 #nd-toc,
-.doc-body table,
+.doc-table,
 .doc-body pre {
 	scrollbar-width: thin;
 	scrollbar-color: var(--rule) transparent;
@@ -229,7 +235,7 @@ body {
 	counter-increment: job;
 	position: relative;
 	padding: 0.4rem 0.625rem 0.4rem 2.625rem !important;
-	border-radius: 2px;
+	border-radius: var(--corner);
 	color: var(--chrome-ink-2);
 	font-size: 0.9375rem;
 	line-height: 1.35;
@@ -293,12 +299,29 @@ body {
 	color: var(--signal-ink);
 }
 
+/* The other half of the notch. The label is an outline, so the mask only opens its dashed edge; the ring draws the
+   bite's rim, and the mask, which stops at the label's box, keeps the half on this side of the cut. */
 .shell-banner__label {
+	position: relative;
 	padding: 8px 12px;
 	border: 1px solid var(--ink);
 	border-inline-start: 1px dashed var(--ink);
 	color: var(--ink);
 	white-space: nowrap;
+	-webkit-mask: radial-gradient(circle at 0 50%, transparent 5px, black 5.5px);
+	mask: radial-gradient(circle at 0 50%, transparent 5px, black 5.5px);
+}
+
+.shell-banner__label::before {
+	content: '';
+	position: absolute;
+	inset-inline-start: -1px;
+	top: 50%;
+	width: 12px;
+	height: 12px;
+	border: 1px solid var(--ink);
+	border-radius: 50%;
+	translate: -50% -50%;
 }
 
 .shell-banner__rule {
@@ -441,7 +464,7 @@ body {
 .doc-body code:not(:where(.not-content *)) {
 	padding: 0.1em 0.375em;
 	border: 1px solid var(--rule);
-	border-radius: 2px;
+	border-radius: var(--corner);
 	background: var(--bar);
 	color: var(--ink);
 }
@@ -471,7 +494,7 @@ body {
 	padding: 0.1em 0.45em;
 	border: 1px solid var(--ink);
 	border-bottom-width: 2px;
-	border-radius: 2px;
+	border-radius: var(--corner);
 	background: var(--paper);
 	color: var(--ink);
 	line-height: 1.4;
@@ -490,16 +513,18 @@ body {
 }
 
 .doc-body img:not(:where(.not-content *)) {
-	border-radius: 2px;
+	border-radius: var(--corner);
 }
 
 /* Tables: a manifest. An ink rule over a mono head, hairline rows, tabular numerals, on plain paper. Wide ones
    scroll. */
-.doc-body table:not(:where(.not-content *)) {
-	display: block;
-	width: max-content;
-	max-width: 100%;
+/* A table fills the column, as everything else does; one too wide for it scrolls in its wrapper (components/fd/mdx.tsx). */
+.doc-table {
 	overflow-x: auto;
+}
+
+.doc-body table:not(:where(.not-content *)) {
+	width: 100%;
 	border-collapse: collapse;
 	border-top: 3px solid var(--chrome);
 	background: var(--paper);
@@ -586,7 +611,7 @@ body {
 	margin-block: 1.75rem;
 	overflow: hidden;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
 	font-family: var(--mono);
@@ -637,8 +662,9 @@ body {
 	display: inline;
 }
 
-/* Collapsed lines (lib/code-collapse.ts): a bar that opens in place. */
+/* Collapsed lines (lib/code-collapse.ts): a bar that opens in place. Visible, or Tailwind's `collapse` hides it. */
 .codeblock details.collapse {
+	visibility: visible;
 	display: block;
 	margin-inline: -1.125rem;
 	padding-inline: 1.125rem;
@@ -677,7 +703,7 @@ body {
 	inset-inline-end: 0.5rem;
 	padding: 0.375rem 0.625rem;
 	border: 1px solid var(--panel-rule);
-	border-radius: 2px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 	color: var(--panel-ink);
 	font: 500 0.75rem/1 var(--mono);
@@ -773,7 +799,7 @@ body {
 	text-decoration: underline;
 }
 
-/* Previous and next (components/shell/Pagination.astro): two tickets that lift on hover. */
+/* Previous and next (components/shell/Pagination.astro): two tickets that light up on hover. */
 .shell-pages {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
@@ -790,16 +816,12 @@ body {
 	text-decoration: none;
 	transition:
 		background-color 0.12s var(--ease),
-		color 0.12s var(--ease),
-		translate 0.12s var(--ease),
-		box-shadow 0.12s var(--ease);
+		color 0.12s var(--ease);
 }
 
 .shell-pages a:hover {
 	background: var(--signal);
 	color: var(--signal-ink);
-	translate: -3px -3px;
-	box-shadow: 4px 4px 0 0 var(--chrome);
 }
 
 .shell-pages__next {
@@ -899,12 +921,6 @@ body {
 	color: var(--signal-ink);
 }
 
-/* One shape for every main action, square-cornered like the ticket stub. No offset shadow: on paper chrome it
-   would be the paper's own colour, so the button would lift onto nothing. */
-:root .btn {
-	border-radius: 2px;
-}
-
 /* ---- Home ---- */
 
 /* Signage for the story's title and the sections' heads. The title keeps its size by the window, but never more than
@@ -948,8 +964,34 @@ body {
 	animation: shell-ticker 60s linear infinite;
 }
 
-.shell-ticker:hover .shell-ticker__track {
+.shell-ticker:is(:hover, [data-paused]) .shell-ticker__track {
 	animation-play-state: paused;
+}
+
+/* The ticker's end: a stub in the job chips' colours, so it reads as part of the board. */
+.shell-ticker__pause {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-end: var(--roll-width, 0);
+	/* Wide enough for Pause, so it keeps its width as it turns to Play. */
+	min-width: 6.5em;
+	padding-inline: 16px;
+	border: 0;
+	background: var(--signal-ink);
+	color: var(--signal);
+	font: 600 0.75rem/1 var(--mono);
+	letter-spacing: inherit;
+	text-transform: inherit;
+	cursor: pointer;
+}
+
+.shell-ticker__pause:hover {
+	background: color-mix(in srgb, var(--signal-ink) 82%, var(--signal));
+}
+
+.shell-ticker__pause:focus-visible {
+	outline: 2px solid var(--signal);
+	outline-offset: -5px;
 }
 
 .shell-ticker ul {
@@ -999,6 +1041,10 @@ body {
 	.shell-ticker__track {
 		animation: none;
 	}
+	/* Nothing moves, so there is nothing to pause. */
+	.shell-ticker__pause {
+		display: none;
+	}
 }
 
 /* ---- 404 ---- */
@@ -1024,6 +1070,13 @@ body {
 @media (pointer: coarse) {
 	.codeblock__copy {
 		min-width: 44px;
+		min-height: 44px;
+	}
+
+	/* Links that stand alone: the page's edit link, and a library's name heading a table's row or column. */
+	:is(.shell-meta, .btable__t th, .mx__table thead th) > a {
+		display: inline-flex;
+		align-items: center;
 		min-height: 44px;
 	}
 }

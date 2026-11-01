@@ -33,7 +33,7 @@
 	min-width: 56px;
 	height: 30px;
 	padding: 0 10px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -79,7 +79,7 @@
 	min-width: 16px;
 	height: 16px;
 	padding: 0 3px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-ink);
 	color: var(--panel);
 	font-size: 0.625rem;
@@ -94,7 +94,7 @@
 	gap: 8px;
 	min-height: 60px;
 	padding: 16px 12px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 }
 
@@ -159,7 +159,7 @@
 .ga-tag {
 	padding: 2px 6px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	color: var(--panel-ink-2);
 	font-size: 0.6875rem;
 	white-space: nowrap;
@@ -193,7 +193,7 @@
 	gap: 8px;
 	min-height: 40px;
 	padding: 4px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 }
 
@@ -239,7 +239,7 @@
 	min-width: 0;
 	padding: 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 }
 
@@ -316,7 +316,7 @@
 	align-items: center;
 	gap: 4px 10px;
 	padding: 6px 8px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 	overflow-wrap: anywhere;
 }
@@ -404,7 +404,7 @@
 	margin: 0;
 	padding: 10px 0;
 	overflow-x: auto;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 	border: 1px solid var(--panel-rule);
 	color: var(--panel-ink);

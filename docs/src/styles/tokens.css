@@ -69,8 +69,6 @@
 	/* Translucent fills for controls and tracks on a dark panel. */
 	--panel-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
 	--panel-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
-	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow): the chrome's green. */
-	--panel-drop: var(--chrome);
 
 	/* Reading and interface text. */
 	--display: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -80,6 +78,8 @@
 
 	--gutter: clamp(16px, 4vw, 40px);
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	/* The site's one corner, the ticket stub's: a panel, a button, a field and a card all take it. */
+	--corner: 2px;
 }
 
 :root[data-theme='dark'] {

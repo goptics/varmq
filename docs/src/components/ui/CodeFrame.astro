@@ -7,7 +7,7 @@ interface Props {
 	html?: string;
 	[attr: string]: unknown;
 }
-const { title, html, class: cls, style: _style, ...rest } = Astro.props;
+const { title, html, class: cls, style: _style, icon: _icon, ...rest } = Astro.props;
 ---
 
 <figure class:list={['codeblock', 'not-content not-prose', 'not-prose', { 'has-title': !!title }]}>

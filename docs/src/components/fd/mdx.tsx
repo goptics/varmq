@@ -1,7 +1,7 @@
 // The components the docs' MDX gets beyond HTML (pages/[...slug].astro). `:::note` and `:::caution` become
 // CalloutContainer (remarkDirectiveAdmonition, astro.config.mjs), drawn as the docs' asides (fd-theme.css, "Callout").
 // Rendered on the server only: none of them needs the browser.
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 const kinds: Record<string, { name: string; title: string }> = {
 	info: { name: 'note', title: 'Note' },
@@ -30,4 +30,12 @@ function CalloutDescription({ children }: { children?: ReactNode }) {
 	return <div className="doc-aside__content">{children}</div>;
 }
 
-export const mdxComponents = { CalloutContainer, CalloutTitle, CalloutDescription };
+function table(props: ComponentProps<'table'>) {
+	return (
+		<div className="doc-table">
+			<table {...props} />
+		</div>
+	);
+}
+
+export const mdxComponents = { CalloutContainer, CalloutTitle, CalloutDescription, table };

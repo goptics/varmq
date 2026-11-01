@@ -43,7 +43,7 @@
 .home-jobs :focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 }
 
 .home-jobs .on-dark :focus-visible {
@@ -182,7 +182,7 @@
 	background-image: radial-gradient(circle, var(--vm-dot) 0.8px, transparent 1.2px);
 	background-size: 14px 14px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 }
 
 .home-jobs .vm-mini-svg {
@@ -441,7 +441,7 @@
 
 .home-jobs .rlane__track {
 	height: 18px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--bar-2);
 	overflow: hidden;
 }
@@ -449,7 +449,7 @@
 .home-jobs .rlane__bar {
 	display: block;
 	height: 100%;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: color-mix(in srgb, var(--ink) 38%, transparent);
 	transform-origin: left center;
 	transform: scaleX(var(--s, 1));
@@ -551,7 +551,7 @@
 	margin-top: clamp(28px, 4vw, 44px);
 	padding: 0 20px;
 	border: 1px solid color-mix(in srgb, var(--trade) 50%, var(--rule));
-	border-radius: 10px;
+	border-radius: var(--corner);
 	background: var(--bar);
 	max-width: 880px;
 }
@@ -778,7 +778,7 @@
 .home-jobs .ex__play textarea:focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: -2px;
-	border-radius: 0 0 12px 12px;
+	border-radius: 0 0 var(--corner) var(--corner);
 }
 
 .home-jobs .ex__hint {
@@ -840,7 +840,7 @@
 	min-width: 0;
 	min-height: 160px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
 	overflow: hidden;

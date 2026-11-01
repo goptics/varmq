@@ -4,6 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import type { GetStaticPaths } from 'astro';
 import Base from '../layouts/Base.astro';
+import CodeFrame from '../components/ui/CodeFrame.astro';
 import PageTitle from '../components/shell/PageTitle.astro';
 import Footer from '../components/shell/Footer.astro';
 import Pagination from '../components/shell/Pagination.astro';
@@ -34,7 +35,7 @@ try {
 	<Docs client:load pathname={Astro.url.pathname} params={Astro.params} tree={tree} toc={toc} logo={{ light: logoLight, dark: logoDark }}>
 		<PageTitle url={page.url} title={page.data.title} />
 		<div class="prose doc-body">
-			<Content components={mdxComponents} />
+			<Content components={{ ...mdxComponents, pre: CodeFrame }} />
 		</div>
 		<div class="shell-meta not-prose">
 			<a href={editUrl}>Edit page</a>
