@@ -1,8 +1,8 @@
-/* Docs shell theme: Fumadocs dressed as transit signage for a dispatcher (docs/DESIGN.md, "The idea"), with the tokens in tokens.css.
+/* Docs shell theme: Fumadocs dressed as signage for a dispatcher, in the mascot's greens (docs/DESIGN.md, "The idea"), with the tokens in tokens.css.
    layouts/Base.astro loads it after Tailwind and Fumadocs, which sit in cascade layers, so these rules win. Every
    custom class starts with `shell-` or `doc-`. The prose rules skip `.not-content`, so scene markup is never touched.
 
-   The pieces, in order: Fumadocs' variables; the page (white paper over a dot-matrix grid); the ultramarine chrome
+   The pieces, in order: Fumadocs' variables; the page (white paper over a dot-matrix grid); the green chrome
    (header, sidebar as a departure board); the page title (a ticket stub) and numbered sections; prose; callouts; code; table of
    contents; the page's end; buttons; the home page; the 404 page. */
 
@@ -56,7 +56,7 @@
 	--color-fd-success: var(--brand);
 }
 
-/* The ultramarine chrome: the same sign in both themes. Its own text and line colours stand in for the page's. */
+/* The green chrome: the same sign in both themes. Its own text and line colours stand in for the page's. */
 #nd-sidebar,
 #nd-sidebar-mobile,
 #nd-subnav,
@@ -131,7 +131,7 @@ body {
 	scrollbar-color: var(--rule) transparent;
 }
 
-/* The logo: on the ultramarine chrome it is white, as a sign's lettering. */
+/* The logo: on the green chrome it is white, as a sign's lettering. */
 .shell-logo {
 	display: block;
 	height: 28px;
@@ -194,7 +194,7 @@ body {
 }
 
 /* Each page is a row on the board: its job number under its heading, as its banner shows it
-   (components/shell/PageTitle.astro), then its name. The page you are on is the lit row: navy on sign yellow. */
+   (components/shell/PageTitle.astro), then its name. The page you are on is the lit row, in the mascot's bright green. */
 :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name) {
 	counter-increment: job;
 	position: relative;
@@ -363,7 +363,7 @@ body {
 	line-height: 1.3;
 }
 
-/* Links: ink, over a yellow highlighter stroke that fills on hover. */
+/* Links: ink, over a green highlighter stroke that fills on hover. */
 .doc-body a:not(:where(.not-content *)) {
 	color: var(--ink);
 	font-weight: 500;
@@ -495,7 +495,8 @@ body {
 }
 
 /* ---- Callout (`:::note`, `:::caution`; components/fd/mdx.tsx) ----
-   A slip on the page: a label tab, then the text. A caution has hazard tape down its edge. The label says which kind
+   A slip on the page: a label tab, then the text. A caution has hazard tape (amber and
+   ink) down its edge. The label says which kind
    it is, so colour is never the only signal. */
 
 .doc-aside {
@@ -520,7 +521,7 @@ body {
 
 .doc-aside--caution,
 .doc-aside--danger {
-	--aside: repeating-linear-gradient(-45deg, var(--signal) 0 6px, var(--signal-ink) 6px 12px);
+	--aside: repeating-linear-gradient(-45deg, var(--hot) 0 6px, var(--ink) 6px 12px);
 }
 
 .doc-aside__title {
@@ -536,7 +537,7 @@ body {
 
 .doc-aside--caution .doc-aside__title,
 .doc-aside--danger .doc-aside__title {
-	background: var(--signal);
+	background: var(--hot);
 	color: var(--signal-ink);
 }
 

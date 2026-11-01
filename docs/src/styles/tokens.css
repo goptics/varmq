@@ -1,49 +1,49 @@
 /* VarMQ docs design tokens. Shared by every page (layouts/Base.astro) and by any page that follows docs/DESIGN.md.
    Change a value here, not in a page stylesheet.
 
-   The identity is transit signage for a job dispatcher (docs/DESIGN.md, "The idea"): a dot-matrix grid on white
-   paper, condensed sign lettering, and the colours of a motorway sign. Ultramarine is the structure (the header, the
-   sidebar), sign yellow the signal (the page you are on, the primary action, a link's marker), coral the numbering
-   and the warnings. Green, the logo's, stays the colour of a worker and of what is running. The scenes and the code
-   are deep navy panels in both themes. */
+   The identity is signage for a job dispatcher (docs/DESIGN.md, "The idea"), in the mascot's colours: every green
+   here is the logo's (assets/logo-light.svg #2e9c7f, logo-dark.svg #44bf9e), deepened or lit. A deep logo green is
+   the structure (the header, the sidebar); the bright logo green is the signal (the page you are on, the primary
+   action, a link's marker); amber, the colour every scene gives a job, numbers the sections. The scenes and the code
+   are green-black panels in both themes. */
 
 :root {
 	color-scheme: light;
 
 	--paper: #fbf8f1;
-	--bar: #f1ede2;
-	--bar-2: #e6e1d3;
-	--ink: #0f1235;
-	--ink-2: #3b3f66;
-	--ink-3: #575b80;
-	--rule: #d9d4c6;
-	/* The dot-matrix grid behind the page: ultramarine dots. */
-	--dot: color-mix(in srgb, var(--chrome) 20%, transparent);
+	--bar: #f0ede3;
+	--bar-2: #e5e1d4;
+	--ink: #0c1f19;
+	--ink-2: #364a43;
+	--ink-3: #52665e;
+	--rule: #d8d4c6;
+	/* The dot-matrix grid behind the page: logo-green dots. */
+	--dot: color-mix(in srgb, var(--brand) 26%, transparent);
 
-	/* The structure: the header and the sidebar, white on ultramarine (7.6:1). */
-	--chrome: #2531d6;
-	--chrome-2: #1d27b0;
-	--chrome-3: #3a46f0;
+	/* The structure: the header and the sidebar, white on the logo's green deepened (7.4:1). */
+	--chrome: #0f5a48;
+	--chrome-2: #0b4a3b;
+	--chrome-3: #17735c;
 	--chrome-ink: #ffffff;
-	--chrome-ink-2: #c8ccff;
+	--chrome-ink-2: #bfe6d8;
 	--chrome-rule: color-mix(in srgb, #ffffff 18%, var(--chrome));
-	/* A page title: ultramarine on paper; on the dark paper a light periwinkle (7:1). */
+	/* A page title: the chrome's green on paper; on the dark paper the bright logo green. */
 	--title: var(--chrome);
 
-	/* The signal: sign yellow, always under --signal-ink. On paper it is a fill or a marker, never text. */
-	--signal: #ffd60a;
-	--signal-ink: #0f1235;
-	/* Coral: section numbers, list markers, warnings' labels. --hot-text is its text on paper (5.1:1). */
-	--hot: #ff5a36;
-	--hot-text: #c4330f;
-	/* Running and failed, as text on a --signal fill (the home page's ticker): 5:1 and more. */
-	--on-signal-go: #0b5a45;
-	--on-signal-stop: #b3260a;
+	/* The signal: the dark logo's bright green, always under --signal-ink (8:1). A fill or a marker, never text. */
+	--signal: #44bf9e;
+	--signal-ink: #04221a;
+	/* Amber, a job's colour: section numbers, list markers, the TOC's marker. --hot-text is its text on paper (5:1). */
+	--hot: #f0a020;
+	--hot-text: #965800;
 	/* Kept for the scenes, which name it. */
 	--signal-text: var(--hot-text);
+	/* Status text on a --signal fill (the home page's ticker). */
+	--on-signal-go: #04221a;
+	--on-signal-stop: #7a1500;
 
-	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f is
-	   enough for marks and fills, so text takes the same hue darker. */
+	/* Each theme's green is its own logo's. On paper the logo's #2e9c7f is enough for marks and fills, so text takes
+	   the same hue darker. */
 	--accent-text: #06735a;
 
 	--brand: #2e9c7f;
@@ -52,21 +52,20 @@
 	/* The dark logo's green: the brand in dark, and on a dark panel in both themes (ui.css). */
 	--brand-on-dark: #44bf9e;
 	--brand-hover-on-dark: #5dd0b0;
-	--amber: #ffc53d;
-	--cobalt: #9db0ff;
+	--amber: #f0b24a;
+	--cobalt: #8fb0ff;
 	--danger: #ff8d7a;
 
-	--panel: #0f1238;
-	--panel-2: #161a4a;
-	--panel-ink: #eef0ff;
-	--panel-ink-2: #a9aed9;
-	--panel-rule: #2a2f6e;
+	--panel: #0b1a16;
+	--panel-2: #11251f;
+	--panel-ink: #e8f4ef;
+	--panel-ink-2: #9fbcb1;
+	--panel-rule: #23403a;
 	--panel-accent: #5fd4b2;
 	/* Translucent fills for controls and tracks on a dark panel. */
 	--panel-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
 	--panel-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
-	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow): ultramarine, like a print
-	   that slipped. */
+	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow): the chrome's green. */
 	--panel-drop: var(--chrome);
 
 	/* Reading and interface text. */
@@ -81,24 +80,24 @@
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--paper: #090b22;
-	--bar: #10133a;
-	--bar-2: #181c4c;
-	--ink: #eef0ff;
-	--ink-2: #c3c7ee;
-	--ink-3: #9196c6;
-	--rule: #232861;
-	--dot: color-mix(in srgb, var(--chrome-3) 26%, transparent);
-	--chrome: #1a22a8;
-	--chrome-2: #141b8a;
-	--title: #9aa2ff;
-	--hot-text: #ff7a59;
+	--paper: #08130f;
+	--bar: #0e1d18;
+	--bar-2: #142821;
+	--ink: #e6f2ed;
+	--ink-2: #b5cdc4;
+	--ink-3: #8aa69b;
+	--rule: #1f3831;
+	--dot: color-mix(in srgb, var(--brand) 22%, transparent);
+	--chrome: #0d4a3c;
+	--chrome-2: #093c30;
+	--title: #5fd4b2;
+	--hot-text: #ffb84d;
 	--accent-text: #5fd4b2;
 	--brand: var(--brand-on-dark);
 	--brand-hover: var(--brand-hover-on-dark);
-	--panel: #0e1135;
-	--panel-2: #151948;
-	--panel-rule: #2b3072;
+	--panel: #0b1a16;
+	--panel-2: #11251f;
+	--panel-rule: #24433b;
 }
 
 
@@ -108,7 +107,7 @@
 	/* On paper. */
 	--tk-k: #9d2f6b;
 	--tk-s: #8a5300;
-	--tk-c: #575b80;
+	--tk-c: #52665e;
 	--tk-n: #8a5300;
 	--tk-f: #1b6d56;
 	--tk-t: #3a4fb5;
@@ -116,9 +115,9 @@
 
 	/* On a dark panel (scene frames and code cards). `ui.css` pins `--tk-*` to these inside a panel. */
 	--tk-k-on-dark: #ff8fb8;
-	--tk-s-on-dark: #ffc53d;
-	--tk-c-on-dark: #9196c6;
-	--tk-n-on-dark: #ffc53d;
+	--tk-s-on-dark: #f0b24a;
+	--tk-c-on-dark: #8aa69b;
+	--tk-n-on-dark: #f0b24a;
 	--tk-f-on-dark: #5fd4b2;
 	--tk-t-on-dark: #8fb0ff;
 	--tk-b-on-dark: #8fb0ff;
