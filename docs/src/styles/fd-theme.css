@@ -328,7 +328,7 @@ input[aria-controls='fd-search-list']:focus-visible {
 	top: 50%;
 	width: 12px;
 	height: 12px;
-	border: 1px solid var(--ink);
+	border: 1px dotted var(--ink);
 	border-radius: 50%;
 	translate: -50% -50%;
 }
