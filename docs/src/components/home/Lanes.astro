@@ -3,6 +3,8 @@
 // counts the bars and values up from `data-v`, `data-dec` and `data-suffix`.
 export interface Lane {
 	name: string;
+	/** The library's source; none for VarMQ and the channel baselines. */
+	href?: string;
 	varmq: boolean;
 	/** The bar's share of the longest. */
 	s: string;
@@ -31,7 +33,7 @@ const { title, unit, head, lanes } = Astro.props;
 		{
 			lanes.map((l) => (
 				<li class:list={['rlane', { 'is-varmq': l.varmq }]}>
-					<span class="rlane__name">{l.name}</span>
+					<span class="rlane__name">{l.href ? <a href={l.href} target="_blank" rel="noopener">{l.name}<span class="sr-only"> (opens in a new tab)</span></a> : l.name}</span>
 					<span class="rlane__track" aria-hidden="true"><span class="rlane__bar" style={`--s:${l.s}`} /></span>
 					<span class="rlane__val" data-v={l.v} data-dec={l.dec} data-suffix={l.suffix}>{l.text}</span>
 					<span class="rlane__x">{l.x}</span>
