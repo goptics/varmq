@@ -136,3 +136,40 @@
 	--tk-t: var(--tk-t-on-dark);
 	--tk-b: var(--tk-b-on-dark);
 }
+
+/* ---- Theme variant: paper chrome, mascot glow ----
+   No coloured chrome: the header and the sidebar are paper too, set apart by a hairline and the bright mascot-green
+   edge. No pattern either: the page is lit by two soft lights fixed to the window, the mascot's green from the top
+   right and a job's amber from the bottom left. */
+
+:root {
+	--page-pattern:
+		radial-gradient(60rem 42rem at 92% -8%, color-mix(in srgb, var(--brand) 20%, transparent), transparent 70%),
+		radial-gradient(52rem 40rem at -8% 108%, color-mix(in srgb, var(--hot) 16%, transparent), transparent 70%);
+	--page-pattern-size: 100% 100%;
+	--page-pattern-attach: fixed;
+
+	--chrome: #f4f1e8;
+	--chrome-2: #e9e5d8;
+	--chrome-3: #dfdacb;
+	--chrome-ink: #0c1f19;
+	--chrome-ink-2: #364a43;
+	--chrome-rule: #d8d4c6;
+	--chrome-scheme: light;
+	--chrome-logo: none;
+	--chrome-logo-light: block;
+	--chrome-logo-dark: none;
+	--title: #0f5a48;
+}
+
+:root[data-theme='dark'] {
+	--chrome: #0c1814;
+	--chrome-2: #12231d;
+	--chrome-3: #183029;
+	--chrome-ink: #e6f2ed;
+	--chrome-ink-2: #b5cdc4;
+	--chrome-rule: #1f3831;
+	--chrome-scheme: dark;
+	--chrome-logo-light: none;
+	--chrome-logo-dark: block;
+}
