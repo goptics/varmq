@@ -33,6 +33,23 @@ const NAMES: Record<string, string> = {
 };
 const name = (s: string) => NAMES[s] ?? s;
 
+// Each library's name links to its source; VarMQ and the channel baselines have no link.
+const LINKS: Record<string, string> = {
+	ErrGroup: 'https://pkg.go.dev/golang.org/x/sync/errgroup',
+	Ants: 'https://github.com/panjf2000/ants',
+	Gopool: 'https://github.com/bytedance/gopkg/tree/main/util/gopool',
+	Conc: 'https://github.com/sourcegraph/conc',
+	WorkerPool: 'https://github.com/gammazero/workerpool',
+	Pond: 'https://github.com/alitto/pond',
+	Asynq: 'https://github.com/hibiken/asynq',
+	GocraftWork: 'https://github.com/gocraft/work',
+	Taskq: 'https://github.com/vmihailenco/taskq',
+	Rmq: 'https://github.com/adjust/rmq',
+	Goqite: 'https://github.com/maragudk/goqite',
+	Backlite: 'https://github.com/mikestefanello/backlite',
+	River: 'https://github.com/riverqueue/river',
+};
+
 // One lane per library: its bar is its share of the longest, and its last column its value divided by VarMQ's.
 const lanes = (c: Chart, opts: { dec?: number; suffix?: string; div?: number } = {}): Lane[] => {
 	const { dec = 0, suffix = '', div = 1 } = opts;
@@ -40,6 +57,7 @@ const lanes = (c: Chart, opts: { dec?: number; suffix?: string; div?: number } =
 	const base = c.lanes.find((l) => l.subject === 'VarMQ')!.value;
 	return c.lanes.map((l) => ({
 		name: name(l.subject),
+		href: LINKS[l.subject],
 		varmq: l.subject === 'VarMQ',
 		s: (l.value / max).toFixed(4),
 		v: l.value / div,

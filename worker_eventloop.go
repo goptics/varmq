@@ -41,7 +41,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				}
 			}
 		}
-	}(w.ctx, w.eventLoopSignal)
+	}(w.Context(), w.eventLoopSignal)
 }
 
 // maxBatch caps how many jobs one wake-up hands to a worker.
