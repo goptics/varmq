@@ -670,26 +670,8 @@
 	container-type: inline-size;
 }
 
-.st-frame::before,
-.st-frame::after {
-	content: '';
-	position: absolute;
-	z-index: 1;
-	right: 0;
-	left: 0;
-	height: 6%;
-	pointer-events: none;
-}
-
-.st-frame::before {
-	top: 0;
-	background: linear-gradient(var(--paper), transparent);
-}
-
-.st-frame::after {
-	bottom: 0;
-	background: linear-gradient(transparent, var(--paper));
-}
+/* The map's own mask feathers its edges (lib/heromap/map.css), so the light behind the story (fd-theme.css, "Home")
+   shows through with no paper band at the frame's top and bottom. */
 
 .st varmq-map {
 	display: block;
@@ -1015,24 +997,14 @@
 		--hole: oklch(from var(--paper) calc(l * 0.78) calc(c * 0.78) h);
 	}
 
-	:root:is([data-home], :has(.st)) .page > header.header {
-		padding-inline: 52px;
-	}
-
-	/* Starlight isolates the main pane, which would keep the rails under the header whatever their z-index. The home
-	   page has no sidebar for that isolation to protect. */
-	:root:is([data-home], :has(.st)) .main-pane {
-		isolation: auto;
-	}
-
 	.roll--l {
 		left: 0;
-		border-right: 1px dashed var(--rule);
+		border-right: 1px solid var(--rule);
 	}
 
 	.roll--r {
 		right: 0;
-		border-left: 1px dashed var(--rule);
+		border-left: 1px solid var(--rule);
 	}
 
 	/* The holes, a pitch past the rail at each end, so an offset of up to one pitch never shows an edge. */

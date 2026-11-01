@@ -3,12 +3,21 @@ import { loader } from 'fumadocs-core/source';
 import type * as PageTree from 'fumadocs-core/page-tree';
 import { toFumadocsSource } from '@fumadocs/astro/source';
 
-// Every page URL ends with a slash, as the site has always served them (gh-pages serves /a/b/index.html at /a/b/).
 export const source = loader({
 	source: toFumadocsSource(await getCollection('docs'), await getCollection('meta')),
 	baseUrl: '/',
-	url: (slugs) => (slugs.length === 0 ? '/' : `/${slugs.join('/')}/`),
 });
+
+/**
+ * A page's link as the site has always served it, with a trailing slash (gh-pages serves /a/b/index.html at /a/b/).
+ * Fumadocs drops the slash from its URLs, so the sidebar, the previous and next links and search results add it back.
+ */
+export function withSlash(url: string): string {
+	if (!url.startsWith('/')) return url;
+	const [path, hash] = url.split('#');
+	const slashed = path.endsWith('/') ? path : `${path}/`;
+	return hash === undefined ? slashed : `${slashed}#${hash}`;
+}
 
 /** The sidebar, with a page's `sidebar.label` in its frontmatter in place of its title where it has one. */
 export function sidebarTree(): PageTree.Root {
@@ -21,7 +30,7 @@ export function sidebarTree(): PageTree.Root {
 	);
 	const relabel = (nodes: PageTree.Node[]): PageTree.Node[] =>
 		nodes.map((node) => {
-			if (node.type === 'page' && labels.has(node.url)) return { ...node, name: labels.get(node.url)! };
+			if (node.type === 'page') return { ...node, url: withSlash(node.url), name: labels.get(node.url) ?? node.name };
 			if (node.type === 'folder') return { ...node, children: relabel(node.children) };
 			return node;
 		});

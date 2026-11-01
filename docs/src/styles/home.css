@@ -113,7 +113,7 @@
 
 .home-jobs .banner__rule {
 	flex: 1;
-	border-top: 1px dashed var(--rule);
+	border-top: 1px solid var(--rule);
 	min-width: 16px;
 }
 
@@ -381,7 +381,7 @@
 	gap: 12px;
 	margin-bottom: 14px;
 	padding-bottom: 10px;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 }
 
 .home-jobs .rg__title h3 {
@@ -688,7 +688,7 @@
 	gap: 8px;
 	min-height: 36px;
 	padding: 0 16px;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 	font: 400 0.75rem/1.2 var(--mono);
 	color: var(--ink-3);
 	cursor: pointer;
@@ -886,7 +886,7 @@
 }
 
 .home-jobs .index li {
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 }
 
 .home-jobs .index a {
@@ -962,7 +962,7 @@
 .home-jobs .tear::after {
 	content: '';
 	flex: 1;
-	border-top: 2px dotted var(--rule);
+	border-top: 1px solid var(--rule);
 }
 
 .home-jobs .close {
@@ -977,7 +977,7 @@
 	gap: 12px;
 }
 
-/* The closing has the page's one tear line, so the footer's is not shown here; a dashed rule starts the footer. */
+/* The closing has the page's one tear line, so the footer's is not shown here; a rule starts the footer. */
 :root:is([data-home], :has(.st)) .shell-tear {
 	display: none;
 }
@@ -985,7 +985,7 @@
 :root:is([data-home], :has(.st)) .shell-foot {
 	margin-top: 0;
 	padding-top: 40px;
-	border-top: 1px dashed var(--rule);
+	border-top: 1px solid var(--rule);
 }
 
 /* ---- Motion ---- */

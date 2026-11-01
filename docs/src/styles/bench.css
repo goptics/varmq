@@ -1,5 +1,5 @@
 /* Benchmarks page. The explorer is a dark panel in both themes (docs/DESIGN.md: simulation panels).
-   Every rule is scoped under .bench so nothing leaks into the Starlight shell.
+   Every rule is scoped under .bench so nothing leaks into the docs shell.
    The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
    Tabs and buttons are the shared `seg` and `pbtn` (ui.css). */
 

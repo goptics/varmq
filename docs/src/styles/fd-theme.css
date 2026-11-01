@@ -15,6 +15,8 @@
 	--shadow-sm: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
 	--shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
 	--shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
+	/* The dark panels lift off the light page; in dark they sit in it. */
+	--panel-shadow: 0 1px 0 0 color-mix(in srgb, white 6%, transparent) inset, 0 24px 48px -28px rgb(17 20 19 / 0.45);
 
 	--default-font-family: var(--display);
 	--default-mono-font-family: var(--mono);
@@ -48,7 +50,7 @@
 	--color-fd-success: var(--brand);
 }
 
-/* ---- Page: paper stripes behind everything, plain paper under text ---- */
+/* ---- Page: one plain surface; the scenes and the code are the only dark panels ---- */
 
 html {
 	scroll-behavior: smooth;
@@ -58,7 +60,6 @@ html {
 
 body {
 	background-color: var(--paper);
-	background-image: repeating-linear-gradient(to bottom, transparent 0 48px, var(--bar) 48px 96px);
 	color: var(--ink);
 	font-family: var(--display);
 	font-size: 1.0625rem;
@@ -96,9 +97,9 @@ body {
 /* ---- Header (home and 404) ---- */
 
 #nd-nav > div {
-	border-bottom: 1px dashed var(--rule);
-	background: var(--paper);
-	backdrop-filter: none;
+	border-bottom: 1px solid var(--rule);
+	background: color-mix(in srgb, var(--paper) 82%, transparent);
+	backdrop-filter: saturate(1.4) blur(12px);
 }
 
 #nd-nav nav a:not([aria-label]) {
@@ -110,7 +111,7 @@ body {
 
 #nd-sidebar {
 	background: var(--paper);
-	border-inline-end: 1px dashed var(--rule);
+	border-inline-end: 1px solid var(--rule);
 }
 
 /* The logo in the sidebar's head (components/fd/layout.tsx): one per theme. */
@@ -129,20 +130,23 @@ body {
 	display: block;
 }
 
-/* Group headings: mono caps. */
+/* Group headings: mono caps. Each one restarts the job count its pages show. */
 #nd-sidebar p:has(> .fd-page-tree-item-name) {
-	margin-top: 1.5rem;
-	color: var(--ink-3);
-	font: 500 0.75rem/1.3 var(--mono);
-	letter-spacing: 0.1em;
+	counter-reset: job;
+	margin-top: 1.75rem;
+	color: var(--ink);
+	font: 600 0.6875rem/1.3 var(--mono);
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
 }
 
-/* Each link carries a small square: hollow for a page, filled for the page you are on. */
+/* Each page carries its job number under its heading, as its banner does (components/shell/PageTitle.astro). The page
+   you are on has a green bar and number. */
 #nd-sidebar a[data-active]:has(> .fd-page-tree-item-name) {
+	counter-increment: job;
 	position: relative;
-	padding: 0.4rem 0.625rem 0.4rem 1.75rem !important;
-	border-radius: 8px;
+	padding: 0.375rem 0.625rem 0.375rem 2.5rem !important;
+	border-radius: 6px;
 	color: var(--ink-2);
 	font-size: 0.9375rem;
 	line-height: 1.35;
@@ -152,17 +156,15 @@ body {
 }
 
 #nd-sidebar a[data-active]:has(> .fd-page-tree-item-name)::before {
-	content: '';
+	content: counter(job, decimal-leading-zero);
 	position: absolute;
-	inset-inline-start: 0.625rem;
-	top: 0.75em;
-	width: 0.5rem;
-	height: 0.5rem;
-	border: 1px solid var(--ink-3);
-	border-radius: 2px;
-	transition:
-		background-color 0.15s var(--ease),
-		border-color 0.15s var(--ease);
+	inset-inline-start: 0.75rem;
+	top: 50%;
+	translate: 0 -50%;
+	color: var(--ink-3);
+	font: 500 0.6875rem/1 var(--mono);
+	font-variant-numeric: tabular-nums;
+	transition: color 0.15s var(--ease);
 }
 
 #nd-sidebar a[data-active]:has(> .fd-page-tree-item-name):hover {
@@ -170,32 +172,25 @@ body {
 	color: var(--ink);
 }
 
-#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name):hover::before {
-	border-color: var(--accent-text);
-}
-
-#nd-sidebar a[data-active='true'],
-#nd-sidebar a[data-active='true']:hover {
-	background: var(--bar-2);
+#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name),
+#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name):hover {
+	background: color-mix(in srgb, var(--brand) 10%, var(--paper));
 	color: var(--ink);
-	font-weight: 650;
+	font-weight: 600;
 }
 
-#nd-sidebar a[data-active='true']::before {
+#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name)::before {
+	color: var(--accent-text);
+}
+
+#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name)::after {
+	content: '';
+	position: absolute;
+	inset-block: 0.4rem;
+	inset-inline-start: 0;
+	width: 2px;
+	border-radius: 2px;
 	background: var(--brand);
-	border-color: var(--brand);
-}
-
-/* ---- The sheet: the article sits on a plain paper column with perforated edges ---- */
-
-#nd-page {
-	background: var(--paper);
-}
-
-@media (min-width: 50rem) {
-	#nd-page {
-		border-inline: 1px dashed var(--rule);
-	}
 }
 
 /* ---- Page title: the JOB banner, then the h1 ---- */
@@ -203,8 +198,8 @@ body {
 .shell-banner {
 	display: flex;
 	align-items: center;
-	gap: 14px;
-	margin: 0 0 1.25rem;
+	gap: 10px;
+	margin: 0 0 1rem;
 	color: var(--ink-3);
 	font: 500 0.75rem/1 var(--mono);
 	letter-spacing: 0.08em;
@@ -212,33 +207,52 @@ body {
 }
 
 .shell-banner__id {
-	padding: 5px 8px;
-	border-radius: 4px;
-	background: var(--ink);
-	color: var(--paper);
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 5px 9px;
+	border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--rule));
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--brand) 9%, var(--paper));
+	color: var(--accent-text);
 	letter-spacing: 0.1em;
 	white-space: nowrap;
+}
+
+/* A live dot: this job is the one running. */
+.shell-banner__id::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--brand);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 
 .shell-banner__label {
 	white-space: nowrap;
 }
 
+.shell-banner__label::before {
+	content: '/';
+	margin-inline-end: 10px;
+	color: var(--ink-3);
+	opacity: 0.5;
+}
+
 .shell-banner__rule {
-	flex: 1;
-	min-width: 16px;
-	border-top: 1px dashed var(--rule);
+	display: none;
 }
 
 .doc-title {
-	margin: 0 0 1.5rem;
+	margin: 0 0 2rem;
 	color: var(--ink);
 	font-family: var(--display);
 	font-size: var(--local-h1);
 	font-weight: 700;
 	font-variation-settings: 'opsz' 96;
-	letter-spacing: -0.035em;
-	line-height: 0.98;
+	letter-spacing: -0.04em;
+	line-height: 0.96;
 	text-wrap: balance;
 }
 
@@ -275,11 +289,11 @@ body {
 	scroll-margin-top: calc(var(--fd-docs-row-1, 0px) + 1.5rem);
 }
 
-/* A new h2 starts a new section: a perforation above it, and room. */
+/* A new h2 starts a new section: room above it. */
 .doc-body h2:not(:where(.not-content *)) {
-	margin-top: 3rem;
-	padding-top: 1.75rem;
-	border-top: 1px dashed var(--rule);
+	margin-top: 3.75rem;
+	padding-top: 0;
+	border-top: 0;
 	font-size: var(--local-h2);
 	font-weight: 700;
 	font-variation-settings: 'opsz' 72;
@@ -311,13 +325,15 @@ body {
 	color: var(--accent-text);
 	font-weight: inherit;
 	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent);
 	text-decoration-thickness: 1px;
-	text-underline-offset: 0.18em;
+	text-underline-offset: 0.2em;
+	transition: text-decoration-color 0.15s var(--ease);
 }
 
 .doc-body a:not(:where(.not-content *)):hover {
 	color: var(--accent-text);
-	text-decoration-thickness: 2px;
+	text-decoration-color: currentColor;
 }
 
 .doc-body strong:not(:where(.not-content *)) {
@@ -349,10 +365,10 @@ body {
 }
 
 .doc-body code:not(:where(.not-content *)) {
-	padding: 0.125em 0.375em;
-	border: 0;
-	border-radius: 4px;
-	background: var(--bar-2);
+	padding: 0.1em 0.375em;
+	border: 1px solid var(--rule);
+	border-radius: 5px;
+	background: var(--bar);
 	color: var(--ink);
 }
 
@@ -386,14 +402,14 @@ body {
 
 .doc-body hr:not(:where(.not-content *)) {
 	border: 0;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 }
 
 .doc-body img:not(:where(.not-content *)) {
 	border-radius: 8px;
 }
 
-/* Tables: a mono label row, dashed row rules, tabular numerals. Wide tables scroll on their own. */
+/* Tables: a mono label row, hairline row rules, tabular numerals. Wide tables scroll on their own. */
 .doc-body table:not(:where(.not-content *)) {
 	display: block;
 	width: max-content;
@@ -407,7 +423,7 @@ body {
 .doc-body :is(th, td):not(:where(.not-content *)) {
 	padding: 0.625rem 1rem;
 	border: 0;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 	text-align: start;
 	vertical-align: top;
 }
@@ -427,11 +443,24 @@ body {
 
 .doc-aside {
 	--aside: var(--brand);
-	margin-block: 1.5rem;
-	border: 1px solid color-mix(in srgb, var(--aside) 65%, var(--rule));
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--aside) 8%, var(--paper));
+	position: relative;
+	margin-block: 1.75rem;
+	padding: 1rem 1.25rem 1.0625rem 1.375rem;
+	overflow: hidden;
+	border: 1px solid var(--rule);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--aside) 6%, var(--paper));
 	color: var(--ink);
+}
+
+/* The kind's colour runs down the left edge; the label says which kind it is, so colour is never the only signal. */
+.doc-aside::before {
+	content: '';
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 3px;
+	background: var(--aside);
 }
 
 .doc-aside--caution,
@@ -440,29 +469,11 @@ body {
 }
 
 .doc-aside__title {
-	display: flex;
-	align-items: center;
-	gap: 0.625rem;
-	margin: 0 !important;
-	padding: 0.625rem 1rem;
-	border-bottom: 1px dashed color-mix(in srgb, var(--aside) 75%, var(--rule));
-	color: var(--ink-2);
-	font: 500 0.75rem/1.2 var(--mono);
-	letter-spacing: 0.1em;
+	margin: 0 0 0.375rem !important;
+	color: var(--ink);
+	font: 600 0.6875rem/1.2 var(--mono);
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
-}
-
-.doc-aside__title::before {
-	content: '';
-	flex: none;
-	width: 0.5rem;
-	height: 0.5rem;
-	border-radius: 2px;
-	background: var(--aside);
-}
-
-.doc-aside__content {
-	padding: 0.875rem 1rem 1rem;
 }
 
 .doc-aside__content > :first-child {
@@ -484,6 +495,7 @@ body {
 	background: var(--panel);
 	color: var(--panel-ink);
 	font-family: var(--mono);
+	box-shadow: var(--panel-shadow);
 }
 
 .codeblock__head {
@@ -628,7 +640,9 @@ body {
 	flex-wrap: wrap;
 	justify-content: space-between;
 	gap: 0.5rem 1.5rem;
-	margin-top: 3rem;
+	margin-top: 4rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--rule);
 	color: var(--ink-3);
 	font: 400 0.75rem/1.6 var(--mono);
 }
@@ -654,8 +668,8 @@ body {
 .shell-pages a {
 	padding: 1rem 1.25rem;
 	border: 1px solid var(--rule);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--paper) 55%, var(--bar));
+	border-radius: 10px;
+	background: var(--paper);
 	color: var(--ink);
 	text-decoration: none;
 	transition:
@@ -664,8 +678,8 @@ body {
 }
 
 .shell-pages a:hover {
-	border-color: var(--accent-text);
-	background: var(--bar);
+	border-color: color-mix(in srgb, var(--brand) 55%, var(--rule));
+	background: color-mix(in srgb, var(--brand) 5%, var(--paper));
 }
 
 .shell-pages__next {
@@ -693,11 +707,13 @@ body {
 }
 
 .shell-foot {
-	margin-top: 2.5rem;
+	margin-top: 3rem;
+	padding-top: 2rem;
+	border-top: 1px solid var(--rule);
 }
 
 .shell-tear {
-	display: flex;
+	display: none;
 	align-items: center;
 	gap: 14px;
 	margin: 0 0 1.5rem;
@@ -777,9 +793,25 @@ body {
 	body {
 		background: none;
 	}
-	#nd-page {
-		border: 0;
-	}
+}
+
+/* ---- Scenes: the same depth as the code ---- */
+
+.sframe {
+	box-shadow: var(--panel-shadow);
+}
+
+:root[data-theme='dark'] {
+	--panel-shadow: 0 1px 0 0 color-mix(in srgb, white 5%, transparent) inset;
+}
+
+/* ---- Home: a soft light behind the story; the only colour field on the site ---- */
+
+.home-page {
+	background:
+		radial-gradient(48rem 34rem at 78% 18rem, color-mix(in srgb, var(--brand) 13%, transparent), transparent 70%),
+		radial-gradient(30rem 24rem at 10% 6rem, color-mix(in srgb, var(--cobalt) 9%, transparent), transparent 70%);
+	background-repeat: no-repeat;
 }
 
 /* ---- 404 ---- */

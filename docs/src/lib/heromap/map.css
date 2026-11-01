@@ -11,10 +11,9 @@
    lightness, OKLCH L 0.49 to 0.56, close to the page's own on-paper colours, so no hue outweighs another. The text
    colours have at least 4.9:1 against --paper; the amber edge has 4.35:1, enough for a stroke. The green that marks a
    worker, its goroutines and their work is the light logo's own (--brand, 3.1:1, enough for a mark), as the dark map's
-   is the dark logo's. Fills are the same hues near L 0.96. The greys take the paper's green rather than a cool grey, so
-   the map sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
+   is the dark logo's. Fills are the same hues near L 0.96. The greys are the paper's neutral, so the map sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
 :root {
-	--vm-dot: #cddbd4;
+	--vm-dot: #d6d8d2;
 	--vm-ink: var(--ink-3);
 	--vm-green: var(--accent-text);
 	--vm-red: #bd3933;

@@ -14,7 +14,6 @@ const CODE_STEPS = 'virtual:code-steps';
 
 export default defineConfig({
 	site: 'https://varmq.goptics.org',
-	trailingSlash: 'always',
 	// `:::note` and `:::caution` are directives (remarkDirectiveAdmonition below).
 	markdown: { processor: satteri({ features: { gfm: true, directive: true } }) },
 	vite: {

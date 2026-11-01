@@ -1,12 +1,13 @@
 ---
 // Previous and next, in sidebar order (lib/source.ts).
 import { findNeighbour } from 'fumadocs-core/page-tree';
-import { sidebarTree } from '../../lib/source';
+import { sidebarTree, withSlash } from '../../lib/source';
 
 interface Props {
 	url: string;
 }
-const { previous, next } = findNeighbour(sidebarTree(), Astro.props.url);
+// The tree's URLs end with a slash (lib/source.ts).
+const { previous, next } = findNeighbour(sidebarTree(), withSlash(Astro.props.url));
 ---
 
 <nav class="shell-pages not-content not-prose" aria-label="Previous and next">
