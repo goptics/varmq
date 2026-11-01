@@ -56,11 +56,11 @@
 	--color-fd-success: var(--brand);
 }
 
-/* The green chrome: the same sign in both themes. Its own text and line colours stand in for the page's. */
+/* The green chrome: the same sign in both themes. Its own text and line colours stand in for the page's. The home
+   header is not chrome: it is paper, like the rails beside it ("Header"). */
 #nd-sidebar,
 #nd-sidebar-mobile,
-#nd-subnav,
-#nd-nav {
+#nd-subnav {
 	--ink: var(--chrome-ink);
 	--ink-2: var(--chrome-ink-2);
 	--ink-3: var(--chrome-ink-2);
@@ -131,29 +131,48 @@ body {
 	scrollbar-color: var(--rule) transparent;
 }
 
-/* The logo: on the green chrome it is white, as a sign's lettering. */
+/* The logo: on the green chrome it is white, as a sign's lettering. On the paper header it keeps its colours, one
+   file per theme. */
 .shell-logo {
 	display: block;
 	height: 28px;
 	width: auto;
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile, #nd-subnav) .shell-logo {
 	filter: brightness(0) invert(1);
 }
 
-.shell-logo--light {
+.shell-logo--light,
+#nd-nav .shell-logo--dark,
+:root[data-theme='dark'] #nd-nav .shell-logo--light {
 	display: none;
+}
+
+#nd-nav .shell-logo--light,
+:root[data-theme='dark'] #nd-nav .shell-logo--dark {
+	display: block;
 }
 
 /* ---- Header (home, 404, and the docs' phone bar) ---- */
 
-#nd-nav > div,
+/* The docs' phone bar is chrome, edged in the bright green. */
 #nd-subnav {
 	border-bottom: 4px solid var(--signal);
 	background: var(--chrome);
 	backdrop-filter: none;
 }
 
+/* The home header (and the 404's) is the rails' frame carried across the top: the same paper and the same
+   hairline as the rails' edges (story.css, .roll), so the three read as one. */
+#nd-nav > div {
+	border-bottom: 1px solid var(--rule);
+	background: var(--paper);
+	backdrop-filter: none;
+}
+
 #nd-nav nav a:not([aria-label]) {
-	color: var(--chrome-ink);
+	color: var(--ink-2);
 	font: 500 0.75rem/1 var(--mono);
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
@@ -161,7 +180,7 @@ body {
 }
 
 #nd-nav nav a:not([aria-label]):hover {
-	color: var(--signal);
+	color: var(--accent-text);
 }
 
 /* ---- Sidebar: a departure board ---- */
