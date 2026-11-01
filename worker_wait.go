@@ -14,9 +14,9 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	defer w.waiters.Broadcast()
 
 	if w.status.CompareAndSwap(running, idle) {
-		// A credit pass may have reserved since the caller loaded processing:
-		// it reserves before it reads the status, so back to Running is all
-		// it needs. Under w.mx, so a Pause can't see the Idle in between.
+		// A dispatch may have reserved since the caller loaded processing:
+		// reserve counts before it reads the status, so back to Running is
+		// all it needs. Under w.mx, so a Pause can't see the Idle in between.
 		if w.curProcessing.Load() != 0 {
 			w.status.CompareAndSwap(idle, running)
 		}

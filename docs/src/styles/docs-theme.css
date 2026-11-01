@@ -1,0 +1,1114 @@
+/* Docs shell theme. Restyles Starlight with the tokens in tokens.css (docs/DESIGN.md).
+   Load order: tokens.css, then this file. Both come through `customCss` in astro.config.mjs.
+   Starlight writes its styles in cascade layers. These rules are not in a layer, so they win.
+   Every custom class starts with `shell-`. Other selectors name Starlight classes only, and the generic
+   prose rules skip `.not-content`, so scene markup on a page is never touched. */
+
+/* ---- Starlight variables, mapped from the tokens ---- */
+
+:root {
+	/* Local values. The article scale is smaller than the landing page scale: an article column is 44rem wide. */
+	--local-h1: clamp(2.25rem, 5.4vw, 3.75rem);
+	--local-h2: clamp(1.625rem, 2.8vw, 2.125rem);
+	--local-sheet-pad: clamp(1rem, 3.2vw, 2rem);
+
+	--sl-font: var(--display);
+	--sl-font-mono: var(--mono);
+
+	/* Text, brightest to faintest. */
+	--sl-color-white: var(--ink);
+	--sl-color-gray-1: var(--ink);
+	--sl-color-gray-2: var(--ink-2);
+	--sl-color-gray-3: var(--ink-3);
+	--sl-color-gray-4: var(--ink-3);
+	/* Lines and surfaces. */
+	--sl-color-gray-5: var(--rule);
+	--sl-color-gray-6: var(--bar);
+	--sl-color-gray-7: var(--bar);
+	--sl-color-black: var(--paper);
+
+	--sl-color-accent-low: var(--bar-2);
+	--sl-color-accent: var(--brand);
+	--sl-color-accent-high: var(--accent-text);
+
+	--sl-color-orange: var(--amber);
+	--sl-color-orange-low: color-mix(in srgb, var(--amber) 16%, var(--paper));
+	--sl-color-orange-high: var(--ink);
+	--sl-color-red: var(--danger);
+	--sl-color-red-low: color-mix(in srgb, var(--danger) 16%, var(--paper));
+	--sl-color-red-high: var(--ink);
+	--sl-color-blue: var(--cobalt);
+	--sl-color-blue-low: color-mix(in srgb, var(--cobalt) 16%, var(--paper));
+	--sl-color-blue-high: var(--ink);
+	--sl-color-green: var(--brand);
+	--sl-color-green-low: color-mix(in srgb, var(--brand) 16%, var(--paper));
+	--sl-color-green-high: var(--ink);
+	--sl-color-purple: var(--cobalt);
+	--sl-color-purple-low: color-mix(in srgb, var(--cobalt) 16%, var(--paper));
+	--sl-color-purple-high: var(--ink);
+
+	--sl-color-text: var(--ink);
+	--sl-color-text-accent: var(--accent-text);
+	--sl-color-text-invert: var(--brand-ink);
+	--sl-color-bg: var(--paper);
+	--sl-color-bg-nav: var(--paper);
+	--sl-color-bg-sidebar: var(--paper);
+	--sl-color-bg-inline-code: var(--bar-2);
+	--sl-color-bg-accent: var(--brand);
+	--sl-color-hairline-light: var(--rule);
+	--sl-color-hairline: var(--rule);
+	--sl-color-hairline-shade: var(--rule);
+	--sl-color-backdrop-overlay: color-mix(in srgb, var(--panel) 62%, transparent);
+
+	--sl-shadow-sm: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+	--sl-shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
+	--sl-shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
+
+	--sl-text-body: 1.0625rem;
+	--sl-text-code: 0.875rem;
+	--sl-text-code-sm: 0.875rem;
+	--sl-text-h1: var(--local-h1);
+	--sl-text-h2: var(--local-h2);
+	--sl-text-h3: 1.25rem;
+	--sl-text-h4: 1.0625rem;
+	--sl-text-h5: 1rem;
+	--sl-line-height: 1.6;
+	--sl-line-height-headings: 1.1;
+
+	--sl-nav-height: 4rem;
+	--sl-sidebar-width: 17rem;
+	--sl-content-width: 44rem;
+	--sl-content-pad-x: var(--local-sheet-pad);
+	--sl-content-gap-y: 1.125rem;
+	--sl-menu-button-size: 2.5rem;
+
+	/* Badge text is white in Starlight. Use the ink token instead. */
+	--sl-badge-default-border: var(--brand);
+	--sl-badge-default-bg: var(--bar-2);
+	--sl-badge-default-text: var(--ink);
+	--sl-badge-note-border: var(--cobalt);
+	--sl-badge-note-bg: var(--bar);
+	--sl-badge-note-text: var(--ink);
+	--sl-badge-tip-border: var(--brand);
+	--sl-badge-tip-bg: var(--bar);
+	--sl-badge-tip-text: var(--ink);
+	--sl-badge-success-border: var(--brand);
+	--sl-badge-success-bg: var(--bar);
+	--sl-badge-success-text: var(--ink);
+	--sl-badge-caution-border: var(--amber);
+	--sl-badge-caution-bg: var(--bar);
+	--sl-badge-caution-text: var(--ink);
+	--sl-badge-danger-border: var(--danger);
+	--sl-badge-danger-bg: var(--bar);
+	--sl-badge-danger-text: var(--ink);
+}
+
+/* ---- Page: paper stripes behind everything, plain paper under text ---- */
+
+html {
+	scroll-behavior: smooth;
+	scrollbar-color: var(--rule) transparent;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	background-color: var(--paper);
+	background-image: repeating-linear-gradient(to bottom, transparent 0 48px, var(--bar) 48px 96px);
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: var(--sl-text-body);
+	line-height: var(--sl-line-height);
+	text-rendering: optimizeLegibility;
+}
+
+::selection {
+	background: var(--brand);
+	color: var(--brand-ink);
+}
+
+:root {
+	accent-color: var(--brand);
+	caret-color: var(--accent-text);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+}
+
+.expressive-code :focus-visible {
+	outline-color: var(--panel-accent);
+}
+
+/* A scroll area with its own scrollbar keeps the thin, quiet one. */
+.sidebar-pane,
+.right-sidebar,
+.sl-markdown-content table,
+.sl-markdown-content pre {
+	scrollbar-width: thin;
+	scrollbar-color: var(--rule) transparent;
+}
+
+[data-has-hero] .page {
+	background: none;
+}
+
+/* ---- Skip link ---- */
+
+.sl-skip-link:focus {
+	top: 12px;
+	padding: 10px 16px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	border-radius: 8px;
+	font: 500 0.8125rem/1.2 var(--mono);
+	box-shadow: var(--sl-shadow-lg);
+}
+
+/* ---- Header ---- */
+
+.page > header.header {
+	background: var(--paper);
+	border-bottom: 1px dashed var(--rule);
+	backdrop-filter: none;
+}
+
+.site-title img {
+	height: 30px;
+}
+
+.social-icons::after {
+	display: none;
+}
+
+.social-icons a {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 8px;
+	color: var(--ink-2);
+	transition: background-color 0.15s var(--ease);
+}
+
+.social-icons a:hover {
+	background: var(--bar-2);
+	color: var(--ink);
+}
+
+site-search button[data-open-modal] {
+	border-radius: 8px;
+	color: var(--ink);
+	font-family: var(--display);
+}
+
+@media (min-width: 50rem) {
+	site-search button[data-open-modal] {
+		border-color: var(--rule);
+		background: var(--bar);
+		color: var(--ink-2);
+		font-size: 0.9375rem;
+	}
+	site-search button[data-open-modal]:hover {
+		border-color: var(--ink-3);
+		background: var(--bar-2);
+		color: var(--ink);
+	}
+}
+
+/* The home page's main links, before the GitHub link (shell/SocialIcons.astro), in the search button's type. They
+   hover as the GitHub link does, with a --bar-2 box. Below 50rem the home header hides them and keeps the GitHub link
+   and the theme switch (story.css); the intro's Get started leads on there. */
+.social-icons .home-links {
+	display: flex;
+	gap: 0.25rem;
+}
+
+.social-icons .home-links a {
+	width: auto;
+	padding-inline: 0.5rem;
+	font: 500 0.9375rem/1 var(--display);
+	white-space: nowrap;
+	text-decoration: none;
+}
+
+site-search button > kbd {
+	border-radius: 4px;
+	background: var(--bar-2);
+	color: var(--ink-2);
+	font-family: var(--mono);
+	font-size: 0.6875rem;
+	letter-spacing: 0.04em;
+}
+
+/* Mobile menu button: a square outline button that fills when the menu is open. */
+.sl-menu-button {
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: var(--paper);
+	color: var(--ink);
+	box-shadow: none;
+}
+
+.sl-menu-button:has(~ :popover-open) {
+	background: var(--ink);
+	color: var(--paper);
+}
+
+/* ---- Sidebar ---- */
+
+.sidebar-pane {
+	background: var(--paper);
+}
+
+@media (min-width: 50rem) {
+	.sidebar-pane {
+		border-inline-end: 1px dashed var(--rule);
+	}
+}
+
+.sidebar-content {
+	padding-block: 1.5rem;
+}
+
+.sidebar-content .top-level > li + li {
+	margin-top: 1.25rem;
+}
+
+.sidebar-content summary {
+	padding: 0.25rem 0.625rem;
+}
+
+.sidebar-content .large {
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.sidebar-content summary .caret {
+	color: var(--ink-3);
+}
+
+/* Each link carries a small square: hollow for a page, filled for the page you are on. */
+.sidebar-content ul ul a,
+.sidebar-content .top-level > li > ul a {
+	position: relative;
+	padding: 0.4rem 0.625rem 0.4rem 1.75rem;
+	border-radius: 8px;
+	color: var(--ink-2);
+	font-size: 0.9375rem;
+	line-height: 1.35;
+	transition:
+		background-color 0.15s var(--ease),
+		color 0.15s var(--ease);
+}
+
+.sidebar-content ul ul a::before,
+.sidebar-content .top-level > li > ul a::before {
+	content: '';
+	position: absolute;
+	inset-inline-start: 0.625rem;
+	top: 0.75em;
+	width: 0.5rem;
+	height: 0.5rem;
+	border: 1px solid var(--ink-3);
+	border-radius: 2px;
+	transition:
+		background-color 0.15s var(--ease),
+		border-color 0.15s var(--ease);
+}
+
+.sidebar-content ul ul a:hover,
+.sidebar-content .top-level > li > ul a:hover {
+	background: var(--bar);
+	color: var(--ink);
+}
+
+.sidebar-content ul ul a:hover::before,
+.sidebar-content .top-level > li > ul a:hover::before {
+	border-color: var(--accent-text);
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+	background: var(--bar-2);
+	color: var(--ink);
+	font-weight: 650;
+}
+
+.sidebar-content a[aria-current='page']::before {
+	background: var(--brand);
+	border-color: var(--brand);
+}
+
+.sidebar-content ul ul li {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+	border-inline-start: 0;
+}
+
+.sidebar-content ul ul {
+	margin-top: 0.125rem;
+}
+
+/* ---- The sheet: the article sits on a plain paper column with perforated edges ---- */
+
+.main-pane {
+	min-height: calc(100vh - var(--sl-nav-height) - var(--sl-mobile-toc-height));
+}
+
+.main-pane > main {
+	min-height: inherit;
+	max-width: calc(var(--sl-content-width) + 2 * var(--sl-content-pad-x));
+	margin-inline: var(--sl-content-margin-inline, auto);
+	background: var(--paper);
+}
+
+@media (min-width: 50rem) {
+	.main-pane > main {
+		border-inline: 1px dashed var(--rule);
+	}
+}
+
+.content-panel {
+	padding-block: 1.5rem;
+}
+
+.content-panel + .content-panel {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.right-sidebar {
+	border-inline-start: 0;
+}
+
+/* ---- Page title: the JOB banner, then the h1 ---- */
+
+.shell-banner {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 1.25rem;
+	color: var(--ink-3);
+	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.shell-banner__id {
+	padding: 5px 8px;
+	border-radius: 4px;
+	background: var(--ink);
+	color: var(--paper);
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+}
+
+.shell-banner__label {
+	white-space: nowrap;
+}
+
+.shell-banner__rule {
+	flex: 1;
+	min-width: 16px;
+	border-top: 1px dashed var(--rule);
+}
+
+/* Kept to one class's weight, so a page that sets its own title (the home page's story) can. */
+.content-panel :where(h1#_top) {
+	margin-top: 0;
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: var(--local-h1);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 96;
+	letter-spacing: -0.035em;
+	line-height: 0.98;
+	text-wrap: balance;
+}
+
+/* ---- Prose ---- */
+
+.sl-markdown-content {
+	color: var(--ink);
+	font-size: var(--sl-text-body);
+	line-height: var(--sl-line-height);
+	overflow-wrap: break-word;
+}
+
+/* No one-word last lines. */
+.sl-markdown-content :is(p, li):not(:where(.not-content *)) {
+	text-wrap: pretty;
+}
+
+.sl-markdown-content :is(h2, h3, h4, h5):not(:where(.not-content *)),
+.sl-markdown-content .sl-heading-wrapper {
+	font-family: var(--display);
+	color: var(--ink);
+	text-wrap: balance;
+}
+
+.sl-markdown-content h2:not(:where(.not-content *)) {
+	font-weight: 700;
+	font-variation-settings: 'opsz' 72;
+	letter-spacing: -0.03em;
+	line-height: 1.05;
+}
+
+.sl-markdown-content h3:not(:where(.not-content *)) {
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	line-height: 1.25;
+}
+
+.sl-markdown-content h4:not(:where(.not-content *)),
+.sl-markdown-content h5:not(:where(.not-content *)) {
+	font-weight: 650;
+	letter-spacing: 0;
+	line-height: 1.3;
+}
+
+/* A new h2 starts a new section: a perforation above it, and room. */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+	margin-top: 3rem;
+	padding-top: 1.75rem;
+	border-top: 1px dashed var(--rule);
+	line-height: 1.05;
+}
+
+.sl-markdown-content > .sl-heading-wrapper.level-h2:first-child {
+	margin-top: 0.5rem;
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h3 {
+	margin-top: 2.25rem;
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h4 {
+	margin-top: 1.75rem;
+}
+
+.sl-markdown-content .sl-anchor-link {
+	color: var(--ink-3);
+}
+
+.sl-markdown-content .sl-anchor-link:hover {
+	color: var(--accent-text);
+}
+
+.sl-markdown-content a:not(:where(.not-content *, .sl-link-card *, .sl-link-button, .sl-anchor-link)) {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
+}
+
+.sl-markdown-content a:not(:where(.not-content *, .sl-link-card *, .sl-link-button, .sl-anchor-link)):hover {
+	color: var(--accent-text);
+	text-decoration-thickness: 2px;
+}
+
+.sl-markdown-content strong:not(:where(.not-content *)) {
+	font-weight: 650;
+}
+
+.sl-markdown-content :is(ul, ol):not(.sl-steps, :where(.not-content *)) {
+	padding-inline-start: 1.375rem;
+}
+
+.sl-markdown-content ul:not(.sl-steps, :where(.not-content *)) {
+	list-style-type: square;
+}
+
+.sl-markdown-content li:not(:where(.not-content *))::marker {
+	color: var(--accent-text);
+	font-family: var(--mono);
+	font-size: 0.875em;
+}
+
+.sl-markdown-content li + li:not(:where(.not-content *)) {
+	margin-top: 0.375rem;
+}
+
+.sl-markdown-content :is(code, kbd):not(:where(.not-content *, .expressive-code *)) {
+	font-family: var(--mono);
+	font-size: 0.875em;
+}
+
+.sl-markdown-content code:not(:where(.not-content *, .expressive-code *)) {
+	padding: 0.125em 0.375em;
+	border-radius: 4px;
+	background: var(--bar-2);
+	color: var(--ink);
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) code:not(:where(.not-content *)) {
+	font-size: 0.85em;
+	letter-spacing: 0;
+}
+
+.sl-markdown-content kbd:not(:where(.not-content *)) {
+	display: inline-block;
+	padding: 0.1em 0.45em;
+	border: 1px solid var(--rule);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	background: var(--bar);
+	color: var(--ink);
+	line-height: 1.4;
+}
+
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+	padding-inline-start: 1.25rem;
+	border-inline-start: 1px solid var(--ink-3);
+	color: var(--ink-2);
+}
+
+.sl-markdown-content hr:not(:where(.not-content *)) {
+	border-bottom: 1px dashed var(--rule);
+}
+
+.sl-markdown-content img:not(:where(.not-content *)) {
+	border-radius: 8px;
+}
+
+.sl-markdown-content details:not(:where(.not-content *, .expressive-code *)) {
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--paper) 60%, var(--bar));
+}
+
+.sl-markdown-content details:not([open]):hover:not(:where(.not-content *, .expressive-code *)),
+.sl-markdown-content details:has(> summary:hover):not(:where(.not-content *, .expressive-code *)) {
+	border-color: var(--ink-3);
+}
+
+/* Tables: a mono label row, dashed row rules, tabular numerals. */
+.sl-markdown-content table:not(:where(.not-content *)) {
+	font-size: 0.9375rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+	padding: 0.625rem 1rem;
+	border-bottom: 1px dashed var(--rule);
+}
+
+.sl-markdown-content th:not(:where(.not-content *)) {
+	border-bottom: 1px solid var(--ink-3);
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* ---- Callout: Starlight asides ----
+   A card with a colored hairline rule, a tint and a square marker. Amber for caution and danger, brand for note
+   and tip. The label text says which one it is, so color is never the only signal. */
+
+.sl-markdown-content .starlight-aside {
+	--sl-color-asides-text-accent: var(--ink);
+	--sl-color-asides-border: var(--brand);
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--sl-color-asides-border) 65%, var(--rule));
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--sl-color-asides-border) 8%, var(--paper));
+	color: var(--ink);
+}
+
+.sl-markdown-content .starlight-aside--caution,
+.sl-markdown-content .starlight-aside--danger {
+	--sl-color-asides-border: var(--amber);
+}
+
+.sl-markdown-content .starlight-aside__title {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	padding: 0.625rem 1rem;
+	border-bottom: 1px dashed color-mix(in srgb, var(--sl-color-asides-border) 75%, var(--rule));
+	color: var(--ink-2);
+	font: 500 0.75rem/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.sl-markdown-content .starlight-aside__title::before {
+	content: '';
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 2px;
+	background: var(--sl-color-asides-border);
+}
+
+.sl-markdown-content .starlight-aside__icon {
+	display: none;
+}
+
+.sl-markdown-content .starlight-aside__content {
+	padding: 0.875rem 1rem 1rem;
+}
+
+.sl-markdown-content .starlight-aside__title + .starlight-aside__content {
+	margin-top: 0;
+}
+
+.sl-markdown-content .starlight-aside__content a {
+	color: var(--accent-text);
+}
+
+/* ---- Code (Expressive Code): a dark panel in both themes ---- */
+
+/* The Go syntax tokens take their dark values here: `ui.css` pins them for `.expressive-code`. */
+.expressive-code {
+	margin-block: 1.5rem;
+}
+
+.expressive-code .frame {
+	font-family: var(--mono);
+}
+
+.expressive-code .frame .header {
+	font-weight: 500;
+	letter-spacing: 0.02em;
+}
+
+/* Shell blocks get no window chrome: a title row only when the block has a title. */
+.expressive-code .frame.is-terminal .header::before {
+	display: none;
+}
+
+.expressive-code .frame.is-terminal:not(.has-title) .header {
+	display: none;
+}
+
+.expressive-code .frame.is-terminal.has-title .header {
+	justify-content: flex-start;
+	padding-inline: 1.125rem;
+}
+
+.expressive-code .copy button {
+	border-radius: 8px;
+	font-family: var(--mono);
+}
+
+/* ---- Cards, link cards, buttons, tabs, steps ---- */
+
+.card {
+	--sl-card-border: var(--brand);
+	--sl-card-bg: color-mix(in srgb, var(--brand) 14%, var(--paper));
+	padding: 1.25rem;
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--paper) 55%, var(--bar));
+	gap: 0.625rem;
+}
+
+.card .title {
+	font-family: var(--display);
+	font-size: 1.125rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.card .icon {
+	border-color: transparent;
+	color: var(--accent-text);
+}
+
+.card .body {
+	color: var(--ink-2);
+	font-size: 0.9375rem;
+}
+
+.sl-link-card {
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--paper) 55%, var(--bar));
+	box-shadow: none;
+	transition:
+		border-color 0.15s var(--ease),
+		background-color 0.15s var(--ease);
+}
+
+.sl-link-card:hover {
+	border-color: var(--accent-text);
+	background: var(--bar);
+}
+
+.sl-link-card .title {
+	font-size: 1.0625rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.sl-link-card .description {
+	color: var(--ink-2);
+	font-size: 0.9375rem;
+}
+
+.sl-link-card:hover .icon {
+	color: var(--accent-text);
+}
+
+.sl-link-button {
+	min-height: 44px;
+	border-radius: 10px;
+	font-family: var(--display);
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1;
+	padding: 0.625rem 1.125rem;
+	transition:
+		background-color 0.15s var(--ease),
+		border-color 0.15s var(--ease);
+}
+
+.sl-link-button.primary,
+.sl-link-button.primary:hover {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+
+.sl-link-button.primary:hover {
+	background: color-mix(in srgb, var(--brand) 86%, white);
+	border-color: color-mix(in srgb, var(--brand) 86%, white);
+}
+
+.sl-link-button.secondary {
+	border-color: var(--rule);
+	color: var(--ink);
+}
+
+.sl-link-button.secondary:hover {
+	background: var(--bar-2);
+}
+
+.sl-link-button.minimal {
+	color: var(--ink);
+}
+
+/* Segmented tabs: the `.seg` rules in ui.css style them. This drops Starlight's own underline. */
+starlight-tabs .tablist-wrapper {
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+starlight-tabs .tab > [role='tab'] {
+	box-shadow: none;
+	white-space: nowrap;
+}
+
+starlight-tabs .tablist-wrapper ~ [role='tabpanel'] {
+	margin-top: 1rem;
+}
+
+/* Steps: a small ink chip with a mono number, like the JOB chip. */
+.sl-steps > li::before {
+	border-radius: 4px;
+	background: var(--ink);
+	box-shadow: none;
+	color: var(--paper);
+	font-family: var(--mono);
+	font-weight: 500;
+}
+
+.sl-steps > li::after {
+	background: none;
+	border-inline-start: 1px dashed var(--rule);
+	width: 0;
+}
+
+.sl-badge {
+	border-radius: 4px;
+	font-family: var(--mono);
+}
+
+/* ---- Table of contents ---- */
+
+.right-sidebar-panel {
+	padding-block: 1.5rem;
+}
+
+.right-sidebar-panel .sl-container,
+starlight-toc nav {
+	color: var(--ink-2);
+}
+
+starlight-toc h2,
+.right-sidebar h2 {
+	margin-bottom: 0.5rem;
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+starlight-toc a,
+mobile-starlight-toc a {
+	border-radius: 6px;
+	color: var(--ink-2);
+	font-size: 0.875rem;
+	line-height: 1.35;
+	transition: color 0.15s var(--ease);
+}
+
+starlight-toc a:hover,
+mobile-starlight-toc a:hover {
+	color: var(--ink);
+}
+
+starlight-toc a[aria-current='true'],
+mobile-starlight-toc a[aria-current='true'] {
+	color: var(--ink);
+	font-weight: 650;
+}
+
+mobile-starlight-toc nav {
+	background: var(--paper);
+	border-top: 0;
+	border-bottom: 1px dashed var(--rule);
+}
+
+mobile-starlight-toc summary {
+	border-bottom: 0;
+	font-family: var(--mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+}
+
+mobile-starlight-toc .toggle {
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: var(--bar);
+	color: var(--ink-2);
+}
+
+mobile-starlight-toc details[open] .toggle {
+	border-color: var(--ink-3);
+	color: var(--ink);
+}
+
+mobile-starlight-toc .dropdown {
+	border: 0;
+	border-bottom: 1px dashed var(--rule);
+	background: var(--paper);
+	box-shadow: var(--sl-shadow-md);
+}
+
+/* ---- Footer: edit link, last updated, previous and next, tear line, links ---- */
+
+.content-panel > .sl-container > footer > .meta {
+	color: var(--ink-3);
+	font: 400 0.75rem/1.6 var(--mono);
+}
+
+.content-panel > .sl-container > footer > .meta a {
+	color: var(--ink-2);
+	text-underline-offset: 0.18em;
+}
+
+.content-panel > .sl-container > footer > .meta a:hover {
+	color: var(--ink);
+	text-decoration: underline;
+}
+
+.pagination-links a {
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--paper) 55%, var(--bar));
+	box-shadow: none;
+	transition:
+		border-color 0.15s var(--ease),
+		background-color 0.15s var(--ease);
+}
+
+.pagination-links a:hover {
+	border-color: var(--accent-text);
+	background: var(--bar);
+}
+
+.pagination-links .link-label {
+	color: var(--ink-3);
+	font: 500 0.75rem/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.pagination-links .link-title {
+	display: block;
+	margin-top: 0.25rem;
+	color: var(--ink);
+	font-size: 1.125rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.pagination-links a:hover .link-label {
+	color: var(--accent-text);
+}
+
+.shell-foot {
+	margin-top: 2.5rem;
+}
+
+.shell-tear {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 1.5rem;
+	color: var(--ink-3);
+	font: 400 0.75rem/1 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.shell-tear::before,
+.shell-tear::after {
+	content: '';
+	flex: 1;
+	border-top: 2px dotted var(--rule);
+}
+
+.shell-foot__in {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 1rem 3rem;
+	font-size: 0.9375rem;
+}
+
+.shell-foot__links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1.5rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.shell-foot__links a {
+	color: var(--accent-text);
+	text-underline-offset: 0.18em;
+}
+
+.shell-foot__links a:hover {
+	text-decoration-thickness: 2px;
+}
+
+.shell-foot__note {
+	max-width: 70ch;
+	margin: 0;
+	/* The repository path is one long word; at large text sizes it breaks rather than widening the page. */
+	overflow-wrap: anywhere;
+	color: var(--ink-3);
+	font: 400 0.75rem/1.6 var(--mono);
+}
+
+/* ---- Search dialog: paper in light, dark paper in dark. Pagefind reads the --sl-* variables. ---- */
+
+dialog[aria-label='Search'] {
+	border: 1px solid var(--rule);
+	border-radius: 12px;
+	background: var(--paper);
+	box-shadow: var(--sl-shadow-lg);
+}
+
+dialog[aria-label='Search']::backdrop {
+	backdrop-filter: blur(4px);
+}
+
+#starlight__search {
+	--pagefind-ui-primary: var(--accent-text);
+	--pagefind-ui-text: var(--ink);
+	--pagefind-ui-background: var(--paper);
+	--pagefind-ui-border: var(--rule);
+	--pagefind-ui-tag: var(--bar-2);
+	--pagefind-ui-font: var(--display);
+}
+
+dialog[aria-label='Search'] button[data-close-modal] {
+	color: var(--accent-text);
+	font-family: var(--mono);
+}
+
+/* ---- Home page hero (splash) ---- */
+
+[data-has-hero] .hero h1 {
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: var(--local-h1);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 96;
+	letter-spacing: -0.035em;
+	line-height: 0.98;
+	text-wrap: balance;
+}
+
+/* Left aligned at every width, like the landing page. Starlight centers the hero on a phone. */
+[data-has-hero] .hero,
+[data-has-hero] .hero .copy,
+[data-has-hero] .hero .tagline {
+	text-align: start;
+}
+
+[data-has-hero] .hero .stack,
+[data-has-hero] .hero .copy,
+[data-has-hero] .hero .actions {
+	align-items: flex-start;
+	justify-content: flex-start;
+}
+
+[data-has-hero] .hero .tagline {
+	color: var(--ink-2);
+	font-size: clamp(1.125rem, 1.8vw, 1.375rem);
+	line-height: 1.5;
+	max-width: 46ch;
+	text-wrap: pretty;
+}
+
+/* ---- A touch target is at least 44 px (ui.css sizes the shared pieces) ---- */
+
+@media (pointer: coarse) {
+	.expressive-code .copy button,
+	site-search button[data-open-modal] {
+		min-width: 44px;
+		min-height: 44px;
+	}
+
+	.social-icons .home-links a {
+		min-height: 44px;
+	}
+}
+
+/* ---- Motion and print ---- */
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0.001ms !important;
+		animation-duration: 0.001ms !important;
+	}
+}
+
+@media print {
+	body {
+		background: none;
+	}
+	.main-pane > main {
+		border: 0;
+	}
+}

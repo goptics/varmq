@@ -1,0 +1,45 @@
+---
+import '../../styles/guides-b.css';
+import Scene from '../ui/Scene.astro';
+import CallStrip from './CallStrip.astro';
+import LoopButtons from './LoopButtons.astro';
+
+const program = '// pick a case';
+const hint = '// pick a case: each call shows when it returns';
+
+const describe = `A timeline of one or two workers that each hold three jobs of 2.4 seconds and run one job at a time. The top row of a worker is its status. The second row is the job that runs. Each other row is one call that blocks: hatched while it waits, solid with an end cap when it returns. The log under the timeline says what each call returned and what NumPending was. Wait returns when no job runs, even if jobs are pending. WaitUntilIdle keeps waiting through a pause, until you press Resume. On a worker that never started, Wait returns at once and WaitUntilIdle waits for Start.`;
+---
+
+<Scene id="gb-waiting" title="Wait calls on one timeline" describe={describe} class="gb">
+	<dl class="sframe__stats" slot="stats"></dl>
+
+	<div class="gb-tl" data-timeline aria-hidden="true"></div>
+	<ol class="gb-log" data-log aria-label="What each call returned"></ol>
+
+	<Fragment slot="call">
+		<CallStrip program={program} hint={hint} />
+	</Fragment>
+
+	<Fragment slot="controls">
+		<div class="seg" role="radiogroup" aria-label="Case" data-case>
+			<button type="button" role="radio" aria-checked="true" tabindex="0" data-key="pause">Pause, then wait</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="stop">Stop: drain or not</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="pauseWait">Pause: now or after</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="initiated">Never started</button>
+		</div>
+		<button type="button" class="pbtn pbtn--primary" data-act="resume">worker.Resume()</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="start" hidden>worker.Start()</button>
+		<button type="button" class="pbtn" data-act="replay">Replay</button>
+		<LoopButtons />
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		One or two workers each hold three jobs of 2.4 s and run one job at a time. The top row of a worker is its
+		status and the second row is the job that runs. Each other row is one call that blocks: hatched while it waits,
+		solid with an end cap when it returns.
+	</p>
+</Scene>
+
+<script>
+	import './waiting.ts';
+</script>

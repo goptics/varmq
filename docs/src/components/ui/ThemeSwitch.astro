@@ -1,0 +1,81 @@
+---
+// Light, Dark or System. The choice is stored under Starlight's own key, `starlight-theme` ('' for System), and
+// Starlight's ThemeProvider sets the theme before the first paint. Native radios, so the arrow keys move between
+// the three.
+import { Icon } from '@astrojs/starlight/components';
+
+const name = `theme-${Math.random().toString(36).slice(2, 8)}`;
+const options = [
+	{ value: 'light', label: 'Light', icon: 'sun' },
+	{ value: 'dark', label: 'Dark', icon: 'moon' },
+	{ value: 'auto', label: 'System', icon: 'laptop' },
+] as const;
+---
+
+<theme-switch class="tswitch">
+	<fieldset>
+		<legend class="sr-only">Theme</legend>
+		{
+			options.map((o) => (
+				<label title={o.label}>
+					<input type="radio" name={name} value={o.value} />
+					<Icon name={o.icon} size="1rem" />
+					<span class="sr-only">{o.label}</span>
+				</label>
+			))
+		}
+	</fieldset>
+	<script is:inline>
+		// Check the stored choice before the first paint.
+		(function (script) {
+			var t = '';
+			try {
+				t = localStorage.getItem('starlight-theme') || '';
+			} catch (e) {}
+			var value = t === 'light' || t === 'dark' ? t : 'auto';
+			var input = script.parentElement.querySelector('input[value="' + value + '"]');
+			if (input) input.checked = true;
+		})(document.currentScript);
+	</script>
+</theme-switch>
+
+<script>
+	type Theme = 'light' | 'dark' | 'auto';
+	const KEY = 'starlight-theme';
+	const light = matchMedia('(prefers-color-scheme: light)');
+
+	const stored = (): Theme => {
+		try {
+			const t = localStorage.getItem(KEY);
+			return t === 'light' || t === 'dark' ? t : 'auto';
+		} catch {
+			return 'auto';
+		}
+	};
+
+	function apply(theme: Theme) {
+		document.documentElement.dataset.theme = theme === 'auto' ? (light.matches ? 'light' : 'dark') : theme;
+		for (const input of document.querySelectorAll<HTMLInputElement>('theme-switch input')) {
+			input.checked = input.value === theme;
+		}
+	}
+
+	light.addEventListener('change', () => {
+		if (stored() === 'auto') apply('auto');
+	});
+
+	customElements.define(
+		'theme-switch',
+		class extends HTMLElement {
+			connectedCallback() {
+				this.addEventListener('change', (e) => {
+					const theme = (e.target as HTMLInputElement).value as Theme;
+					try {
+						localStorage.setItem(KEY, theme === 'auto' ? '' : theme);
+					} catch {}
+					apply(theme);
+				});
+			}
+		},
+	);
+</script>

@@ -1,0 +1,81 @@
+---
+// Numbered setup steps. A step may have tabs for alternatives. Every code card has a copy button.
+import '../../styles/ops.css';
+import { highlightGo, highlightShell } from '../ui/go';
+
+interface Code {
+	label?: string;
+	file?: string;
+	lang?: 'bash' | 'go';
+	code: string;
+	note?: string;
+}
+interface Step {
+	title: string;
+	text?: string;
+	code: Code[];
+}
+interface Props {
+	id: string;
+	steps: Step[];
+}
+
+const { id, steps } = Astro.props;
+const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightShell(c.code));
+---
+
+<ol class="ops ops-steps not-content" data-ops-steps>
+	{
+		steps.map((s, si) => (
+			<li class="ops-step">
+				<div class="ops-step__n" aria-hidden="true">{si + 1}</div>
+				<div class="ops-step__main">
+					<h3 class="ops-step__t">{s.title}</h3>
+					{s.text && <p class="ops-step__p" set:html={s.text} />}
+					{s.code.length > 1 && (
+						<div class="seg" role="tablist" aria-label={s.title}>
+							{s.code.map((c, ci) => (
+								<button
+									type="button"
+									role="tab"
+									id={`${id}-${si}-tab-${ci}`}
+									aria-controls={`${id}-${si}-panel-${ci}`}
+									aria-selected={ci === 0 ? 'true' : 'false'}
+									tabindex={ci === 0 ? 0 : -1}
+									data-key={String(ci)}
+								>
+									{c.label}
+								</button>
+							))}
+						</div>
+					)}
+					{s.code.map((c, ci) => (
+						<div
+							role={s.code.length > 1 ? 'tabpanel' : undefined}
+							id={s.code.length > 1 ? `${id}-${si}-panel-${ci}` : undefined}
+							aria-labelledby={s.code.length > 1 ? `${id}-${si}-tab-${ci}` : undefined}
+							hidden={s.code.length > 1 && ci !== 0}
+						>
+							<div class="code code--dark">
+								<div class="code__head">
+									<span>{c.file ?? (c.lang === 'go' ? 'main.go' : 'terminal')}</span>
+									<button type="button" class="copy" data-copy>Copy</button>
+								</div>
+								<pre><code set:html={render(c)} /></pre>
+								<span class="sr-only" role="status" data-live />
+							</div>
+							{c.note && <p class="ops-step__note" set:html={c.note} />}
+						</div>
+					))}
+				</div>
+			</li>
+		))
+	}
+</ol>
+
+<script>
+	import { tabs, copyButtons } from '../ui/dom';
+
+	document.querySelectorAll<HTMLElement>('[data-ops-steps] [role="tablist"]').forEach((list) => tabs(list));
+	copyButtons();
+</script>

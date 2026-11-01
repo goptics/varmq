@@ -1,0 +1,19 @@
+---
+// The header's social links. On the home page, the main sections lead them: it has no sidebar to reach them from.
+// Guides opens the first page of the Worker pool guides group (sidebar order 1).
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+
+// Starlight gives the home page the route id ''.
+const home = Astro.locals.starlightRoute.id === '';
+---
+
+{
+	home && (
+		<nav class="home-links" aria-label="Main">
+			<a href="/start/introduction/">Docs</a>
+			<a href="/guides/worker-types/">Guides</a>
+			<a href="/reference/benchmarks/">Benchmarks</a>
+		</nav>
+	)
+}
+<Default {...Astro.props} />

@@ -527,3 +527,34 @@ func TestGroupJobSendAndDrain(t *testing.T) {
 		}, time.Second, time.Millisecond, "channel should be drained and closed")
 	})
 }
+
+// #134: every job of a group sends its result or error on one shared
+// Response, from as many goroutines as the worker runs; run with -race.
+func TestGroupJobConcurrentSends(t *testing.T) {
+	items := make([]Item[int], 2000)
+	for i := range items {
+		items[i] = Item[int]{Data: i}
+	}
+
+	t.Run("results", func(t *testing.T) {
+		w := NewResultWorker(func(j Job[int]) (int, error) { return j.Data(), nil }, 8)
+		defer w.Stop()
+
+		n := 0
+		for range w.BindQueue().AddAll(items).Results() {
+			n++
+		}
+		assert.Equal(t, len(items), n)
+	})
+
+	t.Run("errors", func(t *testing.T) {
+		w := NewErrWorker(func(j Job[int]) error { return errors.New("fail") }, 8)
+		defer w.Stop()
+
+		n := 0
+		for range w.BindQueue().AddAll(items).Errs() {
+			n++
+		}
+		assert.Equal(t, len(items), n)
+	})
+}

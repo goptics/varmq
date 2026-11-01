@@ -8,3 +8,9 @@ assets/explainers/
 
 # superpowers specs and plans (local working docs)
 docs/superpowers/
+
+# docs site
+docs/node_modules/
+docs/dist/
+docs/.astro/
+docs/.wrangler/

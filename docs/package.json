@@ -1,0 +1,24 @@
+{
+  "name": "varmq-docs",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "coverage": "bash scripts/api-coverage.sh",
+    "og": "node scripts/og.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
+    "@astrojs/starlight": "0.42.4",
+    "@expressive-code/plugin-collapsible-sections": "0.44.3",
+    "@shikijs/magic-move": "4.5.0",
+    "animejs": "4.5.0",
+    "astro": "7.3.6",
+    "sharp": "0.35.5",
+    "shiki": "4.5.0"
+  }
+}

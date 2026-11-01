@@ -1,0 +1,116 @@
+---
+// The hero slot. The home page opens on the intro with the map and offers the story as a tour (Story.astro). Starlight
+// also draws the 404 page with the hero, which keeps its banner and Starlight's own hero.
+import Default from '@astrojs/starlight/components/Hero.astro';
+import Story from '../Story.astro';
+
+const { id } = Astro.locals.starlightRoute.entry;
+const notFound = id === '404' || id.endsWith('/404');
+---
+
+<script>
+	// The sprocket holes keep feeding (story.css, .roll): the left rail's down and the right rail's up, slowly on their
+	// own, and a third as far as the page moved when it scrolls. The glow runs from the top of the page to the bottom.
+	// Each frame eases toward the scroll position, so the holes glide after a step's snap instead of jumping. The
+	// browser pauses the loop in a hidden tab. The loop runs only where the rails show (1180px and up), and not with
+	// reduced motion (story.css keeps them still and unlit there). This script comes before <Story /> so the browser
+	// runs it without waiting for the story's larger module, as module scripts run in document order.
+	const rails = Array.from(document.querySelectorAll<HTMLElement>('.roll'));
+	const wide = matchMedia('(min-width: 1180px)');
+	const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+	if (rails.length === 2) {
+		const DRIFT = 8; // px per second with no scroll: one hole every 6 s
+		const RATE = 1 / 3; // hole travel per pixel of scroll
+		const EASE = 0.06; // the share of the remaining distance covered in a 60 Hz frame
+		const PITCH = 48; // px between holes (story.css, --pitch)
+		const BAND = 168; // px, the glow's height (story.css, --band)
+		// Each rail's three moving layers, and the transform last written to each, so a frame that changes nothing
+		// writes nothing.
+		const layers = rails.map((rail) =>
+			['.roll-holes', '.roll-band', '.roll-lit'].map((s) => ({ el: rail.querySelector<HTMLElement>(s)!, last: '' })),
+		);
+		const move = (layer: { el: HTMLElement; last: string }, px: number) => {
+			const value = `translateY(${px.toFixed(2)}px)`;
+			if (value === layer.last) return;
+			layer.last = value;
+			layer.el.style.transform = value;
+		};
+		let y = 0;
+		let drift = 0;
+		let last = 0;
+		let frame = 0;
+		// How far the page scrolls and how tall the rails are, kept from the last resize rather than read each frame.
+		let room = 1;
+		let track = 0;
+		const measure = () => {
+			room = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+			track = Math.max(0, rails[0].clientHeight - BAND);
+		};
+		new ResizeObserver(measure).observe(document.body);
+		addEventListener('resize', measure);
+		// The holes move as a layer a pitch taller than the rail at each end, so only the offset within one pitch
+		// counts: it stays between 0 and 48px however far the page has gone.
+		const phase = (at: number) => ((at % PITCH) + PITCH) % PITCH;
+		const tick = (now: number) => {
+			const dt = Math.min(64, last ? now - last : 16.7); // a long gap (hidden tab) counts as a few frames
+			last = now;
+			drift += (DRIFT * dt) / 1000;
+			// The same glide at any refresh rate: the share grows with the time since the last frame.
+			y += (scrollY - y) * (1 - Math.pow(1 - EASE, dt / 16.7));
+			const at = y * RATE + drift;
+			// The glow's band goes from the top of the rail to the bottom as the page does, and the lit holes in it move
+			// back by as much, so they stay over the holes.
+			const band = Math.min(1, y / room) * track;
+			layers.forEach(([holes, glow, lit], i) => {
+				const offset = phase(i === 0 ? at : -at);
+				move(holes, offset);
+				move(glow, band);
+				move(lit, offset - band);
+			});
+			frame = requestAnimationFrame(tick);
+		};
+		const update = () => {
+			const on = wide.matches && !reduce.matches;
+			if (on === frame > 0) return;
+			if (on) {
+				y = scrollY;
+				last = 0;
+				measure();
+				frame = requestAnimationFrame(tick);
+			} else {
+				cancelAnimationFrame(frame);
+				frame = 0;
+			}
+		};
+		wide.addEventListener('change', update);
+		reduce.addEventListener('change', update);
+		update();
+	}
+</script>
+
+{
+	notFound ? (
+		<>
+			<p class="shell-banner">
+				<span class="shell-banner__id">JOB 404</span>
+				<span class="shell-banner__label">Not found</span>
+				<span class="shell-banner__rule" aria-hidden="true" />
+			</p>
+			<Default {...Astro.props}>
+				<slot />
+			</Default>
+		</>
+	) : (
+		<>
+			{['roll--l', 'roll--r'].map((side) => (
+				<div class:list={['roll', side]} aria-hidden="true">
+					<div class="roll-holes" />
+					<div class="roll-band">
+						<div class="roll-lit" />
+					</div>
+				</div>
+			))}
+			<Story />
+		</>
+	)
+}

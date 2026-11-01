@@ -1,0 +1,42 @@
+---
+// One group of benchmark lanes in JOB 04 (Race.astro): its title, the column heads, and one lane per library. race.ts
+// counts the bars and values up from `data-v`, `data-dec` and `data-suffix`.
+export interface Lane {
+	name: string;
+	varmq: boolean;
+	/** The bar's share of the longest. */
+	s: string;
+	v: number;
+	dec: number;
+	suffix: string;
+	text: string;
+	/** The value divided by VarMQ's. */
+	x: string;
+}
+
+interface Props {
+	title: string;
+	unit: string;
+	head: string;
+	lanes: Lane[];
+}
+
+const { title, unit, head, lanes } = Astro.props;
+---
+
+<div>
+	<div class="rg__title"><h3>{title}</h3><span>{unit}</span></div>
+	<div class="rlane__head" aria-hidden="true"><span>Library</span><span></span><span>{head}</span><span>× VarMQ</span></div>
+	<ol class="rlanes">
+		{
+			lanes.map((l) => (
+				<li class:list={['rlane', { 'is-varmq': l.varmq }]}>
+					<span class="rlane__name">{l.name}</span>
+					<span class="rlane__track" aria-hidden="true"><span class="rlane__bar" style={`--s:${l.s}`} /></span>
+					<span class="rlane__val" data-v={l.v} data-dec={l.dec} data-suffix={l.suffix}>{l.text}</span>
+					<span class="rlane__x">{l.x}</span>
+				</li>
+			))
+		}
+	</ol>
+</div>

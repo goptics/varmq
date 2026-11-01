@@ -1,0 +1,47 @@
+---
+// A job through the rows of a sqliteq table: pending, processing, deleted or completed, and what a
+// restart or a second process does to a processing row.
+import '../../styles/ops.css';
+import Scene from '../ui/Scene.astro';
+
+const describe =
+	'A scene that shows the table of a sqliteq queue named jobs, one row per job, with a status of pending, processing or completed. Jobs 7, 8, 9 and 10 are pending. ' +
+	'Take a job turns its row into processing in one statement. Acknowledge deletes the row, or marks it completed when you keep completed rows. ' +
+	'Kill the process leaves the row processing. Restart the program opens the queue again, and sqliteq sets every processing row back to pending, so the job runs again. ' +
+	'A second process that opens the same file does the same while the first process still runs the job, so the job can run twice, and the first process’s acknowledgement then fails.';
+---
+
+<Scene id="sflow" title="Job through SQLite" call={'pq, err := sdb.NewQueue("jobs")'} describe={describe}>
+	<div class="flow" data-sflow>
+		<div class="flow__procs" data-procs></div>
+		<div class="flow__keys">
+			<div class="flow__key">
+				<div class="flow__keyhead"><code>data/jobs.db</code><span>table jobs</span></div>
+				<div class="flow__table-wrap">
+					<table class="flow__table">
+						<caption class="sr-only">Rows of the jobs table</caption>
+						<thead>
+							<tr><th scope="col">id</th><th scope="col">status</th><th scope="col">data</th></tr>
+						</thead>
+						<tbody data-rows></tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+		<p class="ack__out" role="status" data-out></p>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-act="take">Take a job</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="ack">Acknowledge</button>
+		<button type="button" class="pbtn pbtn--danger" data-act="kill">Kill the process</button>
+		<button type="button" class="pbtn" data-act="restart" hidden>Restart the program</button>
+		<button type="button" class="pbtn" data-act="second">Open from a second process</button>
+		<label class="ops-check"><input type="checkbox" data-keep /> WithRemoveOnComplete(false)</label>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './sqliteflow';
+</script>

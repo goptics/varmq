@@ -1,0 +1,106 @@
+---
+// The feature matrix of the Comparison page. The reader can search it, filter it by group, show only the
+// rows where varmq has a limit, and choose which libraries to compare. The header row stays in view.
+import '../../styles/ops.css';
+import { GROUPS, LIBS, LIB_LINKS, NOTES, ROWS } from './matrix-data';
+
+const limits = ROWS.filter((r) => r.limit).length;
+const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').some((l) => r.cells[l][0] === 'Yes');
+---
+
+<div class="ops ops-mx not-content" data-mx>
+	<div class="mx__tools">
+		<div class="mx__field">
+			<label for="mx-q">Find a feature</label>
+			<input id="mx-q" type="search" placeholder="queue, pause, context" autocomplete="off" spellcheck="false" data-q />
+		</div>
+		<div class="mx__set" role="group" aria-label="Group">
+			<span class="mx__legend" aria-hidden="true">Group</span>
+			<button type="button" class="mx__chip" aria-pressed="true" data-group="">All</button>
+			{GROUPS.map((g) => <button type="button" class="mx__chip" aria-pressed="false" data-group={g}>{g}</button>)}
+		</div>
+		<div class="mx__set" role="group" aria-label="Show only">
+			<span class="mx__legend" aria-hidden="true">Show only</span>
+			<button type="button" class="mx__chip" aria-pressed="false" data-flag="limit">Limits in varmq <b>{limits}</b></button>
+			<button type="button" class="mx__chip" aria-pressed="false" data-flag="shared">Others have it too</button>
+			<button type="button" class="mx__chip" aria-pressed="false" data-flag="unique">Only varmq</button>
+		</div>
+		<div class="mx__set" role="group" aria-label="Compare with">
+			<span class="mx__legend" aria-hidden="true">Compare with</span>
+			{
+				LIBS.filter((l) => l !== 'varmq').map((l) => (
+					<button type="button" class="mx__chip" aria-pressed="true" data-lib-chip={l}>{l}</button>
+				))
+			}
+		</div>
+		<p class="mx__count" role="status" data-count></p>
+	</div>
+
+	<div class="mx__how">
+		<b>How to read it.</b> Every row is a feature varmq has, so the varmq column reads Yes all the way down. The table does not list features that another library has and varmq lacks.
+		Where a varmq Yes has a limit, the row says so in amber, with the page of these docs that explains it. For speed, see the{' '}
+		<a href="/reference/benchmarks/">benchmarks</a>.
+	</div>
+
+	<table class="mx__table">
+		<caption class="sr-only">Features of varmq, ants, pond, conc, workerpool, errgroup and gopool. Each cell says Yes or No.</caption>
+		<thead>
+			<tr>
+				<th scope="col" class="mx__feat">Feature</th>
+				{
+					LIBS.map((l) => (
+						<th scope="col" data-lib={l} class={l === 'varmq' ? 'is-varmq' : ''}>
+							<a href={LIB_LINKS[l]}>{l}</a>
+						</th>
+					))
+				}
+			</tr>
+		</thead>
+		<tbody data-body>
+			{
+				ROWS.map((r, i) => (
+					<tr data-group={r.group} data-limit={r.limit ? 'true' : 'false'} data-shared={others(r) ? 'true' : 'false'} data-text={r.feature.toLowerCase()}>
+						<th scope="row" class="mx__feat">
+							<span class="mx__name">{r.feature}</span>
+							{r.limit && (
+								<span class="mx__limit">
+									<b>varmq limit</b> {r.limit.text} <a href={r.limit.href}>{r.limit.source}</a>
+								</span>
+							)}
+						</th>
+						{LIBS.map((l) => {
+							const [v, note] = r.cells[l];
+							return (
+								<td data-lib={l} class={`mx__cell mx__cell--${v.toLowerCase()}${l === 'varmq' ? ' is-varmq' : ''}`}>
+									<span class="mx__v">
+										{v === 'Yes' ? (
+											<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 6.5 4.8 9 10 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+										) : (
+											<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 6h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+										)}
+										{v}
+										{note && (
+											<sup>
+												<a href={`#mx-fn-${note}`} aria-label={`Note ${note}`}>{note}</a>
+											</sup>
+										)}
+									</span>
+								</td>
+							);
+						})}
+					</tr>
+				))
+			}
+		</tbody>
+	</table>
+
+	<p class="mx__empty" data-empty hidden>No row matches. <button type="button" class="mx__clear" data-clear>Clear the filters</button></p>
+
+	<ol class="mx__notes">
+		{NOTES.map((n, i) => <li id={`mx-fn-${i + 1}`} set:html={n.replace(/`([^`]+)`/g, '<code>$1</code>')} />)}
+	</ol>
+</div>
+
+<script>
+	import './matrix';
+</script>

@@ -625,6 +625,7 @@ func TestWorkers(t *testing.T) {
 				job := newJob("test-data", loadJobConfigs(w.configs()))
 				persistentQueue.Enqueue(job)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 
 				assert.Eventually(t, func() bool { return persistentQueue.Len() == 0 }, 200*time.Millisecond, 5*time.Millisecond, "Item should be processed from queue")
@@ -643,6 +644,7 @@ func TestWorkers(t *testing.T) {
 				testQueue.Enqueue(jobBytes)
 				w.bind(testQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 				w.Wait()
 
@@ -662,6 +664,7 @@ func TestWorkers(t *testing.T) {
 				testQueue.Enqueue(job)
 				w.bind(testQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 				w.Wait()
 
@@ -688,10 +691,9 @@ func TestWorkers(t *testing.T) {
 				}
 				w.bind(testQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 
-				// The worker was never started, so Wait returns at once; poll
-				// for the hand-off instead.
 				assert.Eventually(t, func() bool {
 					return ran.Load() == 1 && w.curProcessing.Load() == 0 && w.NumProcessing() == 0
 				}, time.Second, time.Millisecond, "the open job should run and both slots be released")
@@ -708,6 +710,7 @@ func TestWorkers(t *testing.T) {
 				testQueue.Enqueue([]byte("invalid json"))
 				w.bind(testQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 				w.Wait()
 
@@ -724,6 +727,7 @@ func TestWorkers(t *testing.T) {
 				testQueue.Enqueue(123)
 				w.bind(testQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				w.processNextJob()
 				w.Wait()
 
@@ -861,6 +865,7 @@ func TestWorkers(t *testing.T) {
 				queue := newErrorQueue(w, mockQueue)
 				w.bind(queue.internalQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				_, err := w.processNextJob()
 				assert.Error(t, err)
 				assert.Equal(t, ErrFailedToCastJob, err)
@@ -868,11 +873,12 @@ func TestWorkers(t *testing.T) {
 
 			t.Run("processNextJob returns false when all queues empty", func(t *testing.T) {
 				w := newWorker(func(j iJob[string]) {}, WithAutoRun(false))
-				defer w.StopAndWait()
+				defer w.Stop()
 
 				mockQueue := mocks.NewMockPersistentQueue()
 				w.bind(mockQueue, math.MaxInt)
 
+				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				cont, err := w.processNextJob()
 				assert.False(t, cont)
 				assert.NoError(t, err)
@@ -1349,6 +1355,88 @@ func TestWorkerLifecycle(t *testing.T) {
 		w.Stop()
 	})
 
+	// #135: a Pause landing while the dispatcher hands out a job must either
+	// keep the job from starting or return Pausing, never Paused with the job
+	// still to start. The window is a few instructions wide, so many tries.
+	t.Run("No job starts after Pause returns Paused", func(t *testing.T) {
+		for i := range 2000 {
+			var paused, late atomic.Bool
+			w := newWorker(func(j iJob[int]) {
+				if paused.Load() {
+					late.Store(true)
+				}
+			}, 1)
+			q := newQueue(w, queues.NewQueue[any]())
+
+			q.Add(i)
+			if w.Pause() == nil && w.IsPaused() {
+				paused.Store(true)
+			}
+			time.Sleep(200 * time.Microsecond) // let a job that slipped through start
+			w.Wait()
+
+			require.False(t, late.Load(), "try %d: a job started after Pause returned with status Paused", i)
+			w.Stop()
+		}
+	})
+
+	// A Pause and Resume landing between reserve's count and its status read
+	// leave the worker Idle with jobs counted; a second Pause then goes
+	// straight to Paused without looking at them. Only repeated cycles hit it.
+	t.Run("No job starts while Paused across Pause and Resume cycles", func(t *testing.T) {
+		const cycles = 200_000
+		var w *worker[int, iJob[int]]
+		var pausedFlag atomic.Bool
+		var whilePaused, afterPaused atomic.Int64
+		w = newWorker(func(j iJob[int]) {
+			if w.IsPaused() {
+				whilePaused.Add(1)
+			}
+			if pausedFlag.Load() {
+				afterPaused.Add(1)
+			}
+		}, 2)
+		q := newQueue(w, queues.NewQueue[any]())
+
+		stop := make(chan struct{})
+		addDone := make(chan struct{})
+		go func() {
+			defer close(addDone)
+			for i := 0; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if q.Len() < 16 {
+					q.Add(i)
+				}
+			}
+		}()
+
+		for c := range cycles {
+			for end := time.Now().Add(time.Duration(c%4) * time.Microsecond); time.Now().Before(end); {
+			}
+			if w.Pause() == nil && w.IsPaused() {
+				pausedFlag.Store(true)
+				pausedFlag.Store(false)
+			}
+			_ = w.Resume()
+			// A Pause that returned Pausing: wait for Paused, then Resume.
+			if !w.IsActive() {
+				w.WaitUntilPaused()
+				_ = w.Resume()
+			}
+		}
+		close(stop)
+		<-addDone
+		w.Wait()
+		w.Stop()
+
+		assert.Zero(t, whilePaused.Load(), "jobs started while Paused")
+		assert.Zero(t, afterPaused.Load(), "jobs started after Pause returned Paused")
+	})
+
 	t.Run("Pause transitions to pausing then paused when in-flight job completes", func(t *testing.T) {
 		blockCh := make(chan struct{})
 		w := newWorker(func(j iJob[string]) {
@@ -1610,6 +1698,7 @@ func TestDispatchWaitsInsteadOfSpawning(t *testing.T) {
 	w.bind(q, 1)
 
 	q.Enqueue(newJob("first", loadJobConfigs(w.configs())))
+	w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 	cont, err := w.processNextJob()
 	assert.True(t, cont)
 	assert.NoError(t, err)
@@ -1756,6 +1845,7 @@ func TestConcurrencyOneKeepsFullBatches(t *testing.T) {
 	w.bind(q, 1)
 	w.jobNanos.Store(50_000) // 50 µs: the budget alone would allow 1
 
+	w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 	_, err := w.processNextJob()
 	assert.NoError(t, err)
 	assert.Equal(t, 100-maxBatch, q.Len(), "a full batch of 32")

@@ -1,0 +1,135 @@
+---
+// JOB 05 on the home page: the example programs in tabs, each in a code card that runs in place. Each card is a
+// `go-play` element (lib/go-play.ts, shared with GoPlay.astro on the docs pages): Run sends the program to the Go
+// Playground and plays its output back in the panel beside the card; Edit swaps the code for a textarea inside the card.
+import '../../styles/home.css';
+import { highlightGo } from '../ui/go';
+import { exampleSource, versions } from '../../lib/examples';
+
+const tabs = [
+	{
+		key: 'quick',
+		label: 'Quick start',
+		example: 'quick-start',
+		text: 'A worker with the default concurrency of 1 runs two jobs, one after the other.',
+		href: '/start/quick-start/',
+	},
+	{
+		key: 'priority',
+		label: 'Priority',
+		example: 'queues-priority',
+		text: 'The worker starts after the three jobs are added, so the lowest number runs first.',
+		href: '/guides/queues/',
+	},
+	{
+		key: 'rr',
+		label: 'Round robin',
+		example: 'strategies-round-robin',
+		text: 'One worker takes jobs from three queues in turn.',
+		href: '/guides/strategies/',
+	},
+	{
+		key: 'topics',
+		label: 'Topics',
+		example: 'topic-subscribe',
+		text: 'Two workers subscribe to one topic, and each gets every order.',
+		href: '/guides/topics/',
+	},
+	{
+		key: 'results',
+		label: 'Results',
+		example: 'worker-types-result',
+		text: 'A result worker returns a value and an error, which you read from the job.',
+		href: '/guides/worker-types/',
+	},
+].map((t) => {
+	const src = exampleSource(t.example, 'Examples');
+	// What comes before `func main` (the package and its imports) folds away, so the card opens on the program itself.
+	const lines = src.split('\n');
+	const main = lines.findIndex((l) => l.startsWith('func main('));
+	if (main < 1) throw new Error(`Examples: no func main in "${t.example}"`);
+	return { ...t, src, head: lines.slice(0, main).join('\n'), body: lines.slice(main).join('\n'), folded: main };
+});
+---
+
+<section class="home-row section wrap" aria-labelledby="try-it" style="padding-top:0">
+	<div class="banner">
+		<span class="banner__id">JOB 05</span><span>Programs</span><span class="banner__rule"></span><span class="banner__meta">each one runs as it is</span>
+	</div>
+	<div class="section__head">
+		<h2 class="h2" id="try-it">Each tab is a full program.</h2>
+		<p>Press Run to run it in the Go Playground, or edit it first.</p>
+	</div>
+	<div class="ex">
+		<div class="seg" role="tablist" aria-label="Example programs">
+			{
+				tabs.map((t, i) => (
+					<button
+						type="button"
+						role="tab"
+						id={`ex-tab-${t.key}`}
+						aria-controls={`ex-panel-${t.key}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+						data-key={t.key}
+					>
+						{t.label}
+					</button>
+				))
+			}
+		</div>
+		{
+			tabs.map((t, i) => (
+				<div role="tabpanel" id={`ex-panel-${t.key}`} aria-labelledby={`ex-tab-${t.key}`} hidden={i !== 0} class="ex">
+					<p class="ex__more">
+						{t.text} <a href={t.href}>Read it in the docs</a>
+					</p>
+					<go-play class="ex__play" data-pins={versions}>
+						<div class="ex__src">
+							<div class="code">
+								<div class="code__head">
+									<span>{t.example}/main.go</span>
+									<div class="ex__actions">
+										<button type="button" data-run class="pbtn pbtn--primary">Run</button>
+										<button type="button" data-copy-src class="pbtn pbtn--paper" aria-label={`Copy ${t.example}/main.go`}>Copy</button>
+										<button type="button" data-edit class="pbtn pbtn--paper">Edit</button>
+										<button type="button" data-reset hidden class="pbtn pbtn--paper">Reset</button>
+										<button type="button" data-open class="pbtn pbtn--paper" aria-label="Open in Go Playground" title="Open in Go Playground">Playground ↗</button>
+									</div>
+								</div>
+								<div data-read>
+									<details class="ex__fold">
+										<summary>{t.folded} lines: package and imports</summary>
+										<pre class="gocode"><code set:html={highlightGo(t.head)} /></pre>
+									</details>
+									<pre class="gocode"><code set:html={highlightGo(t.body)} /></pre>
+								</div>
+								<textarea
+									data-editor
+									hidden
+									rows={t.src.split('\n').length}
+									spellcheck="false"
+									autocomplete="off"
+									autocapitalize="off"
+									wrap="off"
+									aria-label={`Edit ${t.example}/main.go`}
+									aria-describedby={`ex-hint-${t.key}`}>{t.src}</textarea
+								>
+							</div>
+							<p class="ex__hint" id={`ex-hint-${t.key}`}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
+						</div>
+						<div class="ex__term">
+							<p class="ex__term-head">Output</p>
+							<pre class="ex__out" data-output aria-live="polite"></pre>
+						</div>
+					</go-play>
+				</div>
+			))
+		}
+	</div>
+</section>
+
+<script>
+	import './ui.ts';
+	import '../../lib/go-play';
+</script>

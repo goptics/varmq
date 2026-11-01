@@ -1,0 +1,121 @@
+name: Docs
+
+# Pull requests only build and test. A release or a manual run also publishes the
+# site to gh-pages, next to the bench log.
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      # Pages embed the README's diagrams from here.
+      - "assets/diagrams/**"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/publish-site.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# The reusable publish workflow cannot raise the caller's permissions, so the
+# top level grants write and each job below narrows it back down.
+permissions:
+  contents: write
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: docs/examples/go.mod
+          cache-dependency-path: docs/examples/go.sum
+
+      - run: go vet ./...
+        working-directory: docs/examples
+
+      - run: go test ./...
+        working-directory: docs/examples
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Full history: Starlight's lastUpdated reads git log, and a shallow clone
+      # would stamp every page with the same date.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: docs/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+
+      # The coverage script runs `go doc` on the varmq release that
+      # docs/examples/go.mod pins.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: docs/examples/go.mod
+          cache-dependency-path: docs/examples/go.sum
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: docs
+
+      - run: pnpm test
+        working-directory: docs
+
+      - run: pnpm coverage
+        working-directory: docs
+
+      - run: pnpm build
+        working-directory: docs
+
+      - name: Upload docs site
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-docs
+          path: docs/dist
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: [examples, build]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-site.yml
+    with:
+      artifact_pattern: site-docs
+
+  verify:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Wait for the site and bench-log to be live
+        run: |
+          # Live means HTTP 200 exactly, not just a non-error status.
+          live() {
+            local code
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "$1") || true
+            [[ $code == 200 ]]
+          }
+          for attempt in $(seq 1 20); do
+            if live https://varmq.goptics.org/ && live https://varmq.goptics.org/bench-log/; then
+              echo "site is live"
+              exit 0
+            fi
+            echo "attempt $attempt/20: not live yet, retrying in 15s"
+            sleep 15
+          done
+          echo "site did not come up within 5 minutes" >&2
+          exit 1

@@ -1,0 +1,156 @@
+---
+import { Code } from '@astrojs/starlight/components';
+import { exampleSource, versions } from '../lib/examples';
+
+interface Props {
+	example: string;
+	title?: string;
+}
+
+const { example, title = `${example}/main.go` } = Astro.props;
+const src = exampleSource(example, 'GoPlay');
+const hintId = `go-play-hint-${example}`;
+
+// Collapse the package clause and imports, and `func main() {` when nothing else comes
+// before it, so the block opens on the code that matters. Run and Edit use the full source.
+const lines = src.split('\n');
+let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
+if (lines[head] === 'func main() {') head++;
+const meta = head > 0 ? `collapse={1-${head}}` : '';
+---
+
+<go-play class="not-content" data-pins={versions}>
+	<div data-read>
+		<Code code={src} lang="go" title={title} meta={meta} />
+	</div>
+	<textarea
+		data-editor
+		hidden
+		rows={src.split('\n').length}
+		spellcheck="false"
+		autocomplete="off"
+		autocapitalize="off"
+		wrap="off"
+		aria-label={`Edit ${title}`}
+		aria-describedby={hintId}>{src}</textarea
+	>
+	<p class="hint" id={hintId}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
+	<div class="actions">
+		<button type="button" data-run class="pbtn pbtn--primary">Run</button>
+		<button type="button" data-edit class="pbtn pbtn--paper">Edit</button>
+		<button type="button" data-reset hidden class="pbtn pbtn--paper">Reset</button>
+		<button type="button" data-open class="pbtn pbtn--paper">Open in Go Playground</button>
+	</div>
+	<pre data-output aria-live="polite"></pre>
+</go-play>
+
+<script>
+	import '../lib/go-play';
+</script>
+
+<style>
+	go-play {
+		display: block;
+		margin-block: 1.5rem;
+	}
+
+	go-play [hidden] {
+		display: none !important;
+	}
+
+	textarea {
+		box-sizing: border-box;
+		display: block;
+		width: 100%;
+		margin: 0;
+		padding: 0.75rem 1rem;
+		/* The editor and the output are dark panels in both themes, like the code block they replace. */
+		border: 1px solid var(--panel-rule);
+		border-radius: 12px;
+		background: var(--panel);
+		color: var(--panel-ink);
+		caret-color: var(--panel-accent);
+		color-scheme: dark; /* dark scrollbar and resize grip */
+		font-family: var(--__sl-font-mono);
+		font-size: var(--sl-text-code);
+		line-height: var(--sl-line-height);
+		tab-size: 2;
+		white-space: pre;
+		overflow-x: auto;
+		resize: vertical;
+	}
+
+	textarea:focus-visible {
+		outline: 2px solid var(--panel-accent);
+		outline-offset: -1px;
+	}
+
+	.hint {
+		margin: 0.375rem 0 0;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-xs);
+	}
+
+	textarea[hidden] + .hint {
+		display: none;
+	}
+
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+	}
+
+	.pbtn[aria-disabled='true'] {
+		cursor: progress;
+		opacity: 0.6;
+	}
+
+	pre {
+		margin: 0.75rem 0 0;
+		padding: 0.75rem 1rem;
+		border: 1px solid var(--panel-rule);
+		border-radius: 12px;
+		background: var(--panel);
+		color: var(--panel-ink);
+		font-family: var(--__sl-font-mono);
+		font-size: var(--sl-text-code);
+		line-height: var(--sl-line-height);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	/* Empty until the first run, but still rendered, so the live region is in the
+	   accessibility tree before its first announcement. */
+	pre:empty {
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	/* Output lines are created at runtime, so they carry no scope attribute. */
+	pre :global(.stderr),
+	pre :global(.error) {
+		color: var(--danger);
+	}
+
+	pre :global(.system) {
+		color: var(--panel-ink-2);
+	}
+
+	pre :global(button.link),
+	pre :global(a.link) {
+		cursor: pointer;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--panel-accent);
+		font: inherit;
+		text-decoration: underline;
+	}
+
+	pre :global(.link:focus-visible) {
+		outline-color: var(--panel-accent);
+	}
+</style>
