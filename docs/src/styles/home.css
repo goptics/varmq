@@ -597,6 +597,59 @@
 	max-width: 100%;
 }
 
+/* JOB 03's tabs lead with the store's mark, in the map's colour for it (map.css). The selected tab is filled with
+   --ink, the other theme's paper, so its mark takes the other theme's colour: each one is 3:1 or more on its tab. */
+[data-store-tabs] [role='tab'] {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.store-tab__icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	fill: var(--mark);
+}
+
+[data-store-tabs] [aria-selected='true'] .store-tab__icon {
+	fill: var(--mark-on);
+}
+
+[data-store-tabs] [data-key='memory'] {
+	--mark: var(--vm-go);
+	--mark-on: #44bf9e;
+}
+
+[data-store-tabs] [data-key='sqlite'] {
+	--mark: var(--vm-sqlite);
+	--mark-on: #4aa8e8;
+}
+
+[data-store-tabs] [data-key='redis'] {
+	--mark: var(--vm-redis);
+	--mark-on: #ff4438;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='memory'] {
+	--mark-on: #2e9c7f;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='sqlite'] {
+	--mark-on: #196ea9;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='redis'] {
+	--mark-on: #c53227;
+}
+
+@media (forced-colors: active) {
+	.store-tab__icon,
+	[data-store-tabs] [aria-selected='true'] .store-tab__icon {
+		fill: currentColor;
+	}
+}
+
 .home-jobs .ex {
 	display: grid;
 	gap: 16px;
