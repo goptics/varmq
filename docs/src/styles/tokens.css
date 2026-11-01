@@ -136,3 +136,60 @@
 	--tk-t: var(--tk-t-on-dark);
 	--tk-b: var(--tk-b-on-dark);
 }
+
+/* ---- Theme variant: event-loop violet, registration marks ----
+   The chrome is the violet the story's map gives the event loop (lib/heromap/map.css, --vm-loop), deepened; the
+   signal is that violet lit to lilac. The mascot's green numbers the sections and stays the colour of a worker. The
+   page carries a printer's registration marks. */
+
+:root {
+	--paper: #f8f7fb;
+	--bar: #efedf6;
+	--bar-2: #e4e0f0;
+	--ink: #17122e;
+	--ink-2: #423b5e;
+	--ink-3: #5d567a;
+	--rule: #dcd7e8;
+	--page-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 13v10M13 18h10' stroke='%236b4bb8' stroke-opacity='.32'/%3E%3C/svg%3E");
+	--page-pattern-size: 36px 36px;
+
+	--chrome: #2a1c5c;
+	--chrome-2: #22174b;
+	--chrome-3: #3a2a78;
+	--chrome-ink: #ffffff;
+	--chrome-ink-2: #cfc4ff;
+	--chrome-rule: color-mix(in srgb, #ffffff 16%, var(--chrome));
+	--title: #4a2fa8;
+
+	--signal: #b9a6ff;
+	--signal-ink: #160e33;
+	--hot: #2e9c7f;
+	--hot-text: #06735a;
+	--on-signal-go: #0b4a3a;
+	--on-signal-stop: #7a1500;
+
+	--panel: #120e26;
+	--panel-2: #1a1534;
+	--panel-ink: #efecff;
+	--panel-ink-2: #aaa3cc;
+	--panel-rule: #2e2852;
+	--panel-drop: var(--chrome);
+}
+
+:root[data-theme='dark'] {
+	--paper: #0d0a1c;
+	--bar: #151029;
+	--bar-2: #1d1736;
+	--ink: #eeeaff;
+	--ink-2: #c4bde6;
+	--ink-3: #958db8;
+	--rule: #2a2448;
+	--page-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 13v10M13 18h10' stroke='%238f7be0' stroke-opacity='.3'/%3E%3C/svg%3E");
+	--chrome: #1f1546;
+	--chrome-2: #18103a;
+	--title: #c4b5ff;
+	--hot-text: #5fd4b2;
+	--panel: #120e26;
+	--panel-2: #1a1534;
+	--panel-rule: #302a58;
+}
