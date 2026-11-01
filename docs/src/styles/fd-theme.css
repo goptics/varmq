@@ -12,6 +12,15 @@
 	--local-h1: clamp(3rem, 7vw, 5.25rem);
 	--local-h2: clamp(1.875rem, 3.4vw, 2.625rem);
 
+	/* Tailwind's `rounded-*`, which Fumadocs' own pieces use: the site's one corner. */
+	--radius-xs: var(--corner);
+	--radius-sm: var(--corner);
+	--radius-md: var(--corner);
+	--radius-lg: var(--corner);
+	--radius-xl: var(--corner);
+	--radius-2xl: var(--corner);
+	--radius-3xl: var(--corner);
+
 	/* Shared sizes the component styles read. */
 	--nav-height: 3.5rem;
 	--z-nav: 40;

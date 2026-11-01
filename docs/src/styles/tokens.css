@@ -80,6 +80,8 @@
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 	/* The site's one corner, the ticket stub's: a panel, a button, a field and a card all take it. */
 	--corner: 2px;
+	/* A checked box's tick, in --signal-ink: an image cannot read a variable. */
+	--tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%2304221a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 :root[data-theme='dark'] {

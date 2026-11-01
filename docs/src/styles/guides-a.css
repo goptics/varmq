@@ -237,14 +237,10 @@
 
 .ga-panel {
 	min-width: 0;
-	padding: 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: var(--corner);
-	background: var(--panel-2);
 }
 
 .ga-panel[data-on] {
-	border-color: var(--panel-accent);
+	--group-rule: var(--panel-accent);
 }
 
 /* Blocks inside a panel: a label sits tight on the block it names, and a new block gets room above. */

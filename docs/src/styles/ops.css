@@ -333,10 +333,6 @@
 .flow__key {
 	display: grid;
 	gap: 8px;
-	padding: 10px 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: var(--corner);
-	background: var(--panel-2);
 }
 .flow__keyhead {
 	display: flex;
@@ -801,12 +797,6 @@
 	min-height: 40px;
 	padding: 8px 10px;
 }
-.api__res {
-	padding: 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: var(--corner);
-	background: color-mix(in srgb, black 26%, var(--panel));
-}
 .api__status {
 	display: flex;
 	flex-wrap: wrap;
@@ -969,10 +959,8 @@
 	color: var(--panel-accent);
 }
 .prom__watch {
+	--group-rule: var(--amber);
 	margin: 0;
-	padding: 8px 10px;
-	border: 1px dashed var(--amber);
-	border-radius: var(--corner);
 	color: var(--panel-ink);
 }
 .prom__chart {
@@ -1204,7 +1192,7 @@
 	padding: 0 5px;
 	border-radius: var(--corner);
 	background: var(--amber);
-	color: var(--ink);
+	color: var(--signal-ink);
 	font: 700 0.6875rem/1.5 var(--mono);
 }
 .mx__count {
@@ -1294,7 +1282,7 @@
 	padding: 0 6px;
 	border-radius: var(--corner);
 	background: var(--amber);
-	color: var(--ink);
+	color: var(--signal-ink);
 	font: 700 0.6875rem/1.6 var(--mono);
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
