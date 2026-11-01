@@ -24,7 +24,7 @@ const { id, steps } = Astro.props;
 const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightShell(c.code));
 ---
 
-<ol class="ops ops-steps not-content" data-ops-steps>
+<ol class="ops ops-steps not-content not-prose" data-ops-steps>
 	{
 		steps.map((s, si) => (
 			<li class="ops-step">

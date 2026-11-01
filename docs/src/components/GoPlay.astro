@@ -1,5 +1,6 @@
 ---
-import { Code } from '@astrojs/starlight/components';
+import CodeFrame from './ui/CodeFrame.astro';
+import { highlight } from '../lib/highlight';
 import { exampleSource, versions } from '../lib/examples';
 
 interface Props {
@@ -17,11 +18,12 @@ const lines = src.split('\n');
 let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
 if (lines[head] === 'func main() {') head++;
 const meta = head > 0 ? `collapse={1-${head}}` : '';
+const html = await highlight(src, 'go', meta);
 ---
 
-<go-play class="not-content" data-pins={versions}>
+<go-play class="not-content not-prose" data-pins={versions}>
 	<div data-read>
-		<Code code={src} lang="go" title={title} meta={meta} />
+		<CodeFrame title={title} html={html} />
 	</div>
 	<textarea
 		data-editor
@@ -66,14 +68,14 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 		padding: 0.75rem 1rem;
 		/* The editor and the output are dark panels in both themes, like the code block they replace. */
 		border: 1px solid var(--panel-rule);
-		border-radius: 12px;
+		border-radius: var(--corner);
 		background: var(--panel);
 		color: var(--panel-ink);
 		caret-color: var(--panel-accent);
 		color-scheme: dark; /* dark scrollbar and resize grip */
-		font-family: var(--__sl-font-mono);
-		font-size: var(--sl-text-code);
-		line-height: var(--sl-line-height);
+		font-family: var(--mono);
+		font-size: 0.875rem;
+		line-height: 1.6;
 		tab-size: 2;
 		white-space: pre;
 		overflow-x: auto;
@@ -87,8 +89,8 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 
 	.hint {
 		margin: 0.375rem 0 0;
-		color: var(--sl-color-gray-3);
-		font-size: var(--sl-text-xs);
+		color: var(--ink-3);
+		font-size: 0.8125rem;
 	}
 
 	textarea[hidden] + .hint {
@@ -111,12 +113,12 @@ const meta = head > 0 ? `collapse={1-${head}}` : '';
 		margin: 0.75rem 0 0;
 		padding: 0.75rem 1rem;
 		border: 1px solid var(--panel-rule);
-		border-radius: 12px;
+		border-radius: var(--corner);
 		background: var(--panel);
 		color: var(--panel-ink);
-		font-family: var(--__sl-font-mono);
-		font-size: var(--sl-text-code);
-		line-height: var(--sl-line-height);
+		font-family: var(--mono);
+		font-size: 0.875rem;
+		line-height: 1.6;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

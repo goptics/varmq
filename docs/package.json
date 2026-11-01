@@ -12,13 +12,26 @@
     "og": "node scripts/og.mjs"
   },
   "dependencies": {
+    "@astrojs/markdown-satteri": "0.4.6",
+    "@astrojs/react": "7.1.2",
     "@astrojs/sitemap": "3.7.4",
-    "@astrojs/starlight": "0.42.4",
-    "@expressive-code/plugin-collapsible-sections": "0.44.3",
+    "@fumadocs/astro": "0.1.1",
+    "@fumadocs/satteri": "0.7.1",
     "@shikijs/magic-move": "4.5.0",
     "animejs": "4.5.0",
-    "astro": "7.3.6",
+    "astro": "7.4.4",
+    "fumadocs-core": "16.17.9",
+    "fumadocs-ui": "16.17.9",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "sharp": "0.35.5",
     "shiki": "4.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3"
   }
 }

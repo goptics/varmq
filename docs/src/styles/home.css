@@ -21,20 +21,29 @@
 	display: none !important;
 }
 
-.home-jobs a {
-	color: var(--accent-text);
-	text-underline-offset: 0.18em;
-	text-decoration-thickness: 1px;
+/* Links in the sections' text: ink over an amber marker that fills on hover, as in the docs' prose. Buttons and the
+   index's rows draw their own. */
+.home-jobs a:not(.btn, .pbtn, [class]) {
+	color: var(--ink);
+	font-weight: 500;
+	text-decoration: none;
+	background-image: linear-gradient(var(--signal), var(--signal));
+	background-position: 0 100%;
+	background-repeat: no-repeat;
+	background-size: 100% 3px;
+	transition: background-size 0.15s var(--ease);
 }
 
-.home-jobs a:hover {
-	text-decoration-thickness: 2px;
+.home-jobs a:not(.btn, .pbtn, [class]):hover {
+	color: var(--signal-ink);
+	background-size: 100% 100%;
 }
+
 
 .home-jobs :focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 }
 
 .home-jobs .on-dark :focus-visible {
@@ -43,7 +52,7 @@
 
 /* A link styled as a button keeps the button's colours. */
 .home-jobs a.btn--primary {
-	color: #fff;
+	color: var(--signal-ink);
 }
 
 .home-jobs a.btn--ghost {
@@ -102,18 +111,26 @@
 	margin-bottom: 28px;
 }
 
-/* The job number: white on the primary buttons' green (ui.css), 12 px type at 4.5:1 or more in both themes. */
+/* The job number: a ticket stub, as on the docs pages (fd-theme.css, "Page title"): amber on carbon in light,
+   carbon on amber in dark. */
 .home-jobs .banner__id {
-	padding: 5px 8px;
-	background: color-mix(in oklab, var(--brand), black 24%);
-	color: #fff;
-	border-radius: 4px;
-	letter-spacing: 0.1em;
+	padding: 7px 12px 7px 10px;
+	background: var(--ink);
+	color: var(--signal);
+	border-radius: 0;
+	letter-spacing: 0.12em;
+	-webkit-mask: radial-gradient(circle at 100% 50%, transparent 4px, black 4.5px);
+	mask: radial-gradient(circle at 100% 50%, transparent 4px, black 4.5px);
+}
+
+:root[data-theme='dark'] .home-jobs .banner__id {
+	background: var(--signal);
+	color: var(--signal-ink);
 }
 
 .home-jobs .banner__rule {
 	flex: 1;
-	border-top: 1px dashed var(--rule);
+	border-top: 1px solid var(--rule);
 	min-width: 16px;
 }
 
@@ -165,7 +182,7 @@
 	background-image: radial-gradient(circle, var(--vm-dot) 0.8px, transparent 1.2px);
 	background-size: 14px 14px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 }
 
 .home-jobs .vm-mini-svg {
@@ -381,7 +398,7 @@
 	gap: 12px;
 	margin-bottom: 14px;
 	padding-bottom: 10px;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 }
 
 .home-jobs .rg__title h3 {
@@ -424,7 +441,7 @@
 
 .home-jobs .rlane__track {
 	height: 18px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--bar-2);
 	overflow: hidden;
 }
@@ -432,7 +449,7 @@
 .home-jobs .rlane__bar {
 	display: block;
 	height: 100%;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: color-mix(in srgb, var(--ink) 38%, transparent);
 	transform-origin: left center;
 	transform: scaleX(var(--s, 1));
@@ -534,7 +551,7 @@
 	margin-top: clamp(28px, 4vw, 44px);
 	padding: 0 20px;
 	border: 1px solid color-mix(in srgb, var(--trade) 50%, var(--rule));
-	border-radius: 10px;
+	border-radius: var(--corner);
 	background: var(--bar);
 	max-width: 880px;
 }
@@ -693,7 +710,7 @@
 	gap: 8px;
 	min-height: 36px;
 	padding: 0 16px;
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 	font: 400 0.75rem/1.2 var(--mono);
 	color: var(--ink-3);
 	cursor: pointer;
@@ -761,7 +778,7 @@
 .home-jobs .ex__play textarea:focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: -2px;
-	border-radius: 0 0 12px 12px;
+	border-radius: 0 0 var(--corner) var(--corner);
 }
 
 .home-jobs .ex__hint {
@@ -823,7 +840,7 @@
 	min-width: 0;
 	min-height: 160px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
 	overflow: hidden;
@@ -891,7 +908,7 @@
 }
 
 .home-jobs .index li {
-	border-bottom: 1px dashed var(--rule);
+	border-bottom: 1px solid var(--rule);
 }
 
 .home-jobs .index a {
@@ -907,8 +924,11 @@
 		padding 0.2s var(--ease);
 }
 
+/* The row keeps its ink: the plain-link hover's --signal-ink is for a --signal fill, and on --bar-2 in dark it
+   would vanish. */
 .home-jobs .index a:hover {
 	background: var(--bar-2);
+	color: var(--ink);
 	padding-inline: 12px;
 }
 
@@ -927,10 +947,28 @@
 	color: var(--ink-2);
 }
 
+/* The same drawn arrow as a main action's (.btn svg in ui.css), stepping forward as the row is hovered. */
 .home-jobs .index__go {
-	color: var(--accent-text);
-	font-family: var(--mono);
-	text-align: right;
+	align-self: center;
+	justify-self: end;
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: var(--accent-text);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: translate 0.15s var(--ease);
+}
+
+.home-jobs .index a:hover .index__go {
+	translate: 3px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-jobs .index__go {
+		transition: none;
+	}
 }
 
 @media (max-width: 719px) {
@@ -952,22 +990,29 @@
 
 /* ---- The closing (Close.astro): a tear line, then the install box and the way in ---- */
 
+/* A ticket's perforation, in the stub's language (.banner__id): a dashed line, and at each end a punched notch, a
+   little darker than the paper with a hairline rim, as the rails' holes are. */
 .home-jobs .tear {
+	--notch: radial-gradient(circle, var(--bar-2) 5.5px, var(--rule) 6px 6.75px, transparent 7.25px);
 	display: flex;
 	align-items: center;
 	gap: 14px;
 	margin-bottom: 40px;
+	padding-inline: 14px;
 	font: 400 0.75rem/1 var(--mono);
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--ink-3);
+	background:
+		var(--notch) -7px 50% / 14px 14px no-repeat,
+		var(--notch) calc(100% + 7px) 50% / 14px 14px no-repeat;
 }
 
 .home-jobs .tear::before,
 .home-jobs .tear::after {
 	content: '';
 	flex: 1;
-	border-top: 2px dotted var(--rule);
+	border-top: 1px dashed var(--ink-3);
 }
 
 .home-jobs .close {
@@ -982,7 +1027,7 @@
 	gap: 12px;
 }
 
-/* The closing has the page's one tear line, so the footer's is not shown here; a dashed rule starts the footer. */
+/* The closing has the page's one tear line, so the footer's is not shown here; a rule starts the footer. */
 :root:is([data-home], :has(.st)) .shell-tear {
 	display: none;
 }
@@ -990,7 +1035,7 @@
 :root:is([data-home], :has(.st)) .shell-foot {
 	margin-top: 0;
 	padding-top: 40px;
-	border-top: 1px dashed var(--rule);
+	border-top: 1px solid var(--rule);
 }
 
 /* ---- Motion ---- */

@@ -43,7 +43,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Full history: Starlight's lastUpdated reads git log, and a shallow clone
+      # Full history: each page's "Last updated" reads git log, and a shallow clone
       # would stamp every page with the same date.
       - uses: actions/checkout@v7
         with:

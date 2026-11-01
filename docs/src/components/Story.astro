@@ -1,14 +1,18 @@
 ---
 // The home page's opening: the intro with the whole map, and the tour of varmq's story in ten steps, a caption per
 // scroll, for the reader who starts it. Each step plays its chapter of the map while the one code block morphs into the
-// code behind it (lib/story/main.ts). The title and the lede are the page's hero fields in index.mdx.
+// code behind it (lib/story/main.ts). The title and the lede come from pages/index.astro.
 import '@shikijs/magic-move/style.css';
 import '../lib/heromap/map.css';
 import '../styles/story.css';
 import Install from './ui/Install.astro';
 import { stillMap } from '../lib/heromap/still.ts';
 
-const { title, tagline } = Astro.locals.starlightRoute.entry.data.hero ?? {};
+interface Props {
+	title: string;
+	tagline?: string;
+}
+const { title, tagline } = Astro.props;
 // The h1 names two parts of the map, each in that part's colour (story.css): the worker's goroutines and the
 // queues' lanes.
 const heading = title

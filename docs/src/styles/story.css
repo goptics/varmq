@@ -7,7 +7,7 @@
 /* While the reader is on the tour, in the story, the page snaps a step at a time (main.ts turns this on and off). */
 :root.st-snap {
 	scroll-snap-type: y mandatory;
-	scroll-padding-top: var(--sl-nav-height);
+	scroll-padding-top: var(--nav-height);
 }
 
 /* The home page is a landing page (docs/DESIGN.md, "Page types"). The story and everything under it share one frame,
@@ -21,6 +21,8 @@
 @media (min-width: 1180px) {
 	:root:is([data-home], :has(.st)) {
 		--st-gutter: max(var(--gutter), 52px);
+		/* A rail of sprocket holes (.roll); what runs edge to edge keeps its controls clear of it. */
+		--roll-width: 36px;
 	}
 }
 
@@ -37,48 +39,29 @@
 	}
 }
 
-:root:is([data-home], :has(.st)) .main-pane > main {
-	max-width: none;
-	border-inline: 0;
-}
-
-:root:is([data-home], :has(.st)) .content-panel {
-	padding-top: 0;
-	padding-inline: 0;
-}
-
-:root:is([data-home], :has(.st)) .content-panel > .sl-container {
+:root:is([data-home], :has(.st)) .home-page {
 	--st-gap: clamp(24px, 4vw, 72px);
-	max-width: none;
+	width: 100%;
 }
 
-/* The sections under the story take this frame from their own `.wrap` (home.css), not from the markdown column. */
-:root:is([data-home], :has(.st)) .sl-container > :not(.st, .roll, .sl-markdown-content) {
+/* The header (Fumadocs' home layout) takes the same frame, so its edges clear the sprocket holes. */
+:root:is([data-home], :has(.st)) #nd-nav {
+	--fd-layout-width: var(--st-max);
+}
+
+:root:is([data-home], :has(.st)) #nd-nav nav {
+	padding-inline: var(--st-gutter);
+}
+
+/* The sections under the story take this frame from their own `.wrap` (home.css). */
+:root:is([data-home], :has(.st)) .home-page > :not(.st, .roll, .home-jobs, .shell-ticker) {
 	max-width: var(--st-max);
 	margin-inline: auto;
 	padding-inline: var(--st-gutter);
 }
 
-/* The rails come before the story in the content, so Starlight's margin between siblings would push the stage 1.5rem
-   below the header; after the story it would add to the space above JOB 02, which its own padding sets. */
-:root:is([data-home], :has(.st)) .sl-container > :is(.st, .sl-markdown-content) {
-	margin-top: 0;
-}
-
-/* On a phone, Starlight keeps the theme switch in the sidebar's menu, which the home page does not have: its header
-   shows the switch instead, and the GitHub link without the main links, which the intro's Get started leads to. */
-@media (max-width: 49.99rem) {
-	:root:is([data-home], :has(.st)) .header .right-group {
-		display: flex;
-	}
-
-	:root:is([data-home], :has(.st)) .header .home-links {
-		display: none;
-	}
-}
-
 .st {
-	--st-h: calc(100svh - var(--sl-nav-height));
+	--st-h: calc(100svh - var(--nav-height));
 	--st-pad-y: min(24px, 3svh);
 	--st-small: 0.9375rem;
 
@@ -99,7 +82,7 @@
 
 .st-stage {
 	position: sticky;
-	top: var(--sl-nav-height);
+	top: var(--nav-height);
 	align-self: start;
 	display: grid;
 	grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
@@ -476,7 +459,7 @@
 .st-notes button:focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 }
 
 /* Each caption's point is a ring, like a goroutine's on the map and in the logo's green: its arc grows from the top
@@ -593,10 +576,10 @@
 	min-height: calc(2 * var(--pad) + 3 * var(--lh));
 	overflow: hidden;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--panel);
 	color: var(--panel-ink);
-	box-shadow: var(--sl-shadow-md);
+	box-shadow: var(--shadow-md);
 }
 
 .st-code pre {
@@ -689,26 +672,8 @@
 	container-type: inline-size;
 }
 
-.st-frame::before,
-.st-frame::after {
-	content: '';
-	position: absolute;
-	z-index: 1;
-	right: 0;
-	left: 0;
-	height: 6%;
-	pointer-events: none;
-}
-
-.st-frame::before {
-	top: 0;
-	background: linear-gradient(var(--paper), transparent);
-}
-
-.st-frame::after {
-	bottom: 0;
-	background: linear-gradient(transparent, var(--paper));
-}
+/* The map's own mask feathers its edges (lib/heromap/map.css), so the light behind the story (fd-theme.css, "Home")
+   shows through with no paper band at the frame's top and bottom. */
 
 .st varmq-map {
 	display: block;
@@ -1020,9 +985,9 @@
 		position: fixed;
 		top: 0;
 		bottom: 0;
-		width: 36px;
+		width: var(--roll-width);
 		margin: 0; /* the content stack's margin between siblings would push the right rail down */
-		z-index: calc(var(--sl-z-index-navbar, 10) + 1);
+		z-index: calc(var(--z-nav) + 1);
 		overflow: hidden;
 		container-type: size;
 		pointer-events: none;
@@ -1034,24 +999,14 @@
 		--hole: oklch(from var(--paper) calc(l * 0.78) calc(c * 0.78) h);
 	}
 
-	:root:is([data-home], :has(.st)) .page > header.header {
-		padding-inline: 52px;
-	}
-
-	/* Starlight isolates the main pane, which would keep the rails under the header whatever their z-index. The home
-	   page has no sidebar for that isolation to protect. */
-	:root:is([data-home], :has(.st)) .main-pane {
-		isolation: auto;
-	}
-
 	.roll--l {
 		left: 0;
-		border-right: 1px dashed var(--rule);
+		border-right: 1px solid var(--rule);
 	}
 
 	.roll--r {
 		right: 0;
-		border-left: 1px dashed var(--rule);
+		border-left: 1px solid var(--rule);
 	}
 
 	/* The holes, a pitch past the rail at each end, so an offset of up to one pitch never shows an edge. */

@@ -1,0 +1,49 @@
+---
+// A dispatch board's status line between the story and the sections: jobs as the API names their moves. The list is
+// decorative (the sections say it all in words), so hidden from screen readers. It runs twice, so the loop has no seam
+// (fd-theme.css, "The status ticker"). Still under reduced motion, paused on hover, and its Pause button stops it from
+// a keyboard or a touch screen (WCAG 2.2.2). Without JS the button stays hidden.
+const lines: { job: string; s: 'run' | 'wait' | 'done' | 'fail'; text: string }[] = [
+	{ job: 'JOB 0141', s: 'done', text: 'queue.Add → done' },
+	{ job: 'JOB 0142', s: 'run', text: 'running on goroutine 3' },
+	{ job: 'JOB 0143', s: 'wait', text: 'pending · priority 2' },
+	{ job: 'JOB 0144', s: 'run', text: 'acked from redis' },
+	{ job: 'JOB 0145', s: 'fail', text: 'err returned · job.Err()' },
+	{ job: 'JOB 0146', s: 'wait', text: 'parked · worker paused' },
+	{ job: 'JOB 0147', s: 'done', text: 'result ready · <-job.Result()' },
+	{ job: 'JOB 0148', s: 'run', text: 'batch of 4 · pool grows' },
+	{ job: 'JOB 0149', s: 'wait', text: 'published to topic · 3 subscribers' },
+	{ job: 'JOB 0150', s: 'done', text: 'sqlite · survived restart' },
+];
+---
+
+<div class="shell-ticker not-content not-prose" data-ticker>
+	<div class="shell-ticker__track" aria-hidden="true">
+		{
+			[0, 1].map(() => (
+				<ul>
+					{lines.map((l) => (
+						<li>
+							<b>{l.job}</b>
+							<span data-s={l.s}>{l.text}</span>
+						</li>
+					))}
+				</ul>
+			))
+		}
+	</div>
+	<button type="button" class="shell-ticker__pause" aria-label="Pause the job ticker" hidden>Pause</button>
+</div>
+
+<script>
+	const ticker = document.querySelector<HTMLElement>('[data-ticker]');
+	const button = ticker?.querySelector('button');
+	if (ticker && button) {
+		button.hidden = false;
+		button.addEventListener('click', () => {
+			const verb = ticker.toggleAttribute('data-paused') ? 'Play' : 'Pause';
+			button.textContent = verb;
+			button.setAttribute('aria-label', `${verb} the job ticker`);
+		});
+	}
+</script>

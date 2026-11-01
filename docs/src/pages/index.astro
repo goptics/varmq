@@ -1,0 +1,45 @@
+---
+// The home page (docs/DESIGN.md, "Page types"): the story (shell/Hero.astro) and, under it, the sections as print
+// jobs, JOB 02 to JOB 06, then the closing (components/home/, styles/home.css). The tour (lib/story/main.ts) ends with
+// Skip or Esc at #sched-title, the heading of JOB 02, and focuses it.
+import Base from '../layouts/Base.astro';
+import Hero from '../components/shell/Hero.astro';
+import Footer from '../components/shell/Footer.astro';
+import Scenes from '../components/home/Scenes.astro';
+import Storage from '../components/home/Storage.astro';
+import Race from '../components/home/Race.astro';
+import Examples from '../components/home/Examples.astro';
+import Index from '../components/home/Index.astro';
+import Close from '../components/home/Close.astro';
+import Ticker from '../components/home/Ticker.astro';
+import { Home } from '../components/fd/home';
+import logoDark from '../assets/logo-dark.svg?url';
+import logoLight from '../assets/logo-light.svg?url';
+
+const title = 'Worker pools and job queues for Go';
+const tagline =
+	'Add jobs to a queue. A pool of workers runs them. Keep the jobs in memory, or in Redis or SQLite so they survive a restart.';
+---
+
+<Base
+	title="VarMQ"
+	fullTitle="VarMQ | Worker pools and job queues for Go"
+	description="Worker pools and job queues for Go that keep jobs in memory, or in Redis or SQLite so they survive a restart."
+	home
+>
+	<Home client:load pathname={Astro.url.pathname} params={Astro.params} logo={{ light: logoLight, dark: logoDark }}>
+		<div class="home-page">
+			<Hero title={title} tagline={tagline} />
+			<Ticker />
+			<div class="home-jobs not-content not-prose">
+				<Scenes />
+				<Storage />
+				<Race />
+				<Examples />
+				<Index />
+				<Close />
+			</div>
+			<Footer />
+		</div>
+	</Home>
+</Base>

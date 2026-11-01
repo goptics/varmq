@@ -1,6 +1,5 @@
 ---
-import Default from '@astrojs/starlight/components/Footer.astro';
-
+// The end of every page: the tear line and the site's links.
 const links = [
 	{ label: 'API reference', href: 'https://pkg.go.dev/github.com/goptics/varmq' },
 	{ label: 'Benchmarks', href: '/reference/benchmarks/' },
@@ -9,8 +8,7 @@ const links = [
 ];
 ---
 
-<Default {...Astro.props}><slot /></Default>
-<div class="shell-foot">
+<footer class="shell-foot not-content not-prose">
 	<p class="shell-tear" aria-hidden="true">tear here</p>
 	<div class="shell-foot__in">
 		<ul class="shell-foot__links">
@@ -18,4 +16,4 @@ const links = [
 		</ul>
 		<p class="shell-foot__note">VarMQ is MIT licensed. Benchmark figures come from github.com/goptics/benchmarks.</p>
 	</div>
-</div>
+</footer>
