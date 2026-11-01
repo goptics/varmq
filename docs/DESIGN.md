@@ -7,6 +7,8 @@ Every page of the docs site follows this file. The values live in `src/styles/to
 The queue is a roll of continuous-feed paper. A page is a print job. One square is one job. One lane is one worker.
 A page explains by showing: each claim is a small working scene placed next to the Go call that makes it.
 
+> This branch's variant (end of tokens.css): amber on carbon chrome, the mascot's green for section numbers, a graph-paper page.
+
 The site dresses that idea as signage for a job dispatcher, in the mascot's colours:
 
 - **Colour.** Every green is the logo's (`assets/logo-light.svg` `#2e9c7f`, `logo-dark.svg` `#44bf9e`), deepened or lit; no colour comes from outside the mascot and the scenes. The logo green deepened (`--chrome`) is the structure: the header and the sidebar, with white lettering, edged in the bright logo green. The bright logo green (`--signal`) is the signal: the page you are on, the primary action, the highlighter stroke under a link. Amber (`--hot`), the colour every scene gives a job, numbers the sections, marks lists and is the caution tape. The scenes and the code are green-black panels in both themes.

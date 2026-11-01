@@ -136,3 +136,62 @@
 	--tk-t: var(--tk-t-on-dark);
 	--tk-b: var(--tk-b-on-dark);
 }
+
+/* ---- Theme variant: amber on carbon, graph paper ----
+   The signal is a job's amber, from the scenes; the chrome is carbon, like a dispatch board at night; the page is
+   graph paper. The mascot's green numbers the sections and stays the colour of a worker. */
+
+:root {
+	--paper: #f4f0e6;
+	--bar: #ebe6d9;
+	--bar-2: #e0d9c8;
+	--ink: #17150f;
+	--ink-2: #46423a;
+	--ink-3: #625d53;
+	--rule: #d6cdb9;
+	--dot: color-mix(in srgb, var(--ink) 7%, transparent);
+	--page-pattern:
+		linear-gradient(to right, var(--dot) 1px, transparent 1px),
+		linear-gradient(to bottom, var(--dot) 1px, transparent 1px);
+	--page-pattern-size: 24px 24px;
+
+	--chrome: #17150f;
+	--chrome-2: #24221a;
+	--chrome-3: #34312a;
+	--chrome-ink: #f4efe2;
+	--chrome-ink-2: #b9b29f;
+	--chrome-rule: #34312a;
+	--title: #17150f;
+
+	--signal: #ffb31f;
+	--signal-ink: #1b1300;
+	--hot: #2e9c7f;
+	--hot-text: #06735a;
+	--on-signal-go: #0b4a3a;
+	--on-signal-stop: #7a1500;
+
+	--panel: #17160f;
+	--panel-2: #201f18;
+	--panel-ink: #f2eee4;
+	--panel-ink-2: #aaa596;
+	--panel-rule: #36342c;
+	--panel-drop: var(--ink);
+}
+
+:root[data-theme='dark'] {
+	--paper: #0f0e0b;
+	--bar: #17160f;
+	--bar-2: #211f18;
+	--ink: #f2eee4;
+	--ink-2: #c5bfb0;
+	--ink-3: #979182;
+	--rule: #2d2b23;
+	--dot: color-mix(in srgb, var(--ink) 6%, transparent);
+	--chrome: #1b1a14;
+	--chrome-2: #26241d;
+	--title: #ffc04a;
+	--hot-text: #5fd4b2;
+	--panel: #191813;
+	--panel-2: #211f19;
+	--panel-rule: #37352c;
+}
