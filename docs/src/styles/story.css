@@ -421,7 +421,9 @@
 	font-weight: 500;
 }
 
+/* --y is the middle of a caption's first line, where its point sits and its line starts. */
 .st-notes li {
+	--y: 0.8em;
 	position: relative;
 	padding-left: 26px;
 	color: var(--ink-3);
@@ -455,10 +457,15 @@
 	color: var(--ink);
 }
 
-/* On a touch screen each caption is a 44px target (DESIGN.md). */
+/* On a touch screen each caption is a 44px target (DESIGN.md): padding, not a min-height, so the text stays where
+   --y says. A taller button would centre its text and leave the point above it. */
 @media (pointer: coarse) {
+	.st-notes li {
+		--y: calc(0.8em + (44px - 1lh) / 2);
+	}
+
 	.st-notes button {
-		min-height: 44px;
+		padding-block: calc((44px - 1lh) / 2);
 	}
 }
 
@@ -479,7 +486,7 @@
 .st-point {
 	position: absolute;
 	z-index: 1;
-	top: calc(0.8em - 7px);
+	top: calc(var(--y) - 7px);
 	left: 1px;
 	width: 14px;
 	height: 14px;
@@ -534,12 +541,12 @@
 }
 
 /* A line runs from each caption's point to the next, and fills once the caption is done. Its ends sit under the two
-   rings' strokes (radius 5 to 7 around the point at 0.8em), so ring, line and ring read as one track. */
+   rings' strokes (radius 5 to 7 around the point at --y), so ring, line and ring read as one track. */
 .st-notes li:not(:last-child)::after {
 	content: '';
 	position: absolute;
-	top: calc(0.8em + 5px);
-	bottom: calc(1px - 0.8em);
+	top: calc(var(--y) + 5px);
+	bottom: calc(1px - var(--y));
 	left: 7px;
 	width: 2px;
 	background-color: var(--rule);
