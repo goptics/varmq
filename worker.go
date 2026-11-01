@@ -47,7 +47,7 @@ type worker[T any, JobType iJob[T]] struct {
 	errorChan       chan error
 	waiters         *sync.Cond
 	mx              sync.RWMutex
-	ctx             context.Context
+	ctx             atomic.Pointer[context.Context] // replaced by Start on a restart; Context loads it without w.mx
 	cancel          context.CancelFunc
 	Configs         configs
 	registryTimer   *time.Timer
@@ -329,7 +329,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w.sources.Store(managerBox[iJob[T]]{newSourceManager[iJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
-	w.initContext(c.ctx)
+	w.initContext()
 
 	if c.autoRun {
 		w.Start()
@@ -354,7 +354,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w.sources.Store(managerBox[iErrorJob[T]]{newSourceManager[iErrorJob[T]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
-	w.initContext(c.ctx)
+	w.initContext()
 
 	if c.autoRun {
 		w.Start()
@@ -379,7 +379,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w.sources.Store(managerBox[iResultJob[T, R]]{newSourceManager[iResultJob[T, R]]()})
 	w.waiters = sync.NewCond(&w.mx)
 	w.concurrency.Store(c.concurrency)
-	w.initContext(c.ctx)
+	w.initContext()
 
 	if c.autoRun {
 		w.Start()
@@ -388,12 +388,17 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	return w
 }
 
-func (w *worker[T, JobType]) initContext(parentCtx context.Context) {
-	if parentCtx == nil {
-		parentCtx = context.Background()
+// initContext derives a fresh cancellable context from the configured parent.
+// It never writes Configs: Add copies Configs without w.mx, and Start calls
+// this again on every restart.
+func (w *worker[T, JobType]) initContext() {
+	parent := w.Configs.ctx
+	if parent == nil {
+		parent = context.Background()
 	}
-	w.ctx, w.cancel = context.WithCancel(parentCtx)
-	w.Configs.ctx = parentCtx
+	ctx, cancel := context.WithCancel(parent)
+	w.ctx.Store(&ctx)
+	w.cancel = cancel
 }
 
 func (w *worker[T, JobType]) configs() configs {
@@ -413,7 +418,7 @@ func (w *worker[T, JobType]) Name() string {
 }
 
 func (w *worker[T, JobType]) Context() context.Context {
-	return w.ctx
+	return *w.ctx.Load()
 }
 
 func (w *worker[T, JobType]) Metrics() Metrics {
