@@ -52,7 +52,7 @@
 }
 
 /* The sections under the story take this frame from their own `.wrap` (home.css). */
-:root:is([data-home], :has(.st)) .home-page > :not(.st, .roll, .home-jobs) {
+:root:is([data-home], :has(.st)) .home-page > :not(.st, .roll, .home-jobs, .shell-ticker) {
 	max-width: var(--st-max);
 	margin-inline: auto;
 	padding-inline: var(--st-gutter);

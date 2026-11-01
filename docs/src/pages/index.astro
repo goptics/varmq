@@ -11,6 +11,7 @@ import Race from '../components/home/Race.astro';
 import Examples from '../components/home/Examples.astro';
 import Index from '../components/home/Index.astro';
 import Close from '../components/home/Close.astro';
+import Ticker from '../components/home/Ticker.astro';
 import { Home } from '../components/fd/home';
 import logoDark from '../assets/logo-dark.svg?url';
 import logoLight from '../assets/logo-light.svg?url';
@@ -29,6 +30,7 @@ const tagline =
 	<Home client:load pathname={Astro.url.pathname} params={Astro.params} logo={{ light: logoLight, dark: logoDark }}>
 		<div class="home-page">
 			<Hero title={title} tagline={tagline} />
+			<Ticker />
 			<div class="home-jobs not-content not-prose">
 				<Scenes />
 				<Storage />

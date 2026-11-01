@@ -1,13 +1,16 @@
-/* Docs shell theme. Restyles Fumadocs with the tokens in tokens.css (docs/DESIGN.md).
-   Load order: fd.css imports Tailwind and Fumadocs (in cascade layers), then tokens.css, ui.css and this file, which
-   are not in a layer, so they win. Every custom class starts with `shell-` or `doc-`. The prose rules skip
-   `.not-content`, so scene markup on a page is never touched. */
+/* Docs shell theme: Fumadocs dressed as transit signage for a dispatcher (docs/DESIGN.md, "The idea"), with the tokens in tokens.css.
+   layouts/Base.astro loads it after Tailwind and Fumadocs, which sit in cascade layers, so these rules win. Every
+   custom class starts with `shell-` or `doc-`. The prose rules skip `.not-content`, so scene markup is never touched.
+
+   The pieces, in order: Fumadocs' variables; the page (white paper over a dot-matrix grid); the ultramarine chrome
+   (header, sidebar as a departure board); the page title (a ticket stub) and numbered sections; prose; callouts; code; table of
+   contents; the page's end; buttons; the home page; the 404 page. */
 
 /* ---- Fumadocs variables, mapped from the tokens ---- */
 
 :root {
-	--local-h1: clamp(2.25rem, 5.4vw, 3.75rem);
-	--local-h2: clamp(1.625rem, 2.8vw, 2.125rem);
+	--local-h1: clamp(3rem, 7vw, 5.25rem);
+	--local-h2: clamp(1.875rem, 3.4vw, 2.625rem);
 
 	/* Shared sizes the component styles read. */
 	--nav-height: 3.5rem;
@@ -15,8 +18,8 @@
 	--shadow-sm: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
 	--shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
 	--shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
-	/* The dark panels lift off the light page; in dark they sit in it. */
-	--panel-shadow: 0 1px 0 0 color-mix(in srgb, var(--panel-ink) 6%, transparent) inset, 0 24px 48px -28px var(--panel-drop);
+	/* A dark panel sits on the page like a card on a desk: a hard offset shadow in light, a hairline in dark. */
+	--panel-shadow: 6px 6px 0 0 var(--panel-drop);
 
 	--default-font-family: var(--display);
 	--default-mono-font-family: var(--mono);
@@ -24,9 +27,12 @@
 	--font-mono: var(--mono);
 }
 
+:root[data-theme='dark'] {
+	--panel-shadow: 0 0 0 1px var(--panel-rule);
+}
+
 :root,
-:root.dark,
-:root.dark #nd-sidebar {
+:root.dark {
 	--color-fd-background: var(--paper);
 	--color-fd-foreground: var(--ink);
 	--color-fd-muted: var(--bar);
@@ -36,13 +42,13 @@
 	--color-fd-card: var(--paper);
 	--color-fd-card-foreground: var(--ink);
 	--color-fd-border: var(--rule);
-	--color-fd-primary: var(--accent-text);
-	--color-fd-primary-foreground: var(--brand-ink);
+	--color-fd-primary: var(--ink);
+	--color-fd-primary-foreground: var(--paper);
 	--color-fd-secondary: var(--bar);
 	--color-fd-secondary-foreground: var(--ink);
 	--color-fd-accent: var(--bar-2);
 	--color-fd-accent-foreground: var(--ink);
-	--color-fd-ring: var(--accent-text);
+	--color-fd-ring: var(--signal);
 	--color-fd-overlay: color-mix(in srgb, var(--panel) 62%, transparent);
 	--color-fd-info: var(--cobalt);
 	--color-fd-warning: var(--amber);
@@ -50,7 +56,36 @@
 	--color-fd-success: var(--brand);
 }
 
-/* ---- Page: one plain surface; the scenes and the code are the only dark panels ---- */
+/* The ultramarine chrome: the same sign in both themes. Its own text and line colours stand in for the page's. */
+#nd-sidebar,
+#nd-sidebar-mobile,
+#nd-subnav,
+#nd-nav {
+	--ink: var(--chrome-ink);
+	--ink-2: var(--chrome-ink-2);
+	--ink-3: var(--chrome-ink-2);
+	--rule: var(--chrome-rule);
+	--bar: var(--chrome-2);
+	--bar-2: var(--chrome-2);
+	--paper: var(--chrome);
+	--color-fd-background: var(--chrome);
+	--color-fd-foreground: var(--chrome-ink);
+	--color-fd-card: var(--chrome);
+	--color-fd-muted: var(--chrome-2);
+	--color-fd-muted-foreground: var(--chrome-ink-2);
+	--color-fd-secondary: var(--chrome-2);
+	--color-fd-secondary-foreground: var(--chrome-ink);
+	--color-fd-accent: var(--chrome-2);
+	--color-fd-accent-foreground: var(--chrome-ink);
+	--color-fd-border: var(--chrome-rule);
+	--color-fd-primary: var(--signal);
+	--color-fd-popover: var(--chrome-2);
+	--color-fd-popover-foreground: var(--chrome-ink);
+	color-scheme: dark;
+	color: var(--chrome-ink);
+}
+
+/* ---- Page: white paper over a dot-matrix grid ---- */
 
 html {
 	scroll-behavior: smooth;
@@ -60,30 +95,32 @@ html {
 
 body {
 	background-color: var(--paper);
+	background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.25px);
+	background-size: 20px 20px;
 	color: var(--ink);
 	font-family: var(--display);
 	font-size: 1.0625rem;
-	line-height: 1.6;
+	line-height: 1.65;
 	text-rendering: optimizeLegibility;
 }
 
 ::selection {
-	background: var(--brand);
-	color: var(--brand-ink);
+	background: var(--signal);
+	color: var(--signal-ink);
 }
 
 :root {
-	accent-color: var(--brand);
-	caret-color: var(--accent-text);
+	accent-color: var(--signal);
+	caret-color: var(--ink);
 }
 
 :focus-visible {
-	outline: 2px solid var(--accent-text);
+	outline: 2px solid var(--signal);
 	outline-offset: 3px;
 }
 
 .codeblock :focus-visible {
-	outline-color: var(--panel-accent);
+	outline-color: var(--signal);
 }
 
 #nd-sidebar,
@@ -94,150 +131,144 @@ body {
 	scrollbar-color: var(--rule) transparent;
 }
 
-/* ---- Header (home and 404) ---- */
-
-#nd-nav > div {
-	border-bottom: 1px solid var(--rule);
-	background: color-mix(in srgb, var(--paper) 82%, transparent);
-	backdrop-filter: saturate(1.4) blur(12px);
-}
-
-#nd-nav nav a:not([aria-label]) {
-	font-size: 0.9375rem;
-	font-weight: 500;
-}
-
-/* ---- Sidebar ---- */
-
-#nd-sidebar {
-	background: var(--paper);
-	border-inline-end: 1px solid var(--rule);
-}
-
-/* The logo in the sidebar's head (components/fd/layout.tsx): one per theme. */
+/* The logo: on the ultramarine chrome it is white, as a sign's lettering. */
 .shell-logo {
 	display: block;
-	height: 30px;
+	height: 28px;
 	width: auto;
+	filter: brightness(0) invert(1);
 }
 
-.shell-logo--dark,
-:root[data-theme='dark'] .shell-logo--light {
+.shell-logo--light {
 	display: none;
 }
 
-:root[data-theme='dark'] .shell-logo--dark {
-	display: block;
+/* ---- Header (home, 404, and the docs' phone bar) ---- */
+
+#nd-nav > div,
+#nd-subnav {
+	border-bottom: 4px solid var(--signal);
+	background: var(--chrome);
+	backdrop-filter: none;
 }
 
-/* Group headings: mono caps. Each one restarts the job count its pages show. */
-#nd-sidebar p:has(> .fd-page-tree-item-name) {
+#nd-nav nav a:not([aria-label]) {
+	color: var(--chrome-ink);
+	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	transition: color 0.15s var(--ease);
+}
+
+#nd-nav nav a:not([aria-label]):hover {
+	color: var(--signal);
+}
+
+/* ---- Sidebar: a departure board ---- */
+
+#nd-sidebar,
+#nd-sidebar-mobile {
+	background: var(--chrome);
+	border-inline-end: 4px solid var(--signal);
+}
+
+/* Group headings: mono caps, with an amber tick. Each one restarts the job count its pages show. */
+:is(#nd-sidebar, #nd-sidebar-mobile) p:has(> .fd-page-tree-item-name) {
 	counter-reset: job;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	margin-top: 1.75rem;
-	color: var(--ink);
+	color: var(--chrome-ink);
 	font: 600 0.6875rem/1.3 var(--mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile) p:has(> .fd-page-tree-item-name)::before {
+	content: '';
+	flex: none;
+	width: 8px;
+	height: 2px;
+	background: var(--signal);
+}
+
+/* Each page is a row on the board: its job number under its heading, as its banner shows it
+   (components/shell/PageTitle.astro), then its name. The page you are on is the lit row: navy on sign yellow. */
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name) {
+	counter-increment: job;
+	position: relative;
+	padding: 0.4rem 0.625rem 0.4rem 2.625rem !important;
+	border-radius: 2px;
+	color: var(--chrome-ink-2);
+	font-size: 0.9375rem;
+	line-height: 1.35;
+	transition:
+		background-color 0.12s var(--ease),
+		color 0.12s var(--ease);
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name)::before {
+	content: counter(job, decimal-leading-zero);
+	position: absolute;
+	inset-inline-start: 0.625rem;
+	top: 50%;
+	translate: 0 -50%;
+	color: color-mix(in srgb, var(--chrome-ink-2) 70%, var(--chrome));
+	font: 500 0.6875rem/1 var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name):hover {
+	background: var(--chrome-2);
+	color: var(--chrome-ink);
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true']:has(> .fd-page-tree-item-name),
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true']:has(> .fd-page-tree-item-name):hover {
+	background: var(--signal);
+	color: var(--signal-ink);
+	font-weight: 600;
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true']:has(> .fd-page-tree-item-name)::before {
+	color: var(--signal-ink);
+}
+
+/* ---- Page title: a ticket stub, then the h1 ---- */
+
+.shell-banner {
+	display: flex;
+	align-items: stretch;
+	width: fit-content;
+	margin: 0 0 1.25rem;
+	font: 600 0.75rem/1 var(--mono);
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
 }
 
-/* Each page carries its job number under its heading, as its banner does (components/shell/PageTitle.astro). The page
-   you are on has a green bar and number. */
-#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name) {
-	counter-increment: job;
-	position: relative;
-	padding: 0.375rem 0.625rem 0.375rem 2.5rem !important;
-	border-radius: 6px;
-	color: var(--ink-2);
-	font-size: 0.9375rem;
-	line-height: 1.35;
-	transition:
-		background-color 0.15s var(--ease),
-		color 0.15s var(--ease);
-}
-
-#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name)::before {
-	content: counter(job, decimal-leading-zero);
-	position: absolute;
-	inset-inline-start: 0.75rem;
-	top: 50%;
-	translate: 0 -50%;
-	color: var(--ink-3);
-	font: 500 0.6875rem/1 var(--mono);
-	font-variant-numeric: tabular-nums;
-	transition: color 0.15s var(--ease);
-}
-
-#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name):hover {
-	background: var(--bar);
-	color: var(--ink);
-}
-
-#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name),
-#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name):hover {
-	background: color-mix(in srgb, var(--brand) 10%, var(--paper));
-	color: var(--ink);
-	font-weight: 600;
-}
-
-#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name)::before {
-	color: var(--accent-text);
-}
-
-#nd-sidebar a[data-active='true']:has(> .fd-page-tree-item-name)::after {
-	content: '';
-	position: absolute;
-	inset-block: 0.4rem;
-	inset-inline-start: 0;
-	width: 2px;
-	border-radius: 2px;
-	background: var(--brand);
-}
-
-/* ---- Page title: the JOB banner, then the h1 ---- */
-
-.shell-banner {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin: 0 0 1rem;
-	color: var(--ink-3);
-	font: 500 0.75rem/1 var(--mono);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-}
-
 .shell-banner__id {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	padding: 5px 9px;
-	border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--rule));
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--brand) 9%, var(--paper));
-	color: var(--accent-text);
-	letter-spacing: 0.1em;
+	position: relative;
+	padding: 8px 14px 8px 12px;
+	background: var(--ink);
+	color: var(--signal);
 	white-space: nowrap;
+	/* The stub's torn edge: a notch punched where it meets the label. */
+	-webkit-mask: radial-gradient(circle at 100% 50%, transparent 5px, black 5.5px);
+	mask: radial-gradient(circle at 100% 50%, transparent 5px, black 5.5px);
 }
 
-/* A live dot: this job is the one running. */
-.shell-banner__id::before {
-	content: '';
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--brand);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+:root[data-theme='dark'] .shell-banner__id {
+	background: var(--signal);
+	color: var(--signal-ink);
 }
 
 .shell-banner__label {
+	padding: 8px 12px;
+	border: 1px solid var(--ink);
+	border-inline-start: 1px dashed var(--ink);
+	color: var(--ink);
 	white-space: nowrap;
-}
-
-.shell-banner__label::before {
-	content: '/';
-	margin-inline-end: 10px;
-	color: var(--ink-3);
-	opacity: 0.5;
 }
 
 .shell-banner__rule {
@@ -246,13 +277,13 @@ body {
 
 .doc-title {
 	margin: 0 0 2rem;
-	color: var(--ink);
-	font-family: var(--display);
+	color: var(--title);
+	font-family: var(--headline);
 	font-size: var(--local-h1);
-	font-weight: 700;
-	font-variation-settings: 'opsz' 96;
-	letter-spacing: -0.04em;
-	line-height: 0.96;
+	font-weight: 800;
+	letter-spacing: -0.01em;
+	line-height: 0.92;
+	text-transform: uppercase;
 	text-wrap: balance;
 }
 
@@ -261,19 +292,20 @@ body {
 .doc-body {
 	--tw-prose-body: var(--ink);
 	--tw-prose-headings: var(--ink);
-	--tw-prose-links: var(--accent-text);
+	--tw-prose-links: var(--ink);
 	--tw-prose-bold: var(--ink);
 	--tw-prose-code: var(--ink);
 	--tw-prose-quotes: var(--ink-2);
-	--tw-prose-bullets: var(--accent-text);
-	--tw-prose-counters: var(--accent-text);
+	--tw-prose-bullets: var(--ink);
+	--tw-prose-counters: var(--ink);
 	--tw-prose-hr: var(--rule);
-	--tw-prose-th-borders: var(--ink-3);
+	--tw-prose-th-borders: var(--ink);
 	--tw-prose-td-borders: var(--rule);
+	counter-reset: section;
 	max-width: none;
 	color: var(--ink);
 	font-size: 1.0625rem;
-	line-height: 1.6;
+	line-height: 1.65;
 	overflow-wrap: break-word;
 }
 
@@ -283,22 +315,32 @@ body {
 }
 
 .doc-body :is(h2, h3, h4, h5):not(:where(.not-content *)) {
-	font-family: var(--display);
 	color: var(--ink);
 	text-wrap: balance;
 	scroll-margin-top: calc(var(--fd-docs-row-1, 0px) + 1.5rem);
 }
 
-/* A new h2 starts a new section: room above it. */
+/* A section head is signage: condensed caps, with its number in mono over it. */
 .doc-body h2:not(:where(.not-content *)) {
-	margin-top: 3.75rem;
+	counter-increment: section;
+	margin-top: 4rem;
 	padding-top: 0;
 	border-top: 0;
+	font-family: var(--headline);
 	font-size: var(--local-h2);
-	font-weight: 700;
-	font-variation-settings: 'opsz' 72;
-	letter-spacing: -0.03em;
-	line-height: 1.05;
+	font-weight: 800;
+	letter-spacing: 0;
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+.doc-body h2:not(:where(.not-content *))::before {
+	content: '§ ' counter(section, decimal-leading-zero);
+	display: block;
+	margin-bottom: 0.625rem;
+	color: var(--hot-text);
+	font: 600 0.75rem/1 var(--mono);
+	letter-spacing: 0.12em;
 }
 
 .doc-body > h2:first-child {
@@ -307,37 +349,39 @@ body {
 
 .doc-body h3:not(:where(.not-content *)) {
 	margin-top: 2.25rem;
+	font-family: var(--display);
 	font-size: 1.25rem;
-	font-weight: 650;
-	letter-spacing: -0.01em;
+	font-weight: 700;
+	letter-spacing: -0.005em;
 	line-height: 1.25;
 }
 
 .doc-body :is(h4, h5):not(:where(.not-content *)) {
 	margin-top: 1.75rem;
 	font-size: 1.0625rem;
-	font-weight: 650;
-	letter-spacing: 0;
+	font-weight: 700;
 	line-height: 1.3;
 }
 
+/* Links: ink, over a yellow highlighter stroke that fills on hover. */
 .doc-body a:not(:where(.not-content *)) {
-	color: var(--accent-text);
-	font-weight: inherit;
-	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.2em;
-	transition: text-decoration-color 0.15s var(--ease);
+	color: var(--ink);
+	font-weight: 500;
+	text-decoration: none;
+	background-image: linear-gradient(var(--signal), var(--signal));
+	background-position: 0 92%;
+	background-repeat: no-repeat;
+	background-size: 100% 0.42em;
+	transition: background-size 0.15s var(--ease);
 }
 
 .doc-body a:not(:where(.not-content *)):hover {
-	color: var(--accent-text);
-	text-decoration-color: currentColor;
+	color: var(--signal-ink);
+	background-size: 100% 100%;
 }
 
 .doc-body strong:not(:where(.not-content *)) {
-	font-weight: 650;
+	font-weight: 700;
 }
 
 .doc-body :is(ul, ol):not(:where(.not-content *)) {
@@ -349,7 +393,7 @@ body {
 }
 
 .doc-body li:not(:where(.not-content *))::marker {
-	color: var(--accent-text);
+	color: var(--hot-text);
 	font-family: var(--mono);
 	font-size: 0.875em;
 }
@@ -360,16 +404,22 @@ body {
 
 .doc-body :is(code, kbd):not(:where(.not-content *)) {
 	font-family: var(--mono);
-	font-size: 0.875em;
+	font-size: 0.85em;
 	font-weight: inherit;
 }
 
 .doc-body code:not(:where(.not-content *)) {
 	padding: 0.1em 0.375em;
 	border: 1px solid var(--rule);
-	border-radius: 5px;
+	border-radius: 2px;
 	background: var(--bar);
 	color: var(--ink);
+}
+
+.doc-body a code:not(:where(.not-content *)) {
+	border-color: transparent;
+	background: transparent;
+	padding-inline: 0;
 }
 
 .doc-body code:not(:where(.not-content *))::before,
@@ -378,44 +428,51 @@ body {
 }
 
 .doc-body :is(h1, h2, h3, h4, h5, h6) code:not(:where(.not-content *)) {
+	border: 0;
+	background: none;
+	padding: 0;
 	font-size: 0.85em;
 	letter-spacing: 0;
+	text-transform: none;
 }
 
 .doc-body kbd:not(:where(.not-content *)) {
 	display: inline-block;
 	padding: 0.1em 0.45em;
-	border: 1px solid var(--rule);
+	border: 1px solid var(--ink);
 	border-bottom-width: 2px;
-	border-radius: 4px;
-	background: var(--bar);
+	border-radius: 2px;
+	background: var(--paper);
 	color: var(--ink);
 	line-height: 1.4;
 }
 
 .doc-body blockquote:not(:where(.not-content *)) {
 	padding-inline-start: 1.25rem;
-	border-inline-start: 1px solid var(--ink-3);
+	border-inline-start: 3px solid var(--signal);
 	color: var(--ink-2);
 	font-style: normal;
 }
 
 .doc-body hr:not(:where(.not-content *)) {
 	border: 0;
-	border-bottom: 1px solid var(--rule);
+	border-bottom: 1px dashed var(--ink-3);
 }
 
 .doc-body img:not(:where(.not-content *)) {
-	border-radius: 8px;
+	border-radius: 2px;
 }
 
-/* Tables: a mono label row, hairline row rules, tabular numerals. Wide tables scroll on their own. */
+/* Tables: a manifest. An ink rule over a mono head, hairline rows, tabular numerals, on plain paper. Wide ones
+   scroll. */
 .doc-body table:not(:where(.not-content *)) {
 	display: block;
 	width: max-content;
 	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
+	border-top: 3px solid var(--chrome);
+	background: var(--paper);
 	font-size: 0.9375rem;
 	font-variant-numeric: tabular-nums;
 }
@@ -429,51 +486,58 @@ body {
 }
 
 .doc-body th:not(:where(.not-content *)) {
-	border-bottom: 1px solid var(--ink-3);
-	color: var(--ink-3);
-	font: 500 0.75rem/1.3 var(--mono);
-	letter-spacing: 0.08em;
+	border-bottom: 1px solid var(--ink);
+	color: var(--ink);
+	font: 600 0.6875rem/1.3 var(--mono);
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	white-space: nowrap;
 }
 
 /* ---- Callout (`:::note`, `:::caution`; components/fd/mdx.tsx) ----
-   A card with a colored hairline rule, a tint and a square marker. Amber for caution and danger, brand for note
-   and tip. The label text says which one it is, so color is never the only signal. */
+   A slip on the page: a label tab, then the text. A caution has hazard tape down its edge. The label says which kind
+   it is, so colour is never the only signal. */
 
 .doc-aside {
-	--aside: var(--brand);
+	--aside: var(--chrome);
 	position: relative;
-	margin-block: 1.75rem;
-	padding: 1rem 1.25rem 1.0625rem 1.375rem;
-	overflow: hidden;
-	border: 1px solid var(--rule);
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--aside) 6%, var(--paper));
+	margin-block: 2rem;
+	padding: 1rem 1.25rem 1.0625rem 1.5rem;
+	border: 1px solid var(--ink);
+	border-radius: 0;
+	background: var(--paper);
 	color: var(--ink);
 }
 
-/* The kind's colour runs down the left edge; the label says which kind it is, so colour is never the only signal. */
 .doc-aside::before {
 	content: '';
 	position: absolute;
-	inset-block: 0;
-	inset-inline-start: 0;
-	width: 3px;
+	inset-block: -1px;
+	inset-inline-start: -1px;
+	width: 6px;
 	background: var(--aside);
 }
 
 .doc-aside--caution,
 .doc-aside--danger {
-	--aside: var(--amber);
+	--aside: repeating-linear-gradient(-45deg, var(--signal) 0 6px, var(--signal-ink) 6px 12px);
 }
 
 .doc-aside__title {
-	margin: 0 0 0.375rem !important;
-	color: var(--ink);
+	display: inline-block;
+	margin: 0 0 0.5rem !important;
+	padding: 3px 7px;
+	background: var(--chrome);
+	color: var(--chrome-ink);
 	font: 600 0.6875rem/1.2 var(--mono);
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
+}
+
+.doc-aside--caution .doc-aside__title,
+.doc-aside--danger .doc-aside__title {
+	background: var(--signal);
+	color: var(--signal-ink);
 }
 
 .doc-aside__content > :first-child {
@@ -484,14 +548,14 @@ body {
 	margin-bottom: 0;
 }
 
-/* ---- Code blocks (components/ui/CodeFrame.astro): a dark panel in both themes ---- */
+/* ---- Code blocks (components/ui/CodeFrame.astro): a carbon panel in both themes ---- */
 
 .codeblock {
 	position: relative;
-	margin-block: 1.5rem;
+	margin-block: 1.75rem;
 	overflow: hidden;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: 4px;
 	background: var(--panel);
 	color: var(--panel-ink);
 	font-family: var(--mono);
@@ -507,7 +571,8 @@ body {
 .codeblock__title {
 	padding: 0.5rem 1.125rem;
 	border-inline-end: 1px solid var(--panel-rule);
-	color: var(--panel-ink-2);
+	border-top: 2px solid var(--signal);
+	color: var(--panel-ink);
 	font: 500 0.75rem/1.2 var(--mono);
 	letter-spacing: 0.02em;
 }
@@ -553,7 +618,7 @@ body {
 	margin-block: 0.125rem;
 	margin-inline: -1.125rem;
 	padding: 0.25rem 1.125rem;
-	border-block: 1px solid var(--panel-rule);
+	border-block: 1px dashed var(--panel-rule);
 	background: var(--panel-2);
 	color: var(--panel-ink-2);
 	font: 500 0.75rem/1.4 var(--mono);
@@ -568,6 +633,7 @@ body {
 
 .codeblock details.collapse > summary::before {
 	content: '+ ';
+	color: var(--signal);
 }
 
 .codeblock details.collapse[open] > summary::before {
@@ -579,11 +645,13 @@ body {
 	top: 0.5rem;
 	inset-inline-end: 0.5rem;
 	padding: 0.375rem 0.625rem;
-	border: 1px solid color-mix(in srgb, var(--panel-ink) 22%, transparent);
-	border-radius: 8px;
-	background: var(--panel);
+	border: 1px solid var(--panel-rule);
+	border-radius: 2px;
+	background: var(--panel-2);
 	color: var(--panel-ink);
 	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	opacity: 0;
 	cursor: pointer;
 	transition: opacity 0.15s var(--ease);
@@ -600,7 +668,9 @@ body {
 }
 
 .codeblock__copy:hover {
-	background: color-mix(in srgb, var(--panel-ink) 10%, var(--panel));
+	background: var(--signal);
+	border-color: var(--signal);
+	color: var(--signal-ink);
 }
 
 @media (hover: none) {
@@ -609,12 +679,18 @@ body {
 	}
 }
 
+/* ---- Scenes: the same carbon card as the code ---- */
+
+.sframe {
+	box-shadow: var(--panel-shadow);
+}
+
 /* ---- Table of contents ---- */
 
 #nd-toc h3 {
-	color: var(--ink-3);
-	font: 500 0.75rem/1.3 var(--mono);
-	letter-spacing: 0.1em;
+	color: var(--ink);
+	font: 600 0.6875rem/1.3 var(--mono);
+	letter-spacing: 0.14em;
 	text-transform: uppercase;
 }
 
@@ -630,10 +706,19 @@ body {
 
 #nd-toc a[data-active='true'] {
 	color: var(--ink);
-	font-weight: 650;
+	font-weight: 600;
 }
 
-/* ---- Footer: edit link, last updated, previous and next, tear line, links ---- */
+/* The TOC's progress line and dot. */
+#nd-toc .stroke-fd-primary {
+	stroke: var(--hot);
+}
+
+#nd-toc .bg-fd-primary {
+	background: var(--hot);
+}
+
+/* ---- The page's end: edit and date, previous and next, footer ---- */
 
 .shell-meta {
 	display: flex;
@@ -642,7 +727,7 @@ body {
 	gap: 0.5rem 1.5rem;
 	margin-top: 4rem;
 	padding-top: 1rem;
-	border-top: 1px solid var(--rule);
+	border-top: 1px dashed var(--chrome);
 	color: var(--ink-3);
 	font: 400 0.75rem/1.6 var(--mono);
 }
@@ -657,7 +742,7 @@ body {
 	text-decoration: underline;
 }
 
-/* Previous and next (components/shell/Pagination.astro). */
+/* Previous and next (components/shell/Pagination.astro): two tickets that lift on hover. */
 .shell-pages {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
@@ -667,19 +752,23 @@ body {
 
 .shell-pages a {
 	padding: 1rem 1.25rem;
-	border: 1px solid var(--rule);
-	border-radius: 10px;
+	border: 2px solid var(--chrome);
+	border-radius: 0;
 	background: var(--paper);
 	color: var(--ink);
 	text-decoration: none;
 	transition:
-		border-color 0.15s var(--ease),
-		background-color 0.15s var(--ease);
+		background-color 0.12s var(--ease),
+		color 0.12s var(--ease),
+		translate 0.12s var(--ease),
+		box-shadow 0.12s var(--ease);
 }
 
 .shell-pages a:hover {
-	border-color: color-mix(in srgb, var(--brand) 55%, var(--rule));
-	background: color-mix(in srgb, var(--brand) 5%, var(--paper));
+	background: var(--signal);
+	color: var(--signal-ink);
+	translate: -3px -3px;
+	box-shadow: 4px 4px 0 0 var(--chrome);
 }
 
 .shell-pages__next {
@@ -688,46 +777,31 @@ body {
 }
 
 .shell-pages__label {
-	color: var(--ink-3);
-	font: 500 0.75rem/1.2 var(--mono);
-	letter-spacing: 0.1em;
+	color: inherit;
+	opacity: 0.7;
+	font: 600 0.6875rem/1.2 var(--mono);
+	letter-spacing: 0.14em;
 	text-transform: uppercase;
-}
-
-.shell-pages a:hover .shell-pages__label {
-	color: var(--accent-text);
 }
 
 .shell-pages__title {
 	display: block;
-	margin-top: 0.25rem;
-	font-size: 1.125rem;
-	font-weight: 650;
-	letter-spacing: -0.01em;
+	margin-top: 0.375rem;
+	font-family: var(--headline);
+	font-size: 1.625rem;
+	font-weight: 800;
+	line-height: 1;
+	text-transform: uppercase;
 }
 
 .shell-foot {
 	margin-top: 3rem;
-	padding-top: 2rem;
-	border-top: 1px solid var(--rule);
+	padding-top: 1.5rem;
+	border-top: 4px solid var(--chrome);
 }
 
 .shell-tear {
 	display: none;
-	align-items: center;
-	gap: 14px;
-	margin: 0 0 1.5rem;
-	color: var(--ink-3);
-	font: 400 0.75rem/1 var(--mono);
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-}
-
-.shell-tear::before,
-.shell-tear::after {
-	content: '';
-	flex: 1;
-	border-top: 2px dotted var(--rule);
 }
 
 .shell-foot__in {
@@ -748,13 +822,20 @@ body {
 }
 
 .shell-foot__links a {
-	color: var(--accent-text);
-	text-decoration: underline;
-	text-underline-offset: 0.18em;
+	color: var(--ink);
+	font: 600 0.75rem/1.6 var(--mono);
+	letter-spacing: 0.12em;
+	text-decoration: none;
+	text-transform: uppercase;
+	background-image: linear-gradient(var(--signal), var(--signal));
+	background-position: 0 100%;
+	background-repeat: no-repeat;
+	background-size: 100% 2px;
 }
 
 .shell-foot__links a:hover {
-	text-decoration-thickness: 2px;
+	background-size: 100% 100%;
+	color: var(--signal-ink);
 }
 
 .shell-foot__note {
@@ -764,6 +845,151 @@ body {
 	overflow-wrap: anywhere;
 	color: var(--ink-3);
 	font: 400 0.75rem/1.6 var(--mono);
+}
+
+/* ---- Buttons: the primary action is the signal, amber with carbon text (ui.css draws the rest) ----
+   `:root` lifts these over the scenes' own sheets, which load after this one. */
+
+:root .btn--primary,
+:root .pbtn--primary {
+	--primary: var(--signal);
+	background: var(--signal);
+	border-color: var(--signal);
+	color: var(--signal-ink);
+	font-weight: 700;
+}
+
+:root .btn--primary:hover,
+:root .pbtn--primary:hover {
+	--primary: color-mix(in oklab, var(--signal), white 22%);
+	background: var(--primary);
+	color: var(--signal-ink);
+}
+
+:root .btn--primary {
+	border-radius: 2px;
+	box-shadow: 4px 4px 0 0 var(--chrome);
+	transition:
+		translate 0.12s var(--ease),
+		box-shadow 0.12s var(--ease),
+		background-color 0.12s var(--ease);
+}
+
+:root .btn--primary:hover {
+	translate: -2px -2px;
+	box-shadow: 6px 6px 0 0 var(--chrome);
+}
+
+/* ---- Home ---- */
+
+/* Signage for the story's title and the sections' heads. */
+.st-intro h1 {
+	font-family: var(--headline) !important;
+	font-size: clamp(3.25rem, 7.4vw, 6.5rem) !important;
+	font-weight: 800 !important;
+	font-variation-settings: normal !important;
+	letter-spacing: -0.005em !important;
+	line-height: 0.88 !important;
+	text-transform: uppercase;
+}
+
+.home-jobs :is(.h2, .close h2) {
+	font-family: var(--headline);
+	font-weight: 800;
+	font-variation-settings: normal;
+	letter-spacing: 0;
+	line-height: 0.95;
+	text-transform: uppercase;
+}
+
+/* The status ticker between the story and the sections (components/home/Ticker.astro). */
+.shell-ticker {
+	position: relative;
+	overflow: hidden;
+	border-block: 3px solid var(--signal-ink);
+	background: var(--signal);
+	color: var(--signal-ink);
+	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.shell-ticker__track {
+	display: flex;
+	width: max-content;
+	animation: shell-ticker 60s linear infinite;
+}
+
+.shell-ticker:hover .shell-ticker__track {
+	animation-play-state: paused;
+}
+
+.shell-ticker ul {
+	display: flex;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.shell-ticker li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 28px 14px 0;
+}
+
+.shell-ticker li::after {
+	content: '';
+	width: 4px;
+	height: 4px;
+	margin-inline-start: 18px;
+	background: var(--signal-ink);
+}
+
+.shell-ticker b {
+	padding: 3px 6px;
+	background: var(--signal-ink);
+	color: var(--signal);
+	font-weight: 600;
+}
+
+.shell-ticker [data-s='run'] {
+	color: var(--on-signal-go);
+}
+
+.shell-ticker [data-s='fail'] {
+	color: var(--on-signal-stop);
+}
+
+@keyframes shell-ticker {
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shell-ticker__track {
+		animation: none;
+	}
+}
+
+/* ---- 404 ---- */
+
+.shell-404 {
+	width: 100%;
+	max-width: 48rem;
+	margin-inline: auto;
+	padding: 3rem var(--gutter);
+}
+
+.shell-404 a {
+	color: var(--ink);
+	text-decoration: none;
+	background-image: linear-gradient(var(--signal), var(--signal));
+	background-position: 0 100%;
+	background-repeat: no-repeat;
+	background-size: 100% 3px;
 }
 
 /* ---- A touch target is at least 44 px (ui.css sizes the shared pieces) ---- */
@@ -793,38 +1019,4 @@ body {
 	body {
 		background: none;
 	}
-}
-
-/* ---- Scenes: the same depth as the code ---- */
-
-.sframe {
-	box-shadow: var(--panel-shadow);
-}
-
-:root[data-theme='dark'] {
-	--panel-shadow: 0 1px 0 0 color-mix(in srgb, var(--panel-ink) 5%, transparent) inset;
-}
-
-/* ---- Home: a soft light behind the story; the only colour field on the site ---- */
-
-.home-page {
-	background:
-		radial-gradient(48rem 34rem at 78% 18rem, color-mix(in srgb, var(--brand) 13%, transparent), transparent 70%),
-		radial-gradient(30rem 24rem at 10% 6rem, color-mix(in srgb, var(--cobalt) 9%, transparent), transparent 70%);
-	background-repeat: no-repeat;
-}
-
-/* ---- 404 ---- */
-
-.shell-404 {
-	width: 100%;
-	max-width: 48rem;
-	margin-inline: auto;
-	padding: 3rem var(--gutter);
-}
-
-.shell-404 a {
-	color: var(--accent-text);
-	text-decoration: underline;
-	text-underline-offset: 0.18em;
 }

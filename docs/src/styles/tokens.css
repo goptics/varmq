@@ -1,22 +1,49 @@
 /* VarMQ docs design tokens. Shared by every page (layouts/Base.astro) and by any page that follows docs/DESIGN.md.
    Change a value here, not in a page stylesheet.
 
-   The surfaces are neutral: a warm white in light and a graphite near-black in dark, with no tint and no pattern, so
-   the scenes lead. Green, the logo's, is a signal only: links, the page you are on, what is happening now. The scenes,
-   the code and the story's map are graphite panels in both themes. */
+   The identity is transit signage for a job dispatcher (docs/DESIGN.md, "The idea"): a dot-matrix grid on white
+   paper, condensed sign lettering, and the colours of a motorway sign. Ultramarine is the structure (the header, the
+   sidebar), sign yellow the signal (the page you are on, the primary action, a link's marker), coral the numbering
+   and the warnings. Green, the logo's, stays the colour of a worker and of what is running. The scenes and the code
+   are deep navy panels in both themes. */
 
 :root {
 	color-scheme: light;
 
-	--paper: #fbfbf9;
-	--bar: #f4f4f0;
-	--bar-2: #ecece6;
-	--ink: #111413;
-	--ink-2: #444a47;
-	--ink-3: #5d6561;
-	--rule: #e3e4de;
-	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f has 3.2:1,
-	   enough for marks and fills, so text takes the same hue darker, at 5.4:1. */
+	--paper: #fbf8f1;
+	--bar: #f1ede2;
+	--bar-2: #e6e1d3;
+	--ink: #0f1235;
+	--ink-2: #3b3f66;
+	--ink-3: #575b80;
+	--rule: #d9d4c6;
+	/* The dot-matrix grid behind the page: ultramarine dots. */
+	--dot: color-mix(in srgb, var(--chrome) 20%, transparent);
+
+	/* The structure: the header and the sidebar, white on ultramarine (7.6:1). */
+	--chrome: #2531d6;
+	--chrome-2: #1d27b0;
+	--chrome-3: #3a46f0;
+	--chrome-ink: #ffffff;
+	--chrome-ink-2: #c8ccff;
+	--chrome-rule: color-mix(in srgb, #ffffff 18%, var(--chrome));
+	/* A page title: ultramarine on paper; on the dark paper a light periwinkle (7:1). */
+	--title: var(--chrome);
+
+	/* The signal: sign yellow, always under --signal-ink. On paper it is a fill or a marker, never text. */
+	--signal: #ffd60a;
+	--signal-ink: #0f1235;
+	/* Coral: section numbers, list markers, warnings' labels. --hot-text is its text on paper (5.1:1). */
+	--hot: #ff5a36;
+	--hot-text: #c4330f;
+	/* Running and failed, as text on a --signal fill (the home page's ticker): 5:1 and more. */
+	--on-signal-go: #0b5a45;
+	--on-signal-stop: #b3260a;
+	/* Kept for the scenes, which name it. */
+	--signal-text: var(--hot-text);
+
+	/* Each theme's green is its own logo's (assets/logo-light.svg, logo-dark.svg). On paper the logo's #2e9c7f is
+	   enough for marks and fills, so text takes the same hue darker. */
 	--accent-text: #06735a;
 
 	--brand: #2e9c7f;
@@ -25,23 +52,27 @@
 	/* The dark logo's green: the brand in dark, and on a dark panel in both themes (ui.css). */
 	--brand-on-dark: #44bf9e;
 	--brand-hover-on-dark: #5dd0b0;
-	--amber: #f0b24a;
-	--cobalt: #8fb0ff;
+	--amber: #ffc53d;
+	--cobalt: #9db0ff;
 	--danger: #ff8d7a;
 
-	--panel: #101312;
-	--panel-2: #161a18;
-	--panel-ink: #eaedeb;
-	--panel-ink-2: #a2aaa6;
-	--panel-rule: #2a2f2d;
+	--panel: #0f1238;
+	--panel-2: #161a4a;
+	--panel-ink: #eef0ff;
+	--panel-ink-2: #a9aed9;
+	--panel-rule: #2a2f6e;
 	--panel-accent: #5fd4b2;
 	/* Translucent fills for controls and tracks on a dark panel. */
 	--panel-fill: color-mix(in srgb, var(--panel-ink) 6%, transparent);
 	--panel-fill-2: color-mix(in srgb, var(--panel-ink) 11%, transparent);
-	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow). */
-	--panel-drop: color-mix(in srgb, var(--ink) 45%, transparent);
+	/* The shadow under a dark panel on the light page (fd-theme.css, --panel-shadow): ultramarine, like a print
+	   that slipped. */
+	--panel-drop: var(--chrome);
 
-	--display: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	/* Reading and interface text. */
+	--display: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+	/* Signage: page titles, section heads, the home page's headings. Condensed, so it is set large. */
+	--headline: 'Big Shoulders Display', 'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif;
 	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
 	--gutter: clamp(16px, 4vw, 40px);
@@ -50,19 +81,24 @@
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--paper: #0b0c0c;
-	--bar: #121414;
-	--bar-2: #1a1d1c;
-	--ink: #eceeed;
-	--ink-2: #b6bcb9;
-	--ink-3: #8c9490;
-	--rule: #232726;
+	--paper: #090b22;
+	--bar: #10133a;
+	--bar-2: #181c4c;
+	--ink: #eef0ff;
+	--ink-2: #c3c7ee;
+	--ink-3: #9196c6;
+	--rule: #232861;
+	--dot: color-mix(in srgb, var(--chrome-3) 26%, transparent);
+	--chrome: #1a22a8;
+	--chrome-2: #141b8a;
+	--title: #9aa2ff;
+	--hot-text: #ff7a59;
 	--accent-text: #5fd4b2;
 	--brand: var(--brand-on-dark);
 	--brand-hover: var(--brand-hover-on-dark);
-	--panel: #121514;
-	--panel-2: #181c1a;
-	--panel-rule: #2c3230;
+	--panel: #0e1135;
+	--panel-2: #151948;
+	--panel-rule: #2b3072;
 }
 
 
@@ -72,7 +108,7 @@
 	/* On paper. */
 	--tk-k: #9d2f6b;
 	--tk-s: #8a5300;
-	--tk-c: #5d6561;
+	--tk-c: #575b80;
 	--tk-n: #8a5300;
 	--tk-f: #1b6d56;
 	--tk-t: #3a4fb5;
@@ -80,9 +116,9 @@
 
 	/* On a dark panel (scene frames and code cards). `ui.css` pins `--tk-*` to these inside a panel. */
 	--tk-k-on-dark: #ff8fb8;
-	--tk-s-on-dark: #f0b24a;
-	--tk-c-on-dark: #8c9490;
-	--tk-n-on-dark: #f0b24a;
+	--tk-s-on-dark: #ffc53d;
+	--tk-c-on-dark: #9196c6;
+	--tk-n-on-dark: #ffc53d;
 	--tk-f-on-dark: #5fd4b2;
 	--tk-t-on-dark: #8fb0ff;
 	--tk-b-on-dark: #8fb0ff;

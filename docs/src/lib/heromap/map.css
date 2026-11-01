@@ -13,7 +13,7 @@
    worker, its goroutines and their work is the light logo's own (--brand, 3.1:1, enough for a mark), as the dark map's
    is the dark logo's. Fills are the same hues near L 0.96. The greys are the paper's neutral, so the map sits in the page. A job keeps the dark map's amber, with a darker edge for its 3:1 against the paper. */
 :root {
-	--vm-dot: #d6d8d2;
+	--vm-dot: #d2cab6;
 	--vm-ink: var(--ink-3);
 	--vm-green: var(--accent-text);
 	--vm-red: #bd3933;

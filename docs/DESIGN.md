@@ -7,13 +7,22 @@ Every page of the docs site follows this file. The values live in `src/styles/to
 The queue is a roll of continuous-feed paper. A page is a print job. One square is one job. One lane is one worker.
 A page explains by showing: each claim is a small working scene placed next to the Go call that makes it.
 
+The site dresses that idea as transit signage for a job dispatcher:
+
+- **Colour.** Ultramarine is the structure: the header and the sidebar, with white lettering, edged in sign yellow. Sign yellow (`--signal`) is the signal: the page you are on, the primary action, the highlighter stroke under a link. Coral (`--hot`) numbers the sections and marks lists. Green, the logo's, stays the colour of a worker and of what is running. The scenes and the code are deep navy panels in both themes.
+- **Type.** Big Shoulders Display (`--headline`), condensed sign lettering in caps, for page titles, section heads and the home page's headings. IBM Plex Sans (`--display`) for reading and the interface. JetBrains Mono (`--mono`) for code, labels and the scenes.
+- **Pattern.** A dot-matrix grid of ultramarine dots behind every page, and the sprocket-hole rails on `/`: the paper of a dot-matrix printer.
+- **Pieces.** The sidebar is a departure board: each page has its job number, and the page you are on is the lit yellow row. A page's banner is a ticket stub. Each h2 carries its section number (`§ 01`). A caution has hazard tape down its edge. Cards and buttons cast a hard ultramarine shadow and lift on hover. On `/`, a yellow ticker of job statuses runs between the story and the sections.
+
 ## Tokens
 
 Use only the variables in `src/styles/tokens.css`. Never write a hex color in a page; the few exceptions are listed in "Adding a page or a component", step 4. The reader picks Light, Dark or System in the header's theme switch. System follows `prefers-color-scheme`. The tokens switch on `:root[data-theme='dark']`. Fumadocs' theme provider (next-themes, `components/fd/provider.tsx`) sets `data-theme` and the `dark` class before the first paint from the stored choice, so it carries from page to page.
 
 | Role | Variables |
 |---|---|
-| Surface (paper) | `--paper`, a neutral warm white in light and a graphite near-black in dark, never tinted and never patterned; `--bar` for inline code, kbd and hover boxes; `--bar-2` for a stronger fill |
+| Surface (paper) | `--paper`, a warm white in light and a deep navy in dark, under the `--dot` grid; `--bar` for inline code, kbd and hover boxes; `--bar-2` for a stronger fill |
+| Chrome | `--chrome` (ultramarine), `--chrome-2` for hovers, `--chrome-ink` and `--chrome-ink-2` for its text, `--chrome-rule`. The header and the sidebar in both themes; `fd-theme.css` remaps the page's tokens inside them. `--title` is a page title's colour. |
+| Signal | `--signal` (sign yellow) under `--signal-ink`, never as text on paper; `--hot` and `--hot-text` (coral) for section numbers, list markers and the TOC's marker; `--on-signal-go` and `--on-signal-stop` for status text on a yellow fill |
 | Text | `--ink`, `--ink-2`, `--ink-3`; `--accent-text` for links and highlights on paper |
 | Lines | `--rule` (dashed for banners, tear lines and an article's side edges from 50rem up, solid for cards) |
 | Brand | `--brand` for fills and marks; `--brand-ink` for text on a plain `--brand` fill (the selection, the docs scenes' chips). Primary buttons and the home page's JOB chips are white on the primary buttons' green, `color-mix(in oklab, var(--brand), black 24%)` (`black 34%` on hover), so small type keeps 4.5:1 in both themes and on panels. Each theme's brand is its own logo's green (`assets/logo-light.svg`, `logo-dark.svg`): `#2e9c7f` in light and `--brand-on-dark` (`#44bf9e`) in dark. On paper the light one has 3.1:1, enough for a mark or a fill, so `--accent-text` is the same hue darker, at 5.2:1, for text. Green is a signal, not a surface: links, the page you are on, the live dot of the `JOB nn` chip, what a scene is doing now. The paper carries no green tint in either theme. |
@@ -39,7 +48,7 @@ All text pairs pass WCAG AA in both themes. The lowest is white on the primary g
 ## Layout
 
 - An article's column is Fumadocs' page column (up to 900 px) with its own padding. The landing frame is `--st-max` (1440px) with `--st-gutter` at each side: the `--gutter`, and at least 52px from 1180px up so it clears the sprocket-hole rails. No horizontal scroll from 375 px up.
-- The page background is plain `--paper`, with no stripes or pattern. Lines are solid 1 px `--rule` hairlines; the only dashed lines are inside scenes, where they mean something (a slot, an empty store). The one colour field is the soft green and cobalt light behind the story on `/` (`fd-theme.css`, "Home"). The dark panels (scenes, code) take `--panel-shadow`, so they lift off the light page.
+- The page background is `--paper` under the dot grid (`--dot`, 20 px pitch). Lines are solid `--rule` hairlines, or `--chrome` where a line closes a page (the footer, the meta row). The dark panels (scenes, code) take `--panel-shadow`: a hard ultramarine offset in light, a hairline in dark.
 - Radius: 4 px for chips, kbd, lane tracks and a scene's number and text inputs; 8 px for scene buttons (`.pbtn`), selects, field boxes (`.sfield`), the tabs inside a tab bar, and cards; 10 px for a page's main-action buttons (`.btn`) and the against-VarMQ boxes; 12 px for code cards, segmented tabs, the install box, the theme switch, small maps and the Output panel; 16 px for scene frames and data panels.
 - A scene measures its own width with `@container sframe`, not the viewport.
 
