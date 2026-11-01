@@ -1,5 +1,6 @@
 ---
-import { Code } from '@astrojs/starlight/components';
+import CodeFrame from './ui/CodeFrame.astro';
+import { highlight } from '../lib/highlight';
 import { exampleSource, versions } from '../lib/examples';
 
 interface Props {
@@ -17,11 +18,12 @@ const lines = src.split('\n');
 let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
 if (lines[head] === 'func main() {') head++;
 const meta = head > 0 ? `collapse={1-${head}}` : '';
+const html = await highlight(src, 'go', meta);
 ---
 
-<go-play class="not-content" data-pins={versions}>
+<go-play class="not-content not-prose" data-pins={versions}>
 	<div data-read>
-		<Code code={src} lang="go" title={title} meta={meta} />
+		<CodeFrame title={title} html={html} />
 	</div>
 	<textarea
 		data-editor

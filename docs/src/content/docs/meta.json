@@ -1,0 +1,21 @@
+{
+	"pages": [
+		"---Start here---",
+		"...start",
+		"---Core concepts---",
+		"...concepts",
+		"---Worker pool guides---",
+		"...guides",
+		"---Persistence and distribution---",
+		"...persistence",
+		"---Operations---",
+		"...operations",
+		"---Reference---",
+		"[API reference](https://pkg.go.dev/github.com/goptics/varmq)",
+		"reference/comparison",
+		"reference/benchmarks",
+		"[Benchmarks repository](https://github.com/goptics/benchmarks)",
+		"[Bench log](https://varmq.goptics.org/bench-log/)",
+		"[Changelog](https://github.com/goptics/varmq/blob/main/CHANGELOG.md)"
+	]
+}

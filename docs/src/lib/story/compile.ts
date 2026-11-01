@@ -1,7 +1,7 @@
 import { codeToKeyedTokens, createMagicMoveMachine } from '@shikijs/magic-move/core';
 import type { KeyedTokensInfo } from '@shikijs/magic-move/types';
 import { createHighlighter } from 'shiki';
-import { themes } from '../../../ec.config.mjs';
+import { codeTheme } from '../code-theme.ts';
 import { STATIONS } from './stations.ts';
 
 export interface CodeSteps {
@@ -9,8 +9,8 @@ export interface CodeSteps {
 	phone: KeyedTokensInfo[];
 }
 
-/** The code block's colours: the docs' own code theme, whose colours are the `--tk-*` tokens (ec.config.mjs). */
-const THEME = themes[0];
+/** The code block's colours: the docs' own code theme, whose colours are the `--tk-*` tokens (lib/code-theme.ts). */
+const THEME = codeTheme;
 
 /**
  * The stations' code as magic-move steps, at build time: each token keyed so the one code block can morph from a

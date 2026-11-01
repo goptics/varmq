@@ -1,0 +1,21 @@
+---
+import type { GetStaticPaths } from 'astro';
+import Base from '../layouts/Base.astro';
+import { Docs } from '../components/fd/docs';
+import { source } from '../lib/source';
+import { mdxComponents } from '../components/fd/mdx';
+
+export const getStaticPaths = (() =>
+	source.getPages().map((page) => ({ params: { slug: page.slugs.join('/') }, props: { page } }))) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+const { body: Content, toc } = await page.data.load();
+const tree = await source.serializePageTree(source.getPageTree());
+---
+
+<Base title={`${page.data.title} | VarMQ`} description={page.data.description}>
+	<Docs client:load pathname={Astro.url.pathname} params={Astro.params} tree={tree} toc={toc}>
+		<h1>{page.data.title}</h1>
+		<Content components={mdxComponents} />
+	</Docs>
+</Base>

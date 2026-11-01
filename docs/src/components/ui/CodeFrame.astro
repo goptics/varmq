@@ -1,0 +1,42 @@
+---
+// The frame of every code block: the docs' fenced blocks (the MDX `pre`, pages/[...slug].astro) and GoPlay. A dark
+// panel in both themes, with the file name in a tab when there is one, and a Copy button.
+interface Props {
+	title?: string;
+	/** Highlighted HTML (a Shiki <pre>), when the code does not come in the slot. */
+	html?: string;
+	[attr: string]: unknown;
+}
+const { title, html, class: cls, style: _style, ...rest } = Astro.props;
+---
+
+<figure class:list={['codeblock', 'not-content', 'not-prose', { 'has-title': !!title }]}>
+	{
+		title && (
+			<figcaption class="codeblock__head">
+				<span class="codeblock__title">{title}</span>
+			</figcaption>
+		)
+	}
+	{html ? <Fragment set:html={html} /> : <pre class={cls as string} {...rest}><slot /></pre>}
+	<button type="button" class="codeblock__copy" aria-label="Copy code" data-codecopy>Copy</button>
+</figure>
+
+<script>
+	// One listener for every code block on the page. Copies the code without the collapsed lines' summaries.
+	document.addEventListener('click', async (e) => {
+		const button = (e.target as Element).closest<HTMLButtonElement>('[data-codecopy]');
+		if (!button) return;
+		const code = button.closest('.codeblock')?.querySelector('code');
+		if (!code) return;
+		const copy = code.cloneNode(true) as HTMLElement;
+		copy.querySelectorAll('summary').forEach((s) => s.remove());
+		try {
+			await navigator.clipboard.writeText(copy.textContent ?? '');
+			button.textContent = 'Copied';
+		} catch {
+			button.textContent = 'Failed';
+		}
+		setTimeout(() => (button.textContent = 'Copy'), 1600);
+	});
+</script>
