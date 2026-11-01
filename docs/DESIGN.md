@@ -7,7 +7,7 @@ Every page of the docs site follows this file. The values live in `src/styles/to
 The queue is a roll of continuous-feed paper. A page is a print job. One square is one job. One lane is one worker.
 A page explains by showing: each claim is a small working scene placed next to the Go call that makes it.
 
-> This branch's variant (end of tokens.css): paper chrome with a mascot-green edge, no pattern, and two soft lights (the mascot's green, a job's amber) fixed to the window.
+> This branch's variant (end of tokens.css): paper chrome with a mascot-green edge, no pattern, and two soft lights (the mascot's green, a job's amber) fixed to the window. In light the paper, its fills and the chrome are a faint mascot green, not cream, so the rule below that the paper carries no green tint does not hold here. The home title is capped at 14cqi of its column so it keeps to two lines (`fd-theme.css`).
 
 The site dresses that idea as signage for a job dispatcher, in the mascot's colours:
 

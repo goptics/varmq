@@ -913,10 +913,12 @@ body {
 
 /* ---- Home ---- */
 
-/* Signage for the story's title and the sections' heads. */
+/* Signage for the story's title and the sections' heads. The title keeps its size by the window, but never more than
+   14cqi of its column (.st-text, a size container): "WORKER POOLS AND", its longer line, is 6.84 times the font size
+   wide, so it stays on two lines with 4% to spare. */
 .st-intro h1 {
 	font-family: var(--headline) !important;
-	font-size: clamp(3.25rem, 7.4vw, 6.5rem) !important;
+	font-size: min(clamp(3.25rem, 7.4vw, 6.5rem), 14cqi) !important;
 	font-weight: 800 !important;
 	font-variation-settings: normal !important;
 	letter-spacing: -0.005em !important;

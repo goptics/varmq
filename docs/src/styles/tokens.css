@@ -140,21 +140,27 @@
 /* ---- Theme variant: paper chrome, mascot glow ----
    No coloured chrome: the header and the sidebar are paper too, set apart by a hairline and the bright mascot-green
    edge. No pattern either: the page is lit by two soft lights fixed to the window, the mascot's green from the top
-   right and a job's amber from the bottom left. */
+   right and a job's amber from the bottom left. In light the paper itself is the mascot's green, faint, not cream. */
 
 :root {
+	--paper: #f3f8f3;
+	--bar: #e7f0e9;
+	--bar-2: #dae7dd;
+	--rule: #cbdccf;
+
+	--glow-brand: 28%;
 	--page-pattern:
-		radial-gradient(60rem 42rem at 92% -8%, color-mix(in srgb, var(--brand) 20%, transparent), transparent 70%),
+		radial-gradient(60rem 42rem at 92% -8%, color-mix(in srgb, var(--brand) var(--glow-brand), transparent), transparent 70%),
 		radial-gradient(52rem 40rem at -8% 108%, color-mix(in srgb, var(--hot) 16%, transparent), transparent 70%);
 	--page-pattern-size: 100% 100%;
 	--page-pattern-attach: fixed;
 
-	--chrome: #f4f1e8;
-	--chrome-2: #e9e5d8;
-	--chrome-3: #dfdacb;
+	--chrome: #eaf3ec;
+	--chrome-2: #dde9e0;
+	--chrome-3: #d0e0d4;
 	--chrome-ink: #0c1f19;
 	--chrome-ink-2: #364a43;
-	--chrome-rule: #d8d4c6;
+	--chrome-rule: #cbdccf;
 	--chrome-scheme: light;
 	--chrome-logo: none;
 	--chrome-logo-light: block;
@@ -163,6 +169,7 @@
 }
 
 :root[data-theme='dark'] {
+	--glow-brand: 20%;
 	--chrome: #0c1814;
 	--chrome-2: #12231d;
 	--chrome-3: #183029;
