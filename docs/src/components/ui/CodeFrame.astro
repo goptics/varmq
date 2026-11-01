@@ -10,7 +10,7 @@ interface Props {
 const { title, html, class: cls, style: _style, ...rest } = Astro.props;
 ---
 
-<figure class:list={['codeblock', 'not-content', 'not-prose', { 'has-title': !!title }]}>
+<figure class:list={['codeblock', 'not-content not-prose', 'not-prose', { 'has-title': !!title }]}>
 	{
 		title && (
 			<figcaption class="codeblock__head">

@@ -1,17 +1,33 @@
-// The components the docs' MDX gets beyond HTML (pages/[...slug].astro). `:::note` and `:::caution` become callouts
-// (remarkDirectiveAdmonition, astro.config.mjs) with the title Starlight's asides had.
+// The components the docs' MDX gets beyond HTML (pages/[...slug].astro). `:::note` and `:::caution` become
+// CalloutContainer (remarkDirectiveAdmonition, astro.config.mjs), drawn as the docs' asides (fd-theme.css, "Callout").
+// Rendered on the server only: none of them needs the browser.
 import type { ReactNode } from 'react';
-import { CalloutContainer as Container, CalloutDescription, CalloutTitle } from 'fumadocs-ui/components/callout';
 
-const titles: Record<string, string> = { info: 'Note', warning: 'Caution', error: 'Danger', success: 'Tip' };
+const kinds: Record<string, { name: string; title: string }> = {
+	info: { name: 'note', title: 'Note' },
+	success: { name: 'tip', title: 'Tip' },
+	warning: { name: 'caution', title: 'Caution' },
+	error: { name: 'danger', title: 'Danger' },
+};
 
-function CalloutContainer({ type = 'info', children }: { type?: 'info' | 'warning' | 'error' | 'success'; children?: ReactNode }) {
+function CalloutContainer({ type = 'info', children }: { type?: string; children?: ReactNode }) {
+	const kind = kinds[type] ?? kinds.info;
 	return (
-		<Container type={type} className="aside" data-aside={type}>
-			<CalloutTitle>{titles[type]}</CalloutTitle>
+		<aside aria-label={kind.title} className={`doc-aside doc-aside--${kind.name}`}>
+			<p className="doc-aside__title" aria-hidden="true">
+				{kind.title}
+			</p>
 			{children}
-		</Container>
+		</aside>
 	);
 }
 
-export const mdxComponents = { CalloutContainer, CalloutDescription, CalloutTitle };
+function CalloutTitle({ children }: { children?: ReactNode }) {
+	return <p className="doc-aside__title">{children}</p>;
+}
+
+function CalloutDescription({ children }: { children?: ReactNode }) {
+	return <div className="doc-aside__content">{children}</div>;
+}
+
+export const mdxComponents = { CalloutContainer, CalloutTitle, CalloutDescription };

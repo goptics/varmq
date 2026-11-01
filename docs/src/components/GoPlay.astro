@@ -73,9 +73,9 @@ const html = await highlight(src, 'go', meta);
 		color: var(--panel-ink);
 		caret-color: var(--panel-accent);
 		color-scheme: dark; /* dark scrollbar and resize grip */
-		font-family: var(--__sl-font-mono);
-		font-size: var(--sl-text-code);
-		line-height: var(--sl-line-height);
+		font-family: var(--mono);
+		font-size: 0.875rem;
+		line-height: 1.6;
 		tab-size: 2;
 		white-space: pre;
 		overflow-x: auto;
@@ -89,8 +89,8 @@ const html = await highlight(src, 'go', meta);
 
 	.hint {
 		margin: 0.375rem 0 0;
-		color: var(--sl-color-gray-3);
-		font-size: var(--sl-text-xs);
+		color: var(--ink-3);
+		font-size: 0.8125rem;
 	}
 
 	textarea[hidden] + .hint {
@@ -116,9 +116,9 @@ const html = await highlight(src, 'go', meta);
 		border-radius: 12px;
 		background: var(--panel);
 		color: var(--panel-ink);
-		font-family: var(--__sl-font-mono);
-		font-size: var(--sl-text-code);
-		line-height: var(--sl-line-height);
+		font-family: var(--mono);
+		font-size: 0.875rem;
+		line-height: 1.6;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

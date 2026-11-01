@@ -1,0 +1,798 @@
+/* Docs shell theme. Restyles Fumadocs with the tokens in tokens.css (docs/DESIGN.md).
+   Load order: fd.css imports Tailwind and Fumadocs (in cascade layers), then tokens.css, ui.css and this file, which
+   are not in a layer, so they win. Every custom class starts with `shell-` or `doc-`. The prose rules skip
+   `.not-content`, so scene markup on a page is never touched. */
+
+/* ---- Fumadocs variables, mapped from the tokens ---- */
+
+:root {
+	--local-h1: clamp(2.25rem, 5.4vw, 3.75rem);
+	--local-h2: clamp(1.625rem, 2.8vw, 2.125rem);
+
+	/* Shared sizes the component styles read. */
+	--nav-height: 3.5rem;
+	--z-nav: 40;
+	--shadow-sm: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+	--shadow-md: 0 10px 24px -12px color-mix(in srgb, var(--ink) 28%, transparent);
+	--shadow-lg: 0 30px 60px -30px color-mix(in srgb, var(--panel) 70%, transparent);
+
+	--default-font-family: var(--display);
+	--default-mono-font-family: var(--mono);
+	--font-sans: var(--display);
+	--font-mono: var(--mono);
+}
+
+:root,
+:root.dark,
+:root.dark #nd-sidebar {
+	--color-fd-background: var(--paper);
+	--color-fd-foreground: var(--ink);
+	--color-fd-muted: var(--bar);
+	--color-fd-muted-foreground: var(--ink-2);
+	--color-fd-popover: var(--paper);
+	--color-fd-popover-foreground: var(--ink);
+	--color-fd-card: var(--paper);
+	--color-fd-card-foreground: var(--ink);
+	--color-fd-border: var(--rule);
+	--color-fd-primary: var(--accent-text);
+	--color-fd-primary-foreground: var(--brand-ink);
+	--color-fd-secondary: var(--bar);
+	--color-fd-secondary-foreground: var(--ink);
+	--color-fd-accent: var(--bar-2);
+	--color-fd-accent-foreground: var(--ink);
+	--color-fd-ring: var(--accent-text);
+	--color-fd-overlay: color-mix(in srgb, var(--panel) 62%, transparent);
+	--color-fd-info: var(--cobalt);
+	--color-fd-warning: var(--amber);
+	--color-fd-error: var(--danger);
+	--color-fd-success: var(--brand);
+}
+
+/* ---- Page: paper stripes behind everything, plain paper under text ---- */
+
+html {
+	scroll-behavior: smooth;
+	scrollbar-color: var(--rule) transparent;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	background-color: var(--paper);
+	background-image: repeating-linear-gradient(to bottom, transparent 0 48px, var(--bar) 48px 96px);
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	text-rendering: optimizeLegibility;
+}
+
+::selection {
+	background: var(--brand);
+	color: var(--brand-ink);
+}
+
+:root {
+	accent-color: var(--brand);
+	caret-color: var(--accent-text);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+}
+
+.codeblock :focus-visible {
+	outline-color: var(--panel-accent);
+}
+
+#nd-sidebar,
+#nd-toc,
+.doc-body table,
+.doc-body pre {
+	scrollbar-width: thin;
+	scrollbar-color: var(--rule) transparent;
+}
+
+/* ---- Header (home and 404) ---- */
+
+#nd-nav > div {
+	border-bottom: 1px dashed var(--rule);
+	background: var(--paper);
+	backdrop-filter: none;
+}
+
+#nd-nav nav a:not([aria-label]) {
+	font-size: 0.9375rem;
+	font-weight: 500;
+}
+
+/* ---- Sidebar ---- */
+
+#nd-sidebar {
+	background: var(--paper);
+	border-inline-end: 1px dashed var(--rule);
+}
+
+/* The logo in the sidebar's head (components/fd/layout.tsx): one per theme. */
+.shell-logo {
+	display: block;
+	height: 30px;
+	width: auto;
+}
+
+.shell-logo--dark,
+:root[data-theme='dark'] .shell-logo--light {
+	display: none;
+}
+
+:root[data-theme='dark'] .shell-logo--dark {
+	display: block;
+}
+
+/* Group headings: mono caps. */
+#nd-sidebar p:has(> .fd-page-tree-item-name) {
+	margin-top: 1.5rem;
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+/* Each link carries a small square: hollow for a page, filled for the page you are on. */
+#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name) {
+	position: relative;
+	padding: 0.4rem 0.625rem 0.4rem 1.75rem !important;
+	border-radius: 8px;
+	color: var(--ink-2);
+	font-size: 0.9375rem;
+	line-height: 1.35;
+	transition:
+		background-color 0.15s var(--ease),
+		color 0.15s var(--ease);
+}
+
+#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name)::before {
+	content: '';
+	position: absolute;
+	inset-inline-start: 0.625rem;
+	top: 0.75em;
+	width: 0.5rem;
+	height: 0.5rem;
+	border: 1px solid var(--ink-3);
+	border-radius: 2px;
+	transition:
+		background-color 0.15s var(--ease),
+		border-color 0.15s var(--ease);
+}
+
+#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name):hover {
+	background: var(--bar);
+	color: var(--ink);
+}
+
+#nd-sidebar a[data-active]:has(> .fd-page-tree-item-name):hover::before {
+	border-color: var(--accent-text);
+}
+
+#nd-sidebar a[data-active='true'],
+#nd-sidebar a[data-active='true']:hover {
+	background: var(--bar-2);
+	color: var(--ink);
+	font-weight: 650;
+}
+
+#nd-sidebar a[data-active='true']::before {
+	background: var(--brand);
+	border-color: var(--brand);
+}
+
+/* ---- The sheet: the article sits on a plain paper column with perforated edges ---- */
+
+#nd-page {
+	background: var(--paper);
+}
+
+@media (min-width: 50rem) {
+	#nd-page {
+		border-inline: 1px dashed var(--rule);
+	}
+}
+
+/* ---- Page title: the JOB banner, then the h1 ---- */
+
+.shell-banner {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 1.25rem;
+	color: var(--ink-3);
+	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.shell-banner__id {
+	padding: 5px 8px;
+	border-radius: 4px;
+	background: var(--ink);
+	color: var(--paper);
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+}
+
+.shell-banner__label {
+	white-space: nowrap;
+}
+
+.shell-banner__rule {
+	flex: 1;
+	min-width: 16px;
+	border-top: 1px dashed var(--rule);
+}
+
+.doc-title {
+	margin: 0 0 1.5rem;
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: var(--local-h1);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 96;
+	letter-spacing: -0.035em;
+	line-height: 0.98;
+	text-wrap: balance;
+}
+
+/* ---- Prose ---- */
+
+.doc-body {
+	--tw-prose-body: var(--ink);
+	--tw-prose-headings: var(--ink);
+	--tw-prose-links: var(--accent-text);
+	--tw-prose-bold: var(--ink);
+	--tw-prose-code: var(--ink);
+	--tw-prose-quotes: var(--ink-2);
+	--tw-prose-bullets: var(--accent-text);
+	--tw-prose-counters: var(--accent-text);
+	--tw-prose-hr: var(--rule);
+	--tw-prose-th-borders: var(--ink-3);
+	--tw-prose-td-borders: var(--rule);
+	max-width: none;
+	color: var(--ink);
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	overflow-wrap: break-word;
+}
+
+/* No one-word last lines. */
+.doc-body :is(p, li):not(:where(.not-content *)) {
+	text-wrap: pretty;
+}
+
+.doc-body :is(h2, h3, h4, h5):not(:where(.not-content *)) {
+	font-family: var(--display);
+	color: var(--ink);
+	text-wrap: balance;
+	scroll-margin-top: calc(var(--fd-docs-row-1, 0px) + 1.5rem);
+}
+
+/* A new h2 starts a new section: a perforation above it, and room. */
+.doc-body h2:not(:where(.not-content *)) {
+	margin-top: 3rem;
+	padding-top: 1.75rem;
+	border-top: 1px dashed var(--rule);
+	font-size: var(--local-h2);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 72;
+	letter-spacing: -0.03em;
+	line-height: 1.05;
+}
+
+.doc-body > h2:first-child {
+	margin-top: 0.5rem;
+}
+
+.doc-body h3:not(:where(.not-content *)) {
+	margin-top: 2.25rem;
+	font-size: 1.25rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	line-height: 1.25;
+}
+
+.doc-body :is(h4, h5):not(:where(.not-content *)) {
+	margin-top: 1.75rem;
+	font-size: 1.0625rem;
+	font-weight: 650;
+	letter-spacing: 0;
+	line-height: 1.3;
+}
+
+.doc-body a:not(:where(.not-content *)) {
+	color: var(--accent-text);
+	font-weight: inherit;
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
+}
+
+.doc-body a:not(:where(.not-content *)):hover {
+	color: var(--accent-text);
+	text-decoration-thickness: 2px;
+}
+
+.doc-body strong:not(:where(.not-content *)) {
+	font-weight: 650;
+}
+
+.doc-body :is(ul, ol):not(:where(.not-content *)) {
+	padding-inline-start: 1.375rem;
+}
+
+.doc-body ul:not(:where(.not-content *)) {
+	list-style-type: square;
+}
+
+.doc-body li:not(:where(.not-content *))::marker {
+	color: var(--accent-text);
+	font-family: var(--mono);
+	font-size: 0.875em;
+}
+
+.doc-body li + li:not(:where(.not-content *)) {
+	margin-top: 0.375rem;
+}
+
+.doc-body :is(code, kbd):not(:where(.not-content *)) {
+	font-family: var(--mono);
+	font-size: 0.875em;
+	font-weight: inherit;
+}
+
+.doc-body code:not(:where(.not-content *)) {
+	padding: 0.125em 0.375em;
+	border: 0;
+	border-radius: 4px;
+	background: var(--bar-2);
+	color: var(--ink);
+}
+
+.doc-body code:not(:where(.not-content *))::before,
+.doc-body code:not(:where(.not-content *))::after {
+	content: none;
+}
+
+.doc-body :is(h1, h2, h3, h4, h5, h6) code:not(:where(.not-content *)) {
+	font-size: 0.85em;
+	letter-spacing: 0;
+}
+
+.doc-body kbd:not(:where(.not-content *)) {
+	display: inline-block;
+	padding: 0.1em 0.45em;
+	border: 1px solid var(--rule);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	background: var(--bar);
+	color: var(--ink);
+	line-height: 1.4;
+}
+
+.doc-body blockquote:not(:where(.not-content *)) {
+	padding-inline-start: 1.25rem;
+	border-inline-start: 1px solid var(--ink-3);
+	color: var(--ink-2);
+	font-style: normal;
+}
+
+.doc-body hr:not(:where(.not-content *)) {
+	border: 0;
+	border-bottom: 1px dashed var(--rule);
+}
+
+.doc-body img:not(:where(.not-content *)) {
+	border-radius: 8px;
+}
+
+/* Tables: a mono label row, dashed row rules, tabular numerals. Wide tables scroll on their own. */
+.doc-body table:not(:where(.not-content *)) {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	font-size: 0.9375rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.doc-body :is(th, td):not(:where(.not-content *)) {
+	padding: 0.625rem 1rem;
+	border: 0;
+	border-bottom: 1px dashed var(--rule);
+	text-align: start;
+	vertical-align: top;
+}
+
+.doc-body th:not(:where(.not-content *)) {
+	border-bottom: 1px solid var(--ink-3);
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* ---- Callout (`:::note`, `:::caution`; components/fd/mdx.tsx) ----
+   A card with a colored hairline rule, a tint and a square marker. Amber for caution and danger, brand for note
+   and tip. The label text says which one it is, so color is never the only signal. */
+
+.doc-aside {
+	--aside: var(--brand);
+	margin-block: 1.5rem;
+	border: 1px solid color-mix(in srgb, var(--aside) 65%, var(--rule));
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--aside) 8%, var(--paper));
+	color: var(--ink);
+}
+
+.doc-aside--caution,
+.doc-aside--danger {
+	--aside: var(--amber);
+}
+
+.doc-aside__title {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	margin: 0 !important;
+	padding: 0.625rem 1rem;
+	border-bottom: 1px dashed color-mix(in srgb, var(--aside) 75%, var(--rule));
+	color: var(--ink-2);
+	font: 500 0.75rem/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.doc-aside__title::before {
+	content: '';
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 2px;
+	background: var(--aside);
+}
+
+.doc-aside__content {
+	padding: 0.875rem 1rem 1rem;
+}
+
+.doc-aside__content > :first-child {
+	margin-top: 0;
+}
+
+.doc-aside__content > :last-child {
+	margin-bottom: 0;
+}
+
+/* ---- Code blocks (components/ui/CodeFrame.astro): a dark panel in both themes ---- */
+
+.codeblock {
+	position: relative;
+	margin-block: 1.5rem;
+	overflow: hidden;
+	border: 1px solid var(--panel-rule);
+	border-radius: 12px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	font-family: var(--mono);
+}
+
+.codeblock__head {
+	display: flex;
+	border-bottom: 1px solid var(--panel-rule);
+	background: var(--panel-2);
+}
+
+.codeblock__title {
+	padding: 0.5rem 1.125rem;
+	border-inline-end: 1px solid var(--panel-rule);
+	color: var(--panel-ink-2);
+	font: 500 0.75rem/1.2 var(--mono);
+	letter-spacing: 0.02em;
+}
+
+.codeblock pre {
+	margin: 0;
+	padding: 1rem 1.125rem;
+	overflow-x: auto;
+	border: 0;
+	border-radius: 0;
+	background: transparent !important;
+	color: var(--panel-ink);
+	font: 400 0.8125rem/1.65 var(--mono);
+	tab-size: 4;
+	scrollbar-width: thin;
+	scrollbar-color: var(--panel-rule) transparent;
+}
+
+.codeblock pre code {
+	display: block;
+	width: max-content;
+	min-width: 100%;
+	padding: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	white-space: pre;
+}
+
+.codeblock .line {
+	display: inline;
+}
+
+/* Collapsed lines (lib/code-collapse.ts): a bar that opens in place. */
+.codeblock details.collapse {
+	display: block;
+	margin-inline: -1.125rem;
+	padding-inline: 1.125rem;
+}
+
+.codeblock details.collapse > summary {
+	display: block;
+	margin-block: 0.125rem;
+	margin-inline: -1.125rem;
+	padding: 0.25rem 1.125rem;
+	border-block: 1px solid var(--panel-rule);
+	background: var(--panel-2);
+	color: var(--panel-ink-2);
+	font: 500 0.75rem/1.4 var(--mono);
+	cursor: pointer;
+	list-style: none;
+	white-space: normal;
+}
+
+.codeblock details.collapse > summary::-webkit-details-marker {
+	display: none;
+}
+
+.codeblock details.collapse > summary::before {
+	content: '+ ';
+}
+
+.codeblock details.collapse[open] > summary::before {
+	content: '− ';
+}
+
+.codeblock__copy {
+	position: absolute;
+	top: 0.5rem;
+	inset-inline-end: 0.5rem;
+	padding: 0.375rem 0.625rem;
+	border: 1px solid color-mix(in srgb, var(--panel-ink) 22%, transparent);
+	border-radius: 8px;
+	background: var(--panel);
+	color: var(--panel-ink);
+	font: 500 0.75rem/1 var(--mono);
+	opacity: 0;
+	cursor: pointer;
+	transition: opacity 0.15s var(--ease);
+}
+
+.codeblock.has-title .codeblock__copy {
+	top: 0.25rem;
+	padding-block: 0.25rem;
+}
+
+.codeblock:hover .codeblock__copy,
+.codeblock__copy:focus-visible {
+	opacity: 1;
+}
+
+.codeblock__copy:hover {
+	background: color-mix(in srgb, var(--panel-ink) 10%, var(--panel));
+}
+
+@media (hover: none) {
+	.codeblock__copy {
+		opacity: 1;
+	}
+}
+
+/* ---- Table of contents ---- */
+
+#nd-toc h3 {
+	color: var(--ink-3);
+	font: 500 0.75rem/1.3 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+#nd-toc a {
+	color: var(--ink-2);
+	font-size: 0.875rem;
+	line-height: 1.35;
+}
+
+#nd-toc a:hover {
+	color: var(--ink);
+}
+
+#nd-toc a[data-active='true'] {
+	color: var(--ink);
+	font-weight: 650;
+}
+
+/* ---- Footer: edit link, last updated, previous and next, tear line, links ---- */
+
+.shell-meta {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 0.5rem 1.5rem;
+	margin-top: 3rem;
+	color: var(--ink-3);
+	font: 400 0.75rem/1.6 var(--mono);
+}
+
+.shell-meta a {
+	color: var(--ink-2);
+	text-underline-offset: 0.18em;
+}
+
+.shell-meta a:hover {
+	color: var(--ink);
+	text-decoration: underline;
+}
+
+/* Previous and next (components/shell/Pagination.astro). */
+.shell-pages {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+	gap: 1rem;
+	margin-top: 1.5rem;
+}
+
+.shell-pages a {
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--rule);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--paper) 55%, var(--bar));
+	color: var(--ink);
+	text-decoration: none;
+	transition:
+		border-color 0.15s var(--ease),
+		background-color 0.15s var(--ease);
+}
+
+.shell-pages a:hover {
+	border-color: var(--accent-text);
+	background: var(--bar);
+}
+
+.shell-pages__next {
+	grid-column: -2;
+	text-align: end;
+}
+
+.shell-pages__label {
+	color: var(--ink-3);
+	font: 500 0.75rem/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.shell-pages a:hover .shell-pages__label {
+	color: var(--accent-text);
+}
+
+.shell-pages__title {
+	display: block;
+	margin-top: 0.25rem;
+	font-size: 1.125rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.shell-foot {
+	margin-top: 2.5rem;
+}
+
+.shell-tear {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 1.5rem;
+	color: var(--ink-3);
+	font: 400 0.75rem/1 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.shell-tear::before,
+.shell-tear::after {
+	content: '';
+	flex: 1;
+	border-top: 2px dotted var(--rule);
+}
+
+.shell-foot__in {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 1rem 3rem;
+	font-size: 0.9375rem;
+}
+
+.shell-foot__links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1.5rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.shell-foot__links a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.shell-foot__links a:hover {
+	text-decoration-thickness: 2px;
+}
+
+.shell-foot__note {
+	max-width: 70ch;
+	margin: 0;
+	/* The repository path is one long word; at large text sizes it breaks rather than widening the page. */
+	overflow-wrap: anywhere;
+	color: var(--ink-3);
+	font: 400 0.75rem/1.6 var(--mono);
+}
+
+/* ---- A touch target is at least 44 px (ui.css sizes the shared pieces) ---- */
+
+@media (pointer: coarse) {
+	.codeblock__copy {
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
+
+/* ---- Motion and print ---- */
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0.001ms !important;
+		animation-duration: 0.001ms !important;
+	}
+}
+
+@media print {
+	body {
+		background: none;
+	}
+	#nd-page {
+		border: 0;
+	}
+}
+
+/* ---- 404 ---- */
+
+.shell-404 {
+	width: 100%;
+	max-width: 48rem;
+	margin-inline: auto;
+	padding: 3rem var(--gutter);
+}
+
+.shell-404 a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}

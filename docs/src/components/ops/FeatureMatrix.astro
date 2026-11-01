@@ -8,7 +8,7 @@ const limits = ROWS.filter((r) => r.limit).length;
 const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').some((l) => r.cells[l][0] === 'Yes');
 ---
 
-<div class="ops ops-mx not-content" data-mx>
+<div class="ops ops-mx not-content not-prose" data-mx>
 	<div class="mx__tools">
 		<div class="mx__field">
 			<label for="mx-q">Find a feature</label>

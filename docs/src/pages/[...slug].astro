@@ -1,21 +1,52 @@
 ---
+// Every docs page: the Fumadocs layout (a React island) around the page, which Astro renders, so the scenes in it and
+// their scripts are plain Astro components. Their HTML reaches the island as a slot, which React never re-renders.
+import { execFileSync } from 'node:child_process';
 import type { GetStaticPaths } from 'astro';
 import Base from '../layouts/Base.astro';
+import PageTitle from '../components/shell/PageTitle.astro';
+import Footer from '../components/shell/Footer.astro';
+import Pagination from '../components/shell/Pagination.astro';
 import { Docs } from '../components/fd/docs';
-import { source } from '../lib/source';
 import { mdxComponents } from '../components/fd/mdx';
+import { sidebarTree, source } from '../lib/source';
+import logoDark from '../assets/logo-dark.svg?url';
+import logoLight from '../assets/logo-light.svg?url';
 
 export const getStaticPaths = (() =>
 	source.getPages().map((page) => ({ params: { slug: page.slugs.join('/') }, props: { page } }))) satisfies GetStaticPaths;
 
 const { page } = Astro.props;
 const { body: Content, toc } = await page.data.load();
-const tree = await source.serializePageTree(source.getPageTree());
+const tree = await source.serializePageTree(sidebarTree());
+
+const file = `src/content/docs/${page.path}`;
+const editUrl = `https://github.com/goptics/varmq/edit/main/docs/${file}`;
+// The last commit that touched the page. CI checks out the full history for this (.github/workflows/docs.yml).
+let updated: Date | undefined;
+try {
+	const iso = execFileSync('git', ['log', '-1', '--format=%cI', '--', file], { encoding: 'utf8' }).trim();
+	if (iso) updated = new Date(iso);
+} catch {}
 ---
 
-<Base title={`${page.data.title} | VarMQ`} description={page.data.description}>
-	<Docs client:load pathname={Astro.url.pathname} params={Astro.params} tree={tree} toc={toc}>
-		<h1>{page.data.title}</h1>
-		<Content components={mdxComponents} />
+<Base title={page.data.title} description={page.data.description}>
+	<Docs client:load pathname={Astro.url.pathname} params={Astro.params} tree={tree} toc={toc} logo={{ light: logoLight, dark: logoDark }}>
+		<PageTitle url={page.url} title={page.data.title} />
+		<div class="prose doc-body">
+			<Content components={mdxComponents} />
+		</div>
+		<div class="shell-meta not-prose">
+			<a href={editUrl}>Edit page</a>
+			{
+				updated && (
+					<p>
+						Last updated: <time datetime={updated.toISOString()}>{updated.toLocaleDateString('en', { dateStyle: 'medium' })}</time>
+					</p>
+				)
+			}
+		</div>
+		<Pagination url={page.url} />
+		<Footer />
 	</Docs>
 </Base>

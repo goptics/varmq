@@ -1266,7 +1266,7 @@
 }
 .mx__table thead th {
 	position: sticky;
-	top: calc(var(--sl-nav-height, 3.5rem) + var(--sl-mobile-toc-height, 0rem));
+	top: calc(var(--nav-height));
 	z-index: 2;
 	padding-block: 12px;
 	border-bottom: 2px solid var(--ink);

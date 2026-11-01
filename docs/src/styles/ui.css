@@ -1,8 +1,8 @@
 /* Shared interface pieces for every VarMQ docs page. Follows docs/DESIGN.md.
-   Needs tokens.css. The docs pages load both through `customCss`.
+   Needs tokens.css. The pages load both through styles/fd.css.
    A scene is a dark panel in both themes, so these rules read only the `--panel*` tokens inside it.
 
-   Pieces: `.sr-only`, `.sframe` (the scene frame), `.gocode`, `.call`, `.tk-*`, `.pbtn`, `.stepper`, `.seg` (also Starlight's tabs), `.code` (code card), `.copy`, `.sfield`, `.slabel`. */
+   Pieces: `.sr-only`, `.sframe` (the scene frame), `.gocode`, `.call`, `.tk-*`, `.pbtn`, `.stepper`, `.seg` , `.code` (code card), `.copy`, `.sfield`, `.slabel`. */
 
 .sr-only {
 	position: absolute;
@@ -14,6 +14,20 @@
 	clip: rect(0 0 0 0);
 	white-space: nowrap;
 	border: 0;
+}
+
+/* Tailwind's reset (styles/fd.css) takes the markers off every list and the line height off superscripts. Lists in
+   the scenes that set no list style of their own keep the browser's markers. */
+.not-content :where(ol) {
+	list-style: decimal;
+}
+
+.not-content :where(ul) {
+	list-style: disc;
+}
+
+.not-content :where(sup) {
+	line-height: 1.2;
 }
 
 [role='tabpanel'][hidden] {
@@ -34,7 +48,7 @@
    dark surface. */
 .sframe,
 .code--dark,
-.expressive-code,
+.codeblock,
 .on-dark,
 .st-code {
 	--brand: var(--brand-on-dark);
@@ -347,10 +361,9 @@
 	color: var(--panel-ink);
 }
 
-/* ---- Segmented choice: tabs (with panels) or radios (a plain choice). Starlight's <Tabs> share the look. ---- */
+/* ---- Segmented choice: tabs (with panels) or radios (a plain choice). ---- */
 
-.seg,
-starlight-tabs [role='tablist'] {
+.seg {
 	display: inline-flex;
 	flex-wrap: wrap;
 	gap: 4px;
@@ -361,8 +374,7 @@ starlight-tabs [role='tablist'] {
 }
 
 .seg [role='tab'],
-.seg [role='radio'],
-starlight-tabs .tab > [role='tab'] {
+.seg [role='radio'] {
 	min-height: 40px;
 	padding: 8px 16px;
 	border: 0;
@@ -375,14 +387,12 @@ starlight-tabs .tab > [role='tab'] {
 }
 
 .seg [role='tab']:not([aria-selected='true']):hover,
-.seg [role='radio']:not([aria-checked='true']):hover,
-starlight-tabs .tab > [role='tab']:not([aria-selected='true']):hover {
+.seg [role='radio']:not([aria-checked='true']):hover {
 	background: var(--bar-2);
 }
 
 .seg [aria-selected='true'],
-.seg [aria-checked='true'],
-starlight-tabs .tab > [role='tab'][aria-selected='true'] {
+.seg [aria-checked='true'] {
 	background: var(--ink);
 	color: var(--paper);
 }
@@ -425,8 +435,7 @@ starlight-tabs .tab > [role='tab'][aria-selected='true'] {
 
 /* ---- Code card: a file name row, the code, a copy button ---- */
 
-/* Expressive Code names each line of its code blocks `.code` as well; the card is never one of those. */
-.code:not(:where(.ec-line > *)) {
+.code {
 	border: 1px solid var(--rule);
 	border-radius: 12px;
 	background: color-mix(in srgb, var(--paper) 86%, var(--bar-2));
@@ -742,7 +751,6 @@ button.copy:hover {
 	.seg [role='radio'],
 	.sframe .seg [role='tab'],
 	.sframe .seg [role='radio'],
-	starlight-tabs .tab > [role='tab'],
 	.install [role='tab'],
 	.sfield,
 	.sframe select,

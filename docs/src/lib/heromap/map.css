@@ -186,7 +186,7 @@ varmq-map .vm-svg:not(.vm-under) {
 }
 
 :is(varmq-map, .vm-mini) :is(.vm-label, .vm-text, .vm-num) {
-	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-family: var(--mono);
 	font-weight: 600;
 	fill-opacity: var(--vm-label, 1);
 }
@@ -208,7 +208,7 @@ varmq-map .vm-svg:not(.vm-under) {
 
 /* A Redis record in flight shows the consumer holding it, B or C, until the ack or the requeue. */
 :is(varmq-map, .vm-mini) .vm-tag {
-	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-family: var(--mono);
 	font-size: 12px;
 	font-weight: 700;
 	fill: var(--vm-chip-ink);

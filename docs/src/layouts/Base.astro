@@ -1,22 +1,66 @@
 ---
+// The document around every page: the head (title, description, social card, fonts) and the body.
 import '../styles/fd.css';
+import '../styles/tokens.css';
+import '../styles/ui.css';
+import '../styles/fd-theme.css';
 
 interface Props {
+	/** The page's own title; the site name follows it, except where `fullTitle` is set. */
 	title: string;
+	fullTitle?: string;
 	description?: string;
+	/** The home page: its styles (story.css) key on <html data-home> from the first paint. */
+	home?: boolean;
 }
-const { title, description } = Astro.props;
+const { title, fullTitle = `${title} | VarMQ`, description, home = false } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+
+// The fonts load without blocking the first paint: the stylesheet applies once it arrives, and display=swap shows the
+// fallback until then.
+const fonts =
+	'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap';
+const image = 'https://varmq.goptics.org/og.png';
 ---
 
-<html lang="en">
+<html lang="en" dir="ltr" data-home={home ? '' : undefined} suppressHydrationWarning>
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<title>{title}</title>
+		<title>{fullTitle}</title>
 		{description && <meta name="description" content={description} />}
+		<link rel="canonical" href={canonical} />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+		<meta name="generator" content={Astro.generator} />
+		<!-- The social card on every page (public/og.png, drawn by `pnpm og`, scripts/og.mjs). -->
+		<meta property="og:title" content={fullTitle} />
+		<meta property="og:type" content="article" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:locale" content="en" />
+		{description && <meta property="og:description" content={description} />}
+		<meta property="og:site_name" content="VarMQ" />
+		<meta property="og:image" content={image} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="VarMQ: worker pools and job queues for Go, over a queue of waiting jobs, the event loop and a worker running jobs" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content={image} />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="preload" as="style" href={fonts} />
+		<link rel="stylesheet" href={fonts} media="print" onload="this.media='all'" />
+		<noscript><link rel="stylesheet" href={fonts} /></noscript>
+		{
+			// Without JS the home page's tour cannot start, so its button is hidden.
+			home && (
+				<noscript>
+					<style is:inline>.st-tour { display: none !important; }</style>
+				</noscript>
+			)
+		}
 	</head>
-	<body class="flex flex-col min-h-screen">
+	<body>
 		<slot />
 	</body>
 </html>

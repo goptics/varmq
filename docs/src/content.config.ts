@@ -7,7 +7,8 @@ export const collections = {
 	docs: defineCollection({
 		loader: pageLoader(),
 		schema: pageSchema.extend({
-			sidebar: z.object({ order: z.number().optional() }).optional(),
+			// The order of the pages lives in each folder's meta.json; `label` names a page in the sidebar (lib/source.ts).
+			sidebar: z.object({ order: z.number().optional(), label: z.string().optional() }).optional(),
 		}),
 	}),
 	meta: defineCollection({ loader: metaLoader() }),
