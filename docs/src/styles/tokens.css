@@ -19,6 +19,8 @@
 	--rule: #d8d4c6;
 	/* The dot-matrix grid behind the page: logo-green dots. */
 	--dot: color-mix(in srgb, var(--brand) 26%, transparent);
+	--page-pattern: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.25px);
+	--page-pattern-size: 20px 20px;
 
 	/* The structure: the header and the sidebar, white on the logo's green deepened (7.4:1). */
 	--chrome: #0f5a48;
@@ -27,6 +29,8 @@
 	--chrome-ink: #ffffff;
 	--chrome-ink-2: #bfe6d8;
 	--chrome-rule: color-mix(in srgb, #ffffff 18%, var(--chrome));
+	/* The logo on the chrome: white lettering on a dark sign. */
+	--chrome-logo: brightness(0) invert(1);
 	/* A page title: the chrome's green on paper; on the dark paper the bright logo green. */
 	--title: var(--chrome);
 

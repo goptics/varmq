@@ -81,7 +81,7 @@
 	--color-fd-primary: var(--signal);
 	--color-fd-popover: var(--chrome-2);
 	--color-fd-popover-foreground: var(--chrome-ink);
-	color-scheme: dark;
+	color-scheme: var(--chrome-scheme, dark);
 	color: var(--chrome-ink);
 }
 
@@ -93,10 +93,12 @@ html {
 	-webkit-text-size-adjust: 100%;
 }
 
+/* The page's pattern is the theme's (tokens.css, --page-pattern). */
 body {
 	background-color: var(--paper);
-	background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.25px);
-	background-size: 20px 20px;
+	background-image: var(--page-pattern);
+	background-size: var(--page-pattern-size);
+	background-attachment: var(--page-pattern-attach, scroll);
 	color: var(--ink);
 	font-family: var(--display);
 	font-size: 1.0625rem;
@@ -140,7 +142,7 @@ body {
 }
 
 :is(#nd-sidebar, #nd-sidebar-mobile, #nd-subnav) .shell-logo {
-	filter: brightness(0) invert(1);
+	filter: var(--chrome-logo);
 }
 
 .shell-logo--light,
@@ -152,6 +154,15 @@ body {
 #nd-nav .shell-logo--light,
 :root[data-theme='dark'] #nd-nav .shell-logo--dark {
 	display: block;
+}
+
+/* On the chrome, the theme picks the file (tokens.css, --chrome-logo-light and --chrome-logo-dark). */
+:is(#nd-sidebar, #nd-sidebar-mobile, #nd-subnav) .shell-logo--light {
+	display: var(--chrome-logo-light, none);
+}
+
+:is(#nd-sidebar, #nd-sidebar-mobile, #nd-subnav) .shell-logo--dark {
+	display: var(--chrome-logo-dark, block);
 }
 
 /* ---- Header (home, 404, and the docs' phone bar) ---- */
