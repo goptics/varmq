@@ -904,54 +904,6 @@ input[type='search']::-webkit-search-cancel-button {
 	color: var(--panel-ink-2);
 }
 
-/* ---- Theme switch: Light, Dark, System (components/ui/ThemeSwitch.astro) ---- */
-
-.tswitch fieldset {
-	display: inline-flex;
-	gap: 2px;
-	margin: 0;
-	padding: 3px;
-	border: 1px solid var(--rule);
-	border-radius: var(--corner);
-}
-
-.tswitch label {
-	position: relative;
-	display: grid;
-	place-items: center;
-	width: 32px;
-	height: 32px;
-	border-radius: var(--corner);
-	color: var(--ink-3);
-	cursor: pointer;
-	transition:
-		color 0.15s var(--ease),
-		background-color 0.15s var(--ease);
-}
-
-.tswitch label:hover {
-	color: var(--ink);
-	background: var(--bar-2);
-}
-
-.tswitch input {
-	position: absolute;
-	inset: 0;
-	margin: 0;
-	opacity: 0;
-	cursor: pointer;
-}
-
-.tswitch label:has(:checked) {
-	background: var(--ink);
-	color: var(--paper);
-}
-
-.tswitch label:has(:focus-visible) {
-	outline: 2px solid var(--accent-text);
-	outline-offset: 3px;
-}
-
 /* ---- A touch target is at least 44 px. Last in the file, so it wins over the base sizes above. ---- */
 
 @media (pointer: coarse) {
@@ -975,11 +927,6 @@ input[type='search']::-webkit-search-cancel-button {
 
 	.stepper .pbtn {
 		min-width: 44px;
-	}
-
-	.tswitch label {
-		width: 44px;
-		height: 44px;
 	}
 }
 

@@ -18,6 +18,5 @@ export function baseOptions(logo: Logo): BaseLayoutProps {
 			),
 		},
 		githubUrl: 'https://github.com/goptics/varmq',
-		themeSwitch: { mode: 'light-dark-system' },
 	};
 }

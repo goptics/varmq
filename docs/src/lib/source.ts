@@ -1,11 +1,14 @@
 import { getCollection } from 'astro:content';
 import { loader } from 'fumadocs-core/source';
+import { lucideIconsPlugin } from 'fumadocs-core/source/plugins/lucide-icons';
 import type * as PageTree from 'fumadocs-core/page-tree';
 import { toFumadocsSource } from '@fumadocs/astro/source';
 
 export const source = loader({
 	source: toFumadocsSource(await getCollection('docs'), await getCollection('meta')),
 	baseUrl: '/',
+	// Frontmatter `icon` names a Lucide icon. The tree carries it as SVG markup, so no icon code reaches the browser.
+	plugins: [lucideIconsPlugin()],
 });
 
 /** A route per docs page: `[...slug].astro` renders it, `[...slug].md.ts` writes its Markdown. */

@@ -3,9 +3,9 @@
 import { lazy, type ReactNode } from 'react';
 import { RootProvider } from 'fumadocs-ui/provider/astro';
 
-// Its own chunk, so the search UI and index client are not in every page's first bundle. Fumadocs mounts it in a
-// Suspense after hydration, so the dialog is ready before a reader opens it. A chunk that fails to load costs search
-// alone: a rejected lazy() would stop the whole island hydrating, and the sidebar and theme switch with it.
+// Its own chunk, loaded when a reader first opens search (`preload: false`), so a page that is never searched does not
+// pay for the search UI and index client. A chunk that fails to load costs search alone: a rejected lazy() would stop
+// the whole island hydrating, and the sidebar and theme switch with it.
 const SearchDialog = lazy(() => import('./search').catch(() => ({ default: () => null })));
 
 export interface ProviderProps {
@@ -19,7 +19,7 @@ export function Provider({ pathname, params, children }: ProviderProps) {
 		<RootProvider
 			pathname={pathname}
 			params={params}
-			search={{ SearchDialog }}
+			search={{ SearchDialog, preload: false }}
 			// tokens.css switches on :root[data-theme]; Fumadocs' own styles on .dark. No `d` shortcut: the site never had one.
 			theme={{ attribute: ['class', 'data-theme'], defaultTheme: 'system', enableSystem: true, hotKey: false }}
 		>

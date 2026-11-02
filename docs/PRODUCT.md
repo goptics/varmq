@@ -40,7 +40,7 @@ Storage-agnostic with one API: the same worker and queue calls run whether the j
 - The mascot logo (assets/logo-light.svg, logo-dark.svg) and its green (#2e9c7f light, #44bf9e dark). The palette derives from it; no colour comes from outside the mascot and the scenes.
 - Every interactive visualization and motion graphic stays, working and visible.
 - Fonts: Bricolage Grotesque (headlines), IBM Plex Sans (text), JetBrains Mono (code, labels, scenes).
-- Light, dark and System themes are all first-class.
+- Light and dark themes are both first-class, and a first visit follows the system's theme.
 - The idea of the visual system (docs/DESIGN.md): the queue is a roll of paper, a page is a print job (`JOB nn`), one square is one job, one lane is one worker.
 
 ## Evidence on Hand

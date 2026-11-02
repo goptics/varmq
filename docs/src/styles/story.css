@@ -206,8 +206,8 @@
 	margin-top: 16px;
 }
 
-/* The tour's way in, on the map it plays (main.ts): centred at the map's foot, so it is on the first screen wherever
-   the map is. */
+/* The tour's way in, on the map it plays (main.ts): centred at the map's foot, or at its head where the map sits under
+   the intro (below), so it stays on the first screen. */
 .st-frame .st-tour {
 	position: absolute;
 	z-index: 2;
@@ -878,6 +878,11 @@
 	.st:not([data-tour]) .st-map {
 		grid-row: 2;
 		padding: 4px 0 0;
+	}
+
+	.st:not([data-tour]) .st-frame .st-tour {
+		top: 10px;
+		bottom: auto;
 	}
 }
 

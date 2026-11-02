@@ -1,9 +1,9 @@
-/* Docs shell theme: Fumadocs dressed as signage for a dispatcher, in the mascot's greens (docs/DESIGN.md, "The idea"), with the tokens in tokens.css.
+/* Docs shell theme: Fumadocs in the mascot's greens (docs/DESIGN.md, "The idea"), with the tokens in tokens.css.
    layouts/Base.astro loads it after Tailwind and Fumadocs, which sit in cascade layers, so these rules win. Every
    custom class starts with `shell-` or `doc-`. The prose rules skip `.not-content`, so scene markup is never touched.
 
-   The pieces, in order: Fumadocs' variables; the page (white paper over a dot-matrix grid); the green chrome
-   (header, sidebar as a departure board); the page title (a ticket stub) and numbered sections; prose; callouts; code; table of
+   The pieces, in order: Fumadocs' variables; the page (paper under two soft lights); the chrome
+   (header, sidebar); the page title (a ticket stub) and numbered sections; prose; callouts; code; table of
    contents; the page's end; buttons; the home page; the 404 page. */
 
 /* ---- Fumadocs variables, mapped from the tokens ---- */
@@ -58,7 +58,7 @@
 	--color-fd-secondary-foreground: var(--ink);
 	--color-fd-accent: var(--bar-2);
 	--color-fd-accent-foreground: var(--ink);
-	--color-fd-ring: var(--signal);
+	--color-fd-ring: var(--accent-text);
 	--color-fd-overlay: color-mix(in srgb, var(--panel) 62%, transparent);
 	--color-fd-info: var(--cobalt);
 	--color-fd-warning: var(--amber);
@@ -66,7 +66,7 @@
 	--color-fd-success: var(--brand);
 }
 
-/* The green chrome: the same sign in both themes. Its own text and line colours stand in for the page's. The home
+/* The chrome. Its own text and line colours stand in for the page's. The home
    header is not chrome: it is paper, like the rails beside it ("Header"). */
 #nd-sidebar,
 #nd-sidebar-mobile,
@@ -95,7 +95,7 @@
 	color: var(--chrome-ink);
 }
 
-/* ---- Page: white paper over a dot-matrix grid ---- */
+/* ---- Page ---- */
 
 html {
 	scroll-behavior: smooth;
@@ -127,7 +127,7 @@ body {
 }
 
 :focus-visible {
-	outline: 2px solid var(--signal);
+	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
 }
 
@@ -148,8 +148,7 @@ input[aria-controls='fd-search-list']:focus-visible {
 	scrollbar-color: var(--rule) transparent;
 }
 
-/* The logo: on the green chrome it is white, as a sign's lettering. On the paper header it keeps its colours, one
-   file per theme. */
+/* The logo keeps its colours, one file per theme. */
 .shell-logo {
 	display: block;
 	height: 28px;
@@ -209,7 +208,19 @@ input[aria-controls='fd-search-list']:focus-visible {
 	color: var(--accent-text);
 }
 
-/* ---- Sidebar: a departure board ---- */
+/* GitHub, the theme and the search are inline boxes in list items: flex drops the line's baseline gap, so they centre. */
+#nd-nav ul:has([data-search-full]) > li {
+	display: flex;
+}
+
+/* Fumadocs draws these two as pills with `rounded-full`, which no --radius-* reaches. */
+[data-search-full],
+[data-theme-toggle],
+[data-theme-toggle] > * {
+	border-radius: var(--corner);
+}
+
+/* ---- Sidebar ---- */
 
 /* The layout takes the window's width, so the sidebar meets its left edge and the free space goes to the article. */
 #nd-docs-layout {
@@ -222,48 +233,24 @@ input[aria-controls='fd-search-list']:focus-visible {
 	border-inline-end: 4px solid var(--signal);
 }
 
-/* Group headings, in line with the page numbers under them. Each one restarts the job count its pages show. */
+/* Group headings. */
 :is(#nd-sidebar, #nd-sidebar-mobile) p:has(> .fd-page-tree-item-name) {
-	counter-reset: job;
 	margin-top: 1.75rem;
-	padding-inline-start: 0.625rem;
 	color: var(--chrome-ink);
 	font-size: 0.8125rem;
 	font-weight: 600;
 	line-height: 1.3;
 }
 
-/* Each page is a row on the board: its job number under its heading, as its banner shows it
-   (components/shell/PageTitle.astro), then its name. The page you are on is the lit row, in the mascot's bright green. */
-:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name) {
-	counter-increment: job;
-	position: relative;
-	padding: 0.4rem 0.625rem 0.4rem 2.625rem !important;
+/* Each page and folder is a row. The page you are on is tinted with the mascot's bright green. */
+:is(#nd-sidebar, #nd-sidebar-mobile) :is(a[data-active], button):has(> .fd-page-tree-item-name) {
 	border-radius: var(--corner);
 	color: var(--chrome-ink-2);
 	font-size: 0.9375rem;
 	line-height: 1.35;
-	transition:
-		background-color 0.12s var(--ease),
-		color 0.12s var(--ease);
 }
 
-:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name)::before {
-	content: counter(job, decimal-leading-zero);
-	position: absolute;
-	inset-inline-start: 0.625rem;
-	top: 50%;
-	bottom: auto;
-	width: auto;
-	background: none;
-	translate: 0 -50%;
-	color: color-mix(in srgb, var(--chrome-ink-2) 70%, var(--chrome));
-	font: 500 0.6875rem/1 var(--mono);
-	font-variant-numeric: tabular-nums;
-}
-
-:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:has(> .fd-page-tree-item-name):hover {
-	background: var(--chrome-2);
+:is(#nd-sidebar, #nd-sidebar-mobile) :is(a[data-active], button):has(> .fd-page-tree-item-name):hover {
 	color: var(--chrome-ink);
 }
 
@@ -273,29 +260,41 @@ input[aria-controls='fd-search-list']:focus-visible {
 	color: var(--accent-text);
 }
 
-:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true']:has(> .fd-page-tree-item-name)::before {
-	color: inherit;
+/* Under a mouse, one highlight slides from row to row. pages/[...slug].astro sets its box and `data-hover-row`. */
+@media (hover: hover) {
+	#nd-sidebar :is(a[data-active='false'], button):has(> .fd-page-tree-item-name):hover {
+		background: none;
+	}
+
+	#nd-sidebar::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: var(--row-w, 0);
+		height: var(--row-h, 0);
+		translate: var(--row-x, 0) var(--row-y, 0);
+		border-radius: var(--corner);
+		background: var(--chrome-2);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.2s var(--ease);
+	}
+
+	#nd-sidebar[data-hover-row]::before {
+		opacity: 1;
+		transition:
+			opacity 0.2s var(--ease),
+			translate 0.2s var(--ease),
+			width 0.2s var(--ease),
+			height 0.2s var(--ease);
+	}
 }
 
-/* A folder's row lines up with the pages' names. Its pages step in past Fumadocs' guide line, and have their own count,
-   as their banners do. */
-:is(#nd-sidebar, #nd-sidebar-mobile) button:has(> .fd-page-tree-item-name) {
-	padding-inline-start: 2.625rem !important;
-	color: var(--chrome-ink-2);
-	font-size: 0.9375rem;
-	line-height: 1.35;
-}
-
-:is(#nd-sidebar, #nd-sidebar-mobile) div:has(> button > .fd-page-tree-item-name) {
-	counter-reset: job;
-}
-
-:is(#nd-sidebar, #nd-sidebar-mobile) div:has(> button > .fd-page-tree-item-name) a[data-active]:has(> .fd-page-tree-item-name) {
-	padding-inline-start: 3.5rem !important;
-}
-
-:is(#nd-sidebar, #nd-sidebar-mobile) div:has(> button > .fd-page-tree-item-name) a[data-active]:has(> .fd-page-tree-item-name)::before {
-	inset-inline-start: 1.5rem;
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
+	#nd-sidebar[data-hover-row]::before {
+		transition: none;
+	}
 }
 
 /* ---- Page title: a ticket stub, then the h1 ---- */
@@ -929,7 +928,7 @@ input[aria-controls='fd-search-list']:focus-visible {
 	font: 400 0.75rem/1.6 var(--mono);
 }
 
-/* ---- Buttons: the primary action is the signal, amber with carbon text (ui.css draws the rest) ----
+/* ---- Buttons: the primary action is the signal, dark text on the bright green (ui.css draws the rest) ----
    `:root` lifts these over the scenes' own sheets, which load after this one. */
 
 :root .btn--primary,
