@@ -510,6 +510,19 @@
 	font-size: 0.75rem;
 }
 
+/* A button in a card's head is sized as its copy button is; 44 px on a touch screen. */
+.code__head .pbtn {
+	min-height: 32px;
+	padding: 4px 12px;
+	font-size: 0.75rem;
+}
+
+@media (pointer: coarse) {
+	.code__head .pbtn {
+		min-height: 44px;
+	}
+}
+
 button.copy {
 	flex: none;
 	min-height: 36px;

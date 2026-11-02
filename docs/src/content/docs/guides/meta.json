@@ -1,3 +1,4 @@
 {
+	"title": "Guides",
 	"pages": ["worker-types", "function-helpers", "queues", "adding-many", "job-ids", "concurrency", "strategies", "topics", "waiting", "context", "errors", "metrics", "configuration"]
 }

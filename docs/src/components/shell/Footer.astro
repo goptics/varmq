@@ -1,5 +1,5 @@
 ---
-// The end of every page: the tear line and the site's links.
+// The end of every page: the site's links.
 const links = [
 	{ label: 'API reference', href: 'https://pkg.go.dev/github.com/goptics/varmq' },
 	{ label: 'Benchmarks', href: '/reference/benchmarks/' },
@@ -9,7 +9,6 @@ const links = [
 ---
 
 <footer class="shell-foot not-content not-prose">
-	<p class="shell-tear" aria-hidden="true">tear here</p>
 	<div class="shell-foot__in">
 		<ul class="shell-foot__links">
 			{links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}

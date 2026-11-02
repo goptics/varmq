@@ -110,6 +110,7 @@
 }
 
 .bench__title {
+	font-family: var(--headline);
 	font-size: 1.25rem;
 	font-weight: 650;
 	line-height: 1.25;
@@ -416,6 +417,7 @@
 }
 
 .bench .rg__title h4 {
+	font-family: var(--headline);
 	font-size: 1rem;
 	font-weight: 650;
 	line-height: 1.2;
@@ -734,6 +736,7 @@
 }
 
 .bloss h4 {
+	font-family: var(--headline);
 	font-size: 1rem;
 	font-weight: 650;
 	color: var(--amber);

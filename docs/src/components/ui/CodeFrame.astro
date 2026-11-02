@@ -1,13 +1,11 @@
 ---
-// The frame of every code block: the docs' fenced blocks (the MDX `pre`, pages/[...slug].astro) and GoPlay. A dark
-// panel in both themes, with the file name in a tab when there is one, and a Copy button.
+// The frame of the docs' fenced blocks (the MDX `pre`, pages/[...slug].astro). A dark panel in both themes, with the
+// file name in a tab when there is one, and a Copy button.
 interface Props {
 	title?: string;
-	/** Highlighted HTML (a Shiki <pre>), when the code does not come in the slot. */
-	html?: string;
 	[attr: string]: unknown;
 }
-const { title, html, class: cls, style: _style, icon: _icon, ...rest } = Astro.props;
+const { title, class: cls, style: _style, icon: _icon, ...rest } = Astro.props;
 ---
 
 <figure class:list={['codeblock', 'not-content not-prose', 'not-prose', { 'has-title': !!title }]}>
@@ -18,7 +16,7 @@ const { title, html, class: cls, style: _style, icon: _icon, ...rest } = Astro.p
 			</figcaption>
 		)
 	}
-	{html ? <Fragment set:html={html} /> : <pre class={cls as string} {...rest}><slot /></pre>}
+	<pre class={cls as string} {...rest}><slot /></pre>
 	<button type="button" class="codeblock__copy" aria-label="Copy code" data-codecopy>Copy</button>
 </figure>
 

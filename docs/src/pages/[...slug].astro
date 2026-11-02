@@ -10,16 +10,15 @@ import Footer from '../components/shell/Footer.astro';
 import Pagination from '../components/shell/Pagination.astro';
 import { Docs } from '../components/fd/docs';
 import { mdxComponents } from '../components/fd/mdx';
-import { sidebarTree, source } from '../lib/source';
+import { pagePaths, sidebarTree, source } from '../lib/source';
 import logoDark from '../assets/logo-dark.svg?url';
 import logoLight from '../assets/logo-light.svg?url';
 
-export const getStaticPaths = (() =>
-	source.getPages().map((page) => ({ params: { slug: page.slugs.join('/') }, props: { page } }))) satisfies GetStaticPaths;
+export const getStaticPaths = pagePaths satisfies GetStaticPaths;
 
 const { page } = Astro.props;
 const { body: Content, toc } = await page.data.load();
-const tree = await source.serializePageTree(sidebarTree());
+const tree = await source.serializePageTree(sidebarTree(page.url));
 
 const file = `src/content/docs/${page.path}`;
 const editUrl = `https://github.com/goptics/varmq/edit/main/docs/${file}`;

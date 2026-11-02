@@ -73,7 +73,7 @@
 	/* Reading and interface text. */
 	--display: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	/* Signage: page titles, section heads, the home page's headings. Condensed, so it is set large. */
-	--headline: 'Big Shoulders Display', 'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif;
+	--headline: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
 	--gutter: clamp(16px, 4vw, 40px);

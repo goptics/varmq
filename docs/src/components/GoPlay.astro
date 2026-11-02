@@ -1,6 +1,8 @@
 ---
-import CodeFrame from './ui/CodeFrame.astro';
-import { highlight } from '../lib/highlight';
+// A program that runs in place, on the docs pages and in JOB 05 on the home page: a code card with its buttons in its
+// head, then its output. Run sends the program to the Go Playground and plays its output back (lib/go-play.ts); Edit
+// swaps the code for a textarea inside the card.
+import { highlightGo } from './ui/go';
 import { exampleSource, versions } from '../lib/examples';
 
 interface Props {
@@ -12,38 +14,51 @@ const { example, title = `${example}/main.go` } = Astro.props;
 const src = exampleSource(example, 'GoPlay');
 const hintId = `go-play-hint-${example}`;
 
-// Collapse the package clause and imports, and `func main() {` when nothing else comes
-// before it, so the block opens on the code that matters. Run and Edit use the full source.
+// The package clause and the imports fold away, so the card opens on the code that matters. Run and Edit use the
+// full source.
 const lines = src.split('\n');
-let head = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
-if (lines[head] === 'func main() {') head++;
-const meta = head > 0 ? `collapse={1-${head}}` : '';
-const html = await highlight(src, 'go', meta);
+const fold = lines.findIndex((l, i) => i > 0 && l !== '' && !/^(import|package|\t|\))/.test(l));
+if (fold < 1) throw new Error(`GoPlay: no code after the imports in "${example}"`);
 ---
 
-<go-play class="not-content not-prose" data-pins={versions}>
-	<div data-read>
-		<CodeFrame title={title} html={html} />
+<go-play class="ex__play not-content not-prose" data-pins={versions}>
+	<div class="ex__src">
+		<div class="code">
+			<div class="code__head">
+				<span>{title}</span>
+				<div class="ex__actions">
+					<button type="button" data-run class="pbtn pbtn--primary">Run</button>
+					<button type="button" data-copy-src class="pbtn pbtn--paper" aria-label={`Copy ${title}`}>Copy</button>
+					<button type="button" data-edit class="pbtn pbtn--paper">Edit</button>
+					<button type="button" data-reset hidden class="pbtn pbtn--paper">Reset</button>
+					<button type="button" data-open class="pbtn pbtn--paper" aria-label="Open in Go Playground" title="Open in Go Playground">Playground ↗</button>
+				</div>
+			</div>
+			<div data-read>
+				<details class="ex__fold">
+					<summary>{fold} lines: package and imports</summary>
+					<pre class="gocode"><code set:html={highlightGo(lines.slice(0, fold).join('\n'))} /></pre>
+				</details>
+				<pre class="gocode"><code set:html={highlightGo(lines.slice(fold).join('\n'))} /></pre>
+			</div>
+			<textarea
+				data-editor
+				hidden
+				rows={lines.length}
+				spellcheck="false"
+				autocomplete="off"
+				autocapitalize="off"
+				wrap="off"
+				aria-label={`Edit ${title}`}
+				aria-describedby={hintId}>{src}</textarea
+			>
+		</div>
+		<p class="ex__hint" id={hintId}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
 	</div>
-	<textarea
-		data-editor
-		hidden
-		rows={src.split('\n').length}
-		spellcheck="false"
-		autocomplete="off"
-		autocapitalize="off"
-		wrap="off"
-		aria-label={`Edit ${title}`}
-		aria-describedby={hintId}>{src}</textarea
-	>
-	<p class="hint" id={hintId}>Tab inserts a tab. Esc leaves the editor. Ctrl+Enter runs.</p>
-	<div class="actions">
-		<button type="button" data-run class="pbtn pbtn--primary">Run</button>
-		<button type="button" data-edit class="pbtn pbtn--paper">Edit</button>
-		<button type="button" data-reset hidden class="pbtn pbtn--paper">Reset</button>
-		<button type="button" data-open class="pbtn pbtn--paper">Open in Go Playground</button>
+	<div class="ex__term">
+		<p class="ex__term-head">Output</p>
+		<pre class="ex__out" data-output aria-live="polite"></pre>
 	</div>
-	<pre data-output aria-live="polite"></pre>
 </go-play>
 
 <script>
@@ -51,98 +66,191 @@ const html = await highlight(src, 'go', meta);
 </script>
 
 <style>
-	go-play {
-		display: block;
-		margin-block: 1.5rem;
+	.ex__play {
+		display: grid;
+		gap: 16px;
 	}
 
 	go-play [hidden] {
 		display: none !important;
 	}
 
+	.ex__src {
+		display: grid;
+		gap: 8px;
+		align-content: start;
+		min-width: 0;
+	}
+
+	/* The lines before the code, folded: a row to open them, then those lines over the rest. */
+	.ex__fold summary {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 36px;
+		padding: 0 16px;
+		border-bottom: 1px solid var(--rule);
+		font: 400 0.75rem/1.2 var(--mono);
+		color: var(--ink-3);
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.ex__fold summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.ex__fold summary::before {
+		content: '';
+		width: 6px;
+		height: 6px;
+		border: solid currentColor;
+		border-width: 0 1.5px 1.5px 0;
+		rotate: -45deg;
+	}
+
+	.ex__fold[open] summary::before {
+		rotate: 45deg;
+	}
+
+	.ex__fold summary:hover {
+		color: var(--ink);
+	}
+
+	.ex__fold[open] + pre {
+		padding-top: 0;
+	}
+
+	.ex__fold > pre {
+		padding-bottom: 0;
+	}
+
+	@media (pointer: coarse) {
+		.ex__fold summary {
+			min-height: 44px;
+		}
+	}
+
+	/* Edit swaps the card's code for this textarea, with the same type and padding, so the card keeps its place. */
 	textarea {
 		box-sizing: border-box;
 		display: block;
 		width: 100%;
 		margin: 0;
-		padding: 0.75rem 1rem;
-		/* The editor and the output are dark panels in both themes, like the code block they replace. */
-		border: 1px solid var(--panel-rule);
-		border-radius: var(--corner);
-		background: var(--panel);
-		color: var(--panel-ink);
-		caret-color: var(--panel-accent);
-		color-scheme: dark; /* dark scrollbar and resize grip */
-		font-family: var(--mono);
-		font-size: 0.875rem;
-		line-height: 1.6;
-		tab-size: 2;
+		padding: 16px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: var(--ink);
+		caret-color: var(--accent-text);
+		font: 400 0.8125rem/1.65 var(--mono);
+		tab-size: 4;
 		white-space: pre;
 		overflow-x: auto;
 		resize: vertical;
 	}
 
 	textarea:focus-visible {
-		outline: 2px solid var(--panel-accent);
-		outline-offset: -1px;
+		outline: 2px solid var(--accent-text);
+		outline-offset: -2px;
+		border-radius: 0 0 var(--corner) var(--corner);
 	}
 
-	.hint {
-		margin: 0.375rem 0 0;
+	.ex__hint {
+		margin: 0;
+		font: 400 0.75rem/1.5 var(--mono);
 		color: var(--ink-3);
-		font-size: 0.8125rem;
 	}
 
-	textarea[hidden] + .hint {
+	.ex__play:has(textarea[hidden]) .ex__hint {
 		display: none;
 	}
 
-	.actions {
+	.ex__actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 0.75rem;
+		gap: 6px;
 	}
 
-	.pbtn[aria-disabled='true'] {
+	/* The file name keeps one line; the buttons go under it when the card is too narrow for both. */
+	.code__head {
+		flex-wrap: wrap;
+	}
+
+	.code__head > span {
+		white-space: nowrap;
+	}
+
+	.ex__actions .pbtn[aria-disabled='true'] {
 		cursor: progress;
 		opacity: 0.6;
 	}
 
-	pre {
-		margin: 0.75rem 0 0;
-		padding: 0.75rem 1rem;
+	/* The output: a dark panel in both themes. Its pre is always rendered, so the live region is in the accessibility
+	   tree before its first announcement. */
+	.ex__term {
+		display: grid;
+		grid-template-rows: auto 1fr;
+		min-width: 0;
 		border: 1px solid var(--panel-rule);
 		border-radius: var(--corner);
 		background: var(--panel);
 		color: var(--panel-ink);
-		font-family: var(--mono);
-		font-size: 0.875rem;
-		line-height: 1.6;
+		overflow: hidden;
+	}
+
+	.ex__term-head {
+		margin: 0;
+		padding: 10px 16px;
+		border-bottom: 1px solid var(--panel-rule);
+		font: 500 0.75rem/1.2 var(--mono);
+		color: var(--panel-ink-2);
+	}
+
+	.ex__out {
+		margin: 0;
+		padding: 12px 16px;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: 400 0.8125rem/1.65 var(--mono);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
 
-	/* Empty until the first run, but still rendered, so the live region is in the
-	   accessibility tree before its first announcement. */
-	pre:empty {
-		margin: 0;
-		padding: 0;
+	/* A docs page has many of these, so the output takes no room until the first run. */
+	:global(.doc-body) .ex__play {
+		margin-block: 1.75rem;
+	}
+
+	:global(.doc-body) .ex__play:has(.ex__out:empty) {
+		gap: 0;
+	}
+
+	:global(.doc-body) .ex__term:has(.ex__out:empty) {
 		border: 0;
 	}
 
+	:global(.doc-body) .ex__term:has(.ex__out:empty) .ex__term-head {
+		display: none;
+	}
+
+	:global(.doc-body) .ex__out:empty {
+		padding: 0;
+	}
+
 	/* Output lines are created at runtime, so they carry no scope attribute. */
-	pre :global(.stderr),
-	pre :global(.error) {
+	.ex__out :global(.stderr),
+	.ex__out :global(.error) {
 		color: var(--danger);
 	}
 
-	pre :global(.system) {
+	.ex__out :global(.system) {
 		color: var(--panel-ink-2);
 	}
 
-	pre :global(button.link),
-	pre :global(a.link) {
+	.ex__out :global(button.link),
+	.ex__out :global(a.link) {
 		cursor: pointer;
 		padding: 0;
 		border: 0;
@@ -152,7 +260,7 @@ const html = await highlight(src, 'go', meta);
 		text-decoration: underline;
 	}
 
-	pre :global(.link:focus-visible) {
+	.ex__out :global(.link:focus-visible) {
 		outline-color: var(--panel-accent);
 	}
 </style>

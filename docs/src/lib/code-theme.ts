@@ -1,7 +1,7 @@
 // The docs' one code theme. Code is a dark panel in both themes (docs/DESIGN.md, "Dark surfaces"), and the syntax
 // colours are the CSS variables `--tk-*`, which ui.css pins to their dark values inside `.codeblock` and the story's
-// code. Shiki writes them into each token's style as they are. The fenced blocks (astro.config.mjs), GoPlay and the
-// home page's story (lib/story/compile.ts) all highlight with it.
+// code. Shiki writes them into each token's style as they are. The fenced blocks (astro.config.mjs) and the home page's
+// story (lib/story/compile.ts) both highlight with it.
 import type { ThemeRegistration } from 'shiki';
 
 const rule = (scope: string, token: string, fontStyle?: string) => ({

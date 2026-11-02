@@ -1,6 +1,7 @@
 ---
-// The page title with the `JOB nn` banner above it (docs/DESIGN.md, "Banner"). nn is the page's position under its
-// sidebar heading, and the label is the heading (lib/source.ts). Content pages must not add their own banner.
+// The page title with the `JOB nn` banner above it (docs/DESIGN.md, "Banner") and Copy as Markdown under it. nn is the
+// page's position under its sidebar heading or folder, and the label is that heading or folder (lib/source.ts). Content
+// pages must not add their own banner.
 import { banner } from '../../lib/source';
 
 interface Props {
@@ -17,3 +18,14 @@ const { id, label } = banner(url);
 	<span class="shell-banner__rule" aria-hidden="true"></span>
 </p>
 <h1 id="_top" class="doc-title">{title}</h1>
+<button type="button" class="pbtn pbtn--paper shell-copy-md" data-md={`${url}.md`} aria-live="polite">Copy as Markdown</button>
+
+<script>
+	import { copyText } from '../ui/dom';
+
+	const button = document.querySelector<HTMLButtonElement>('[data-md]');
+	button?.addEventListener('click', () => {
+		const text = fetch(button.dataset.md!).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText))));
+		void copyText(button, text);
+	});
+</script>

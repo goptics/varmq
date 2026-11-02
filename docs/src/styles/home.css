@@ -1,7 +1,7 @@
 /* The home page's sections under the story (components/home/, index.mdx): each section is a print job with its
    banner, `JOB 02` to `JOB 06`, then the closing. Every rule is scoped by `.home-jobs`, the wrapper in index.mdx, which
-   is also `.not-content`, so the docs' prose rules (docs-theme.css) leave these sections alone; the two that hide the
-   footer's tear line on `/` are scoped by `:root:is([data-home], :has(.st))` instead. The colours are the
+   is also `.not-content`, so the docs' prose rules (docs-theme.css) leave these sections alone; the one that restyles
+   the footer on `/` is scoped by `:root:is([data-home], :has(.st))` instead. The colours are the
    tokens, which follow the theme switch (`:root[data-theme]`, tokens.css). */
 
 .home-jobs {
@@ -70,7 +70,7 @@
 /* ---- Type ---- */
 
 .home-jobs .h-display {
-	font-family: var(--display);
+	font-family: var(--headline);
 	font-weight: 700;
 	font-variation-settings: 'opsz' 96;
 	letter-spacing: -0.035em;
@@ -83,6 +83,7 @@
 }
 
 .home-jobs .h2 {
+	font-family: var(--headline);
 	font-size: clamp(1.875rem, 4.2vw, 3.25rem);
 	letter-spacing: -0.03em;
 	line-height: 1.02;
@@ -92,6 +93,7 @@
 }
 
 .home-jobs .h3 {
+	font-family: var(--headline);
 	font-size: 1.25rem;
 	line-height: 1.25;
 	font-weight: 650;
@@ -360,10 +362,6 @@
 
 .home-jobs .race__top {
 	display: flex;
-	flex-wrap: wrap;
-	justify-content: space-between;
-	align-items: center;
-	gap: 16px;
 	margin-bottom: 28px;
 }
 
@@ -402,6 +400,7 @@
 }
 
 .home-jobs .rg__title h3 {
+	font-family: var(--headline);
 	font-size: 1rem;
 	font-weight: 650;
 }
@@ -682,13 +681,7 @@
 	color: var(--ink-2);
 }
 
-/* A program that runs in place (lib/go-play.ts): the card, with its buttons in its head, beside its output; one
-   above the other on narrow screens. */
-.home-jobs .ex__play {
-	display: grid;
-	gap: 16px;
-}
-
+/* A program beside its output (GoPlay.astro); one above the other on narrow screens. */
 @media (min-width: 900px) {
 	.home-jobs .ex__play {
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
@@ -696,126 +689,17 @@
 	}
 }
 
-.home-jobs .ex__src {
-	display: grid;
-	gap: 8px;
-	align-content: start;
-	min-width: 0;
+.home-jobs .ex__term {
+	min-height: 160px;
 }
 
-/* The lines before func main, folded: a row to open them, then those lines over the rest. */
-.home-jobs .ex__fold summary {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-height: 36px;
-	padding: 0 16px;
-	border-bottom: 1px solid var(--rule);
-	font: 400 0.75rem/1.2 var(--mono);
-	color: var(--ink-3);
-	cursor: pointer;
-	list-style: none;
-}
-
-.home-jobs .ex__fold summary::-webkit-details-marker {
-	display: none;
-}
-
-.home-jobs .ex__fold summary::before {
-	content: '';
-	width: 6px;
-	height: 6px;
-	border: solid currentColor;
-	border-width: 0 1.5px 1.5px 0;
-	rotate: -45deg;
-}
-
-.home-jobs .ex__fold[open] summary::before {
-	rotate: 45deg;
-}
-
-.home-jobs .ex__fold summary:hover {
-	color: var(--ink);
-}
-
-.home-jobs .ex__fold[open] + pre {
-	padding-top: 0;
-}
-
-.home-jobs .ex__fold > pre {
-	padding-bottom: 0;
-}
-
-@media (pointer: coarse) {
-	.home-jobs .ex__fold summary {
-		min-height: 44px;
-	}
+.home-jobs .ex__out:empty::before {
+	content: 'Press Run to see what it prints.';
+	color: var(--panel-ink-2);
 }
 
 .home-jobs .ex__more a {
 	white-space: nowrap;
-}
-
-/* Edit swaps the card's code for this textarea, with the same type and padding, so the card keeps its place. */
-.home-jobs .ex__play textarea {
-	box-sizing: border-box;
-	display: block;
-	width: 100%;
-	margin: 0;
-	padding: 16px;
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	color: var(--ink);
-	caret-color: var(--accent-text);
-	font: 400 0.8125rem/1.65 var(--mono);
-	tab-size: 4;
-	white-space: pre;
-	overflow-x: auto;
-	resize: vertical;
-}
-
-.home-jobs .ex__play textarea:focus-visible {
-	outline: 2px solid var(--accent-text);
-	outline-offset: -2px;
-	border-radius: 0 0 var(--corner) var(--corner);
-}
-
-.home-jobs .ex__hint {
-	font: 400 0.75rem/1.5 var(--mono);
-	color: var(--ink-3);
-}
-
-.home-jobs .ex__play:has(textarea[hidden]) .ex__hint {
-	display: none;
-}
-
-.home-jobs .ex__actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-/* The file name keeps one line; the buttons go under it when the card is too narrow for both. */
-.home-jobs .ex__src .code__head {
-	flex-wrap: wrap;
-}
-
-.home-jobs .ex__src .code__head > span {
-	white-space: nowrap;
-}
-
-/* Sized for the card's head, as its copy button is; 44 px on a touch screen. */
-.home-jobs .code__head .pbtn {
-	min-height: 32px;
-	padding: 4px 12px;
-	font-size: 0.75rem;
-}
-
-@media (pointer: coarse) {
-	.home-jobs .code__head .pbtn {
-		min-height: 44px;
-	}
 }
 
 /* The links that stand alone (a code card's head, a scene's guide) are 44 px tall on a touch screen. */
@@ -825,71 +709,6 @@
 		align-items: center;
 		min-height: 44px;
 	}
-}
-
-.home-jobs .ex__actions .pbtn[aria-disabled='true'] {
-	cursor: progress;
-	opacity: 0.6;
-}
-
-/* The output: a dark panel in both themes, as on the docs pages, as tall as the card beside it. Its pre is always
-   rendered, so the live region is in the accessibility tree before its first announcement. */
-.home-jobs .ex__term {
-	display: grid;
-	grid-template-rows: auto 1fr;
-	min-width: 0;
-	min-height: 160px;
-	border: 1px solid var(--panel-rule);
-	border-radius: var(--corner);
-	background: var(--panel);
-	color: var(--panel-ink);
-	overflow: hidden;
-}
-
-.home-jobs .ex__term-head {
-	margin: 0;
-	padding: 10px 16px;
-	border-bottom: 1px solid var(--panel-rule);
-	font: 500 0.75rem/1.2 var(--mono);
-	color: var(--panel-ink-2);
-}
-
-.home-jobs .ex__out {
-	margin: 0;
-	padding: 12px 16px;
-	border: 0;
-	background: none;
-	color: inherit;
-	font: 400 0.8125rem/1.65 var(--mono);
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-
-.home-jobs .ex__out:empty::before {
-	content: 'Press Run to see what it prints.';
-	color: var(--panel-ink-2);
-}
-
-.home-jobs .ex__out :is(.stderr, .error) {
-	color: var(--danger);
-}
-
-.home-jobs .ex__out .system {
-	color: var(--panel-ink-2);
-}
-
-.home-jobs .ex__out :is(button, a).link {
-	cursor: pointer;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: var(--panel-accent);
-	font: inherit;
-	text-decoration: underline;
-}
-
-.home-jobs .ex__out .link:focus-visible {
-	outline-color: var(--panel-accent);
 }
 
 @media (max-width: 599px) {
@@ -938,6 +757,7 @@
 }
 
 .home-jobs .index__t {
+	font-family: var(--headline);
 	font-size: 1.25rem;
 	font-weight: 650;
 	letter-spacing: -0.01em;
@@ -988,32 +808,7 @@
 	}
 }
 
-/* ---- The closing (Close.astro): a tear line, then the install box and the way in ---- */
-
-/* A ticket's perforation, in the stub's language (.banner__id): a dashed line, and at each end a punched notch, a
-   little darker than the paper with a hairline rim, as the rails' holes are. */
-.home-jobs .tear {
-	--notch: radial-gradient(circle, var(--bar-2) 5.5px, var(--rule) 6px 6.75px, transparent 7.25px);
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	margin-bottom: 40px;
-	padding-inline: 14px;
-	font: 400 0.75rem/1 var(--mono);
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--ink-3);
-	background:
-		var(--notch) -7px 50% / 14px 14px no-repeat,
-		var(--notch) calc(100% + 7px) 50% / 14px 14px no-repeat;
-}
-
-.home-jobs .tear::before,
-.home-jobs .tear::after {
-	content: '';
-	flex: 1;
-	border-top: 1px dashed var(--ink-3);
-}
+/* ---- The closing (Close.astro): the install box and the way in ---- */
 
 .home-jobs .close {
 	display: grid;
@@ -1027,11 +822,7 @@
 	gap: 12px;
 }
 
-/* The closing has the page's one tear line, so the footer's is not shown here; a rule starts the footer. */
-:root:is([data-home], :has(.st)) .shell-tear {
-	display: none;
-}
-
+/* A rule starts the footer here, in the rails' hairline. */
 :root:is([data-home], :has(.st)) .shell-foot {
 	margin-top: 0;
 	padding-top: 40px;

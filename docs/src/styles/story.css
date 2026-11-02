@@ -150,7 +150,7 @@
 
 .st-intro h1 {
 	color: var(--ink);
-	font-family: var(--display);
+	font-family: var(--headline);
 	font-size: clamp(2.375rem, 4.4vw, 3.75rem);
 	font-weight: 700;
 	font-variation-settings: 'opsz' 96;
@@ -388,7 +388,7 @@
 .st-title {
 	margin-bottom: 14px;
 	color: var(--ink);
-	font-family: var(--display);
+	font-family: var(--headline);
 	font-size: clamp(2rem, 3.2vw, 2.625rem);
 	font-weight: 700;
 	font-variation-settings: 'opsz' 72;

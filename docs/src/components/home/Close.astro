@@ -1,12 +1,10 @@
 ---
-// The home page's closing: a tear line, then the install box and the way in. The footer's own tear line is hidden on
-// the home page (home.css), so there is one.
+// The home page's closing: the install box and the way in.
 import '../../styles/home.css';
 import Install from '../ui/Install.astro';
 ---
 
 <section class="home-row section wrap" aria-labelledby="close-title" style="padding-top:0">
-	<p class="tear" aria-hidden="true">tear here</p>
 	<div class="close">
 		<h2 class="h-display h1" id="close-title">Run your first worker.</h2>
 		<Install id="close" />
