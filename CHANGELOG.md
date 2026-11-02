@@ -8,6 +8,7 @@
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
 - **Data race on `Restart`** (#133): `Restart` wrote the worker's configs while `Add` copied them, and replaced the context while `Context()` read it, without a lock. `Restart` no longer writes the configs, and the context is now loaded atomically, so `Context()` still takes no lock.
 - **A job could start after `Pause` returned with the worker Paused** (#135): the dispatcher moved the worker to Running before it counted the batch, so a `Pause` in between saw nothing running and went straight to Paused. The batch is now counted first, and given back to the dispatcher if a `Pause` or `Stop` got in.
+- **`AddAll` with no items never closed `Results()` or `Errs()`** (#155): the shared channel is closed by the member whose `Close` takes the group's count to zero, and an empty group has no members, so `for range` over it blocked forever and `Drain()` leaked its goroutine. An empty group now closes its channel when it is created.
 
 ## [v1.10.0] (2026-10-25)
 
