@@ -50,25 +50,3 @@ try {
 		<Footer />
 	</Docs>
 </Base>
-
-<script>
-	// The sidebar's sliding highlight (fd-theme.css). It is the sidebar's ::before, so React's markup is never touched.
-	const rows = 'a[data-active], button:has(> .fd-page-tree-item-name)';
-	addEventListener('pointerover', (event) => {
-		const sidebar = document.getElementById('nd-sidebar');
-		if (!sidebar || event.pointerType !== 'mouse') return;
-		const row = sidebar.contains(event.target as Node) ? (event.target as Element).closest(rows) : null;
-		if (!row) return void delete sidebar.dataset.hoverRow;
-		const box = sidebar.getBoundingClientRect();
-		const { left, top, width, height } = row.getBoundingClientRect();
-		sidebar.style.setProperty('--row-x', `${left - box.left}px`);
-		sidebar.style.setProperty('--row-y', `${top - box.top}px`);
-		sidebar.style.setProperty('--row-w', `${width}px`);
-		sidebar.style.setProperty('--row-h', `${height}px`);
-		// Off, it takes its place at once; on, the read below commits that, so it fades in there and slides from then on.
-		void sidebar.offsetWidth;
-		sidebar.dataset.hoverRow = '';
-	});
-	// The sidebar meets the window's edge, so the mouse can leave it for no element at all.
-	document.documentElement.addEventListener('pointerleave', () => delete document.getElementById('nd-sidebar')?.dataset.hoverRow);
-</script>

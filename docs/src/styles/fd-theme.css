@@ -251,6 +251,7 @@ input[aria-controls='fd-search-list']:focus-visible {
 }
 
 :is(#nd-sidebar, #nd-sidebar-mobile) :is(a[data-active], button):has(> .fd-page-tree-item-name):hover {
+	background: var(--chrome-2);
 	color: var(--chrome-ink);
 }
 
@@ -258,43 +259,6 @@ input[aria-controls='fd-search-list']:focus-visible {
 :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true']:has(> .fd-page-tree-item-name):hover {
 	background: color-mix(in srgb, var(--signal) 18%, transparent);
 	color: var(--accent-text);
-}
-
-/* Under a mouse, one highlight slides from row to row. pages/[...slug].astro sets its box and `data-hover-row`. */
-@media (hover: hover) {
-	#nd-sidebar :is(a[data-active='false'], button):has(> .fd-page-tree-item-name):hover {
-		background: none;
-	}
-
-	#nd-sidebar::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: var(--row-w, 0);
-		height: var(--row-h, 0);
-		translate: var(--row-x, 0) var(--row-y, 0);
-		border-radius: var(--corner);
-		background: var(--chrome-2);
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 0.2s var(--ease);
-	}
-
-	#nd-sidebar[data-hover-row]::before {
-		opacity: 1;
-		transition:
-			opacity 0.2s var(--ease),
-			translate 0.2s var(--ease),
-			width 0.2s var(--ease),
-			height 0.2s var(--ease);
-	}
-}
-
-@media (hover: hover) and (prefers-reduced-motion: reduce) {
-	#nd-sidebar[data-hover-row]::before {
-		transition: none;
-	}
 }
 
 /* ---- Page title: a ticket stub, then the h1 ---- */
@@ -945,80 +909,6 @@ input[aria-controls='fd-search-list']:focus-visible {
 	--primary: color-mix(in oklab, var(--signal), white 22%);
 	background: var(--primary);
 	color: var(--signal-ink);
-}
-
-/* ---- Home ---- */
-
-/* The status ticker between the story and the sections (components/home/Ticker.astro). */
-.shell-ticker {
-	position: relative;
-	overflow: hidden;
-	border-block: 3px solid var(--signal-ink);
-	background: var(--signal);
-	color: var(--signal-ink);
-	font: 500 0.75rem/1 var(--mono);
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	white-space: nowrap;
-}
-
-.shell-ticker__track {
-	display: flex;
-	width: max-content;
-	animation: shell-ticker 60s linear infinite;
-}
-
-.shell-ticker:hover .shell-ticker__track {
-	animation-play-state: paused;
-}
-
-.shell-ticker ul {
-	display: flex;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.shell-ticker li {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 14px 28px 14px 0;
-}
-
-.shell-ticker li::after {
-	content: '';
-	width: 4px;
-	height: 4px;
-	margin-inline-start: 18px;
-	background: var(--signal-ink);
-}
-
-.shell-ticker b {
-	padding: 3px 6px;
-	background: var(--signal-ink);
-	color: var(--signal);
-	font-weight: 600;
-}
-
-.shell-ticker [data-s='run'] {
-	color: var(--on-signal-go);
-}
-
-.shell-ticker [data-s='fail'] {
-	color: var(--on-signal-stop);
-}
-
-@keyframes shell-ticker {
-	to {
-		transform: translateX(-50%);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.shell-ticker__track {
-		animation: none;
-	}
 }
 
 /* ---- 404 ---- */

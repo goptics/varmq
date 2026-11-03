@@ -42,9 +42,6 @@
 	--hot-text: #965800;
 	/* Kept for the scenes, which name it. */
 	--signal-text: var(--hot-text);
-	/* Status text on a --signal fill (the home page's ticker). */
-	--on-signal-go: #04221a;
-	--on-signal-stop: #7a1500;
 
 	/* Each theme's green is its own logo's. On paper the logo's #2e9c7f is enough for marks and fills, so text takes
 	   the same hue darker. */
