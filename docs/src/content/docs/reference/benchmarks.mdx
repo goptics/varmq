@@ -36,14 +36,7 @@ For the full method of each suite, read the READMEs in the benchmarks repository
 
 The page reads a committed snapshot, `src/components/bench/data.json`. A script builds it from the raw `.txt` files at one commit of the benchmarks repository. The script keeps the line number of every row, which is how the page links each figure to its line. The docs build does not use the network.
 
-The live charts at benchmarks.goptics.org do not send a CORS header. A browser on this site cannot read their dataset, so the page cannot refresh itself. To update the snapshot, run these commands in the `docs/` folder:
-
-```bash
-node scripts/bench-data.mjs --ref main --check-live
-pnpm test
-```
-
-`--check-live` compares every row with the published chart data and fails on a difference. The tests check the figures against the home page and check that each `go test` command selects exactly the groups in scope.
+To update the snapshot, run `node scripts/bench-data.mjs --ref main --check-live` and then `pnpm test` in the `docs/` folder of the VarMQ repository.
 
 ## Run it yourself
 

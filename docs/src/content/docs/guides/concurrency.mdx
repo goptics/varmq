@@ -30,7 +30,7 @@ If you pass more than one value to a worker, the last one wins. [Worker types](/
 
 ## A limit, not a pool size
 
-[`NumConcurrency()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) returns the limit. It is an upper bound on the jobs running at once, not a number of goroutines the worker creates. The worker starts a goroutine when jobs are waiting and one more would clear the backlog faster than it costs to start it, up to the limit, and goroutines exit when the backlog is gone. A worker with a limit of 100 and three waiting jobs does not start 100 goroutines. [How it works](/concepts/how-it-works/#the-worker-pool) has the details.
+[`NumConcurrency()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) returns the limit. It is an upper bound on the jobs running at once, not a number of goroutines the worker creates. The worker starts goroutines while jobs wait, up to the limit, and they exit when the backlog is gone. A worker with a limit of 100 and three waiting jobs does not start 100 goroutines. [How it works](/concepts/how-it-works/#the-worker-pool) has the details.
 
 Four methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) report what the pool is doing:
 
@@ -82,11 +82,11 @@ Jobs 2 and 3 start beside job 1, which is three at once, the new limit. Jobs 4 t
 
 ### Lowering the limit
 
-Nothing running is interrupted. The worker hands out no new batch until fewer goroutines are busy than the new limit, so `NumProcessing` can stay above `NumConcurrency` until those goroutines finish their batches. A goroutine that already holds a batch keeps running it one job after another, so jobs from batches already handed out still start after the change. The worker removes idle goroutines it no longer needs at once, unless you set an expiry duration, in which case the expiry removes them (see below).
+Nothing running is interrupted. `NumProcessing` can stay above `NumConcurrency` until the busy goroutines finish the jobs they already hold. Those jobs still start after the change. The worker removes idle goroutines it no longer needs at once, or on the expiry timer if you set one (see below).
 
 ## Idle goroutines
 
-A worker with default settings keeps one idle goroutine in its pool. A goroutine that finishes a job stays in the pool if more jobs are waiting than idle goroutines are ready to run them, or if the pool holds fewer idle goroutines than the minimum, which is one. Otherwise it exits. Two options change this.
+A worker with default settings keeps one idle goroutine in its pool. A goroutine that finishes a job stays in the pool if more jobs wait than idle goroutines can take, or if the pool has fewer idle goroutines than the minimum, which is one. Otherwise it exits. Two options change this.
 
 [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) sets the share of the limit to keep idle, as a percentage from 1 to 100. The worker keeps `limit * percentage / 100` idle goroutines, rounded down, with a floor of one. With a limit of 4, a ratio of 50 keeps 2 and a ratio of 100 keeps 4. A value outside the range is clamped: `0` becomes 1 and anything above 100 becomes 100. The limit here is the current one, so the minimum follows a `TunePool`.
 

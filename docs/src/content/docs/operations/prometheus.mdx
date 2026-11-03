@@ -7,7 +7,7 @@ import MetricsScene from '../../../components/ops/MetricsScene.astro';
 
 VarMQ imports no metrics library. A worker exposes what Prometheus needs as plain methods: how many jobs are running and waiting, and four counters of what has happened. You wrap those methods in collectors from the [Prometheus Go client](https://github.com/prometheus/client_golang). Its [`GaugeFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeFunc) and [`CounterFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#CounterFunc) call a function each time Prometheus scrapes, so nothing of yours has to poll the worker.
 
-This page follows `examples/prometheus`, which is its own Go module and uses client_golang v1.23.2.
+A longer version of the program below is in [`examples/prometheus`](https://github.com/goptics/varmq/tree/main/examples/prometheus).
 
 ## A worker with metrics
 
@@ -78,8 +78,6 @@ func registerMetrics(w varmq.Worker, namespace string) {
 	counter("failed_total", "Jobs that returned an error or panicked", m.Failed)
 }
 ```
-
-The repository's example registers collectors with the same eight names, one [`MustRegister`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#MustRegister) call each, on a worker with the same concurrency. The helpers above shorten that, and their help texts are shorter.
 
 ### Run locally
 

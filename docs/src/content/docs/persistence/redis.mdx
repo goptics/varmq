@@ -24,7 +24,7 @@ redisq needs Redis 6.0 or newer, with Lua scripts allowed: it takes, adds and pu
 | [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/redisq#Queues.NewDistributedQueue) | first in, first out, plus wake-ups for idle consumers | [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), or [`varmq.NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) with no worker |
 | [`NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/redisq#Queues.NewDistributedPriorityQueue) | lowest number first, plus wake-ups for idle consumers | [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue), or [`varmq.NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedPriorityQueue) |
 
-A queue with the key `jobs` keeps its waiting jobs under `jobs`. It keeps the jobs a worker took and has not acknowledged under `jobs:nacked`, with their deadlines under `jobs:timeouts` and the heartbeats of the queue objects that took them under `jobs:heartbeats`. Its other keys, and a distributed queue's wake-up channels, also start with `jobs:`.
+A queue with the key `jobs` keeps its waiting jobs under `jobs`. Every other key it uses, and the wake-up channels of a distributed queue, start with `jobs:`. Give each queue its own key.
 
 Redis keeps these in memory. Whether they survive a restart of Redis itself is up to Redis's own persistence settings, which neither VarMQ nor redisq changes.
 
@@ -263,6 +263,23 @@ To see a crash instead, run the producer again and kill one consumer with `kill 
 
 [The overview](/persistence/overview/#acknowledgement) describes when VarMQ acknowledges a job. This is what redisq does with a job that was taken and not acknowledged, for example because the process died.
 
+When such a job runs again:
+
+| Case | The job runs again |
+|---|---|
+| A distributed consumer crashes | about six seconds later, on another consumer |
+| A program on a persistent queue crashes | once the program has run again for 30 seconds in total, or when a queue object finds the job past its visibility timeout (five minutes), whichever comes first |
+| A job runs longer than the visibility timeout | at the next sweep, also while the first run goes on |
+| You call `Close` on the queue | at once |
+
+- **`Close` hands jobs back.** [`Close`](https://pkg.go.dev/github.com/goptics/redisq#Queue.Close) puts back at once every job its queue object took and has not acknowledged. After it, `Enqueue` and `Acknowledge` on that object return `false`. Stop the worker before you close the queue.
+- **The timeouts are set per queue object.** [`SetVisibilityTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetVisibilityTimeout) changes the deadline for jobs taken after the call. [`SetHeartbeatTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetHeartbeatTimeout) sets how long the object may go without reaching Redis: at least five seconds, and 0 turns heartbeats off. Call them right after you create the queue.
+- **Keep the visibility timeout longer than your slowest job.** A job still running past its deadline is put back by the next sweep and runs again.
+- **Keep the heartbeat timeout longer than any freeze you want to survive.** A process that is frozen or cut off from Redis for longer is taken for dead. Its running jobs run again elsewhere, and their later `Acknowledge` still returns `true`.
+- **[`GetNackedItemsCount`](https://pkg.go.dev/github.com/goptics/redisq#Queue.GetNackedItemsCount) counts the jobs taken and not acknowledged.** The handle's `Len` does not, because they have left the queue.
+
+### How redisq tracks a taken job
+
 The scene below shows the keys of a queue named `jobs`. Take a job, then kill the process or close the queue, and move the slider to move time forward.
 
 <RedisFlow />
@@ -270,12 +287,6 @@ The scene below shows the keys of a queue named `jobs`. Take a job, then kill th
 - **A taken job is recorded in the same step.** One script moves the job from the queue to the hash `<key>:nacked`, under its acknowledgement ID, and gives it a deadline in `<key>:timeouts`: Redis's time plus the visibility timeout, five minutes by default. `Acknowledge` removes both entries.
 - **Every queue object sweeps once a second.** From its creation until `Close`, it puts back the jobs whose deadline has passed and the jobs held by a queue object taken for dead. On the first-in first-out queues they go to the front, and on a priority queue back at their priority. On a distributed queue the sweep wakes a consumer for them. Creating a queue object also puts back the jobs whose deadline has passed.
 - **A queue object is taken for dead when its heartbeat runs out.** Each one renews a heartbeat in `<key>:heartbeats` when it takes jobs and on every sweep, and the other queue objects on the key put back its jobs once the heartbeat is 30 seconds old, the default. Time in which no process swept the key does not count, because Redis cannot tell a dead process from a pause of all of them. A distributed consumer is taken for dead sooner: Redis drops its wake-up channel when its process exits, and five seconds later the other consumers put its jobs back.
-- **So a job from a crashed run comes back.** On a distributed queue, another consumer runs it about six seconds after the crash. On a persistent queue, it comes back once the program has been running again for 30 seconds, counted over all the runs since the crash, or as soon as a queue object finds it past its deadline, whichever comes first.
-- **`Close` hands jobs back.** [`Close`](https://pkg.go.dev/github.com/goptics/redisq#Queue.Close) puts back at once every job its queue object took and has not acknowledged. After it, `Enqueue` and `Acknowledge` on that object return `false`. Stop the worker before you close the queue.
-- **The timeouts are set per queue object.** [`SetVisibilityTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetVisibilityTimeout) changes the deadline for jobs taken after the call. [`SetHeartbeatTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetHeartbeatTimeout) sets how long the object may go without reaching Redis: at least five seconds, and 0 turns heartbeats off. Call them right after you create the queue.
-- **Keep the visibility timeout longer than your slowest job.** A job still running past its deadline is put back by the next sweep and runs again.
-- **Keep the heartbeat timeout longer than any freeze you want to ride out.** A process that is frozen or cut off from Redis for longer is taken for dead. Its running jobs run again elsewhere, and their later `Acknowledge` still returns `true`.
-- **[`GetNackedItemsCount`](https://pkg.go.dev/github.com/goptics/redisq#Queue.GetNackedItemsCount) counts the jobs in `:nacked`.** The handle's `Len` does not, because they have left the queue.
 
 ## Job IDs
 
