@@ -1,0 +1,28 @@
+---
+title: Glossary
+description: "Short definitions of the terms the VarMQ docs use, each with a link to the page that covers it."
+---
+
+The terms these docs use, in alphabetical order. Each term links to the page that explains it in full.
+
+| Term | Meaning |
+|---|---|
+| [Acknowledge](/persistence/overview/#acknowledgement) | To tell the storage that a job is done, so the storage forgets it. Only persistent and distributed queues acknowledge jobs. A failed job is acknowledged too. |
+| [Batch](/concepts/how-it-works/#batched-dispatch) | Several jobs that a pool goroutine takes together and runs one after another. A priority queue is not batched. |
+| [Concurrency (limit)](/guides/concurrency/) | The most jobs a worker runs at the same time. It is an upper bound, not a pool size. |
+| [Distributed queue](/persistence/overview/#persistent-or-distributed) | A queue in a storage adapter that workers in several processes share. Each job goes to one of them. |
+| [Event loop](/concepts/how-it-works/#the-event-loop) | The one goroutine in each worker that decides what runs next. It hands waiting jobs to free pool goroutines. |
+| [Goroutine (pool member)](/concepts/how-it-works/#the-worker-pool) | A goroutine in the worker's pool that runs your function. The pool starts more while jobs wait, up to the concurrency limit. |
+| [Job](/concepts/jobs/) | One unit of work: your data, an optional ID, and a status that changes as the worker runs it. `Add` creates it. |
+| [Job ID](/guides/job-ids/) | An optional string that names a job. An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds. |
+| [Parked job](/concepts/lifecycle/#what-happens-to-jobs) | A job from a batch that did not start before a pause or stop. It stays `Queued` and runs first after `Resume` or `Restart`. |
+| [Persistent queue](/persistence/overview/#persistent-or-distributed) | A queue in a storage adapter that keeps jobs across a restart of one process. |
+| [Priority queue](/guides/queues/#fifo-and-priority-queues) | A queue that gives out waiting jobs in priority order. A lower number runs first. |
+| [Rank](/guides/strategies/#choosing-a-strategy) | The number you set on a source with `WithQueuePriority` or `WithTopicPriority`. A lower rank goes first. |
+| [Source](/guides/strategies/) | Anything bound to a worker that gives it jobs: a queue, a priority queue or a topic subscription. |
+| [Storage adapter](/persistence/adapters/) | A type that implements some of VarMQ's queue interfaces, such as redisq or sqliteq. It keeps jobs across restarts or shares a queue between processes. |
+| [Strategy](/guides/strategies/) | The rule a worker with several sources uses to pick which source gives the next job. |
+| [Subscription](/guides/topics/#creating-a-topic-and-subscribing) | The link between a topic and one worker, made with `WithTopic`. Each subscription gets its own job for every payload. |
+| [Topic](/guides/topics/) | An in-memory object that gives each published payload to every subscribed worker. A queue gives each job to one worker. |
+| [Visibility timeout (redisq)](/persistence/redis/#jobs-that-were-not-acknowledged) | How long a taken job can stay unacknowledged in redisq, five minutes by default. After that, the next sweep puts the job back in the queue. |
+| [Worker](/start/introduction/#the-model-a-worker-is-a-pool-a-queue-is-a-source) | The pool that owns your function and the concurrency limit. It runs the jobs from the sources bound to it. |

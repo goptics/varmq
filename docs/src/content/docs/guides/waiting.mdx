@@ -40,6 +40,27 @@ Both cover everything bound to the worker: each queue and each topic subscriptio
 Do not call `Wait`, `WaitUntilIdle` or the combined calls below on a worker from inside that worker's own function. The job that is calling counts as running, so the call waits for the job it is in.
 :::
 
+### Waiting with a timeout
+
+`Wait` and the other wait calls take no context and no timeout. To give up after a time, run the call in a goroutine and select on it:
+
+```go
+done := make(chan struct{})
+go func() {
+	worker.Wait()
+	close(done)
+}()
+
+select {
+case <-done:
+	// the work is done
+case <-time.After(30 * time.Second):
+	// gave up; the goroutine still waits until the work is done
+}
+```
+
+The goroutine keeps waiting after the timeout. It ends when the worker drains, pauses or stops.
+
 ## Waiting for a state
 
 [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one status and look at nothing else. They return at once if the worker is already there. Otherwise they keep waiting until something puts it there, so a worker that you stop while you wait for `Paused` leaves the call waiting.
