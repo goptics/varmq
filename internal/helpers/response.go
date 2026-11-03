@@ -1,8 +1,7 @@
 package helpers
 
 type Response[R any] struct {
-	ch  chan R
-	res R
+	ch chan R
 }
 
 func NewResponse[R any](cap int) *Response[R] {
@@ -15,21 +14,10 @@ func (rc *Response[R]) Read() <-chan R {
 	return rc.ch
 }
 
+// Send is called by every worker goroutine of a group, so it must touch
+// nothing but the channel.
 func (c *Response[R]) Send(res R) {
-	// Store the result in the result field for later access
-	c.res = res
-	// Send to channel for immediate consumption
 	c.ch <- res
-}
-
-func (c *Response[R]) Response() R {
-	result, ok := <-c.ch
-
-	if ok {
-		return result
-	}
-
-	return c.res
 }
 
 func (c *Response[R]) Drain() {

@@ -1,0 +1,171 @@
+---
+// The quick-start program on a timeline: main adds two jobs and waits, the worker runs them.
+// Concurrency 1 runs the jobs one after the other. Concurrency 2 runs them together.
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'quick' } = Astro.props;
+const call = 'worker := varmq.NewWorker(func(j varmq.Job[int]) {\n\tfmt.Printf("Processing %d\\n", j.Data())\n\ttime.Sleep(1 * time.Second)\n}) // default concurrency is 1';
+---
+
+<Scene
+	id={id}
+	title="The quick start"
+	tag="timeline"
+	class="learn"
+	call={call}
+	describe="The quick-start program on a timeline of two seconds. Main calls Add twice at time zero, then waits in WaitUntilIdle. With concurrency 1 the worker runs job 1 from 0 to 1 second and job 2 from 1 to 2 seconds. With concurrency 2 both jobs run from 0 to 1 second. A slider moves through time, and the printed lines appear as time passes. Play replays the run."
+>
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>time</dt><dd data-stat="t">2.0 s</dd></div>
+		<div><dt>printed</dt><dd data-stat="lines">3</dd></div>
+	</dl>
+
+	<div class="qt" data-quick>
+		<div class="qt__grid" aria-hidden="true">
+			<span class="qt__name">main</span>
+			<div class="qt__track" data-main></div>
+			<span class="qt__name">Worker 1</span>
+			<div class="qt__track" data-lane="1"></div>
+			<span class="qt__name" data-lane2-name>Worker 2</span>
+			<div class="qt__track" data-lane="2"></div>
+			<span></span>
+			<div class="qt__axis"><span>0 s</span><span>1 s</span><span>2 s</span></div>
+		</div>
+
+		<div class="qt__out">
+			<span class="slabel">output</span>
+			<pre class="qt__pre" data-out aria-live="polite"></pre>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-act="play">Play</button>
+		<label class="sfield">
+			<span>time</span>
+			<input type="range" min="0" max="2000" step="50" value="2000" data-scrub aria-label="Time in seconds" />
+		</label>
+		<div class="lgroup">
+			<span id={`${id}-cl`}>concurrency</span>
+			<div class="seg" role="radiogroup" aria-labelledby={`${id}-cl`} data-conc>
+				<button type="button" role="radio" aria-checked="true" data-key="1">1 (default)</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="2">2</button>
+			</div>
+		</div>
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		The Go Playground runs on a simulated clock, and so does this model: it draws the program, it does not time it. With concurrency 2 the two lines print together, in either order.
+	</p>
+</Scene>
+
+<script>
+	import { tabs, setCall, reducedMotion } from '../ui/dom';
+
+	const END = 2000; // ms of the model
+
+	document.querySelectorAll<HTMLElement>('[data-quick]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.sframe')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+
+		let c: 1 | 2 = 1;
+		let t = END;
+		let playing = false;
+		let last = 0;
+
+		const jobs = () =>
+			c === 1
+				? [
+						{ id: 1, lane: 1, start: 0, end: 1000 },
+						{ id: 2, lane: 1, start: 1000, end: 2000 },
+					]
+				: [
+						{ id: 1, lane: 1, start: 0, end: 1000 },
+						{ id: 2, lane: 2, start: 0, end: 1000 },
+					];
+		const exitAt = () => (c === 1 ? 2000 : 1000);
+
+		const pct = (ms: number) => `${(ms / END) * 100}%`;
+
+		const draw = () => {
+			const list = jobs();
+			q('[data-main]').innerHTML = `
+				<span class="qt__bar qt__bar--add" style="left:0;width:16%">Add ×2</span>
+				<span class="qt__bar qt__bar--wait" style="left:17%;width:calc(${pct(exitAt())} - 17%)"><span>WaitUntilIdle blocks</span></span>
+				<span class="qt__exit" style="left:${pct(exitAt())}">exit</span>`;
+			for (const lane of [1, 2]) {
+				const el = q(`[data-lane="${lane}"]`);
+				el.innerHTML = list
+					.filter((j) => j.lane === lane)
+					.map((j) => `<span class="qt__bar" data-done="${t >= j.end}" data-run="${t >= j.start && t < j.end}" style="left:${pct(j.start)};width:${pct(j.end - j.start)}"><span>job ${j.id}${j.start === 0 && lane === 1 ? '' : ''}</span></span>`)
+					.join('');
+			}
+			const l2 = c === 2;
+			q('[data-lane="2"]').classList.toggle('is-off', !l2);
+			q('[data-lane2-name]').classList.toggle('is-off', !l2);
+			q('[data-lane2-name]').textContent = l2 ? 'Worker 2' : 'Worker 2 (limit is 1)';
+
+			// Cursor.
+			root.style.setProperty('--t', String(t / END));
+
+			const lines: string[] = [];
+			for (const j of list) if (t >= j.start) lines.push(`Processing ${j.id}`);
+			if (t >= exitAt()) lines.push('Program exited.');
+			q('[data-out]').textContent = lines.join('\n');
+			q('[data-stat="t"]').textContent = `${(t / 1000).toFixed(1)} s`;
+			q('[data-stat="lines"]').textContent = String(lines.length);
+			q<HTMLInputElement>('[data-scrub]').value = String(t);
+			q<HTMLInputElement>('[data-scrub]').setAttribute('aria-valuetext', `${(t / 1000).toFixed(1)} seconds`);
+			q('[data-act="play"]').textContent = playing ? 'Pause' : t >= END ? 'Replay' : 'Play';
+		};
+
+		const tick = (now: number) => {
+			if (!playing) return;
+			t = Math.min(END, t + Math.min(now - last, 100));
+			last = now;
+			if (t >= END) playing = false;
+			draw();
+			if (playing) requestAnimationFrame(tick);
+		};
+
+		scene.addEventListener('click', (e) => {
+			if (!(e.target as HTMLElement).closest('[data-act="play"]')) return;
+			if (playing) {
+				playing = false;
+			} else {
+				if (t >= END) t = 0;
+				playing = true;
+				last = performance.now();
+				requestAnimationFrame(tick);
+			}
+			draw();
+		});
+
+		q<HTMLInputElement>('[data-scrub]').addEventListener('input', (e) => {
+			playing = false;
+			t = Number((e.target as HTMLInputElement).value);
+			draw();
+		});
+
+		tabs(q('[data-conc]'), (key) => {
+			c = key === '2' ? 2 : 1;
+			playing = false;
+			t = END;
+			setCall(
+				q('[data-call]'),
+				`worker := varmq.NewWorker(func(j varmq.Job[int]) {\n\tfmt.Printf("Processing %d\\n", j.Data())\n\ttime.Sleep(1 * time.Second)\n}${c === 2 ? ', 2' : ''}) // ${c === 2 ? 'concurrency 2' : 'default concurrency is 1'}`,
+			);
+			draw();
+		});
+
+		if (reducedMotion()) q('[data-act="play"]').hidden = true;
+		setCall(
+			q('[data-call]'),
+			`worker := varmq.NewWorker(func(j varmq.Job[int]) {\n\tfmt.Printf("Processing %d\\n", j.Data())\n\ttime.Sleep(1 * time.Second)\n}) // default concurrency is 1`,
+		);
+		draw();
+	});
+</script>

@@ -1,0 +1,842 @@
+/* The home page's sections under the story (components/home/, index.mdx): each section is a print job with its
+   banner, `JOB 02` to `JOB 06`, then the closing. Every rule is scoped by `.home-jobs`, the wrapper in index.mdx, which
+   is also `.not-content`, so the docs' prose rules (docs-theme.css) leave these sections alone; the one that restyles
+   the footer on `/` is scoped by `:root:is([data-home], :has(.st))` instead. The colours are the
+   tokens, which follow the theme switch (`:root[data-theme]`, tokens.css). */
+
+.home-jobs {
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	text-rendering: optimizeLegibility;
+}
+
+.home-jobs :is(h2, h3, p, ul, ol, dl, dd, figure, pre) {
+	margin: 0;
+}
+
+/* A hidden tab panel, or a part a demo hides, stays hidden whatever display its class sets. */
+.home-jobs [hidden] {
+	display: none !important;
+}
+
+/* Links in the sections' text: ink over an amber marker that fills on hover, as in the docs' prose. Buttons and the
+   index's rows draw their own. */
+.home-jobs a:not(.btn, .pbtn, [class]) {
+	color: var(--ink);
+	font-weight: 500;
+	text-decoration: none;
+	background-image: linear-gradient(var(--signal), var(--signal));
+	background-position: 0 100%;
+	background-repeat: no-repeat;
+	background-size: 100% 3px;
+	transition: background-size 0.15s var(--ease);
+}
+
+.home-jobs a:not(.btn, .pbtn, [class]):hover {
+	color: var(--signal-ink);
+	background-size: 100% 100%;
+}
+
+
+.home-jobs :focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 3px;
+	border-radius: var(--corner);
+}
+
+.home-jobs .on-dark :focus-visible {
+	outline-color: var(--panel-accent);
+}
+
+/* A link styled as a button keeps the button's colours. */
+.home-jobs a.btn--primary {
+	color: var(--signal-ink);
+}
+
+.home-jobs a.btn--ghost {
+	color: var(--ink);
+}
+
+/* The story's frame (story.css): as wide as the stage, with its gutters, so the edges line up with the hero's. */
+.home-jobs .wrap {
+	width: 100%;
+	max-width: var(--st-max);
+	margin-inline: auto;
+	padding-inline: var(--st-gutter);
+}
+
+/* ---- Type ---- */
+
+.home-jobs .h-display {
+	font-family: var(--headline);
+	font-weight: 700;
+	font-variation-settings: 'opsz' 96;
+	letter-spacing: -0.035em;
+	line-height: 0.98;
+	text-wrap: balance;
+}
+
+.home-jobs .h1 {
+	font-size: clamp(2.25rem, 6vw, 4.5rem);
+}
+
+.home-jobs .h2 {
+	font-family: var(--headline);
+	font-size: clamp(1.875rem, 4.2vw, 3.25rem);
+	letter-spacing: -0.03em;
+	line-height: 1.02;
+	font-weight: 700;
+	font-variation-settings: 'opsz' 72;
+	text-wrap: balance;
+}
+
+.home-jobs .h3 {
+	font-family: var(--headline);
+	font-size: 1.25rem;
+	line-height: 1.25;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+/* ---- Banner: the header line of each print job ---- */
+
+.home-jobs .banner {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	font: 500 0.75rem/1 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin-bottom: 28px;
+}
+
+/* The job number: a ticket stub, as on the docs pages (fd-theme.css, "Page title"): amber on carbon in light,
+   carbon on amber in dark. */
+.home-jobs .banner__id {
+	padding: 7px 12px 7px 10px;
+	background: var(--ink);
+	color: var(--signal);
+	border-radius: 0;
+	letter-spacing: 0.12em;
+	-webkit-mask: radial-gradient(circle at 100% 50%, transparent 4px, black 4.5px);
+	mask: radial-gradient(circle at 100% 50%, transparent 4px, black 4.5px);
+}
+
+:root[data-theme='dark'] .home-jobs .banner__id {
+	background: var(--signal);
+	color: var(--signal-ink);
+}
+
+.home-jobs .banner__rule {
+	flex: 1;
+	border-top: 1px solid var(--rule);
+	min-width: 16px;
+}
+
+.home-jobs .banner > span:not(.banner__rule) {
+	white-space: nowrap;
+}
+
+.home-jobs .on-dark .banner {
+	color: var(--panel-ink-2);
+}
+
+.home-jobs .on-dark .banner__id {
+	background: var(--panel-ink);
+	color: var(--panel);
+}
+
+.home-jobs .on-dark .banner__rule {
+	border-color: var(--panel-rule);
+}
+
+@media (max-width: 519px) {
+	.home-jobs .banner__meta {
+		display: none;
+	}
+}
+
+.home-jobs .section {
+	padding-block: clamp(64px, 9vw, 120px);
+}
+
+.home-jobs .section__head {
+	display: grid;
+	gap: 16px;
+	max-width: 760px;
+	margin-bottom: clamp(32px, 5vw, 56px);
+}
+
+.home-jobs .section__head p {
+	color: var(--ink-2);
+	max-width: 56ch;
+	text-wrap: pretty;
+}
+
+/* ---- Small maps: JOB 02's scenes and JOB 03's stage (components/home/mini.ts) ----
+   Pieces of the hero map, drawn with its classes, which heromap/map.css styles under `.vm-mini` as under `varmq-map`,
+   in the map's palette for the theme. No panel: the page shows through, under the map's dot grid. */
+
+.home-jobs .vm-mini {
+	background-image: radial-gradient(circle, var(--vm-dot) 0.8px, transparent 1.2px);
+	background-size: 14px 14px;
+	border: 1px solid var(--rule);
+	border-radius: var(--corner);
+}
+
+.home-jobs .vm-mini-svg {
+	display: block;
+	width: 100%;
+	height: auto;
+	overflow: visible;
+}
+
+/* The defs the small maps share (Scenes.astro): drawn nowhere. */
+.home-jobs .vm-mini-defs {
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+/* The glow and the lanes' edge come from those defs, not the hero's. */
+:root[data-theme='dark'] .home-jobs .vm-mini {
+	--vm-glow: url(#vm-mini-glow);
+}
+
+.home-jobs .vm-mini .vm-lane > .vm-shape {
+	stroke: url(#vm-mini-lane-edge);
+}
+
+/* Labels at a size for these small stages: the map's 14 is for a map seen from far out. */
+.home-jobs .vm-mini .vm-label {
+	font-size: 10px;
+	letter-spacing: 0.12em;
+}
+
+/* A store's record of a job in flight is an outline: its number takes the chips' ink. */
+.home-jobs .vm-mini .vm-out .vm-num {
+	fill: var(--vm-chip-ink);
+}
+
+/* No storage outside the process: an empty dashed outline. */
+.home-jobs .vm-mini .vm-none > .vm-shape {
+	fill: none;
+	stroke: var(--vm-line);
+	stroke-width: max(1, var(--vm-floor));
+	stroke-dasharray: 4 4;
+}
+
+/* The ack on its way back to the store: the map's green signal. */
+.home-jobs .vm-mini .vm-ack-dot > .vm-jb {
+	fill: var(--vm-green);
+	stroke: var(--vm-green);
+	rx: 11px;
+}
+
+@media (forced-colors: active) {
+	.home-jobs .vm-mini-svg {
+		forced-color-adjust: none;
+	}
+}
+
+/* ---- JOB 02: the scheduling scenes (Scenes.astro, scenes.ts) ---- */
+
+.home-jobs .scenes {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: clamp(24px, 3vw, 40px);
+}
+
+@media (max-width: 979px) {
+	.home-jobs .scenes {
+		grid-template-columns: minmax(0, 1fr);
+		max-width: 520px;
+	}
+}
+
+.home-jobs .scene-card {
+	display: grid;
+	gap: 14px;
+	align-content: start;
+}
+
+.home-jobs .scene-cap {
+	font: 400 0.8125rem/1.3 var(--mono);
+	color: var(--ink-2);
+	min-height: 2.6em;
+	overflow-wrap: anywhere;
+}
+
+.home-jobs .scene {
+	padding: 6px;
+}
+
+.home-jobs .scene-card p {
+	color: var(--ink-2);
+	max-width: 44ch;
+	text-wrap: pretty;
+}
+
+/* ---- JOB 03: where jobs live (Storage.astro, store.ts) ---- */
+
+.home-jobs .store-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+	gap: clamp(24px, 4vw, 48px);
+	align-items: start;
+}
+
+@media (max-width: 899px) {
+	.home-jobs .store-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.home-jobs .store {
+	display: grid;
+	gap: 12px;
+	font-family: var(--mono);
+}
+
+.home-jobs .store__stage {
+	padding: 8px;
+}
+
+.home-jobs .store__stage .vm-mini-svg {
+	max-width: 560px;
+	margin-inline: auto;
+}
+
+/* The buttons, then the result on its own line under them, so a long result never moves the buttons. */
+.home-jobs .store__bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.home-jobs .store__result {
+	flex: 1 1 100%;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	color: var(--ink-2);
+	min-height: 2.8em;
+}
+
+/* One column that may shrink: the code's pre scrolls inside its card instead of widening the page. */
+.home-jobs .store-side {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 18px;
+	min-width: 0;
+}
+
+.home-jobs .store-side p {
+	color: var(--ink-2);
+	max-width: 52ch;
+	text-wrap: pretty;
+}
+
+/* ---- JOB 04: the benchmark lanes, on the page's own paper in each theme (Race.astro, race.ts) ---- */
+
+/* The against-VarMQ toggle's amber: dark enough for text on light paper, the theme's amber on dark. */
+.home-jobs .race {
+	--trade: #8a5300;
+}
+
+:root[data-theme='dark'] .home-jobs .race {
+	--trade: var(--amber);
+}
+
+.home-jobs .race .section__head p {
+	color: var(--ink-2);
+}
+
+.home-jobs .race a {
+	color: var(--accent-text);
+}
+
+.home-jobs .race__top {
+	display: flex;
+	margin-bottom: 28px;
+}
+
+.home-jobs .race__spec {
+	max-width: 76ch;
+	margin-bottom: 28px;
+	font: 400 0.8125rem/1.6 var(--mono);
+	color: var(--ink-2);
+}
+
+.home-jobs .race__groups {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: clamp(28px, 4vw, 56px);
+}
+
+.home-jobs .race__groups--one {
+	grid-template-columns: minmax(0, 1fr);
+	max-width: 820px;
+}
+
+@media (max-width: 899px) {
+	.home-jobs .race__groups {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.home-jobs .rg__title {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+	margin-bottom: 14px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--rule);
+}
+
+.home-jobs .rg__title h3 {
+	font-family: var(--headline);
+	font-size: 1rem;
+	font-weight: 650;
+}
+
+.home-jobs .rg__title span {
+	font: 400 0.75rem/1.2 var(--mono);
+	color: var(--ink-2);
+	text-align: right;
+}
+
+.home-jobs .rlanes {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 6px;
+}
+
+.home-jobs .rlane {
+	display: grid;
+	grid-template-columns: minmax(104px, 150px) minmax(0, 1fr) 88px 64px;
+	align-items: center;
+	gap: 12px;
+	min-height: 32px;
+	font: 400 0.8125rem/1.2 var(--mono);
+}
+
+.home-jobs .rlane__name {
+	color: var(--ink-2);
+	overflow-wrap: anywhere;
+}
+
+/* A library's name links to its source in the lane's own colour, so only VarMQ's lane is green. */
+.home-jobs .rlane__name a {
+	color: inherit;
+}
+
+.home-jobs .rlane__track {
+	height: 18px;
+	border-radius: var(--corner);
+	background: var(--bar-2);
+	overflow: hidden;
+}
+
+.home-jobs .rlane__bar {
+	display: block;
+	height: 100%;
+	border-radius: var(--corner);
+	background: color-mix(in srgb, var(--ink) 38%, transparent);
+	transform-origin: left center;
+	transform: scaleX(var(--s, 1));
+}
+
+.home-jobs .rlane__val {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--ink);
+}
+
+.home-jobs .rlane__x {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--ink-2);
+}
+
+.home-jobs .rlane.is-varmq :is(.rlane__name, .rlane__val) {
+	color: var(--accent-text);
+	font-weight: 700;
+}
+
+.home-jobs .rlane.is-varmq .rlane__bar {
+	background: var(--brand);
+}
+
+.home-jobs .rlane__head {
+	display: grid;
+	grid-template-columns: minmax(104px, 150px) minmax(0, 1fr) 88px 64px;
+	gap: 12px;
+	margin-bottom: 4px;
+	font: 400 0.6875rem/1 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+}
+
+.home-jobs .rlane__head span:nth-child(3),
+.home-jobs .rlane__head span:nth-child(4) {
+	text-align: right;
+}
+
+/* On a phone the bar goes under its name, value and ratio. */
+@media (max-width: 599px) {
+	.home-jobs :is(.rlane, .rlane__head) {
+		grid-template-columns: minmax(0, 1fr) auto 60px;
+		row-gap: 4px;
+		column-gap: 10px;
+	}
+
+	.home-jobs .rlane {
+		padding-block: 4px;
+	}
+
+	.home-jobs .rlane__name {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.home-jobs .rlane__val {
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	.home-jobs .rlane__x {
+		grid-column: 3;
+		grid-row: 1;
+	}
+
+	.home-jobs .rlane__track {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		height: 10px;
+	}
+
+	.home-jobs .rlane__head span {
+		white-space: nowrap;
+	}
+
+	.home-jobs .rlane__head span:nth-child(2) {
+		display: none;
+	}
+
+	.home-jobs .rlane__head span:nth-child(1) {
+		grid-column: 1;
+	}
+
+	.home-jobs .rlane__head span:nth-child(3) {
+		grid-column: 2;
+	}
+
+	.home-jobs .rlane__head span:nth-child(4) {
+		grid-column: 3;
+	}
+}
+
+/* Closed by default: one toggle, its summary the heading. */
+.home-jobs .race__trade {
+	margin-top: clamp(28px, 4vw, 44px);
+	padding: 0 20px;
+	border: 1px solid color-mix(in srgb, var(--trade) 50%, var(--rule));
+	border-radius: var(--corner);
+	background: var(--bar);
+	max-width: 880px;
+}
+
+.home-jobs .race__trade summary {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 44px;
+	padding: 10px 0;
+	font-size: 1rem;
+	font-weight: 650;
+	color: var(--trade);
+	cursor: pointer;
+	list-style: none;
+}
+
+.home-jobs .race__trade summary::-webkit-details-marker {
+	display: none;
+}
+
+/* A chevron that turns down when open. */
+.home-jobs .race__trade summary::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border: solid currentColor;
+	border-width: 0 2px 2px 0;
+	rotate: -45deg;
+	transition: rotate 0.15s var(--ease);
+}
+
+.home-jobs .race__trade[open] summary::before {
+	rotate: 45deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-jobs .race__trade summary::before {
+		transition: none;
+	}
+}
+
+.home-jobs .race__trade ul {
+	margin: 0 0 18px;
+	padding-left: 1.2em;
+	color: var(--ink);
+}
+
+.home-jobs .race__trade li + li {
+	margin-top: 6px;
+}
+
+.home-jobs .race__foot {
+	margin-top: 28px;
+	font: 400 0.75rem/1.7 var(--mono);
+	color: var(--ink-2);
+	max-width: 75ch;
+}
+
+/* ---- JOB 05: the programs (Examples.astro) ---- */
+
+/* Tab bars hold their tabs and no more, so no empty end reads as a missing tab. */
+.home-jobs .seg {
+	width: fit-content;
+	max-width: 100%;
+}
+
+/* JOB 03's tabs lead with the store's mark, in the map's colour for it (map.css). The selected tab is filled with
+   --ink, the other theme's paper, so its mark takes the other theme's colour: each one is 3:1 or more on its tab. */
+[data-store-tabs] [role='tab'] {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.store-tab__icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	fill: var(--mark);
+}
+
+[data-store-tabs] [aria-selected='true'] .store-tab__icon {
+	fill: var(--mark-on);
+}
+
+[data-store-tabs] [data-key='memory'] {
+	--mark: var(--vm-go);
+	--mark-on: #44bf9e;
+}
+
+[data-store-tabs] [data-key='sqlite'] {
+	--mark: var(--vm-sqlite);
+	--mark-on: #4aa8e8;
+}
+
+[data-store-tabs] [data-key='redis'] {
+	--mark: var(--vm-redis);
+	--mark-on: #ff4438;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='memory'] {
+	--mark-on: #2e9c7f;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='sqlite'] {
+	--mark-on: #196ea9;
+}
+
+:root[data-theme='dark'] [data-store-tabs] [data-key='redis'] {
+	--mark-on: #c53227;
+}
+
+@media (forced-colors: active) {
+	.store-tab__icon,
+	[data-store-tabs] [aria-selected='true'] .store-tab__icon {
+		fill: currentColor;
+	}
+}
+
+.home-jobs .ex {
+	display: grid;
+	gap: 16px;
+}
+
+.home-jobs .ex__more {
+	font-size: 0.9375rem;
+	color: var(--ink-2);
+}
+
+/* A program beside its output (GoPlay.astro); one above the other on narrow screens. */
+@media (min-width: 900px) {
+	.home-jobs .ex__play {
+		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+		align-items: stretch;
+	}
+}
+
+.home-jobs .ex__term {
+	min-height: 160px;
+}
+
+.home-jobs .ex__out:empty::before {
+	content: 'Press Run to see what it prints.';
+	color: var(--panel-ink-2);
+}
+
+.home-jobs .ex__more a {
+	white-space: nowrap;
+}
+
+/* The links that stand alone (a code card's head, a scene's guide) are 44 px tall on a touch screen. */
+@media (pointer: coarse) {
+	.home-jobs :is(.code__head a, .scene-card p > a:only-child, .rlane__name a) {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+	}
+}
+
+@media (max-width: 599px) {
+	.home-jobs .code pre {
+		font-size: 0.78rem;
+	}
+}
+
+/* ---- JOB 06: the index of the docs (Index.astro) ---- */
+
+.home-jobs .index {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border-top: 1px solid var(--ink);
+}
+
+.home-jobs .index li {
+	border-bottom: 1px solid var(--rule);
+}
+
+.home-jobs .index a {
+	display: grid;
+	grid-template-columns: 56px minmax(0, 190px) minmax(0, 1fr) 24px;
+	align-items: baseline;
+	gap: 16px;
+	padding: 18px 4px;
+	color: var(--ink);
+	text-decoration: none;
+	transition:
+		background-color 0.15s,
+		padding 0.2s var(--ease);
+}
+
+/* The row keeps its ink: the plain-link hover's --signal-ink is for a --signal fill, and on --bar-2 in dark it
+   would vanish. */
+.home-jobs .index a:hover {
+	background: var(--bar-2);
+	color: var(--ink);
+	padding-inline: 12px;
+}
+
+.home-jobs .index__n {
+	font: 500 0.75rem/1 var(--mono);
+	color: var(--ink-3);
+}
+
+.home-jobs .index__t {
+	font-family: var(--headline);
+	font-size: 1.25rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.home-jobs .index__d {
+	color: var(--ink-2);
+}
+
+/* The same drawn arrow as a main action's (.btn svg in ui.css), stepping forward as the row is hovered. */
+.home-jobs .index__go {
+	align-self: center;
+	justify-self: end;
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: var(--accent-text);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: translate 0.15s var(--ease);
+}
+
+.home-jobs .index a:hover .index__go {
+	translate: 3px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-jobs .index__go {
+		transition: none;
+	}
+}
+
+@media (max-width: 719px) {
+	.home-jobs .index a {
+		grid-template-columns: 40px minmax(0, 1fr) 20px;
+		row-gap: 4px;
+	}
+
+	.home-jobs .index__d {
+		grid-column: 2;
+		grid-row: 2;
+	}
+
+	.home-jobs .index__go {
+		grid-column: 3;
+		grid-row: 1;
+	}
+}
+
+/* ---- The closing (Close.astro): the install box and the way in ---- */
+
+.home-jobs .close {
+	display: grid;
+	gap: 28px;
+	justify-items: start;
+}
+
+.home-jobs .close__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+/* A rule starts the footer here, in the rails' hairline. */
+:root:is([data-home], :has(.st)) .shell-foot {
+	margin-top: 0;
+	padding-top: 40px;
+	border-top: 1px solid var(--rule);
+}
+
+/* ---- Motion ---- */
+
+@media (prefers-reduced-motion: reduce) {
+	.home-jobs *,
+	.home-jobs *::before,
+	.home-jobs *::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
+}

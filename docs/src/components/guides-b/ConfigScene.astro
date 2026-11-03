@@ -1,0 +1,104 @@
+---
+import '../../styles/guides-b.css';
+import Scene from '../ui/Scene.astro';
+import CallStrip from './CallStrip.astro';
+
+const program = 'worker := varmq.NewWorker(process)';
+const hint = '// switch an option on: the call builds itself here';
+
+const describe = `An option explorer. Tick an option and the NewWorker call below it grows to include it. The result list says what the worker gets: its concurrency, whether it starts, how many idle goroutines it keeps, and what the error handler, the context and the other options do. An option that has no effect, such as a retention time on a worker with no name, is marked.`;
+---
+
+<Scene id="gb-config" title="Option explorer" describe={describe} class="gb">
+	<div class="gb-cfg">
+		<div>
+			<span class="slabel">Worker function and options</span>
+			<div class="seg" role="radiogroup" aria-label="Constructor" data-ctor>
+				<button type="button" role="radio" aria-checked="true" tabindex="0" data-key="NewWorker">NewWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="NewErrWorker">NewErrWorker</button>
+				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="NewResultWorker">NewResultWorker</button>
+			</div>
+			<ul class="gb-opts" data-opts>
+				<li class="gb-opt" data-row="defaults" data-off="true">
+					<label><input type="checkbox" data-opt="defaults" /> <code>varmq.DefaultConcurrency(8)</code> first</label>
+				</li>
+				<li class="gb-opt" data-row="concurrency" data-off="true">
+					<label><input type="checkbox" data-opt="concurrency" /> concurrency</label>
+					<span class="gb-opt__args">
+						<input type="number" min="-1" max="64" value="4" data-val="concurrency" aria-label="Concurrency" />
+						<select data-as="concurrency" aria-label="Pass the concurrency as">
+							<option value="int">as an int</option>
+							<option value="option">WithConcurrency</option>
+						</select>
+					</span>
+				</li>
+				<li class="gb-opt" data-row="name" data-off="true">
+					<label><input type="checkbox" data-opt="name" /> name</label>
+					<span class="gb-opt__args">
+						<input type="text" value="mailer" maxlength="16" data-val="name" aria-label="Worker name" />
+						<select data-as="name" aria-label="Pass the name as">
+							<option value="string">as a string</option>
+							<option value="option">WithName</option>
+						</select>
+					</span>
+				</li>
+				<li class="gb-opt" data-row="autoRun" data-off="true">
+					<label><input type="checkbox" data-opt="autoRun" /> <code>WithAutoRun(false)</code></label>
+				</li>
+				<li class="gb-opt" data-row="strategy" data-off="true">
+					<label><input type="checkbox" data-opt="strategy" /> <code>WithStrategy</code></label>
+					<span class="gb-opt__args">
+						<select data-val="strategy" aria-label="Strategy">
+							<option selected>Priority</option>
+							<option>RoundRobin</option>
+							<option>MaxLen</option>
+							<option>MinLen</option>
+						</select>
+					</span>
+				</li>
+				<li class="gb-opt" data-row="ratio" data-off="true">
+					<label><input type="checkbox" data-opt="ratio" /> <code>WithMinIdleWorkerRatio</code></label>
+					<span class="gb-opt__args"><input type="number" min="0" max="255" value="50" data-val="ratio" aria-label="Idle ratio percent" /></span>
+				</li>
+				<li class="gb-opt" data-row="expiry" data-off="true">
+					<label><input type="checkbox" data-opt="expiry" /> <code>WithIdleWorkerExpiryDuration</code></label>
+					<span class="gb-opt__args"><input type="number" min="1" max="3600" value="30" data-val="expiry" aria-label="Seconds" /> s</span>
+				</li>
+				<li class="gb-opt" data-row="errHandler" data-off="true">
+					<label><input type="checkbox" data-opt="errHandler" /> <code>WithErrHandler</code></label>
+				</li>
+				<li class="gb-opt" data-row="context" data-off="true">
+					<label><input type="checkbox" data-opt="context" /> <code>WithContext</code></label>
+				</li>
+				<li class="gb-opt" data-row="retention" data-off="true">
+					<label><input type="checkbox" data-opt="retention" /> <code>WithStoppedRetention</code></label>
+					<span class="gb-opt__args"><input type="number" min="0" max="600" value="5" data-val="retention" aria-label="Minutes" /> min</span>
+				</li>
+				<li class="gb-opt" data-row="idGen" data-off="true">
+					<label><input type="checkbox" data-opt="idGen" /> <code>WithJobIdGenerator</code></label>
+				</li>
+			</ul>
+		</div>
+		<div>
+			<span class="slabel">What the worker gets</span>
+			<dl class="gb-res" data-res></dl>
+		</div>
+	</div>
+
+	<Fragment slot="call">
+		<CallStrip program={program} hint={hint} />
+	</Fragment>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn" data-act="clear">Clear all</button>
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		Defaults come from <code>defaultConfig</code> in config.go. An option that has no effect, such as a retention time
+		on a worker with no name, is marked.
+	</p>
+</Scene>
+
+<script>
+	import './config.ts';
+</script>

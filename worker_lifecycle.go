@@ -14,7 +14,7 @@ func (w *worker[T, JobType]) Start() error {
 	}
 
 	if s == stopped {
-		w.initContext(w.Configs.ctx)
+		w.initContext()
 	}
 
 	if w.registryTimer != nil {

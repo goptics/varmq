@@ -1,0 +1,54 @@
+---
+import '../../styles/guides-b.css';
+import Scene from '../ui/Scene.astro';
+import CallStrip from './CallStrip.astro';
+import LoopButtons from './LoopButtons.astro';
+
+const program = `worker := varmq.NewWorker(process, 6)`;
+const hint = '// press Add jobs: the burst runs, then the pool shrinks';
+
+const describe = `A simulation of the idle goroutines in one worker pool. Press Add jobs to send one job for each slot of the limit. Each goroutine runs a job for 1.6 seconds, then goes back to the pool or exits. With no options the pool keeps one idle goroutine. A ratio keeps that share of the limit, never fewer than one. An expiry timer keeps every goroutine until a sweep finds it idle for longer than the duration, so a goroutine can wait up to about twice the duration. Changing the limit, the ratio or the timer creates a new worker.`;
+---
+
+<Scene id="gb-idle" title="Idle goroutines" describe={describe} class="gb">
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>NumConcurrency</dt><dd data-stat="limit">6</dd></div>
+		<div><dt>NumIdleWorkers</dt><dd data-stat="idle">1</dd></div>
+		<div><dt>minimum idle</dt><dd data-stat="min">1</dd></div>
+		<div><dt>next sweep</dt><dd data-stat="sweep">no timer</dd></div>
+	</dl>
+
+	<div aria-hidden="true">
+		<div data-pool></div>
+	</div>
+
+	<Fragment slot="call">
+		<CallStrip program={program} hint={hint} />
+	</Fragment>
+
+	<Fragment slot="controls">
+		<label class="sfield">
+			limit
+			<input type="range" min="2" max="12" value="6" data-limit />
+			<output data-limit-out>6</output>
+		</label>
+		<div class="seg" role="radiogroup" aria-label="WithMinIdleWorkerRatio" data-ratio>
+			<button type="button" role="radio" aria-checked="true" tabindex="0" data-key="0">ratio: not set</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="25">25</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="50">50</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="100">100</button>
+		</div>
+		<button type="button" class="pbtn" data-act="expiry" aria-pressed="false">Expiry timer: off</button>
+		<button type="button" class="pbtn pbtn--primary" data-act="burst">Add jobs</button>
+		<LoopButtons />
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		Add jobs sends one job for each slot of the limit. Each job runs for 1.6 s. With no options the pool keeps one
+		idle goroutine. A change to the limit, the ratio or the timer creates a new worker.
+	</p>
+</Scene>
+
+<script>
+	import './idle.ts';
+</script>

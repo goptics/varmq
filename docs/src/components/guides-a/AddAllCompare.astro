@@ -1,0 +1,68 @@
+---
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
+
+const describe =
+	'The same four items added two ways. Calling Add once for each item returns one handle and one bool for each item, so you know which item the queue refused. Calling AddAll once returns one group handle: NumPending counts the jobs that have not ended, Wait blocks until that number is 0, and Results delivers each result in the order the jobs finish. AddAll skips an item that the queue refuses, and it does not say which one, so NumPending can start below the number of items. Pick a case: all IDs new, one ID repeated, or a queue that holds only three jobs.';
+
+const variants = [
+	['new', 'All IDs are new'],
+	['repeat', 'One ID repeats'],
+	['full', 'Queue holds 3'],
+];
+---
+
+<Scene id="add-all-compare" title="Add against AddAll" call={'group := queue.AddAll(items)'} describe={describe} class="ga">
+	<div class="ga-stack">
+		<div class="ga-toolbar">
+			<div class="seg" role="radiogroup" aria-label="Which items to add" data-variants>
+				{
+					variants.map(([key, label], i) => (
+						<button type="button" role="radio" data-key={key} aria-checked={i === 1 ? 'true' : 'false'} tabindex={i === 1 ? 0 : -1}>
+							{label}
+						</button>
+					))
+				}
+			</div>
+		</div>
+		<div>
+			<p class="ga-label"><strong>items</strong><span data-items-note></span></p>
+			<div class="ga-rail ga-rail--ghost" role="list" aria-label="The items to add" data-items></div>
+		</div>
+
+		<div class="ga-cols ga-cols--2">
+			<section class="ga-panel" aria-label="Add, once for each item">
+				<h3>Add, once for each item</h3>
+				<ul class="ga-rows" data-rows aria-label="Result of each Add call"></ul>
+				<p class="ga-note" data-add-note></p>
+			</section>
+
+			<section class="ga-panel" aria-label="AddAll, once for the group">
+				<h3>AddAll, once for the group</h3>
+				<dl class="ga-read">
+					<dt>NumPending()</dt>
+					<dd data-pending data-tone="dim">not called</dd>
+					<dt>Wait()</dt>
+					<dd data-wait data-tone="dim">not called</dd>
+				</dl>
+				<p class="ga-label"><strong>Results()</strong><span>in the order the jobs finish</span></p>
+				<div class="ga-rail ga-rail--ghost" role="list" aria-label="Results as they arrive" data-results>
+					<span class="ga-hint" aria-hidden="true">none yet</span>
+				</div>
+				<p class="ga-note" data-all-note></p>
+			</section>
+		</div>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-add>Add the items</button>
+		<button type="button" class="pbtn" data-start>Start worker</button>
+		<span class="ga-tag">concurrency 3</span>
+		<span class="sframe__spacer"></span>
+		<button type="button" class="pbtn" data-reset>Reset</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './add-all-compare';
+</script>

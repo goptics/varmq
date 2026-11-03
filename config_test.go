@@ -82,6 +82,17 @@ func TestConfig(t *testing.T) {
 					assert.Equal(t, tc.expected, result)
 				})
 			}
+
+			// #131: uint32(1<<32) is 0, and a worker with limit 0 never runs a job.
+			t.Run("Concurrency above MaxUint32 should clamp, not wrap to 0", func(t *testing.T) {
+				if math.MaxInt <= math.MaxUint32 {
+					t.Skip("int cannot exceed MaxUint32 on this platform")
+				}
+
+				above := uint64(math.MaxUint32) + 1 // a variable: as a constant it would not compile where int is 32 bits
+				assert.Equal(t, uint32(math.MaxUint32), withSafeConcurrency(int(above)))
+				assert.Equal(t, uint32(math.MaxUint32), withSafeConcurrency(math.MaxInt))
+			})
 		})
 
 		t.Run("WithJobIdGenerator", func(t *testing.T) {
