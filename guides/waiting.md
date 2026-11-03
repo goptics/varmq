@@ -1,6 +1,6 @@
 # Waiting
 
-Wait and WaitUntilIdle, WaitUntilPaused and WaitUntilStopped, the WaitAnd and AndWait helpers for pausing and stopping, and what NumPending and NumProcessing count.
+Block until a worker goes idle, pauses or stops, or until one job finishes.
 
 [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) returns at once, and the worker runs the job later. A set of calls on the worker block until the worker as a whole reaches a point: drained, paused or stopped. They do not wait for one job. For that, use the job's own handle ([waiting on a job](https://varmq.goptics.org/concepts/jobs/#waiting-on-a-job)).
 
@@ -15,8 +15,6 @@ The scene below puts the wait calls of this page on one timeline. Pick a case, t
 | `Running` or `Idle` | no job is pending and none is running | the same, and the status is `Idle` |
 | `Pausing`, `Paused`, `Stopping` or `Stopped` | no job is running, even if jobs are still pending | the worker is `Idle` again, with nothing pending |
 | `Initiated` | at once, even if jobs are queued | the worker has been started and drained |
-
-The godoc puts the difference this way: `Wait` "does NOT require the status to be Idle". It answers "is the work done or halted?", and `WaitUntilIdle` answers "is the worker idle with nothing left?".
 
 In practice:
 
@@ -71,11 +69,32 @@ Both cover everything bound to the worker: each queue and each topic subscriptio
 Do not call `Wait`, `WaitUntilIdle` or the combined calls below on a worker from inside that worker's own function. The job that is calling counts as running, so the call waits for the job it is in.
 :::
 
+### Waiting with a timeout
+
+`Wait` and the other wait calls take no context and no timeout. To give up after a time, run the call in a goroutine and select on it:
+
+```go
+done := make(chan struct{})
+go func() {
+	worker.Wait()
+	close(done)
+}()
+
+select {
+case <-done:
+	// Wait returned; on a paused or stopped worker, jobs can still be pending
+case <-time.After(30 * time.Second):
+	// gave up; the goroutine still waits until the work is done
+}
+```
+
+The goroutine keeps waiting after the timeout. It ends when the worker drains, pauses or stops. Each call that times out leaves one goroutine waiting, so do not retry the timeout in a loop while the worker stays busy. When `Wait` returns, check `NumPending` and the status before you assume every job ran.
+
 ## Waiting for a state
 
 [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one status and look at nothing else. They return at once if the worker is already there. Otherwise they keep waiting until something puts it there, so a worker that you stop while you wait for `Paused` leaves the call waiting.
 
-[`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) and [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) return as soon as the change has started. While a job is running, the worker is `Pausing` or `Stopping`. Call `WaitUntilPaused` or `WaitUntilStopped` after them to wait until the change is over. The [lifecycle](https://varmq.goptics.org/concepts/lifecycle/#waiting-for-a-state) page lists the states. Its [first program](https://varmq.goptics.org/concepts/lifecycle/#the-seven-states) shows a worker go from `Pausing` to `Paused`.
+[`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) and [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) return as soon as the change has started. While a job is running, the worker is `Pausing` or `Stopping`. Call `WaitUntilPaused` or `WaitUntilStopped` after them to wait until the change is over. The [lifecycle](https://varmq.goptics.org/concepts/lifecycle/#the-seven-states) page lists the states. Its [first program](https://varmq.goptics.org/concepts/lifecycle/#the-seven-states) shows a worker go from `Pausing` to `Paused`.
 
 ## Combined calls
 
@@ -90,7 +109,7 @@ Four calls join a wait and a pause or a stop. The verb that comes first happens 
 
 Each returns an `error`: the one `Pause` or `Stop` returns. `PauseAndWait` and `StopAndWait` return it without waiting when the pause or stop failed. The [lifecycle](https://varmq.goptics.org/concepts/lifecycle/#moving-between-states) page lists the errors.
 
-**`WaitAndStop` drains, `StopAndWait` does not.** On a worker that is running, `WaitAndStop` lets every pending job run, then starts the stop. A job added after `Wait` returns can still be left queued, so stop adding jobs before you call it. (On a paused worker, `Wait` returns with jobs still pending, and they stay queued.) It returns before the worker has reached `Stopped`, so call `WaitUntilStopped` after it if you need that. `StopAndWait` starts the stop at once and blocks until the worker is `Stopped`. Running jobs finish, and jobs that had not started stay queued: `NumPending` counts them, and they run after a `Restart`. See [what happens to jobs](https://varmq.goptics.org/concepts/lifecycle/#what-happens-to-jobs).
+**`WaitAndStop` drains, `StopAndWait` does not.** On a worker that is running, `WaitAndStop` lets every pending job run, then starts the stop. A job added after `Wait` returns can still be left queued. So stop adding jobs before you call it. On a paused worker, `Wait` returns with jobs still pending, and they stay queued. It returns before the worker has reached `Stopped`, so call `WaitUntilStopped` after it if you need that. `StopAndWait` starts the stop at once and blocks until the worker is `Stopped`. Running jobs finish, and jobs that had not started stay queued: `NumPending` counts them, and they run after a `Restart`. See [what happens to jobs](https://varmq.goptics.org/concepts/lifecycle/#what-happens-to-jobs).
 
 The program below gives two workers three jobs each. The first gets `StopAndWait` while job 1 runs, and the second gets `WaitAndStop`, followed by `WaitUntilStopped`.
 
@@ -132,13 +151,13 @@ func main() {
 
 Under `StopAndWait`, job 1 finishes and jobs 2 and 3 stay pending. Under `WaitAndStop`, all three jobs run before the worker stops.
 
-The pause pair works the same way: `WaitAndPause` lets the work finish before it pauses, and `PauseAndWait` pauses at once and waits for the running jobs to end.
+The pause pair works the same way. `WaitAndPause` lets the work finish before it pauses. `PauseAndWait` pauses at once and waits for the running jobs to end.
 
 ## NumPending and NumProcessing
 
 Two methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) count the work in flight:
 
-- [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the number of jobs that have not started: the jobs waiting in the bound queues, the jobs a goroutine has taken into a batch but not started, and the jobs parked by a pause or stop. A queue's own [`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) counts only the first group. A job you closed while it waited still counts until the worker reaches it. While a goroutine works through a batch, the batch's finished jobs still count until the whole batch ends, so mid-run it can read high. It is exact once the worker is idle, paused or stopped.
+- [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the number of jobs that have not started. It counts the jobs waiting in the bound queues and the jobs a goroutine has taken into a batch but not started. It also counts the jobs parked by a pause or stop. A queue's own [`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) counts only the first group. A job you closed while it waited still counts until the worker reaches it. While a goroutine works through a batch, the batch's finished jobs still count until the whole batch ends. So during a run, it can be too high. It is exact once the worker is idle, paused or stopped.
 - [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) is the number of jobs running right now. It is at most the [concurrency](https://varmq.goptics.org/guides/concurrency/) limit, except for a while after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers it.
 
 Each is read on its own, so the two together are not a snapshot of one moment. They suit a progress display or a backpressure check. To know that the work is finished, use `Wait`. For counters over the worker's lifetime, see [metrics](https://varmq.goptics.org/guides/metrics/).

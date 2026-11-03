@@ -1,9 +1,13 @@
 # Comparison
 
-A feature table of varmq against ants, pond, conc, workerpool, errgroup and gopool, checked against each package's source in October 2026.
+A feature table of VarMQ against ants, pond, conc, workerpool, errgroup and gopool, checked against each package's source.
 
-This table compares varmq with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup) and [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool). The cells are the same as in the feature comparison in the [README](https://github.com/goptics/varmq#feature-comparison). The amber notes are new here: they say where a varmq Yes has a limit.
+This table compares VarMQ with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup) and [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool). The cells are the same as in the feature comparison in the [README](https://github.com/goptics/varmq#feature-comparison). The notes marked **VarMQ limit** are new here: they say where a VarMQ Yes has a limit.
 
 Checked against each package's source, October 2026.
+
+## What this page leaves out
+
+This table covers in-process worker pools only. The [benchmarks](https://varmq.goptics.org/reference/benchmarks/) also measure Redis job queues (Asynq, gocraft/work, rmq, taskq) and SQLite job queues (goqite, Backlite, River). This page has no feature table for them.
 
 For how fast each one runs, see the [benchmarks](https://varmq.goptics.org/reference/benchmarks/), with the raw data in [goptics/benchmarks](https://github.com/goptics/benchmarks), and the [bench log](https://varmq.goptics.org/bench-log/).

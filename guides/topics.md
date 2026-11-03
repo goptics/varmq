@@ -1,6 +1,6 @@
 # Topics
 
-Publish once and every subscribed worker gets its own job. NewTopic, WithTopic, Publish, Unsubscribe, capacity and priority. Topics are in-memory only.
+Publish once, and every subscribed worker gets its own job. Topics are in-memory only.
 
 A queue gives each job to one worker. A [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) gives each payload to every worker subscribed to it. Use one when several workers must each act on the same event, such as sending an email and updating stock for the same order.
 
@@ -53,7 +53,7 @@ func main() {
 
 Each worker prints all four orders. The stock lines come first because its jobs are shorter, and with concurrency 2 two of them can print in either order.
 
-![Two workers subscribed to one topic: each Publish stores the payload once in a shared log and wakes both workers, and each worker reads it through its own cursor and runs its own job](https://raw.githubusercontent.com/goptics/varmq/main/assets/diagrams/varmq-topic.svg)
+![Two workers subscribed to one topic. Each Publish stores the payload once in a shared log and wakes both workers. Each worker reads it through its own cursor and runs its own job](https://raw.githubusercontent.com/goptics/varmq/main/assets/diagrams/varmq-topic.svg)
 
 `WithTopic` is available on the worker that [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) returns. Error and result workers cannot subscribe: see the table in [worker types](https://varmq.goptics.org/guides/worker-types/#which-queues-each-worker-can-bind).
 
@@ -114,13 +114,13 @@ func main() {
 
 A topic keeps one copy of each payload in a shared in-memory log, however many workers subscribe. Each subscription reads the log at its own position, so a slow worker does not block `Publish` or the other workers. A payload is freed once every subscription has read it. In the diagram, that is why a chunk of the log stays while the slower worker's cursor is still on it.
 
-The same rule means a subscriber that is slow, paused or stopped holds on to every payload published since it fell behind, until it catches up, purges or unsubscribes. For a worker that may stall, set a [capacity](#capacity).
+So a subscriber that is slow, paused or stopped keeps every payload that it has not read. It keeps them until it reads them all, purges or unsubscribes. For a worker that may stall, set a [capacity](#capacity).
 
 ## Unsubscribing
 
-[`Unsubscribe`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Unsubscribe) on the subscription ends it. The worker gets nothing more from the topic, and the payloads it has not read yet are dropped. A job the worker has already taken from the topic is not recalled: a running job finishes, and a job waiting in a batch still runs. Calling it twice is safe. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the subscription does the same.
+[`Unsubscribe`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Unsubscribe) on the subscription ends it. The worker gets nothing more from the topic, and the payloads it has not read yet are dropped. A job the worker has already taken from the topic is not recalled. A running job finishes, and a job waiting in a batch still runs. Calling it twice is safe. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the subscription does the same.
 
-[`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) on a subscription keeps the subscription and drops the unread payloads. Unlike `Unsubscribe`, it also discards the jobs the worker has taken from the topic but not started, so a job waiting in a batch does not run. A job that is already running finishes. `Purge` does not call `Close` on the payloads. [`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) is the number of payloads the subscription has not read, and [`Worker()`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Worker) returns its worker.
+[`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) on a subscription keeps the subscription and drops the unread payloads. Unlike `Unsubscribe`, it also discards the jobs the worker has taken from the topic but not started. So a job waiting in a batch does not run. A job that is already running finishes. `Purge` does not call `Close` on the payloads. [`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) is the number of payloads the subscription has not read, and [`Worker()`](https://pkg.go.dev/github.com/goptics/varmq#Subscription.Worker) returns its worker.
 
 To end every subscription at once, call [`Close`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Close) on the topic. It unsubscribes all of them, and every later `Publish` returns `false`. [`NumSubscribers()`](https://pkg.go.dev/github.com/goptics/varmq#Topic.NumSubscribers) tells you how many are attached.
 
@@ -206,7 +206,7 @@ func main() {
 
 The worker is created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), so it reads nothing until [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). Two payloads fit, and the third is refused while 2 are unread. Once the worker has read both, there is room, and the same `Publish` succeeds.
 
-[`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#Topic.IsFull) on the topic tells you whether it is at its capacity right now, and the answer can change straight after. On a subscription, [`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) is true when that subscription is at the capacity, which makes it the one refusing `Publish`. Act on the result of `Publish` itself, not on `IsFull`.
+[`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#Topic.IsFull) on the topic tells you whether it is at its capacity right now, and the answer can change right after. On a subscription, [`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) is true when that subscription is at the capacity, which makes it the one refusing `Publish`. Act on the result of `Publish` itself, not on `IsFull`.
 
 ## Priority and strategy
 
@@ -217,5 +217,3 @@ worker.WithTopic(orders, varmq.WithTopicPriority(1)) // read orders before other
 ```
 
 With the default [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority) strategy, a worker with a topic subscription ranked 1 and a queue without a rank takes the payloads first. If the two have the same rank, the one bound first goes first. [Strategies](https://varmq.goptics.org/guides/strategies/#what-priority-does-under-the-other-strategies) covers what priority does under the other three.
-
-A worker whose only source is a topic takes payloads in batches, like a worker with one in-memory FIFO queue. With more than one source it takes one job at a time. [How it works](https://varmq.goptics.org/concepts/how-it-works/#batched-dispatch) has both.

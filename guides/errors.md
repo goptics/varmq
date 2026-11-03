@@ -1,8 +1,12 @@
 # Errors
 
-How a failed job is reported to its handle, the worker's Errs() channel and WithErrHandler, and a table of every exported Err value and when it is returned.
+Where the error of a failed job goes, how to handle it, and every error that VarMQ returns.
 
-A failure in varmq shows up in one of three places, and a few values are returned directly from calls you make. This page covers where a failed job is reported, how to read the worker's error channel and set an error handler, and every exported `Err` value with the call that returns it.
+A failure in VarMQ appears in one of three places. A few values are returned directly from calls you make. This page covers:
+
+- where a failed job is reported;
+- how to read the worker's error channel and set an error handler;
+- every exported `Err` value, with the call that returns it.
 
 [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) has no error result. It returns a `bool`, and `false` means the queue did not take the job. See [queues](https://varmq.goptics.org/guides/queues/#capacity).
 
@@ -30,8 +34,8 @@ For a group of jobs added with [`AddAll`](https://pkg.go.dev/github.com/goptics/
 The worker's `Errs()` returns a read-only channel of `error`. Three things to know about it:
 
 - **It holds one error.** The channel has room for a single value. When a job fails and the channel is full, the error is not put on the channel, and the worker does not wait for you. A reader that is slow, or absent, loses errors. The handler does not.
-- **It is never closed.** `for err := range worker.Errs()` does not end when the worker stops, so run it in a goroutine of its own, or read with `select` and a `default`.
-- **An error does not say which job it came from.** Put the job's ID or something that identifies the work in the message you return.
+- **It is never closed.** `for err := range worker.Errs()` does not end when the worker stops. Run it in a goroutine of its own, or read with `select` and a `default`.
+- **An error does not say which job it came from.** Put the job's ID, or something else that identifies the work, in the message you return.
 
 ```go
 go func() {
@@ -41,7 +45,7 @@ go func() {
 }()
 ```
 
-A reader like this one drains the channel as errors arrive. If you need every error, set a handler as well: the channel can still drop an error when two arrive faster than the reader takes them.
+A reader like this one drains the channel as errors arrive. If you need every error, set a handler as well. The channel can still drop an error when two errors arrive faster than the reader takes them.
 
 In the program below every job fails and nothing reads `Errs()` while the jobs run.
 
@@ -123,7 +127,7 @@ func main() {
 The handler runs once for each failure and prints `mailer`. Its lines come first, because the program waits for the worker to go idle before it reads the handles. Each handle then has its own outcome: `nil`, the returned error, and the panic as `panic recovered inside err-worker: boom`.
 
 - **The handler runs for every error,** including those the full `Errs()` channel dropped.
-- **It runs synchronously on the goroutine that reports the error,** and it must not block. For an error from a job, or from a failed acknowledgement, that is the goroutine that ran the job, so a slow handler delays that goroutine's next job. For an error from pulling a job off its storage, it is the worker's event loop, which hands out every job, so a slow handler holds them all back.
+- **It runs synchronously on the goroutine that reports the error,** and it must not block. For an error from a job, or from a failed acknowledgement, that is the goroutine that ran the job. A slow handler then delays that goroutine's next job. For an error from pulling a job off its storage, it is the worker's event loop. The event loop hands out every job, so a slow handler delays all of them.
 - **Passing `nil` is ignored.** The worker keeps the handler it had.
 - **The default handler does nothing.** [`DefaultErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#DefaultErrHandler) changes it for the workers you create after the call. [Configuration](https://varmq.goptics.org/guides/configuration/#the-default-functions) says how the defaults work.
 
@@ -160,7 +164,7 @@ func main() {
 
 [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) with the limit the worker already has returns `ErrSameConcurrency`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns `ErrWorkerStopped`. `errors.Is` matches both.
 
-The next two sections list all thirteen, grouped by how you meet them. The messages are the text each one carries. Four of them are not returned from a call: the worker reports them on `Errs()` and to the handler.
+The next two sections list every exported error, grouped by how you receive them. The messages are the text each one carries. Four of them are not returned from a call: the worker reports them on `Errs()` and to the handler.
 
 ### Returned by calls you make
 
@@ -176,11 +180,11 @@ The next two sections list all thirteen, grouped by how you meet them. The messa
 | [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing) | `job is processing, you can't close processing job` | [`Close`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) on a job handle while the job's function is running. |
 | [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed) | `job is already closed` | `Close` on a job that is already closed, which includes one that has run, since the worker closes those. |
 
-The first six rows are the worker's states at work. [Lifecycle](https://varmq.goptics.org/concepts/lifecycle/#moving-between-states) lists, call by call, which states return which error. [Concurrency](https://varmq.goptics.org/guides/concurrency/#changing-the-limit-with-tunepool) covers `TunePool`, and [jobs](https://varmq.goptics.org/concepts/jobs/#closing-a-queued-job) covers closing a job.
+The first six rows are errors that come from the worker's states. [Lifecycle](https://varmq.goptics.org/concepts/lifecycle/#moving-between-states) lists, call by call, which states return which error. [Concurrency](https://varmq.goptics.org/guides/concurrency/#changing-the-limit-with-tunepool) covers `TunePool`, and [jobs](https://varmq.goptics.org/concepts/jobs/#closing-a-queued-job) covers closing a job.
 
 ### Sent to Errs and the handler
 
-These four are not returned from any call. The worker reports them when it pulls a job from its storage or closes a finished job. They go to `Errs()` and to the handler, and the worker carries on.
+These four are not returned from any call. The worker reports them when it pulls a job from its storage or closes a finished job. They go to `Errs()` and to the handler, and the worker continues.
 
 | Error | Message | Reported when |
 |---|---|---|
@@ -189,6 +193,6 @@ These four are not returned from any call. The worker reports them when it pulls
 | [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob) | `failed to parse job`, followed by the decoder's message | A persistent or distributed queue returned bytes that do not decode as a job. The error wraps `ErrParseJob`, so match it with `errors.Is`. |
 | [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) | `queue failed to acknowledge job`, followed by the job and acknowledgement IDs | A persistent or distributed queue refused the acknowledgement when the worker closed a job it had taken from it. The error wraps `ErrAcknowledgeJob`. |
 
-Only persistent and distributed storage hands out bytes to decode or jobs to acknowledge, so `ErrParseJob` and `ErrAcknowledgeJob` do not come from the built-in in-memory queues. [Persistence](https://varmq.goptics.org/persistence/overview/) covers those queues.
+Only persistent and distributed storage hands out bytes to decode or jobs to acknowledge. So `ErrParseJob` and `ErrAcknowledgeJob` do not come from the built-in in-memory queues. [Persistence](https://varmq.goptics.org/persistence/overview/) covers those queues.
 
 One more error has no variable. The helpers [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) handle a `nil` function with the error `provided function is nil`. `ErrFunc` and `ResultFunc` return it; `Func` panics with it, so the text arrives inside the panic message. It is not exported, so match it with `strings.Contains`. See [function helpers](https://varmq.goptics.org/guides/function-helpers/#details).

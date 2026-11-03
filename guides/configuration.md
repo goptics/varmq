@@ -1,8 +1,8 @@
 # Configuration
 
-Every With and Default function in one table, with its default, what it does and the guide that covers it. How positional arguments, options and the Default functions combine.
+Every With and Default option in one table, with its default, what it does and the guide that covers it.
 
-varmq is configured with functions you pass when you create something: a worker, a job, a queue or a topic. This page lists all of them in one table, then explains how they combine. Each row links to the guide that covers the option in full.
+VarMQ is configured with functions you pass when you create something: a worker, a job, a queue or a topic. This page lists all of them in one table, then explains how they combine. Each row links to the guide that covers the option in full.
 
 Tick options in the scene below and it builds the call. A result list says what the worker gets.
 
@@ -42,15 +42,15 @@ A `Default*` function sets the default of the matching worker option for workers
 | [`DefaultStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStoppedRetention) | 1 minute | Sets the default retention. | [Lifecycle](https://varmq.goptics.org/concepts/lifecycle/#withstoppedretention) |
 | [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) | none: the job has no ID, or the generator's | Gives one job an ID. An empty string is ignored. | [Job IDs](https://varmq.goptics.org/guides/job-ids/#giving-a-job-an-id) |
 | [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) | unlimited | The most jobs the queue holds. `Add` returns `false` when it is full. A value below 1 means no limit. | [Queues](https://varmq.goptics.org/guides/queues/#capacity) |
-| [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) | [`math.MaxInt`](https://pkg.go.dev/math#MaxInt), the lowest rank | The rank of a queue among the queues bound to one worker. A lower number goes first under the `Priority` strategy. | [Strategies](https://varmq.goptics.org/guides/strategies/#priority-the-default) |
+| [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) | [`math.MaxInt`](https://pkg.go.dev/math#MaxInt), the largest rank, so it goes last | The rank of a queue among the queues bound to one worker. A lower number goes first under the `Priority` strategy. | [Strategies](https://varmq.goptics.org/guides/strategies/#priority-the-default) |
 | [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity) | unlimited | The most unread payloads the slowest subscription may hold. [`Publish`](https://pkg.go.dev/github.com/goptics/varmq#Topic.Publish) returns `false` once it does. A value below 1 means no limit. | [Topics](https://varmq.goptics.org/guides/topics/#capacity) |
-| [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority) | `math.MaxInt`, the lowest rank | The rank of a topic subscription among a worker's sources, like `WithQueuePriority`. | [Topics](https://varmq.goptics.org/guides/topics/#priority-and-strategy) |
+| [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority) | `math.MaxInt`, the largest rank, so it goes last | The rank of a topic subscription among a worker's sources, like `WithQueuePriority`. | [Topics](https://varmq.goptics.org/guides/topics/#priority-and-strategy) |
 
 That is every exported `With` and `Default` function in the package. The methods that bind a source to a worker, such as `WithQueue` and `WithTopic`, are not options and are not in the table. A few details it leaves out:
 
 - **Not setting the idle ratio is not the same as setting it to 1.** Without it, the worker keeps one idle goroutine. `WithMinIdleWorkerRatio(1)` keeps 1% of the limit, rounded down, and never fewer than one, so with a limit of 200 it keeps two.
 - **`WithName` and a string argument do the same thing.** See below.
-- **A queue option reaches only a queue that can use it.** `WithQueueCapacity` takes effect only on a queue that implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter), which the built-in queues do. See [queues](https://varmq.goptics.org/guides/queues/#capacity).
+- **A queue option reaches only a queue that can use it.** `WithQueueCapacity` takes effect only on a queue that implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). The built-in queues implement it. See [queues](https://varmq.goptics.org/guides/queues/#capacity).
 
 ## Options and positional arguments
 
@@ -63,20 +63,20 @@ That is every exported `With` and `Default` function in the package. The methods
 | a `string` | names the worker, like [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) |
 | any other type | is ignored, with no error |
 
-Only a value of type `int` sets the concurrency. A value of another integer type, such as `int64` or `uint`, falls into the last row and is ignored.
+Only a value of type `int` sets the concurrency. A value of another integer type, such as `int64` or `uint`, matches the last row and is ignored.
 
 ```go
 // 4 is the concurrency and "mailer" is the name.
 worker := varmq.NewErrWorker(send, 4, "mailer", varmq.WithAutoRun(false))
 ```
 
-The arguments are applied from left to right on top of the defaults, so the last one that sets a value wins. `varmq.NewWorker(f, 2, varmq.WithConcurrency(8))` runs 8 at once. A string and `WithName` set the same name, so with both, the later one decides. [Worker types](https://varmq.goptics.org/guides/worker-types/#what-follows-the-function) lists the same arguments next to the three constructors.
+The arguments are applied from left to right, over the defaults, so the last one that sets a value wins. `varmq.NewWorker(f, 2, varmq.WithConcurrency(8))` runs 8 at once. A string and `WithName` set the same name, so with both, the later one decides. [Worker types](https://varmq.goptics.org/guides/worker-types/#what-follows-the-function) lists the same arguments next to the three constructors.
 
 A value below 1 for the concurrency means one per CPU wherever it is given: as an `int`, in `WithConcurrency`, in [`DefaultConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#DefaultConcurrency) and in [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool). The number is the logical CPU count of the machine, so it differs between machines.
 
 ## The `Default*` functions
 
-Each `Default*` function sets the default of one worker option. A worker copies the defaults when you create it, so a call changes the workers created after it and leaves the ones that exist alone. An option or a positional argument for a worker still overrides the default.
+Each `Default*` function sets the default of one worker option. A worker copies the defaults when you create it. So a call changes only the workers created after it, not the ones that exist. An option or a positional argument for a worker still overrides the default.
 
 ```go
 func main() {

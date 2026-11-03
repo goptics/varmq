@@ -1,6 +1,6 @@
 # Quick start
 
-Run your first varmq worker in the browser.
+Run your first VarMQ worker in the browser.
 
 This program creates a worker, binds a queue to it and adds two jobs. Press **Run** to run it on the Go Playground. Press **Edit** to change it, then **Run** again (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, <kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac).
 
@@ -44,7 +44,7 @@ worker := varmq.NewWorker(func(j varmq.Job[int]) {
 defer worker.WaitUntilIdle()
 ```
 
-[`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) blocks until the worker has no jobs left and is idle. Deferring it holds `main` open until both jobs are done. Without it, `main` would return straight after the two `Add` calls and the program would exit before the jobs ran.
+[`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) blocks until the worker has no jobs left and is idle. Deferring it stops `main` from returning until both jobs are done. Without it, `main` would return right after the two `Add` calls and the program would exit before the jobs ran.
 
 ```go
 queue := worker.BindQueue()
@@ -57,7 +57,7 @@ queue.Add(1)
 queue.Add(2)
 ```
 
-[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns at once, without waiting for the job to run. It returns a handle to the job and `true`, or `false` if the queue did not take the job (it is full or closed, for example). This example ignores both.
+[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns immediately, without waiting for the job to run. It returns a handle to the job and `true`. It returns `false` if the queue did not take the job, for example because the queue is full or closed. This example ignores both. [Jobs](https://varmq.goptics.org/concepts/jobs/#two-views-of-a-job) covers them.
 
 ## Try it
 
@@ -70,5 +70,7 @@ Press **Edit** and pass a concurrency of 2 as the last argument to `NewWorker`:
 Run it again: both jobs now start together, so their two lines appear at the same moment, in either order. The timeline below shows both runs. Switch the concurrency and drag the time slider.
 
 :::note
-The Go Playground runs programs on a simulated clock. `time.Sleep` costs it no real time; the page replays the pauses the program recorded. Output pacing on this site says nothing about how fast varmq is.
+The Go Playground runs programs on a simulated clock. `time.Sleep` costs it no real time; the page replays the pauses the program recorded. Output pacing on this site says nothing about how fast VarMQ is.
 :::
+
+Next: [workers and queues](https://varmq.goptics.org/concepts/workers-and-queues/).

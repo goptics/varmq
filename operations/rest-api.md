@@ -1,12 +1,24 @@
 # REST API
 
-Mount varmq's HTTP handler to list named workers, read their counters, and pause, resume, stop, restart or tune them. Covers Handler, NewServerMux, WorkerRegistry, InstanceID and InstanceHeader.
+Inspect and control running workers over HTTP: list them, read their counters, and pause, resume, stop, restart or resize them.
 
-varmq ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
+VarMQ ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
 
 :::caution
 The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
 :::
+
+## Routes at a glance
+
+The paths follow the prefix you give to `Handler`, for example `/varmq`.
+
+| Method | Path | Does |
+|---|---|---|
+| `GET` | `/health` | returns `{"status":"ok"}` |
+| `GET` | `/workers` | lists every registered worker, with a summary |
+| `GET` | `/workers/{name}` | returns one worker, with its counters |
+| `PATCH` | `/workers/{name}/actions/{action}` | pauses, resumes, restarts, starts or stops a worker |
+| `PATCH` | `/workers/{name}/config/concurrency/{number}` | changes the worker's concurrency limit |
 
 ## Mounting it
 
@@ -20,7 +32,7 @@ http.ListenAndServe("127.0.0.1:8080", mux)
 
 You can also pass the handler to `ListenAndServe` itself, as `examples/api-control` does with `varmq.Handler("/api")`. Then the routes start at `/api`.
 
-[`NewServerMux`](https://pkg.go.dev/github.com/goptics/varmq#NewServerMux) returns the same routes as an [`*http.ServeMux`](https://pkg.go.dev/net/http#ServeMux) with no prefix, for mounting them yourself. `Handler` is `NewServerMux` behind that prefix, plus one more thing: it sets the [instance header](#which-instance-answered) on every response, including the 404 and 405 replies the mux generates for itself. With `NewServerMux` alone, those two replies do not carry the header.
+[`NewServerMux`](https://pkg.go.dev/github.com/goptics/varmq#NewServerMux) returns the same routes as an [`*http.ServeMux`](https://pkg.go.dev/net/http#ServeMux) with no prefix, for mounting them yourself. `Handler` is `NewServerMux` behind that prefix, with one addition. It sets the [instance header](#which-instance-answered) on every response. This includes the 404 and 405 replies that the mux generates for itself. With `NewServerMux` alone, those two replies do not carry the header.
 
 The program below starts two named workers and an unnamed one, adds jobs to them, and serves the API under `/varmq`.
 
@@ -78,7 +90,7 @@ func main() {
 
 ### Run locally
 
-1. Make a module, save the program as `main.go` and add varmq:
+1. Make a module, save the program as `main.go` and add VarMQ:
 
    ```bash
    mkdir rest-demo && cd rest-demo
@@ -114,7 +126,7 @@ func main() {
 
    The first prints a `200 OK` with no body. While a job is running, the next call shows the worker as `Pausing`, and later `Paused`, as [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) does. Run `resume` once it reads `Paused`: on a worker that is still `Pausing`, it is refused (see [the status codes](#responses)). The last call changes the limit to 4.
 
-The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](https://github.com/goptics/vartop) is a separate terminal dashboard for varmq workers that reads this API, and the example's last comment suggests pointing it at `http://localhost:8080/api`.
+The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](https://github.com/goptics/vartop) is a separate terminal dashboard for VarMQ workers that reads this API, and the example's last comment suggests pointing it at `http://localhost:8080/api`.
 
 ## Which workers it serves
 
@@ -122,34 +134,22 @@ The API serves the workers in [`WorkerRegistry`](https://pkg.go.dev/github.com/g
 
 - **Only a named worker is registered.** [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) and a plain string argument to [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) both give a worker a name. A worker with no name is not in the registry and cannot be reached.
 - **A worker is registered when it starts.** A worker created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) is not in the registry until you call [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start).
-- **A name holds one worker.** Starting a second worker with the same name replaces the first in the registry, so the API reaches the second.
-- **A stopped worker stays for a while.** After it reaches `Stopped`, it is removed from the registry once [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) has passed, one minute by default, unless it was started again. [Lifecycle](https://varmq.goptics.org/concepts/lifecycle/#withstoppedretention) has the details.
+- **A name holds one worker.** When a second worker with the same name starts, it replaces the first in the registry. The API then reaches the second.
+- **A stopped worker stays for a while.** After it reaches `Stopped`, the [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) time starts. The default is one minute. When that time has passed, the worker is removed from the registry, unless it was started again. [Lifecycle](https://varmq.goptics.org/concepts/lifecycle/#withstoppedretention) has the details.
 - **The order of `/workers` is not defined.** It follows the order the map yields entries in.
 
-You can read the registry yourself. `varmq.WorkerRegistry.Load("email-sender")` returns the worker as an `any`, and a type assertion to [`varmq.Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) gives you its methods, so you can build your own routes on it.
+You can read the registry yourself. `varmq.WorkerRegistry.Load("email-sender")` returns the worker as an `any`. A type assertion to [`varmq.Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) gives you its methods. You can then build your own routes on it.
 
 ## Routes
 
-| Method | Path | Does |
-|---|---|---|
-| `GET` | `/health` | returns `{"status":"ok"}` |
-| `GET` | `/workers` | lists every registered worker, with a summary |
-| `GET` | `/workers/{name}` | returns one worker, with its counters |
-| `PATCH` | `/workers/{name}/actions/{action}` | pauses, resumes, restarts, starts or stops a worker |
-| `PATCH` | `/workers/{name}/config/concurrency/{number}` | changes the worker's concurrency limit |
+[Routes at a glance](#routes-at-a-glance) has the table of routes.
 
 The `{action}` is one of `pause`, `resume`, `restart`, `start` and `stop`. Each calls the worker method of the same name, which [lifecycle](https://varmq.goptics.org/concepts/lifecycle/#moving-between-states) describes. Two behaviours follow from that:
 
-- **`pause` and `stop` return at once.** A worker that is running jobs reads `Pausing` or `Stopping` until they end. Read the worker again to see when it has changed.
+- **`pause` and `stop` return immediately.** A worker that is running jobs reads `Pausing` or `Stopping` until they end. Read the worker again to see when it has changed.
 - **`restart` waits.** [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) stops the worker, waits until it has stopped, and starts it. The request is answered after that, so it can take as long as the running jobs do.
 
 The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) with the number. A number below 1 becomes the CPU count. [Concurrency](https://varmq.goptics.org/guides/concurrency/#changing-the-limit-with-tunepool) covers what a change does to jobs already running.
-
-### Try the routes
-
-The explorer below runs a model of the handler in the page. It calls no server. The model was checked against the real handler: a Go program called `varmq.Handler("/varmq")` for each worker status and each route, and for those requests the model gives the same status code, JSON and headers. It leaves out some of what `http.ServeMux` does by itself: it does not redirect `/varmq` to `/varmq/`, it does not clean a path such as `//`, and it does not show the newline that ends each real body. The two workers are the ones of the program above, with example numbers.
-
-Press **PATCH pause** on `email-sender`, then **PATCH resume**. A worker that is running jobs reads `Pausing`, and resume is refused until it reads `Paused`. Press **Let running jobs finish** to let time pass.
 
 ## What a worker looks like
 
@@ -165,23 +165,23 @@ Press **PATCH pause** on `email-sender`, then **PATCH resume**. A worker that is
 | `num_idle_workers` | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) |
 | `metrics.submitted`, `completed`, `successful`, `failed` | the four counters of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) |
 
-[Waiting](https://varmq.goptics.org/guides/waiting/) covers what `NumPending` and `NumProcessing` count, and [Metrics](https://varmq.goptics.org/guides/metrics/) covers the four counters on in-memory queues. For a worker on a persistent or distributed queue, see [the overview](https://varmq.goptics.org/persistence/overview/#metrics). These docs do not cover how a distributed queue's counters count yet.
+[Waiting](https://varmq.goptics.org/guides/waiting/) covers what `NumPending` and `NumProcessing` count, and [Metrics](https://varmq.goptics.org/guides/metrics/) covers the four counters on in-memory queues. For a worker on a persistent or distributed queue, see [the overview](https://varmq.goptics.org/persistence/overview/#metrics).
 
 ## Responses
 
 A response from one of these routes sets `Content-Type: application/json`, except a successful action, which has no body. An error is a JSON object with one field, `error`.
 
-| Status | When | Body |
-|---|---|---|
-| 200 | the request worked | JSON for a read, empty for an action or a concurrency change |
-| 400 | the action is not one of the five, or the concurrency is not a number | `{"error":"unknown action"}` or `{"error":"invalid concurrency value"}` |
-| 404 | no registered worker has that name | `{"error":"worker not found"}` |
-| 409 | the call returned [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) or [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | the error's message, for example `{"error":"worker is already running"}` |
-| 500 | the call returned any other error | the error's message, for example `{"error":"worker is stopped"}` |
+| Status | When | Example | Body |
+|---|---|---|---|
+| 200 | the request worked | any read, or an action the worker accepts | JSON for a read, empty for an action or a concurrency change |
+| 400 | the action is not one of the five, or the concurrency is not a number | `actions/jump`, `concurrency/four` | `{"error":"unknown action"}` or `{"error":"invalid concurrency value"}` |
+| 404 | no registered worker has that name | a worker with no name, or one removed from the registry | `{"error":"worker not found"}` |
+| 409 | the call returned [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) or [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | `start` on a running worker, or a concurrency change to the same number | the error's message, for example `{"error":"worker is already running"}` |
+| 500 | the call returned any other error | `ErrWorkerPausing`, `ErrWorkerPaused`, `ErrWorkerStopping` or `ErrWorkerStopped`: `resume` on a `Pausing` worker, `pause` on a stopped one | the error's message, for example `{"error":"worker is stopped"}` |
 
 The last two rows follow the error the worker returns. `start` on a worker that is running, and a concurrency change to the number it already has, are 409. A worker that is `Pausing`, `Paused`, `Stopping` or `Stopped` answers some calls with [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused), [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) or [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped), and those are 500. So `resume` on a worker that is `Pausing` is a 500 with `worker is pausing`, and so is `pause` on a stopped one. [Errors](https://varmq.goptics.org/guides/errors/#returned-by-calls-you-make) lists which call returns which error.
 
-Two replies do not come from the routes. A path the mux does not know is a plain-text `404 page not found`, and a known path with the wrong method is a plain-text `405 Method Not Allowed` with an `Allow` header.
+Two replies do not come from the routes. A path the mux does not know gets a plain-text `404 page not found`. A known path with the wrong method gets a plain-text `405 Method Not Allowed` with an `Allow` header.
 
 ## Which instance answered
 

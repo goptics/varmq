@@ -1,0 +1,1 @@
+import{l as e}from"./dom.CNvQcRot.js";document.querySelectorAll(`.home-jobs [role="tablist"]`).forEach(t=>{e(t,(e,t)=>t.dispatchEvent(new CustomEvent(`tabchange`,{bubbles:!0,detail:{key:e}})))});

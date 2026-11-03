@@ -1,0 +1,1 @@
+import{r as e}from"./dom.CNvQcRot.js";var t=document.querySelector(`[data-md]`);t?.addEventListener(`click`,()=>{let n=fetch(t.dataset.md).then(e=>e.ok?e.text():Promise.reject(Error(e.statusText)));e(t,n)});

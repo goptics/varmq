@@ -1,0 +1,1 @@
+import{r as e}from"./dom.CNvQcRot.js";document.addEventListener(`click`,t=>{let n=t.target.closest(`[data-codecopy]`),r=n?.closest(`.codeblock`)?.querySelector(`code`);if(!n||!r)return;let i=r.cloneNode(!0);i.querySelectorAll(`summary`).forEach(e=>e.remove()),e(n,i.textContent??``)});

@@ -1,8 +1,8 @@
 # Worker types
 
-NewWorker, NewErrWorker and NewResultWorker side by side. What each function returns, what Add hands back, and which queues each worker can bind.
+NewWorker, NewErrWorker and NewResultWorker compared: what each returns, what Add gives back, and which queues each can bind.
 
-varmq has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
+VarMQ has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
 
 | Constructor | Your function | `Add` returns | Read the outcome with |
 |---|---|---|---|
@@ -10,7 +10,7 @@ varmq has three worker constructors. In each, your worker function receives a [`
 | [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | `func(j Job[T]) error` | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | [`Err() error`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) |
 | [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | `func(j Job[T]) (R, error)` | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | [`Result() (R, error)`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) |
 
-Pick a constructor and a job below. The same function runs under all three, so you see what changes: the type `Add` hands back, and where a failure shows up.
+Pick a constructor and a job below. The same function runs under all three, so you see what changes: the type `Add` hands back, and where a failure appears.
 
 `R` is the type of the result. `Add` returns the handle together with a `bool`, `false` when the queue did not take the job. [Jobs](https://varmq.goptics.org/concepts/jobs/#two-views-of-a-job) covers both.
 
@@ -41,11 +41,11 @@ func main() {
 
 The worker's function prints `worker got hello`. `Wait` returns once the job is done, and there is nothing else to read from the handle.
 
-If the function panics, the worker recovers, counts the job as failed, and reports the panic on the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel and to the handler you set with [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler). The handle does not get it. [Errors](https://varmq.goptics.org/guides/errors/) covers both.
+If the function panics, the worker recovers and counts the job as failed. It reports the panic on the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel and to the handler you set with [`WithErrHandler`](https://pkg.go.dev/github.com/goptics/varmq#WithErrHandler). The handle does not get it. [Errors](https://varmq.goptics.org/guides/errors/) covers both.
 
 ## An error worker
 
-`NewErrWorker` takes a function that returns an `error`. `Err()` blocks until the job is closed, then returns what the function returned: `nil` when it succeeded. A panic comes back through `Err()` as an error. The worker reports the same error on its own `Errs()` channel and to its error handler too, so one failure shows up in both places.
+`NewErrWorker` takes a function that returns an `error`. `Err()` blocks until the job is closed, then returns what the function returned: `nil` when it succeeded. A panic comes back through `Err()` as an error. The worker reports the same error on its own `Errs()` channel and to its error handler too, so one failure appears in both places.
 
 A job that was closed before it ran also releases `Err`, with `nil`. So `nil` means the function reported no error, not that it ran. See [closing a queued job](https://varmq.goptics.org/concepts/jobs/#closing-a-queued-job).
 
@@ -112,7 +112,7 @@ func main() {
 
 Every handle has [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status), [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed), `Wait()` and [`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close). The error and result handles add `Err()` or `Result()`, and a [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain) method.
 
-`Drain` does nothing on a single job. It exists for the group handles that [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns ([adding many jobs](https://varmq.goptics.org/guides/adding-many/)), so `Err` and `Result` give the same answer whether or not you call it.
+`Drain` does nothing on a single job. It exists for the group handles that [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns ([adding many jobs](https://varmq.goptics.org/guides/adding-many/)). So `Err` and `Result` give the same answer whether or not you call it.
 
 ## Which queues each worker can bind
 
@@ -131,12 +131,7 @@ The handles in this guide are what an in-memory queue's `Add` returns. On a pers
 
 ## What follows the function
 
-All three constructors take the same trailing arguments, `config ...any`:
-
-- An `int` sets the concurrency. The default is 1, and a value below 1 means one per CPU. [Concurrency](https://varmq.goptics.org/guides/concurrency/) covers it.
-- A `string` names the worker, the same as [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName).
-- A [`ConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#ConfigFunc), such as [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), applies that option.
-- A value of any other type is ignored, with no error.
+All three constructors take the same trailing arguments, `config ...any`: an `int` for the concurrency, a `string` for the name, and option functions such as [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun). [Configuration](https://varmq.goptics.org/guides/configuration/#options-and-positional-arguments) has the rules.
 
 ```go
 worker := varmq.NewResultWorker(parse, 4, "parser", varmq.WithAutoRun(false))
