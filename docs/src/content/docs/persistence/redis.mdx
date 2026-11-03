@@ -272,7 +272,7 @@ When such a job runs again:
 | A job runs longer than the visibility timeout | at the next sweep, also while the first run goes on |
 | You call `Close` on the queue | at once |
 
-- **`Close` hands jobs back.** [`Close`](https://pkg.go.dev/github.com/goptics/redisq#Queue.Close) puts back at once every job its queue object took and has not acknowledged. After it, `Enqueue` and `Acknowledge` on that object return `false`. Stop the worker before you close the queue.
+- **`Close` hands jobs back.** [`Close`](https://pkg.go.dev/github.com/goptics/redisq#Queue.Close) puts back at once every job its queue object took and has not acknowledged. After it, `Enqueue` and `Acknowledge` on that object return `false`. See [shutting down](/persistence/overview/#shutting-down).
 - **The timeouts are set per queue object.** [`SetVisibilityTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetVisibilityTimeout) changes the deadline for jobs taken after the call. [`SetHeartbeatTimeout`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetHeartbeatTimeout) sets how long the object may go without reaching Redis: at least five seconds, and 0 turns heartbeats off. Call them right after you create the queue.
 - **Keep the visibility timeout longer than your slowest job.** A job still running past its deadline is put back by the next sweep and runs again.
 - **Keep the heartbeat timeout longer than any freeze you want to survive.** A process that is frozen or cut off from Redis for longer is taken for dead. Its running jobs run again elsewhere, and their later `Acknowledge` still returns `true`.

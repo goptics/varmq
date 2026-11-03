@@ -41,7 +41,7 @@ queue.Add(1)
 queue.Add(2)
 ```
 
-[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns at once, without waiting for the job to run. It returns a handle to the job and `true`, or `false` if the queue did not take the job (it is full or closed, for example). This example ignores both.
+[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) puts a job in the queue and returns at once, without waiting for the job to run. It returns a handle to the job and `true`, or `false` if the queue did not take the job (it is full or closed, for example). This example ignores both. [Jobs](/concepts/jobs/#two-views-of-a-job) covers them.
 
 ## Try it
 

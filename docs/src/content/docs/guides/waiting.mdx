@@ -46,7 +46,7 @@ Do not call `Wait`, `WaitUntilIdle` or the combined calls below on a worker from
 
 [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one status and look at nothing else. They return at once if the worker is already there. Otherwise they keep waiting until something puts it there, so a worker that you stop while you wait for `Paused` leaves the call waiting.
 
-[`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) and [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) return as soon as the change has started. While a job is running, the worker is `Pausing` or `Stopping`. Call `WaitUntilPaused` or `WaitUntilStopped` after them to wait until the change is over. The [lifecycle](/concepts/lifecycle/#waiting-for-a-state) page lists the states. Its [first program](/concepts/lifecycle/#the-seven-states) shows a worker go from `Pausing` to `Paused`.
+[`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) and [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) return as soon as the change has started. While a job is running, the worker is `Pausing` or `Stopping`. Call `WaitUntilPaused` or `WaitUntilStopped` after them to wait until the change is over. The [lifecycle](/concepts/lifecycle/#the-seven-states) page lists the states. Its [first program](/concepts/lifecycle/#the-seven-states) shows a worker go from `Pausing` to `Paused`.
 
 ## Combined calls
 
