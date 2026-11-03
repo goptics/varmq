@@ -1,0 +1,86 @@
+---
+// JOB 05 on the home page: the example programs in tabs, each a GoPlay with its output in the panel beside the card.
+import '../../styles/home.css';
+import GoPlay from '../GoPlay.astro';
+
+const tabs = [
+	{
+		key: 'quick',
+		label: 'Quick start',
+		example: 'quick-start',
+		text: 'A worker with the default concurrency of 1 runs two jobs, one after the other.',
+		href: '/start/quick-start/',
+	},
+	{
+		key: 'priority',
+		label: 'Priority',
+		example: 'queues-priority',
+		text: 'The worker starts after the three jobs are added, so the lowest number runs first.',
+		href: '/guides/queues/',
+	},
+	{
+		key: 'rr',
+		label: 'Round robin',
+		example: 'strategies-round-robin',
+		text: 'One worker takes jobs from three queues in turn.',
+		href: '/guides/strategies/',
+	},
+	{
+		key: 'topics',
+		label: 'Topics',
+		example: 'topic-subscribe',
+		text: 'Two workers subscribe to one topic, and each gets every order.',
+		href: '/guides/topics/',
+	},
+	{
+		key: 'results',
+		label: 'Results',
+		example: 'worker-types-result',
+		text: 'A result worker returns a value and an error, which you read from the job.',
+		href: '/guides/worker-types/',
+	},
+];
+---
+
+<section class="home-row section wrap" aria-labelledby="try-it" style="padding-top:0">
+	<div class="banner">
+		<span class="banner__id">JOB 05</span><span>Programs</span><span class="banner__rule"></span><span class="banner__meta">each one runs as it is</span>
+	</div>
+	<div class="section__head">
+		<h2 class="h2" id="try-it">Each tab is a full program.</h2>
+		<p>Press Run to run it in the Go Playground, or edit it first.</p>
+	</div>
+	<div class="ex">
+		<div class="seg" role="tablist" aria-label="Example programs">
+			{
+				tabs.map((t, i) => (
+					<button
+						type="button"
+						role="tab"
+						id={`ex-tab-${t.key}`}
+						aria-controls={`ex-panel-${t.key}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+						data-key={t.key}
+					>
+						{t.label}
+					</button>
+				))
+			}
+		</div>
+		{
+			tabs.map((t, i) => (
+				<div role="tabpanel" id={`ex-panel-${t.key}`} aria-labelledby={`ex-tab-${t.key}`} hidden={i !== 0} class="ex">
+					<p class="ex__more">
+						{t.text} <a href={t.href}>Read it in the docs</a>
+					</p>
+					<GoPlay example={t.example} />
+				</div>
+			))
+		}
+	</div>
+</section>
+
+<script>
+	import './ui.ts';
+</script>

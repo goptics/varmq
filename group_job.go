@@ -97,6 +97,10 @@ func newResultGroupJob[T, R any](bufferSize int) *resultGroupJob[T, R] {
 		wgc:  helpers.NewWgCounter(bufferSize),
 	}
 
+	if bufferSize == 0 {
+		gj.resp.Close() // no member will ever close it
+	}
+
 	return gj
 }
 
@@ -170,10 +174,16 @@ type EnqueuedErrGroupJob interface {
 }
 
 func newErrorGroupJob[T any](bufferSize int) *errorGroupJob[T] {
-	return &errorGroupJob[T]{
+	gj := &errorGroupJob[T]{
 		resp: helpers.NewResponse[error](bufferSize),
 		wgc:  helpers.NewWgCounter(bufferSize),
 	}
+
+	if bufferSize == 0 {
+		gj.resp.Close() // no member will ever close it
+	}
+
+	return gj
 }
 
 func (gj *errorGroupJob[T]) NumPending() int {

@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+import Footer from '../components/shell/Footer.astro';
+import { Home } from '../components/fd/home';
+import logoDark from '../assets/logo-dark.svg?url';
+import logoLight from '../assets/logo-light.svg?url';
+---
+
+<Base title="Not found">
+	<Home client:load pathname={Astro.url.pathname} params={Astro.params} logo={{ light: logoLight, dark: logoDark }}>
+		<main class="shell-404">
+			<p class="shell-banner">
+				<span class="shell-banner__id">JOB 404</span>
+				<span class="shell-banner__label">Not found</span>
+				<span class="shell-banner__rule" aria-hidden="true"></span>
+			</p>
+			<h1 class="doc-title">Page not found</h1>
+			<p>This page is not in the docs. Check the address, or start from the <a href="/start/introduction/">introduction</a>.</p>
+			<Footer />
+		</main>
+	</Home>
+</Base>

@@ -1,0 +1,8 @@
+/* Tailwind and Fumadocs, in cascade layers. The docs' own sheets (tokens.css, ui.css, fd-theme.css) are not in a
+   layer, so they win; layouts/Base.astro imports them as modules, so a component that imports one too shares it. */
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* Tailwind's dark variant follows the theme Fumadocs sets on <html> (components/fd/provider.tsx). */
+@custom-variant dark (&:where(.dark, .dark *));

@@ -1,0 +1,16 @@
+---
+// The content of the `call` slot of a guide scene: the Go program (a script may rewrite `[data-code]`)
+// and the line that shows the call the last control made (`[data-call]`, written with `setCall`).
+// The call line is a `div`: `.sframe :where(code)` in ui.css resets the border and padding of a `code` element.
+import { highlightGo } from '../ui/go';
+
+interface Props {
+	program: string;
+	/** Shown in the call line before the reader does anything. */
+	hint: string;
+}
+const { program, hint } = Astro.props;
+---
+
+<code class="gocode" data-code set:html={highlightGo(program)}></code>
+<div class="call" data-call set:html={highlightGo(hint)}></div>

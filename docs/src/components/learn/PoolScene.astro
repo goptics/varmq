@@ -1,0 +1,326 @@
+---
+// A worker pool that drains a backlog. Runs the rules of worker_eventloop.go and worker_pool.go through
+// engine.ts: one signal slot, the free-slot check, a pool that spawns on demand, and freePoolNode.
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
+
+interface Props {
+	id?: string;
+	jobs?: number;
+	concurrency?: number;
+}
+const { id = 'pool', jobs = 6, concurrency = 4 } = Astro.props;
+---
+
+<Scene
+	id={id}
+	title="Worker pool"
+	tag="simulation"
+	class="learn"
+	call={`worker := varmq.NewWorker(process, ${concurrency})\nqueue := worker.BindQueue()`}
+	describe="A worker pool drains a backlog. Press Add to put jobs in the queue. The jobs arrive as one wake-up for the event loop, which hands them to pool goroutines while a slot is free. The goroutines spawn on demand and the pool shrinks back to one idle goroutine when the queue is empty. Steppers change the concurrency limit and the number of jobs. Play, Pause and Step control the playback."
+>
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>loop</dt><dd data-stat="loop">asleep</dd></div>
+		<div><dt>busy</dt><dd data-stat="busy">0</dd></div>
+		<div><dt>queued</dt><dd data-stat="queued">0</dd></div>
+		<div><dt>done</dt><dd data-stat="done">0</dd></div>
+	</dl>
+
+	<div data-pool data-jobs={jobs} data-c={concurrency}>
+		<div class="eloop" aria-hidden="true">
+			<div class="eloop__col">
+				<span class="slabel">queue</span>
+				<div class="lstrip" data-queue></div>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">event loop</span>
+				<div class="enode" data-node data-awake="false"><span data-node-text>asleep</span></div>
+				<div class="eslot" data-slot data-full="false">
+					<span class="eslot__cell" data-slot-cell>–</span>
+					<span data-slot-text>signal slot, empty</span>
+				</div>
+				<p class="eslot" data-dropped hidden></p>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">pool · up to <span data-limit>4</span></span>
+				<div class="lblocks" data-lanes></div>
+			</div>
+			<div class="eloop__col">
+				<span class="slabel">done</span>
+				<div class="lstrip" data-done></div>
+			</div>
+		</div>
+		<p class="estep__text ppool__text" aria-live="polite" data-readout>Press Add to put jobs in the queue.</p>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-act="add">Add <span data-n>6</span> jobs</button>
+		<button type="button" class="pbtn" data-act="play" aria-pressed="false">Pause</button>
+		<button type="button" class="pbtn" data-act="step">Step</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
+		<span class="sframe__spacer"></span>
+		<div class="lgroup">
+			<span id={`${id}-cl`}>limit</span>
+			<div class="stepper" role="group" aria-labelledby={`${id}-cl`}>
+				<button type="button" class="pbtn" data-act="c-" aria-label="Lower the concurrency limit">−</button>
+				<output data-c-out>4</output>
+				<button type="button" class="pbtn" data-act="c+" aria-label="Raise the concurrency limit">+</button>
+			</div>
+		</div>
+		<div class="lgroup">
+			<span id={`${id}-jl`}>jobs</span>
+			<div class="stepper" role="group" aria-labelledby={`${id}-jl`}>
+				<button type="button" class="pbtn" data-act="n-" aria-label="Add fewer jobs">−</button>
+				<output data-n-out>6</output>
+				<button type="button" class="pbtn" data-act="n+" aria-label="Add more jobs">+</button>
+			</div>
+		</div>
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		Each job takes about a second, so every hand-off is one job when the limit is above 1. At limit 1 the one goroutine takes the whole backlog in one batch (batching is below). A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { PoolModel, type Step } from './engine';
+	import { setCall, reducedMotion } from '../ui/dom';
+
+	const GAP = 340; // ms of presentation time between the visible steps of the loop
+	const JOB_MS = 1400; // ms of presentation time for one job
+	const DONE_SHOWN = 3; // finished jobs drawn before "+n more"
+
+	document.querySelectorAll<HTMLElement>('[data-pool]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.sframe')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+		const stat = (k: string) => q(`[data-stat="${k}"]`);
+		const INTRO = 'Press Add to put jobs in the queue.';
+
+		let c = Number(root.dataset.c) || 4;
+		let n = Number(root.dataset.jobs) || 6;
+		let model = new PoolModel(c, JOB_MS);
+		let P = 0; // presentation clock, ms
+		let due = 0; // the next step may run at this time
+		let playing = !reducedMotion();
+		let last = performance.now();
+		let fresh = true;
+		let over = false;
+		let latest = INTRO;
+		const still = reducedMotion(); // no autoplay: the reader steps, or runs to the end
+
+		const chip = (job: number, cls = '') => `<span class="ljob ${cls}">${job}</span>`;
+
+		const callFor = (s: Step): string => {
+			switch (s.kind) {
+				case 'add':
+					return `queue.Add(job) // ×${s.n}: the slot holds one signal, ${Math.max(0, s.n - 1)} dropped`;
+				case 'wake':
+					return `// loop wakes: busy ${model.busy.length} < ${c}, queue has ${model.queue.length}`;
+				case 'handoff':
+					return `// job ${s.jobs.join(', ')} → Worker ${s.node} (${s.spawned ? 'new goroutine' : 'idle goroutine'})`;
+				case 'sleep':
+					return s.why === 'full' ? `// busy ${model.busy.length} = limit ${c}: the loop sleeps` : '// the queue is empty: the loop sleeps';
+				case 'finish':
+					return `// Worker ${s.node} finished job ${s.jobs.join(', ')} and signals the loop. ${s.kept ? 'It stays in the pool.' : 'It exits.'}`;
+				default:
+					return `// ${model.done.length} jobs done. ${model.idle.length} idle goroutine${model.idle.length === 1 ? '' : 's'} left in the pool.`;
+			}
+		};
+
+		const readFor = (s: Step): string => {
+			switch (s.kind) {
+				case 'add':
+					return `${s.n} Add call${s.n === 1 ? '' : 's'}. They share one signal slot, so the loop gets one wake-up.`;
+				case 'wake':
+					return 'The loop wakes and checks for a free slot and for work.';
+				case 'handoff':
+					return `Job ${s.jobs.join(', ')} goes to Worker ${s.node}${s.spawned ? ', a goroutine the pool just started' : ', the idle goroutine'}.`;
+				case 'sleep':
+					return s.why === 'full' ? `All ${c} slots are busy. The loop sleeps until a goroutine comes back.` : 'The queue is empty. The loop sleeps.';
+				case 'finish':
+					return `Worker ${s.node} finished job ${s.jobs.join(', ')}. ${
+						s.kept ? 'It stays in the pool: more jobs wait, or the pool holds no idle goroutine.' : 'It exits: nothing is waiting and the pool already holds an idle goroutine.'
+					}`;
+				default:
+					return `Done. ${model.done.length} jobs ran, never more than ${c} at once. The pool is back to one idle goroutine.`;
+			}
+		};
+
+		const render = (animate: boolean) => {
+			q('[data-queue]').innerHTML = model.queue.length ? model.queue.map((j) => chip(j, animate ? 'ljob--new' : '')).join('') : '<span class="lempty">empty</span>';
+			// The newest finished jobs, then a count of the rest, so the column does not grow with the run.
+			const shown = model.done.slice(-DONE_SHOWN);
+			const rest = model.done.length - shown.length;
+			q('[data-done]').innerHTML = model.done.length
+				? shown.map((j) => chip(j, 'ljob--done')).join('') + (rest ? `<span class="lempty">+${rest} more</span>` : '')
+				: '<span class="lempty">none yet</span>';
+
+			// Only live goroutines: one block each, filled while it runs its batch. An exited one is gone.
+			const live = [...model.busy.map((b) => b.node), ...model.idle].sort((a, b) => a - b);
+			q('[data-lanes]').innerHTML = live
+				.map((i) => {
+					const b = model.busy.find((x) => x.node === i);
+					const jobs = b ? (b.jobs.length > 1 ? `${b.jobs[0]}–${b.jobs[b.jobs.length - 1]}` : String(b.jobs[0])) : '';
+					return `<div class="lblock" data-s="${b ? 'busy' : 'idle'}" data-node="${i}">${
+						b ? '<span class="lblock__fill" data-fill></span>' : ''
+					}<b>W${i}</b>${jobs ? `<span>${jobs}</span>` : ''}</div>`;
+				})
+				.join('');
+			q('[data-limit]').textContent = String(c);
+			q('[data-c-out]').textContent = String(c);
+			q('[data-n-out]').textContent = String(n);
+			scene.querySelectorAll('[data-n]').forEach((e) => (e.textContent = String(n)));
+
+			q('[data-node]').dataset.awake = String(model.awake);
+			q('[data-node-text]').textContent = model.awake ? 'awake' : 'asleep';
+			q('[data-slot]').dataset.full = String(model.signal);
+			q('[data-slot-cell]').textContent = model.signal ? '1' : '–';
+			q('[data-slot-text]').textContent = model.signal ? 'signal waiting (holds 1)' : 'signal slot, empty';
+			const dropped = q('[data-dropped]');
+			dropped.hidden = model.dropped === 0;
+			dropped.textContent = `${model.dropped} signal${model.dropped === 1 ? '' : 's'} dropped`;
+
+			stat('loop').textContent = model.awake ? 'awake' : 'asleep';
+			stat('busy').textContent = String(model.busy.length);
+			stat('queued').textContent = String(model.queue.length);
+			stat('done').textContent = String(model.done.length);
+			q('[data-readout]').textContent = latest;
+
+			const play = q('[data-act="play"]');
+			play.textContent = still ? 'Run to end' : playing ? 'Pause' : 'Play';
+			if (still) play.removeAttribute('aria-pressed');
+			else play.setAttribute('aria-pressed', String(!playing));
+			scene.classList.toggle('is-paused', !playing);
+			play.setAttribute('aria-disabled', String(fresh || over));
+			q('[data-act="step"]').setAttribute('aria-disabled', String(fresh || over));
+			fills();
+		};
+
+		/** When may the next step run? Loop work follows at once; otherwise wait for the first batch to end. */
+		const schedule = () => {
+			due = !model.loopBusy && model.busy.length > 0 ? (model.nextDue() ?? P) : P + GAP;
+		};
+
+		const apply = (s: Step) => {
+			if (s.kind === 'wait') return;
+			if (s.kind === 'idle') over = true;
+			latest = readFor(s);
+			setCall(q('[data-call]'), callFor(s));
+			render(true);
+			schedule();
+		};
+
+		/** The fill of each busy block shows how far its batch has run. */
+		const fills = () => {
+			scene.querySelectorAll<HTMLElement>('.lblock[data-s="busy"]').forEach((lane) => {
+				const b = model.busy.find((x) => x.node === Number(lane.dataset.node));
+				const fill = lane.querySelector<HTMLElement>('[data-fill]');
+				if (b && fill) fill.style.transform = `scaleY(${Math.min(1, Math.max(0, (P - b.start) / (b.end - b.start)))})`;
+			});
+		};
+
+		// The frame loop runs only while the scene plays and is on screen.
+		let raf = 0;
+		let visible = true;
+		const wake = () => {
+			if (raf || !playing || fresh || over || !visible) return;
+			last = performance.now();
+			raf = requestAnimationFrame(tick);
+		};
+
+		const tick = (now: number) => {
+			raf = 0;
+			const dt = Math.min(now - last, 100);
+			last = now;
+			if (playing && !fresh && !over) {
+				P += dt;
+				while (P >= due && !over) {
+					const s = model.advance(P);
+					if (s.kind === 'wait') {
+						schedule();
+						break;
+					}
+					apply(s);
+				}
+			}
+			fills();
+			wake();
+		};
+
+		const reset = () => {
+			model = new PoolModel(c, JOB_MS);
+			P = 0;
+			due = 0;
+			fresh = true;
+			over = false;
+			latest = INTRO;
+			playing = !still;
+			setCall(q('[data-call]'), `worker := varmq.NewWorker(process, ${c})\nqueue := worker.BindQueue()`);
+			render(false);
+		};
+
+		scene.addEventListener('click', (e) => {
+			const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+			if (!t || t.getAttribute('aria-disabled') === 'true') return;
+			switch (t.dataset.act) {
+				case 'add': {
+					fresh = false;
+					over = false;
+					const s = model.add(n);
+					latest = readFor(s);
+					setCall(q('[data-call]'), callFor(s));
+					due = P + GAP;
+					render(true);
+					wake();
+					break;
+				}
+				case 'play':
+					if (still) {
+						// Show the end state at once.
+						for (let guard = 0; !over && guard < 400; guard++) {
+							P = Math.max(P, due);
+							const s = model.advance(P);
+							if (s.kind === 'wait') schedule();
+							else apply(s);
+						}
+						render(false);
+						break;
+					}
+					playing = !playing;
+					render(false);
+					wake();
+					break;
+				case 'step': {
+					playing = false;
+					if (over || fresh) break;
+					// Jump the clock to the moment the next step is due.
+					P = Math.max(P, due);
+					apply(model.advance(P));
+					render(false);
+					break;
+				}
+				case 'reset':
+					reset();
+					break;
+				case 'c-':
+				case 'c+':
+					c = Math.max(1, Math.min(6, c + (t.dataset.act === 'c+' ? 1 : -1)));
+					reset();
+					break;
+				case 'n-':
+				case 'n+':
+					n = Math.max(1, Math.min(12, n + (t.dataset.act === 'n+' ? 1 : -1)));
+					render(false);
+					break;
+			}
+		});
+
+		new IntersectionObserver((entries) => {
+			visible = entries.some((e) => e.isIntersecting);
+			wake();
+		}).observe(scene);
+
+		reset();
+	});
+</script>

@@ -1,0 +1,241 @@
+---
+// Several queues, one worker. Mirrors source_manager.go and internal/helpers/manager.go: with more than one
+// queue bound, the strategy picks the queue for every single job, and the queues share one pool and one limit.
+import '../../styles/learn.css';
+import Scene from '../ui/Scene.astro';
+
+interface Props {
+	id?: string;
+}
+const { id = 'bind' } = Astro.props;
+---
+
+<Scene
+	id={id}
+	title="Queues and a worker"
+	tag="simulation"
+	class="learn"
+	call={'worker := varmq.NewWorker(process, 2)\nemails := worker.BindQueue()\nreports := worker.BindQueue()'}
+	describe="One worker with a concurrency limit of 2 and two or three queues bound to it, each with three jobs. Press Play to watch the worker hand out the jobs one at a time: the strategy picks the queue for each free goroutine, and at most two jobs run at once, whichever queue they came from. Priority takes from the queue bound first while it has jobs. RoundRobin takes one job from each queue in turn and skips empty queues. Goroutine blocks appear when they start and disappear when they exit."
+>
+	<dl class="sframe__stats" slot="stats">
+		<div><dt>busy</dt><dd data-stat="busy">0 of 2</dd></div>
+		<div><dt>queued</dt><dd data-stat="queued">6</dd></div>
+		<div><dt>done</dt><dd data-stat="done">0</dd></div>
+	</dl>
+
+	<div class="bq" data-bind>
+		<div class="bq__cols" aria-hidden="true">
+			<div>
+				<span class="slabel">queues</span>
+				<div class="bq__queues" data-queues></div>
+			</div>
+			<div>
+				<span class="slabel">pool · up to 2</span>
+				<div class="lblocks" data-lanes></div>
+			</div>
+			<div>
+				<span class="slabel">done</span>
+				<div class="lstrip" data-done></div>
+			</div>
+		</div>
+		<p class="estep__text ppool__text" aria-live="polite" data-readout></p>
+	</div>
+
+	<Fragment slot="controls">
+		<button type="button" class="pbtn pbtn--primary" data-act="play">Play</button>
+		<button type="button" class="pbtn" data-act="step">Step</button>
+		<button type="button" class="pbtn" data-act="reset">Reset</button>
+		<span class="sframe__spacer"></span>
+		<div class="seg" role="radiogroup" aria-label="Strategy" data-strategy>
+			<button type="button" role="radio" aria-checked="true" data-key="Priority">Priority</button>
+			<button type="button" role="radio" aria-checked="false" tabindex="-1" data-key="RoundRobin">RoundRobin</button>
+		</div>
+		<button type="button" class="pbtn" data-act="more">Bind backups</button>
+	</Fragment>
+
+	<p class="sframe__note" slot="note">
+		All jobs are added before the worker takes any, and every job takes the same time. MaxLen, MinLen and queue priorities are on <a href="/guides/strategies/">Strategies</a>. A model of the library, not a benchmark.
+	</p>
+</Scene>
+
+<script>
+	import { tabs, setCall, reducedMotion } from '../ui/dom';
+
+	type Strategy = 'Priority' | 'RoundRobin';
+	type Q = { name: string; tag: string; cls: string; jobs: string[] };
+	type G = { n: number; job: string | null; cls: string };
+	type Frame = { queues: Q[]; gors: G[]; done: { job: string; cls: string }[]; text: string };
+
+	const QUEUES = [
+		{ name: 'emails', tag: 'e', cls: '' },
+		{ name: 'reports', tag: 'r', cls: 'ljob--b' },
+		{ name: 'backups', tag: 'b', cls: 'ljob--c' },
+	];
+	const LIMIT = 2;
+	const PER_QUEUE = 3;
+	const GAP = 800; // ms between two events of the run
+	const DONE_SHOWN = 3; // finished jobs drawn before "+n more"
+	const BOUND = ['bound first', 'bound second', 'bound third'];
+
+	/**
+	 * Every event of one run, as frames. The rules: the strategy picks a queue for each free slot (RoundRobin
+	 * goes round in bind order and skips empty queues, Priority takes the first queue that has a job), an idle
+	 * goroutine takes the job before a new one starts, the job that started first ends first, and a goroutine
+	 * that ends its job exits only if nothing waits and another goroutine is already idle (freePoolNode).
+	 */
+	function run(strategy: Strategy, count: number): Frame[] {
+		const queues: Q[] = QUEUES.slice(0, count).map((q) => ({ ...q, jobs: Array.from({ length: PER_QUEUE }, (_, i) => `${q.tag}${i + 1}`) }));
+		let gors: G[] = [{ n: 1, job: null, cls: '' }];
+		const done: Frame['done'] = [];
+		const started: G[] = [];
+		const frames: Frame[] = [];
+		let rr = 0;
+		const snap = (text: string) =>
+			frames.push({ queues: queues.map((q) => ({ ...q, jobs: [...q.jobs] })), gors: gors.map((g) => ({ ...g })), done: [...done], text });
+		const waiting = () => queues.reduce((n, q) => n + q.jobs.length, 0);
+
+		snap(`Press Play. ${count === 2 ? 'Both' : 'All three'} queues hold three jobs, and the pool starts with one idle goroutine.`);
+		while (waiting() || started.length) {
+			// Hand out one job per free slot.
+			while (started.length < LIMIT && waiting()) {
+				let i = 0;
+				const skipped: string[] = [];
+				if (strategy === 'RoundRobin') {
+					while (!queues[rr % queues.length].jobs.length) skipped.push(queues[rr++ % queues.length].name);
+					i = rr++ % queues.length;
+				} else i = queues.findIndex((q) => q.jobs.length);
+				const q = queues[i];
+				const job = q.jobs.shift()!;
+				let g = [...gors].reverse().find((x) => !x.job); // idle goroutines are reused newest first
+				const fresh = !g;
+				if (!g) gors.push((g = { n: gors.length + 1, job: null, cls: '' }));
+				g.job = job;
+				g.cls = q.cls;
+				started.push(g);
+				const why =
+					strategy === 'Priority'
+						? i === 0
+							? `${q.name} is bound first and has a job`
+							: `${queues.slice(0, i).map((x) => x.name).join(' and ')} ${i === 1 ? 'is' : 'are'} empty, so ${q.name} is next`
+						: `${skipped.length ? `${skipped.join(' and ')} ${skipped.length === 1 ? 'is' : 'are'} empty, skipped. ` : ''}${q.name} is next in turn`;
+				const full = started.length === LIMIT && waiting() ? ' Both slots are busy: the next job waits.' : '';
+				snap(`${why}: g${g.n} ${fresh ? 'starts and ' : ''}takes ${job}.${full}`);
+			}
+			// The job that started first ends.
+			const g = started.shift()!;
+			done.push({ job: g.job!, cls: g.cls });
+			const job = g.job;
+			g.job = null;
+			if (waiting() || !gors.some((x) => x !== g && !x.job)) snap(`g${g.n} finished ${job} and waits in the pool for the next job.`);
+			else {
+				gors = gors.filter((x) => x !== g);
+				snap(`g${g.n} finished ${job} and exits: nothing waits, and another goroutine is already idle.`);
+			}
+		}
+		frames[frames.length - 1].text += ` Done: ${done.length} jobs ran, never more than ${LIMIT} at once.`;
+		return frames;
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-bind]').forEach((root) => {
+		const scene = root.closest<HTMLElement>('.sframe')!;
+		const q = <T extends HTMLElement>(s: string) => scene.querySelector<T>(s)!;
+		const still = reducedMotion();
+
+		let strategy: Strategy = 'Priority';
+		let count = 2;
+		let frames = run(strategy, count);
+		let at = 0;
+		let timer = 0;
+
+		const chip = (job: string, cls: string) => `<span class="ljob ${cls}">${job}</span>`;
+
+		const render = () => {
+			const f = frames[at];
+			q('[data-queues]').innerHTML = f.queues
+				.map(
+					(x, i) => `<div class="bq__q"><span class="bq__name"><b>${x.name}</b> ${BOUND[i]}</span><span class="lstrip">${
+						x.jobs.length ? x.jobs.map((j) => chip(j, x.cls)).join('') : '<span class="lempty">empty</span>'
+					}</span></div>`,
+				)
+				.join('');
+			q('[data-lanes]').innerHTML = f.gors
+				.map((g) => `<div class="lblock" data-s="${g.job ? 'busy' : 'idle'}"><b>g${g.n}</b>${g.job ? `<span>${g.job}</span>` : ''}</div>`)
+				.join('');
+			const shown = f.done.slice(-DONE_SHOWN);
+			const rest = f.done.length - shown.length;
+			q('[data-done]').innerHTML = f.done.length
+				? shown.map((d) => chip(d.job, `ljob--done`)).join('') + (rest ? `<span class="lempty">+${rest} more</span>` : '')
+				: '<span class="lempty">none yet</span>';
+			q('[data-readout]').textContent = f.text;
+
+			const busy = f.gors.filter((g) => g.job).length;
+			q('[data-stat="busy"]').textContent = `${busy} of ${LIMIT}`;
+			q('[data-stat="queued"]').textContent = String(f.queues.reduce((n, x) => n + x.jobs.length, 0));
+			q('[data-stat="done"]').textContent = String(f.done.length);
+
+			const end = at === frames.length - 1;
+			const play = q('[data-act="play"]');
+			play.textContent = timer ? 'Pause' : still ? 'Run to end' : end ? 'Play again' : 'Play';
+			q('[data-act="step"]').setAttribute('aria-disabled', String(end));
+			q('[data-act="more"]').textContent = count === 3 ? 'Unbind backups' : 'Bind backups';
+		};
+
+		const stop = () => {
+			clearInterval(timer);
+			timer = 0;
+		};
+
+		const config = () => {
+			stop();
+			frames = run(strategy, count);
+			at = 0;
+			const lines = [`worker := varmq.NewWorker(process, ${LIMIT}${strategy === 'RoundRobin' ? ', varmq.WithStrategy(varmq.RoundRobin)' : ''})`];
+			for (const x of QUEUES.slice(0, count)) lines.push(`${x.name} := worker.BindQueue()`);
+			setCall(q('[data-call]'), lines.join('\n'));
+			render();
+		};
+
+		const step = () => {
+			if (at < frames.length - 1) at++;
+			if (at === frames.length - 1) stop();
+			render();
+		};
+
+		scene.addEventListener('click', (e) => {
+			const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+			if (!t || t.getAttribute('aria-disabled') === 'true') return;
+			switch (t.dataset.act) {
+				case 'play':
+					if (timer) stop();
+					else if (still) at = frames.length - 1;
+					else {
+						if (at === frames.length - 1) at = 0;
+						timer = window.setInterval(step, GAP);
+						step();
+						return;
+					}
+					break;
+				case 'step':
+					stop();
+					step();
+					return;
+				case 'reset':
+					config();
+					return;
+				case 'more':
+					count = count === 3 ? 2 : 3;
+					config();
+					return;
+			}
+			render();
+		});
+
+		tabs(q('[data-strategy]'), (key) => {
+			strategy = key as Strategy;
+			config();
+		});
+
+		config();
+	});
+</script>

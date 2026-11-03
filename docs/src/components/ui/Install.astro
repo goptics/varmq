@@ -1,0 +1,48 @@
+---
+interface Props {
+	id: string;
+}
+const { id } = Astro.props;
+
+const tabs = [
+	{ key: 'core', label: 'varmq', cmd: 'go get github.com/goptics/varmq' },
+	{ key: 'redis', label: '+ Redis', cmd: 'go get github.com/goptics/varmq github.com/goptics/redisq' },
+	{ key: 'sqlite', label: '+ SQLite', cmd: 'go get github.com/goptics/varmq github.com/goptics/sqliteq' },
+];
+---
+
+<div class="install" data-tabs>
+	<div role="tablist" aria-label="Install command">
+		{
+			tabs.map((t, i) => (
+				<button
+					type="button"
+					role="tab"
+					id={`${id}-tab-${t.key}`}
+					aria-controls={`${id}-panel-${t.key}`}
+					aria-selected={i === 0 ? 'true' : 'false'}
+					tabindex={i === 0 ? 0 : -1}
+					data-key={t.key}
+				>
+					{t.label}
+				</button>
+			))
+		}
+	</div>
+	{
+		tabs.map((t, i) => (
+			<div
+				role="tabpanel"
+				id={`${id}-panel-${t.key}`}
+				aria-labelledby={`${id}-tab-${t.key}`}
+				class="install__row"
+				hidden={i !== 0}
+			>
+				<code id={`${id}-cmd-${t.key}`}>{t.cmd}</code>
+				<button type="button" class="copy" data-copy={`#${id}-cmd-${t.key}`} aria-label={`Copy ${t.label} install command`}>
+					Copy
+				</button>
+			</div>
+		))
+	}
+</div>

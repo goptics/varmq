@@ -85,7 +85,7 @@ func (w *worker[T, JobType]) goRemoveIdleWorkers() {
 				}
 			}
 		}
-	}(w.ctx)
+	}(w.Context())
 }
 
 func (w *worker[T, JobType]) removeAllWorkers() {
