@@ -24,7 +24,7 @@ The diagram below is a worker you can drive. Click a state to read about it. Pre
 | `Stopping` | `Stop` was called. Running jobs finish, then the worker's goroutines are removed. | none |
 | `Stopped` | The event loop has ended and the goroutines are gone. Jobs still in the queue stay there. | [`IsStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.IsStopped) |
 
-`Idle` and `Running` swap on their own as jobs start and finish, so `Running` is a moment, not a mode you set. `IsActive` is true for either of them, which makes it the check for "started and not paused or stopped".
+`Idle` and `Running` swap on their own as jobs start and finish. You cannot set `Running`. The worker sets it while jobs run. `IsActive` is true for either of them, which makes it the check for "started and not paused or stopped".
 
 The program below creates a worker with `WithAutoRun(false)`, adds three jobs, starts it, and pauses it while job 1 runs.
 
@@ -56,7 +56,7 @@ From any other state, each call returns an error. The errors below are in the sa
 
 The errors are values in the package, listed under [Variables](https://pkg.go.dev/github.com/goptics/varmq#pkg-variables). Two details:
 
-- `Pause`, `Resume` and `Stop` return at once. `Restart` does not: it waits for running jobs to finish before it starts the worker again. If another goroutine restarts the worker first, it returns `ErrRunningWorker`.
+- `Pause`, `Resume` and `Stop` return immediately. `Restart` does not: it waits for running jobs to finish before it starts the worker again. If another goroutine restarts the worker first, it returns `ErrRunningWorker`.
 - A stopped worker cannot be resumed. `Resume` returns `ErrWorkerStopped`. Use `Restart`, or `Start`, which also accepts a stopped worker.
 
 The program below stops a worker, tries to resume it, adds a job while it is stopped, then restarts it.
@@ -69,7 +69,7 @@ The program below stops a worker, tries to resume it, adds a job while it is sto
 
 Pause and stop never interrupt a running job. Each running job finishes first.
 
-Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue at once (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
+Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue together (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
 
 A stop also cancels the worker's [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context). A restart gives the worker a fresh one.
 
@@ -89,7 +89,7 @@ Pass `WithAutoRun(false)` to get an `Initiated` worker instead. You can bind que
 
 This setting matters only for a worker with a name ([`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) or a string argument to `NewWorker`). `Start` adds a named worker to [`WorkerRegistry`](https://pkg.go.dev/github.com/goptics/varmq#WorkerRegistry), the map that the REST [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) reads. A worker without a name is never registered.
 
-When a registered worker reaches `Stopped`, it stays in the registry for a while, so it still shows up as `Stopped`. [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) sets how long. When the time is up and the worker is still stopped, it is removed from the registry.
+When a registered worker reaches `Stopped`, it stays in the registry for a while, so it still appears as `Stopped`. [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) sets how long. When that time has passed and the worker is still stopped, it is removed from the registry.
 
 - The default is one minute. [`DefaultStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStoppedRetention) changes the default for workers created after the call.
 - `0` turns the cleanup off: a stopped worker stays in the registry for good.

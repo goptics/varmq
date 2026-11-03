@@ -76,7 +76,7 @@ The worker has concurrency 3, so the three result lines can come in a different 
 - Results arrive in the order the jobs finish. With concurrency above 1 that is not the order of your slice, so match results to items by `JobId`. With concurrency 1 on a FIFO queue they come back in the order you added them.
 - A job closed before it ran sends nothing.
 - The channel closes once every job in the group has ended, so the `range` loop finishes by itself. For an empty slice, the channel is closed when `AddAll` returns, so the loop ends at once. In v1.10.0 it never closed, and the loop never finished.
-- The channel has room for one value per item. A slow reader does not hold up the workers.
+- The channel has room for one value per item. A slow reader does not delay the workers.
 
 ## Reading errors
 
