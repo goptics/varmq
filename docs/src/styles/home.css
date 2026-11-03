@@ -1,5 +1,5 @@
 /* The home page's sections under the story (components/home/, index.mdx): each section is a print job with its
-   banner, `JOB 02` to `JOB 06`, then the closing. Every rule is scoped by `.home-jobs`, the wrapper in index.mdx, which
+   banner, `JOB 01` to `JOB 05`, then the closing. Every rule is scoped by `.home-jobs`, the wrapper in index.mdx, which
    is also `.not-content`, so the docs' prose rules (docs-theme.css) leave these sections alone; the one that restyles
    the footer on `/` is scoped by `:root:is([data-home], :has(.st))` instead. The colours are the
    tokens, which follow the theme switch (`:root[data-theme]`, tokens.css). */
@@ -176,7 +176,7 @@
 	text-wrap: pretty;
 }
 
-/* ---- Small maps: JOB 02's scenes and JOB 03's stage (components/home/mini.ts) ----
+/* ---- Small maps: JOB 01's scenes and JOB 02's stage (components/home/mini.ts) ----
    Pieces of the hero map, drawn with its classes, which heromap/map.css styles under `.vm-mini` as under `varmq-map`,
    in the map's palette for the theme. No panel: the page shows through, under the map's dot grid. */
 
@@ -243,7 +243,7 @@
 	}
 }
 
-/* ---- JOB 02: the scheduling scenes (Scenes.astro, scenes.ts) ---- */
+/* ---- JOB 01: the scheduling scenes (Scenes.astro, scenes.ts) ---- */
 
 .home-jobs .scenes {
 	display: grid;
@@ -281,7 +281,7 @@
 	text-wrap: pretty;
 }
 
-/* ---- JOB 03: where jobs live (Storage.astro, store.ts) ---- */
+/* ---- JOB 02: where jobs live (Storage.astro, store.ts) ---- */
 
 .home-jobs .store-grid {
 	display: grid;
@@ -341,7 +341,7 @@
 	text-wrap: pretty;
 }
 
-/* ---- JOB 04: the benchmark lanes, on the page's own paper in each theme (Race.astro, race.ts) ---- */
+/* ---- JOB 03: the benchmark lanes, on the page's own paper in each theme (Race.astro, race.ts) ---- */
 
 /* The against-VarMQ toggle's amber: dark enough for text on light paper, the theme's amber on dark. */
 .home-jobs .race {
@@ -610,7 +610,7 @@
 	max-width: 75ch;
 }
 
-/* ---- JOB 05: the programs (Examples.astro) ---- */
+/* ---- JOB 04: the programs (Examples.astro) ---- */
 
 /* Tab bars hold their tabs and no more, so no empty end reads as a missing tab. */
 .home-jobs .seg {
@@ -618,7 +618,7 @@
 	max-width: 100%;
 }
 
-/* JOB 03's tabs lead with the store's mark, in the map's colour for it (map.css). The selected tab is filled with
+/* JOB 02's tabs lead with the store's mark, in the map's colour for it (map.css). The selected tab is filled with
    --ink, the other theme's paper, so its mark takes the other theme's colour: each one is 3:1 or more on its tab. */
 [data-store-tabs] [role='tab'] {
 	display: inline-flex;
@@ -717,7 +717,7 @@
 	}
 }
 
-/* ---- JOB 06: the index of the docs (Index.astro) ---- */
+/* ---- JOB 05: the index of the docs (Index.astro) ---- */
 
 .home-jobs .index {
 	list-style: none;

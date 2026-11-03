@@ -1,13 +1,13 @@
 ---
 title: SQLite
-description: Persistent queues in SQLite files with sqliteq. Setup, the FIFO and priority queues, runnable programs, and what sqliteq does with a job that was not acknowledged.
+description: "Persistent queues in a SQLite file with sqliteq: setup, programs to run, and what happens to unacknowledged jobs."
 ---
 
 import SetupSteps from '../../../components/ops/SetupSteps.astro';
 import SqliteFlow from '../../../components/ops/SqliteFlow.astro';
 import { sqliteSetup } from '../../../components/ops/setup-data';
 
-[sqliteq](https://github.com/goptics/sqliteq) is the SQLite adapter for varmq. It keeps jobs in SQLite database files, so jobs survive a restart of the process with no server to run. It provides persistent queues only: it has no distributed queue, so [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) does not take it. Read [persistence and distribution](/persistence/overview/) first for what a persistent queue does.
+[sqliteq](https://github.com/goptics/sqliteq) is the SQLite adapter for VarMQ. It keeps jobs in SQLite database files, so jobs survive a restart of the process with no server to run. It provides persistent queues only: it has no distributed queue, so [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) does not take it. Read [persistence and distribution](/persistence/overview/) first for what a persistent queue does.
 
 ## Setup
 
@@ -159,7 +159,7 @@ Run it again and it reopens the same file, adds three more jobs and prints the s
 
 ## Jobs that were not acknowledged
 
-[The overview](/persistence/overview/#acknowledgement) describes when varmq acknowledges a job. This is what sqliteq does with a job that was taken and not acknowledged, for example because the process died.
+[The overview](/persistence/overview/#acknowledgement) describes when VarMQ acknowledges a job. This is what sqliteq does with a job that was taken and not acknowledged, for example because the process died.
 
 The scene below shows the table of a queue named `jobs`. Take a job, then kill the process and restart the program. Or open the file from a second process while the job runs.
 

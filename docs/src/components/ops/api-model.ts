@@ -207,7 +207,7 @@ export function handle(workers: Map<string, Worker>, method: string, path: strin
 
 	// /workers/{name}/config/concurrency/{number}
 	const asked = atoi(parts[4]);
-	if (asked === null) return err(400, 'invalid concurrency value', 'The number is not an integer that fits in an int, so strconv.Atoi fails and varmq answers before it calls TunePool.');
+	if (asked === null) return err(400, 'invalid concurrency value', 'The number is not an integer that fits in an int, so strconv.Atoi fails and VarMQ answers before it calls TunePool.');
 	if (!isActive(w)) return err(500, STATUS_ERR[w.status], `TunePool needs an active worker. On a ${w.status} one it returns ErrWorker${w.status}, a 500.`);
 	const safe = safeConcurrency(asked);
 	if (safe === w.concurrency) return err(409, 'worker already has the same concurrency', 'TunePool returns ErrSameConcurrency, one of the three errors that map to 409.');
@@ -218,7 +218,7 @@ export function handle(workers: Map<string, Worker>, method: string, path: strin
 		asked < 1
 			? `A number below 1 becomes the CPU count (${CPU} on the machine that recorded this).`
 			: safe < asked
-				? `The limit went up. varmq clamps it to ${MAX_UINT32}, the largest uint32.`
+				? `The limit went up. VarMQ clamps it to ${MAX_UINT32}, the largest uint32.`
 				: raised
 					? 'The limit went up, so the worker takes more waiting jobs now.'
 					: 'The limit went down. Jobs already running keep running.',

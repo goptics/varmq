@@ -1,6 +1,6 @@
 ---
 title: Context
-description: Tie a worker to a context with WithContext or DefaultCtx, what cancelling it does to running and queued jobs, and what the worker's own Context() is for.
+description: "Tie a worker to a context, and what cancelling it does to running and queued jobs."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
@@ -28,7 +28,7 @@ The context does not reach your worker function. A [`Job[T]`](https://pkg.go.dev
 
 When the context is done, because you called its cancel function or its deadline passed, the worker shuts down the way `Stop` does. [The lifecycle page](/concepts/lifecycle/) has the states. For jobs, that means:
 
-- **A running job is not interrupted.** varmq cannot stop a function. Each running job keeps going until its function returns.
+- **A running job is not interrupted.** VarMQ cannot stop a function. Each running job keeps going until its function returns.
 - **Jobs that are still waiting do not start.** Once the worker has noticed the cancel, it hands out no new job, and a goroutine that holds a batch finishes the job it is on and parks the rest. Between the cancel and the moment the worker notices, it may still hand out a job. A waiting job is not lost, and it is not closed. It stays `Queued`, either in the queue or, if a goroutine had taken it into a batch, parked on the worker. The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts it. See [what happens to jobs](/concepts/lifecycle/#what-happens-to-jobs).
 - **The worker is `Stopping` while jobs run, then `Stopped`.** It reaches `Stopped` once the running jobs have returned and its goroutines are gone.
 - **Nothing is reported as an error.** The cancellation does not reach [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) or the [error handler](/guides/errors/).
@@ -48,13 +48,13 @@ To wait for the shutdown, use [`WaitUntilStopped`](https://pkg.go.dev/github.com
 
 ## Stopping a running job early
 
-Because varmq does not interrupt a function, a job that should end when the worker shuts down has to watch for it. The worker's `Context()` is the one to watch: it is done when your context is, and also when `Stop` or `Restart` is called. Pass it to anything that accepts a context, or select on its [`Done`](https://pkg.go.dev/context#Context) channel.
+Because VarMQ does not interrupt a function, a job that should end when the worker shuts down has to watch for it. The worker's `Context()` is the one to watch: it is done when your context is, and also when `Stop` or `Restart` is called. Pass it to anything that accepts a context, or select on its [`Done`](https://pkg.go.dev/context#Context) channel.
 
 <GoPlay example="context-stop-early" />
 
 The job would sleep for a second, but it ends early, as soon as the program cancels the context. `Err()` reports `context canceled`. The worker function reads `Context()` from the worker it belongs to, so the worker is declared first, as an [`IWorkerBinder`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder).
 
-To varmq, a job that returns early is a finished job. For a plain worker, a normal return counts as successful. With [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker), return the context's error if you want it counted as failed. [Metrics](/guides/metrics/) has the counters.
+To VarMQ, a job that returns early is a finished job. For a plain worker, a normal return counts as successful. With [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker), return the context's error if you want it counted as failed. [Metrics](/guides/metrics/) has the counters.
 
 ## The worker's Context()
 

@@ -1,11 +1,11 @@
 ---
 title: Errors
-description: How a failed job is reported to its handle, the worker's Errs() channel and WithErrHandler, and a table of every exported Err value and when it is returned.
+description: "Where the error of a failed job goes, how to handle it, and every error that VarMQ returns."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
 
-A failure in varmq shows up in one of three places, and a few values are returned directly from calls you make. This page covers where a failed job is reported, how to read the worker's error channel and set an error handler, and every exported `Err` value with the call that returns it.
+A failure in VarMQ shows up in one of three places, and a few values are returned directly from calls you make. This page covers where a failed job is reported, how to read the worker's error channel and set an error handler, and every exported `Err` value with the call that returns it.
 
 [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) has no error result. It returns a `bool`, and `false` means the queue did not take the job. See [queues](/guides/queues/#capacity).
 

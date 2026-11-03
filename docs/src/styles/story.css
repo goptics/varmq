@@ -860,7 +860,7 @@
 	}
 
 	/* Not pinned until the tour: the hero is as tall as the intro and the map, with the sections' own space above
-	   it (home.css, .section), and JOB 02's top padding is the space under it, as between any two sections. */
+	   it (home.css, .section), and JOB 01's top padding is the space under it, as between any two sections. */
 	.st:not([data-tour]) .st-stage {
 		position: relative;
 		top: 0;

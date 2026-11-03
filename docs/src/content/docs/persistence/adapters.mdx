@@ -1,11 +1,11 @@
 ---
 title: Adapters
-description: Every queue and job interface in varmq. Which interface each binding method needs, what each method means, and what the worker calls on it and when. For reading an adapter or writing one.
+description: "The queue and job interfaces that a storage adapter implements, and what the worker calls on each one."
 ---
 
 import AdapterMap from '../../../components/ops/AdapterMap.astro';
 
-A storage adapter is a type that implements some of varmq's queue interfaces. redisq and sqliteq are adapters, and a type of your own can be one. varmq decides what a queue can do by the interfaces its value implements. It checks them with a type assertion when you bind the queue or add a job, so an interface that is not implemented switches its behaviour off and is not an error. This page lists them all, from [`IBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue) to the small job interfaces. They are all in the `varmq` package.
+A storage adapter is a type that implements some of VarMQ's queue interfaces. redisq and sqliteq are adapters, and a type of your own can be one. VarMQ decides what a queue can do by the interfaces its value implements. It checks them with a type assertion when you bind the queue or add a job, so an interface that is not implemented switches its behaviour off and is not an error. This page lists them all, from [`IBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue) to the small job interfaces. They are all in the `varmq` package.
 
 For using redisq or sqliteq, read [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) instead. [The overview](/persistence/overview/) covers what persistent and distributed queues do.
 
@@ -26,7 +26,7 @@ The map below shows how the interfaces fit together. Press a part to say that yo
 | [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue), no worker | `IDistributedQueue` | `DistributedQueue[T]` |
 | [`NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedPriorityQueue), no worker | `IDistributedPriorityQueue` | `DistributedPriorityQueue[T]` |
 
-Queues store values of type `any`. An in-memory queue, and one you bind with `WithQueue` or `WithPriorityQueue`, stores the job values varmq creates. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue.Add) on a persistent or distributed queue encodes the job as JSON and passes the `[]byte` to [`Enqueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue). What the storage gives back has to be that `[]byte`, or a job value. Anything else is reported as [`ErrFailedToCastJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToCastJob), and bytes that do not decode are [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob).
+Queues store values of type `any`. An in-memory queue, and one you bind with `WithQueue` or `WithPriorityQueue`, stores the job values VarMQ creates. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue.Add) on a persistent or distributed queue encodes the job as JSON and passes the `[]byte` to [`Enqueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue). What the storage gives back has to be that `[]byte`, or a job value. Anything else is reported as [`ErrFailedToCastJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToCastJob), and bytes that do not decode are [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob).
 
 What the worker assumes of any queue:
 
@@ -38,17 +38,17 @@ What the worker assumes of any queue:
 
 ### `IBaseQueue`
 
-The root of every queue. Every queue you hand to varmq has these five methods:
+The root of every queue. Every queue you hand to VarMQ has these five methods:
 
 | Method | The worker calls it |
 |---|---|
 | [`Len() int`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Len) | Whenever it decides whether there is work: before it pulls a job, for [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending), for [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait), and for the `MaxLen` and `MinLen` [strategies](/guides/strategies/). On a persistent or distributed queue each call is a call to the storage. |
 | [`Dequeue() (any, bool)`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Dequeue) | Once for each job it takes from a queue that does not acknowledge. It does not call it on a queue that is [`IAcknowledgeable`](#iacknowledgeable), which it reads with [`DequeueWithAckId`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.DequeueWithAckId). |
-| [`Values() []any`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Values) | Only when you call [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) on the handle. varmq reads what is in the queue, clears it, then closes every value that implements [`io.Closer`](https://pkg.go.dev/io#Closer), which is how a purged job comes to read `Closed`. |
+| [`Values() []any`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Values) | Only when you call [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) on the handle. VarMQ reads what is in the queue, clears it, then closes every value that implements [`io.Closer`](https://pkg.go.dev/io#Closer), which is how a purged job comes to read `Closed`. |
 | [`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) | When you call `Purge` on the handle, as above. |
 | [`Close() error`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Close) | When you call `Close` on the handle. |
 
-On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge` and `Close` are the adapter's own methods, called directly. varmq adds nothing around them, and `Purge` closes no jobs.
+On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge` and `Close` are the adapter's own methods, called directly. VarMQ adds nothing around them, and `Purge` closes no jobs.
 
 ### `IQueue` and `IPriorityQueue`
 
@@ -56,7 +56,7 @@ On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge`
 
 The handle's `Add` calls `Enqueue` once for each job, unless the job has an ID and the queue implements [`IDedupQueue`](#idedupqueue-and-ideduppriorityqueue), which it calls instead. `true` means the item is stored. `false` makes `Add` return `false`.
 
-The priority is the number the caller passed to `Add`. varmq does not order the queue: the worker takes whatever `Dequeue` returns next, so a priority queue has to hand out the lowest number first itself. For the built-in queues, and for redisq and sqliteq, a lower number comes first.
+The priority is the number the caller passed to `Add`. VarMQ does not order the queue: the worker takes whatever `Dequeue` returns next, so a priority queue has to hand out the lowest number first itself. For the built-in queues, and for redisq and sqliteq, a lower number comes first.
 
 ### `IAcknowledgeable`
 
@@ -122,21 +122,21 @@ For a distributed queue, [`Submitted`](https://pkg.go.dev/github.com/goptics/var
 
 ### `CapacitySetter`
 
-[`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter) is optional and has one method, [`SetCapacity(cap int)`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter.SetCapacity). varmq calls it when it creates a queue handle, with the number from [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity). It calls it even when you passed no capacity, with 0, so an implementation has to read a number below 1 as no limit. After that it is up to the storage to refuse `Enqueue` when it is full.
+[`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter) is optional and has one method, [`SetCapacity(cap int)`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter.SetCapacity). VarMQ calls it when it creates a queue handle, with the number from [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity). It calls it even when you passed no capacity, with 0, so an implementation has to read a number below 1 as no limit. After that it is up to the storage to refuse `Enqueue` when it is full.
 
 Without it, [`IsFull`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) on the handle compares `Len` with the number, and `Add` is not refused. [Queues](/guides/queues/#capacity) covers capacity.
 
 ## The handle and the job interfaces
 
-The rest of the interfaces are not for adapters to implement. They describe what varmq hands you. They are listed here because they sit next to the queue interfaces in the API reference.
+The rest of the interfaces are not for adapters to implement. They describe what VarMQ hands you. They are listed here because they sit next to the queue interfaces in the API reference.
 
 ### [`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue)
 
-[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge` and `Close`, and a deprecated `NumPending` that does what `Len` does. varmq implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
+[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge` and `Close`, and a deprecated `NumPending` that does what `Len` does. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
 
 ### Job interfaces
 
-The job interfaces are small pieces that the job and group handles are built from. None of them is for storage to implement, because the jobs are varmq's own values.
+The job interfaces are small pieces that the job and group handles are built from. None of them is for storage to implement, because the jobs are VarMQ's own values.
 
 | Interface | Methods | Where it appears |
 |---|---|---|

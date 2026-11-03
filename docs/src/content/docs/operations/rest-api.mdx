@@ -1,11 +1,11 @@
 ---
 title: REST API
-description: Mount varmq's HTTP handler to list named workers, read their counters, and pause, resume, stop, restart or tune them. Covers Handler, NewServerMux, WorkerRegistry, InstanceID and InstanceHeader.
+description: "Inspect and control running workers over HTTP: list them, read their counters, and pause, resume, stop, restart or resize them."
 ---
 
 import ApiExplorer from '../../../components/ops/ApiExplorer.astro';
 
-varmq ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
+VarMQ ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
 
 :::caution
 The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
@@ -81,7 +81,7 @@ func main() {
 
 ### Run locally
 
-1. Make a module, save the program as `main.go` and add varmq:
+1. Make a module, save the program as `main.go` and add VarMQ:
 
    ```bash
    mkdir rest-demo && cd rest-demo
@@ -117,7 +117,7 @@ func main() {
 
    The first prints a `200 OK` with no body. While a job is running, the next call shows the worker as `Pausing`, and later `Paused`, as [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) does. Run `resume` once it reads `Paused`: on a worker that is still `Pausing`, it is refused (see [the status codes](#responses)). The last call changes the limit to 4.
 
-The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](https://github.com/goptics/vartop) is a separate terminal dashboard for varmq workers that reads this API, and the example's last comment suggests pointing it at `http://localhost:8080/api`.
+The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](https://github.com/goptics/vartop) is a separate terminal dashboard for VarMQ workers that reads this API, and the example's last comment suggests pointing it at `http://localhost:8080/api`.
 
 ## Which workers it serves
 
