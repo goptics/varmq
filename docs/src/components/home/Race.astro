@@ -1,5 +1,5 @@
 ---
-// JOB 04 on the home page: the benchmark lanes on the page's own paper, with the results against VarMQ next to them.
+// JOB 03 on the home page: the benchmark lanes on the page's own paper, with the results against VarMQ next to them.
 // Every figure is computed from the committed snapshot of github.com/goptics/benchmarks (bench/data.json) by
 // bench/home.ts, the same means the Benchmarks page shows. Pool figures are the mean over the rows at 50K workers (3
 // tasks x 5 producer shapes) and over GOMAXPROCS 24, 8 and 4. Memory is the benchmark's B/op for the same rows, in MB
@@ -91,7 +91,7 @@ const machine = d.env.machine.split(', SQLite')[0];
 
 <section class="home-row race section" id="benchmarks" aria-labelledby="bench-title" data-race style="padding-top:0">
 	<div class="wrap">
-		<div class="banner"><span class="banner__id">JOB 04</span><span>Measured in public</span><span class="banner__rule"></span><span class="banner__meta">raw output published</span></div>
+		<div class="banner"><span class="banner__id">JOB 03</span><span>Measured in public</span><span class="banner__rule"></span><span class="banner__meta">raw output published</span></div>
 		<div class="section__head">
 			<h2 class="h2" id="bench-title">The numbers, and where they do not favor VarMQ.</h2>
 			<p>
@@ -176,7 +176,7 @@ const machine = d.env.machine.split(', SQLite')[0];
 		</details>
 
 		<p class="race__foot">
-			Run of {d.source.runDate} · varmq {varmqVersion} · {machine} · Absolute numbers vary between
+			Run of {d.source.runDate} · VarMQ {varmqVersion} · {machine} · Absolute numbers vary between
 			runs, so compare ratios within one run. Figures come from the raw output in{' '}
 			<a href="https://github.com/goptics/benchmarks">github.com/goptics/benchmarks</a>;
 			charts and the harness are at <a href="https://benchmarks.goptics.org">benchmarks.goptics.org</a>.

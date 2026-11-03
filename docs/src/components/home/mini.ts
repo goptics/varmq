@@ -1,5 +1,5 @@
-// Small pieces of the hero map, for the home page's sections under the story: JOB 02's three scheduling scenes
-// (scenes.ts) and JOB 03's storage stage (store.ts). They draw with the map's own classes (`.vm-chip`, `.vm-lane`,
+// Small pieces of the hero map, for the home page's sections under the story: JOB 01's three scheduling scenes
+// (scenes.ts) and JOB 02's storage stage (store.ts). They draw with the map's own classes (`.vm-chip`, `.vm-lane`,
 // `.vm-card`, `.vm-go`, `.vm-job` and the rest, styled by heromap/map.css for any `.vm-mini`) and its sizes
 // (heromap/scene.ts), so they follow the theme as the map does. The defs they need, the glow and the lanes' edge, are
 // in Scenes.astro, once for the page.

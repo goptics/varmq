@@ -1,12 +1,12 @@
 ---
 title: Worker types
-description: NewWorker, NewErrWorker and NewResultWorker side by side. What each function returns, what Add hands back, and which queues each worker can bind.
+description: "NewWorker, NewErrWorker and NewResultWorker compared: what each returns, what Add gives back, and which queues each can bind."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
 import WorkerTypes from '../../../components/guides-a/WorkerTypes.astro';
 
-varmq has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
+VarMQ has three worker constructors. In each, your worker function receives a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), where `T` is the type of the data you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add). They differ in what the function returns. That decides what `Add` hands back, and how you find out what happened to a job.
 
 | Constructor | Your function | `Add` returns | Read the outcome with |
 |---|---|---|---|

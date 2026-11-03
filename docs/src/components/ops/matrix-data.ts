@@ -67,7 +67,7 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, N, N, N, N, N, N],
 		{
-			text: 'varmq has no adapter of its own: you add redisq (Redis) or sqliteq (SQLite). The best case is at-least-once delivery, so a job can run twice.',
+			text: 'VarMQ has no adapter of its own: you add redisq (Redis) or sqliteq (SQLite). The best case is at-least-once delivery, so a job can run twice.',
 			href: '/persistence/overview/#what-this-guarantees',
 			source: 'What this guarantees',
 		},
@@ -120,7 +120,7 @@ export const ROWS: Row[] = [
 		'Lifecycle',
 		[Y, N, Y, Y, N, Y, N],
 		{
-			text: 'Cancelling the context shuts the worker down. A running job is not interrupted: varmq cannot stop a function. Jobs that wait do not start.',
+			text: 'Cancelling the context shuts the worker down. A running job is not interrupted: VarMQ cannot stop a function. Jobs that wait do not start.',
 			href: '/guides/context/#what-cancelling-does',
 			source: 'Context',
 		},

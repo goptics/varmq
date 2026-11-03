@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast VarMQ is against other Go worker pools and against Redis and SQLite job queues. Real numbers from the raw benchmark output, with filters, charts, and the groups where VarMQ does not win.
+description: "VarMQ against other Go worker pools and Redis and SQLite job queues, from raw benchmark output, with the groups it does not win."
 ---
 
 import Explorer from '../../../components/bench/Explorer.astro';
@@ -11,7 +11,7 @@ export const varmq = data.env.versions.find((v) => v.name === 'varmq').version;
 export const rows = data.datasets.reduce((n, d) => n + d.rowCount, 0).toLocaleString('en-US');
 export const repo = `https://github.com/${data.source.repo}`;
 
-This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every row on it is one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>, and every figure is read from those rows or averaged over them. The run is from {data.source.runDate}, with varmq {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
+This page compares VarMQ with other Go worker pools, Redis job queues and SQLite job queues. Every row on it is one line of the raw `go test -bench` output in <a href={repo}>goptics/benchmarks</a>, and every figure is read from those rows or averaged over them. The run is from {data.source.runDate}, with VarMQ {varmq}, at commit <a href={`${repo}/tree/${data.source.commit}`}><code>{sha}</code></a>. The page holds all {rows} rows of that run. Each result links to its line in the raw file.
 
 ## Explore the rows
 
@@ -57,4 +57,4 @@ task sqlite:bench
 
 Run details, at the foot of the explorer, shows the command for the groups in scope. The full run takes hours: the committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.
 
-See also the [comparison](/reference/comparison/) of features and the [bench log](https://varmq.goptics.org/bench-log/).
+See also the [comparison](/reference/comparison/) of features and the [micro-benchmark log](https://varmq.goptics.org/bench-log/) of each release.

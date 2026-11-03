@@ -1,16 +1,16 @@
 ---
 title: What is VarMQ
-description: What varmq is, when to use it, and its worker and queue model.
+description: "What VarMQ is, when to use it, and its worker and queue model."
 icon: CircleQuestionMark
 ---
 
 import PoolScene from '../../../components/learn/PoolScene.astro';
 
-varmq is a typed worker pool and message queue for Go. You give a worker a function and a concurrency limit, bind one or more queues to it, and add jobs to those queues. The worker runs each job through your function, never more at once than the limit allows.
+VarMQ is a typed worker pool and job queue for Go. You give a worker a function and a concurrency limit, bind one or more queues to it, and add jobs to those queues. The worker runs each job through your function, never more at once than the limit allows.
 
 ## When to use it
 
-Reach for varmq when a program has work to run in the background and you want a say in how much of it runs at once:
+Reach for VarMQ when a program has work to run in the background and you want a say in how much of it runs at once:
 
 - **Bounded concurrency with typed jobs.** A [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job) carries your data type, and a job can hand back an error ([`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker)) or a result and an error ([`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker)).
 - **Several sources, one pool.** One worker can take jobs from plain queues, priority queues and topics at the same time.
@@ -23,7 +23,7 @@ If all you need is to run a fixed set of functions and wait for them, [`errgroup
 
 ## The model: a worker is a pool, a queue is a source
 
-varmq splits the work between two things.
+VarMQ splits the work between two things.
 
 **A worker is the pool.** It owns your function and the concurrency limit. The limit is an upper bound, not a fixed number of goroutines: the worker starts goroutines while jobs are waiting and lets them exit once the queue drains.
 
@@ -33,4 +33,4 @@ Below, six jobs are added to a worker with concurrency 4. Four start right away,
 
 <PoolScene />
 
-Next: [install varmq](/start/installation/), then run the [quick start](/start/quick-start/) in your browser.
+Next: [install VarMQ](/start/installation/), then run the [quick start](/start/quick-start/) in your browser.

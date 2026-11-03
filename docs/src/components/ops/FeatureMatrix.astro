@@ -21,9 +21,9 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 		</div>
 		<div class="mx__set" role="group" aria-label="Show only">
 			<span class="mx__legend" aria-hidden="true">Show only</span>
-			<button type="button" class="mx__chip" aria-pressed="false" data-flag="limit">Limits in varmq <b>{limits}</b></button>
+			<button type="button" class="mx__chip" aria-pressed="false" data-flag="limit">Limits in VarMQ <b>{limits}</b></button>
 			<button type="button" class="mx__chip" aria-pressed="false" data-flag="shared">Others have it too</button>
-			<button type="button" class="mx__chip" aria-pressed="false" data-flag="unique">Only varmq</button>
+			<button type="button" class="mx__chip" aria-pressed="false" data-flag="unique">Only VarMQ</button>
 		</div>
 		<div class="mx__set" role="group" aria-label="Compare with">
 			<span class="mx__legend" aria-hidden="true">Compare with</span>
@@ -37,13 +37,13 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 	</div>
 
 	<div class="mx__how">
-		<b>How to read it.</b> Every row is a feature varmq has, so the varmq column reads Yes all the way down. The table does not list features that another library has and varmq lacks.
-		Where a varmq Yes has a limit, the row says so in amber, with the page of these docs that explains it. For speed, see the{' '}
+		<b>How to read it.</b> Every row is a feature VarMQ has, so the VarMQ column reads Yes all the way down. The table does not list features that another library has and VarMQ lacks.
+		Where a VarMQ Yes has a limit, the row says so in amber, with the page of these docs that explains it. For speed, see the{' '}
 		<a href="/reference/benchmarks/">benchmarks</a>.
 	</div>
 
 	<table class="mx__table">
-		<caption class="sr-only">Features of varmq, ants, pond, conc, workerpool, errgroup and gopool. Each cell says Yes or No.</caption>
+		<caption class="sr-only">Features of VarMQ, ants, pond, conc, workerpool, errgroup and gopool. Each cell says Yes or No.</caption>
 		<thead>
 			<tr>
 				<th scope="col" class="mx__feat">Feature</th>
@@ -64,7 +64,7 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 							<span class="mx__name">{r.feature}</span>
 							{r.limit && (
 								<span class="mx__limit">
-									<b>varmq limit</b> {r.limit.text} <a href={r.limit.href}>{r.limit.source}</a>
+									<b>VarMQ limit</b> {r.limit.text} <a href={r.limit.href}>{r.limit.source}</a>
 								</span>
 							)}
 						</th>

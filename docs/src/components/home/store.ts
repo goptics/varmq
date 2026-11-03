@@ -1,4 +1,4 @@
-// JOB 03's stage: what a restart of your process does to its jobs, for each place they can live, drawn as a piece of
+// JOB 02's stage: what a restart of your process does to its jobs, for each place they can live, drawn as a piece of
 // the hero map (mini.ts). The process holds Add() and the worker. In memory the queue is in the process too; with Redis
 // or SQLite it is in the store below, with the jobs taken and not yet acknowledged in its IN FLIGHT tray, as on the
 // map. Each event (take a job, run it, Add 5 jobs, Restart process) is a short anime.js timeline on the stage.

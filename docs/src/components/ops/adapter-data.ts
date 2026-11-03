@@ -43,7 +43,7 @@ export const BASE: NodeDef = {
 	on: () => true,
 	enable: () => {},
 	methods: ['Len() int', 'Dequeue() (any, bool)', 'Values() []any', 'Purge()', 'Close() error'],
-	adds: 'The root of every queue. Every queue you hand to varmq has these five methods.',
+	adds: 'The root of every queue. Every queue you hand to VarMQ has these five methods.',
 	worker: [
 		'Len: whenever it decides whether there is work. On a persistent or distributed queue each call is a call to the storage.',
 		'Dequeue: once for each job it takes from a queue that does not acknowledge.',
@@ -87,7 +87,7 @@ export const NODES: NodeDef[] = [
 		methods: ['Enqueue(item any, priority int) bool'],
 		adds: 'Adds Enqueue with a priority to IBaseQueue. A type has one Enqueue, so it is a FIFO queue or a priority queue, not both.',
 		worker: [
-			'The priority is the number the caller passed to Add. varmq does not order the queue.',
+			'The priority is the number the caller passed to Add. VarMQ does not order the queue.',
 			'The worker takes whatever Dequeue returns next, so a priority queue has to hand out the lowest number first itself.',
 		],
 		bind: 'WithPriorityQueue',
@@ -290,7 +290,7 @@ export const NODES: NodeDef[] = [
 		methods: ['SetCapacity(cap int)'],
 		adds: 'Optional. Lets WithQueueCapacity reach the storage.',
 		worker: [
-			'varmq calls it when it creates a queue handle, with the number from WithQueueCapacity. It calls it with 0 when you passed none, so read a number below 1 as no limit.',
+			'VarMQ calls it when it creates a queue handle, with the number from WithQueueCapacity. It calls it with 0 when you passed none, so read a number below 1 as no limit.',
 			'After that it is up to the storage to refuse Enqueue when it is full.',
 		],
 		by: [],
@@ -321,7 +321,7 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 			text: !enqueue
 				? 'There is no Enqueue yet, so a job cannot get in.'
 				: c.prio
-					? 'Lowest number first, but only if your storage hands jobs out that way. varmq does not order the queue.'
+					? 'Lowest number first, but only if your storage hands jobs out that way. VarMQ does not order the queue.'
 					: 'First in, first out, as your storage hands jobs out.',
 		},
 		{
@@ -331,8 +331,8 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 				enqueue && c.dedup
 					? 'Add calls EnqueueOnce for a job with an ID. A retried Add stores the job once.'
 					: c.ack
-						? 'The ID goes into the stored JSON and nothing checks it. varmq does not deduplicate for you.'
-						: 'The job keeps its ID, and nothing checks it. varmq does not deduplicate for you.',
+						? 'The ID goes into the stored JSON and nothing checks it. VarMQ does not deduplicate for you.'
+						: 'The job keeps its ID, and nothing checks it. VarMQ does not deduplicate for you.',
 		},
 		{
 			label: 'Taking a job',

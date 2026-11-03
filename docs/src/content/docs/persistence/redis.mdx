@@ -1,13 +1,13 @@
 ---
 title: Redis
-description: Persistent and distributed queues on Redis with redisq. Setup, the four queue types, runnable programs, and what redisq does with a job that was not acknowledged.
+description: "Persistent and distributed queues on Redis with redisq: setup, programs to run, and what happens to unacknowledged jobs."
 ---
 
 import SetupSteps from '../../../components/ops/SetupSteps.astro';
 import RedisFlow from '../../../components/ops/RedisFlow.astro';
 import { redisSetup } from '../../../components/ops/setup-data';
 
-[redisq](https://github.com/goptics/redisq) is the Redis adapter for varmq. It provides first-in first-out and priority queues on one Redis server, each in a persistent and a distributed form. Read [persistence and distribution](/persistence/overview/) first for what the two kinds of queue do.
+[redisq](https://github.com/goptics/redisq) is the Redis adapter for VarMQ. It provides first-in first-out and priority queues on one Redis server, each in a persistent and a distributed form. Read [persistence and distribution](/persistence/overview/) first for what the two kinds of queue do.
 
 ## Setup
 
@@ -26,7 +26,7 @@ redisq needs Redis 6.0 or newer, with Lua scripts allowed: it takes, adds and pu
 
 A queue with the key `jobs` keeps its waiting jobs under `jobs`. It keeps the jobs a worker took and has not acknowledged under `jobs:nacked`, with their deadlines under `jobs:timeouts` and the heartbeats of the queue objects that took them under `jobs:heartbeats`. Its other keys, and a distributed queue's wake-up channels, also start with `jobs:`.
 
-Redis keeps these in memory. Whether they survive a restart of Redis itself is up to Redis's own persistence settings, which neither varmq nor redisq changes.
+Redis keeps these in memory. Whether they survive a restart of Redis itself is up to Redis's own persistence settings, which neither VarMQ nor redisq changes.
 
 ## A persistent queue
 
@@ -261,7 +261,7 @@ To see a crash instead, run the producer again and kill one consumer with `kill 
 
 ## Jobs that were not acknowledged
 
-[The overview](/persistence/overview/#acknowledgement) describes when varmq acknowledges a job. This is what redisq does with a job that was taken and not acknowledged, for example because the process died.
+[The overview](/persistence/overview/#acknowledgement) describes when VarMQ acknowledges a job. This is what redisq does with a job that was taken and not acknowledged, for example because the process died.
 
 The scene below shows the keys of a queue named `jobs`. Take a job, then kill the process or close the queue, and move the slider to move time forward.
 

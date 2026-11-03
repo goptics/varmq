@@ -44,7 +44,7 @@ const groups = [
 
 const describe =
 	'An API explorer for varmq’s REST handler, mounted at /varmq. It runs a model of the handler in the page and calls no server. ' +
-	'Two workers are registered: email-sender and image-processor. Pick a request or type one, then press Send. The reply shows the status line, the headers varmq sets and the body, with a sentence that says why. ' +
+	'Two workers are registered: email-sender and image-processor. Pick a request or type one, then press Send. The reply shows the status line, the headers VarMQ sets and the body, with a sentence that says why. ' +
 	'Control requests change the worker, and the worker cards above the reply show the new status. A pause on a running worker makes it Pausing until its running jobs end. Use Let running jobs finish to let time pass. ' +
 	'Some requests fail on purpose: resume on a Pausing worker is a 500, start on a running worker is a 409, and an unknown action is a 400.';
 ---

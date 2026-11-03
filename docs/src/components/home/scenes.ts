@@ -1,4 +1,4 @@
-// JOB 02's three scenes, each a small piece of the hero map with its own looping anime.js timeline (mini.ts): a
+// JOB 01's three scenes, each a small piece of the hero map with its own looping anime.js timeline (mini.ts): a
 // priority queue, three queues on one worker under RoundRobin, and a topic with two subscribed workers. The order the
 // jobs run in comes from order.ts, which does what varmq does, and the Go call of each step is the caption above the
 // scene. Scenes.astro draws each one's still frame at build time with `build`; `boot` plays them on the page.
