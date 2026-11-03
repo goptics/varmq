@@ -70,7 +70,7 @@ func registerMetrics(w varmq.Worker, namespace string) {
 	gauge("workers_processing", "Jobs being processed right now", w.NumProcessing)
 	gauge("workers_concurrency", "Maximum number of jobs processed at once", w.NumConcurrency)
 	gauge("workers_idle", "Idle goroutines in the pool", w.NumIdleWorkers)
-	gauge("waiting_total", "Jobs not started yet; can read high while batches run", w.NumPending)
+	gauge("jobs_waiting", "Jobs not started yet; can read high while batches run", w.NumPending)
 
 	counter("submitted_total", "Jobs the queue accepted", m.Submitted)
 	counter("completed_total", "Jobs whose function has returned", m.Completed)
@@ -105,13 +105,13 @@ The repository's example registers collectors with the same eight names, one [`M
    foo_worker_failed_total 0
    foo_worker_submitted_total 1000
    foo_worker_successful_total 190
-   foo_worker_waiting_total 800
+   foo_worker_jobs_waiting 800
    foo_worker_workers_concurrency 10
    foo_worker_workers_idle 0
    foo_worker_workers_processing 10
    ```
 
-4. Ask again after about fifteen seconds. All 1000 jobs have completed, `waiting_total` and `workers_processing` read 0, and `workers_idle` reads 1.
+4. Ask again after about fifteen seconds. All 1000 jobs have completed, `jobs_waiting` and `workers_processing` read 0, and `workers_idle` reads 1.
 
 Leave out `grep` to see the `# HELP` and `# TYPE` lines too, and the Go runtime and process metrics. [`promhttp.Handler()`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus/promhttp#Handler) serves the default registry, which has those as well.
 
@@ -126,7 +126,7 @@ With the namespace `foo_worker`, each name starts with `foo_worker_`. The scene 
 | `workers_processing` | gauge | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | jobs being processed right now |
 | `workers_concurrency` | gauge | [`NumConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) | the concurrency limit |
 | `workers_idle` | gauge | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | idle goroutines in the pool |
-| `waiting_total` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
+| `jobs_waiting` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
 | `submitted_total` | counter | [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) | jobs the queue accepted |
 | `completed_total` | counter | [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) | jobs whose function has returned |
 | `successful_total` | counter | [`Successful`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Successful) | jobs that returned without an error or a panic |
@@ -143,19 +143,18 @@ These use the namespace `foo_worker`. Change it to the namespace you pass to eac
 | How many jobs finish each second? | `rate(foo_worker_completed_total[5m])` |
 | What share of finished jobs fail? | `rate(foo_worker_failed_total[5m]) / rate(foo_worker_completed_total[5m])` |
 | How full is the pool? (1 means every slot runs a job) | `foo_worker_workers_processing / foo_worker_workers_concurrency` |
-| How large is the backlog? | `foo_worker_waiting_total` |
+| How large is the backlog? | `foo_worker_jobs_waiting` |
 | Do jobs arrive faster than they finish? | `rate(foo_worker_submitted_total[5m]) - rate(foo_worker_completed_total[5m])` |
 
 The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row is above 0 while jobs arrive faster than they finish. On a persistent queue it can mislead: `Submitted` counts only this process's `Add` calls, so a job another process added is not counted, and `Completed` can then be higher than `Submitted`. On a distributed queue the counters may differ from what you expect. [The overview](/persistence/overview/#metrics) says what each counter counts there.
 
 ## What to watch for
 
-- **`waiting_total` is a gauge.** It goes up and down. The `_total` suffix is the Prometheus convention for counters, so you may want another name for it in your own code.
 - **The reads are not one snapshot.** A scrape reads eight values at slightly different moments, and a job can finish between two of them. A set read while jobs run can be off by a few. [Metrics](/guides/metrics/#reading-them) says more.
 - **The counters start at zero when the worker is created.** They are totals. Use `rate()` or `increase()` in Prometheus to see how many jobs ran in a period. A restart of the process zeroes them, and Prometheus functions such as `rate()` read a drop as a counter reset.
 - **[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) makes a counter fall.** It zeroes the four counters, and Prometheus reads that as a reset, like a restart. Do not call it on a worker you export unless you want that.
 - **One namespace for each worker.** `MustRegister` panics when a collector with the same metric name is registered twice, with `duplicate metrics collector registration attempted`. Register each worker under its own namespace.
-- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite, so every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics). The `Submitted` count of a distributed queue may differ from what you expect, and these docs do not cover how a distributed queue's counters count yet.
+- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite, so every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics).
 
 ## Scraping it
 

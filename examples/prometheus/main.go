@@ -84,7 +84,7 @@ func registerMetrics(w varmq.Worker, namespace string) {
 		prometheus.NewGaugeFunc(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
-				Name:      "waiting_total",
+				Name:      "jobs_waiting",
 				Help:      "Number of tasks waiting to be processed",
 			},
 			func() float64 {

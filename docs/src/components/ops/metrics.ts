@@ -13,11 +13,11 @@ const svg = (tag: string, attrs: Record<string, string | number> = {}, ...kids: 
 
 /** The value of a query that only reads gauges at this moment. */
 const NOW: Record<string, (s: Sample) => string> = {
-	foo_worker_waiting_total: (s) => String(s.waiting),
+	foo_worker_jobs_waiting: (s) => String(s.waiting),
 	foo_worker_workers_processing: (s) => String(s.processing),
 	foo_worker_workers_idle: (s) => String(s.idle),
 	'foo_worker_workers_processing / foo_worker_workers_concurrency': (s) => String(s.processing / s.concurrency),
-	'avg_over_time(foo_worker_waiting_total[5m]) > 500': (s) => (s.waiting > 500 ? 'true at this scrape alone' : 'not above 500 at this scrape'),
+	'avg_over_time(foo_worker_jobs_waiting[5m]) > 500': (s) => (s.waiting > 500 ? 'true at this scrape alone' : 'not above 500 at this scrape'),
 };
 
 const root = document.querySelector<HTMLElement>('[data-prom]');

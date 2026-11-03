@@ -50,9 +50,15 @@ pnpm test
 Install Go 1.26 or later and [Task](https://taskfile.dev), then clone <a href={repo}>goptics/benchmarks</a>. The Redis suite needs Docker. The SQLite suite needs a C compiler.
 
 ```bash
-task pool:bench                      # one iteration of every pool benchmark
+# Quick check: one iteration of every benchmark
+task pool:bench
 task redis:up redis:bench redis:down
 task sqlite:bench
+
+# The published files: two iterations per row (-benchtime=2x)
+task pool:txt                        # at -cpu 24, 8 and 4
+task redis:up redis:txt redis:down
+task sqlite:txt
 ```
 
 Run details, at the foot of the explorer, shows the command for the groups in scope. The full run takes hours: the committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.

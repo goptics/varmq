@@ -73,7 +73,7 @@ The package exports its sentinel errors as variables, so match them with `errors
 
 [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) with the limit the worker already has returns `ErrSameConcurrency`. After [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait), [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) returns `ErrWorkerStopped`. `errors.Is` matches both.
 
-The next two sections list all thirteen, grouped by how you meet them. The messages are the text each one carries. Four of them are not returned from a call: the worker reports them on `Errs()` and to the handler.
+The next two sections list every exported error, grouped by how you meet them. The messages are the text each one carries. Four of them are not returned from a call: the worker reports them on `Errs()` and to the handler.
 
 ### Returned by calls you make
 

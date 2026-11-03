@@ -309,7 +309,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		captions: [
 			{ at: 300, text: 'SQLite keeps the *queue* in a file' },
 			{ at: 1300, text: '*Add* writes each job to jobs.db' },
-			{ at: 3300, text: 'Taken jobs stay *in flight* until acked' },
+			{ at: 3300, text: 'Taken jobs stay *in flight* until confirmed' },
 			{ at: 6800, text: 'The program !dies! mid-job' },
 			{ at: 9300, text: 'On restart they go *back* to the queue' },
 			{ at: 10900, text: 'and run again. Nothing is *lost*' },

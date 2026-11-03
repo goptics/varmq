@@ -121,7 +121,7 @@ function priority(S: Stage, tl: Timeline, caps: Captions): Scene['still'] {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Several queues, one worker: RoundRobin over alerts, reports and emails, as order.ts's roundRobin takes them.
+// Many queues, one worker: RoundRobin over alerts, reports and emails, as order.ts's roundRobin takes them.
 
 function strategy(S: Stage, tl: Timeline, caps: Captions): Scene['still'] {
 	const ys = [46, 114, 182];
