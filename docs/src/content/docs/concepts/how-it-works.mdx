@@ -75,3 +75,5 @@ With enough jobs waiting, that works out like this:
 The scene starts on a worker that has already timed its jobs, with 8 cheap jobs and concurrency 2. The first goroutine takes 4 jobs, a second goroutine is spawned for 2, and the last 2 jobs go out one at a time as goroutines free up. A fresh worker hands out one job at a time until its first batch finishes. Pick a row of the table, or set your own numbers, to see the batch size.
 
 <BatchPlanner />
+
+Next: [worker types](/guides/worker-types/).

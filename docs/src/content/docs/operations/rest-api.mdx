@@ -11,6 +11,18 @@ VarMQ ships an HTTP handler that lets you look at your workers and control them 
 The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
 :::
 
+## Routes at a glance
+
+The paths follow the prefix you give to `Handler`, for example `/varmq`.
+
+| Method | Path | Does |
+|---|---|---|
+| `GET` | `/health` | returns `{"status":"ok"}` |
+| `GET` | `/workers` | lists every registered worker, with a summary |
+| `GET` | `/workers/{name}` | returns one worker, with its counters |
+| `PATCH` | `/workers/{name}/actions/{action}` | pauses, resumes, restarts, starts or stops a worker |
+| `PATCH` | `/workers/{name}/config/concurrency/{number}` | changes the worker's concurrency limit |
+
 ## Mounting it
 
 [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) takes a path prefix and returns an [`http.Handler`](https://pkg.go.dev/net/http#Handler). It strips the prefix from each request before it looks for a route. Mount it on a mux with the prefix in the pattern, with a trailing slash:
@@ -133,13 +145,7 @@ You can read the registry yourself. `varmq.WorkerRegistry.Load("email-sender")` 
 
 ## Routes
 
-| Method | Path | Does |
-|---|---|---|
-| `GET` | `/health` | returns `{"status":"ok"}` |
-| `GET` | `/workers` | lists every registered worker, with a summary |
-| `GET` | `/workers/{name}` | returns one worker, with its counters |
-| `PATCH` | `/workers/{name}/actions/{action}` | pauses, resumes, restarts, starts or stops a worker |
-| `PATCH` | `/workers/{name}/config/concurrency/{number}` | changes the worker's concurrency limit |
+[Routes at a glance](#routes-at-a-glance) has the table of routes.
 
 The `{action}` is one of `pause`, `resume`, `restart`, `start` and `stop`. Each calls the worker method of the same name, which [lifecycle](/concepts/lifecycle/#moving-between-states) describes. Two behaviours follow from that:
 
@@ -176,13 +182,13 @@ Press **PATCH pause** on `email-sender`, then **PATCH resume**. A worker that is
 
 A response from one of these routes sets `Content-Type: application/json`, except a successful action, which has no body. An error is a JSON object with one field, `error`.
 
-| Status | When | Body |
-|---|---|---|
-| 200 | the request worked | JSON for a read, empty for an action or a concurrency change |
-| 400 | the action is not one of the five, or the concurrency is not a number | `{"error":"unknown action"}` or `{"error":"invalid concurrency value"}` |
-| 404 | no registered worker has that name | `{"error":"worker not found"}` |
-| 409 | the call returned [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) or [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | the error's message, for example `{"error":"worker is already running"}` |
-| 500 | the call returned any other error | the error's message, for example `{"error":"worker is stopped"}` |
+| Status | When | Example | Body |
+|---|---|---|---|
+| 200 | the request worked | any read, or an action the worker accepts | JSON for a read, empty for an action or a concurrency change |
+| 400 | the action is not one of the five, or the concurrency is not a number | `actions/jump`, `concurrency/four` | `{"error":"unknown action"}` or `{"error":"invalid concurrency value"}` |
+| 404 | no registered worker has that name | a worker with no name, or one removed from the registry | `{"error":"worker not found"}` |
+| 409 | the call returned [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) or [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | `start` on a running worker, or a concurrency change to the same number | the error's message, for example `{"error":"worker is already running"}` |
+| 500 | the call returned any other error | `ErrWorkerPausing`, `ErrWorkerPaused`, `ErrWorkerStopping` or `ErrWorkerStopped`: `resume` on a `Pausing` worker, `pause` on a stopped one | the error's message, for example `{"error":"worker is stopped"}` |
 
 The last two rows follow the error the worker returns. `start` on a worker that is running, and a concurrency change to the number it already has, are 409. A worker that is `Pausing`, `Paused`, `Stopping` or `Stopped` answers some calls with [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused), [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) or [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped), and those are 500. So `resume` on a worker that is `Pausing` is a 500 with `worker is pausing`, and so is `pause` on a stopped one. [Errors](/guides/errors/#returned-by-calls-you-make) lists which call returns which error.
 

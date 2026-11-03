@@ -7,6 +7,18 @@ import GoPlay from '../../../components/GoPlay.astro';
 import QueueOrder from '../../../components/guides-a/QueueOrder.astro';
 import QueueHandle from '../../../components/guides-a/QueueHandle.astro';
 
+```go
+// FIFO: jobs leave in the order you add them.
+fifo := varmq.NewWorker(process, 4).BindQueue()
+fifo.Add("first")
+fifo.Add("second")
+
+// Priority: a lower number runs first.
+prio := varmq.NewWorker(process, 4).BindPriorityQueue()
+prio.Add("report", 5)
+prio.Add("alert", 1)
+```
+
 [Workers and queues](/concepts/workers-and-queues/) showed how a worker gets a queue. This page covers the in-memory queues: the first-in first-out queue and the priority queue, how to bound them, and the calls that inspect and empty them.
 
 ## FIFO and priority queues
@@ -58,9 +70,18 @@ If you bind your own queue, the capacity reaches it only when it implements [`Ca
 
 These three work on the queue handle that `Bind...` returns.
 
-**[`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len)** is the number of jobs waiting in the queue. It leaves out a job a worker has taken into a batch, and a job the worker parked when you paused or stopped it. The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts those. A job you closed while it waited still counts until the worker reaches it. See [closing a queued job](/concepts/jobs/#closing-a-queued-job). The queue handle also has a [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.NumPending) method. It is deprecated: use `Len`.
+**[`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len)** is the number of jobs waiting in the queue.
 
-**[`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge)** removes every job that has not started and closes each one. Its [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) reads `Closed`, [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, [`Err`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) returns `nil` and [`Result`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) returns the zero value. Jobs a worker had already taken into a batch, or parked, are closed too: the worker closes a batched job as it reaches it. A job that is running is not affected. Purging also frees the IDs of the jobs it removes.
+- It leaves out a job a worker has taken into a batch, and a job the worker parked when you paused or stopped it. The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts those.
+- A job you closed while it waited still counts until the worker reaches it. See [closing a queued job](/concepts/jobs/#closing-a-queued-job).
+- The queue handle also has a [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.NumPending) method. It is deprecated: use `Len`.
+
+**[`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge)** removes every job that has not started and closes each one.
+
+- A purged job's [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) reads `Closed`, [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) returns, [`Err`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) returns `nil` and [`Result`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) returns the zero value.
+- Jobs a worker had already taken into a batch, or parked, are closed too. The worker closes a batched job as it reaches it.
+- A job that is running is not affected.
+- Purging also frees the IDs of the jobs it removes.
 
 **[`Close()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close)** stops the queue taking jobs: every later `Add` returns `false`. With the built-in queues, jobs already in the queue stay there and still run. The queue stays closed, and VarMQ has no call to reopen it. The worker is not stopped, and neither are other queues bound to it. For the worker, see the [lifecycle](/concepts/lifecycle/). The built-in queues return a `nil` error from `Close`.
 

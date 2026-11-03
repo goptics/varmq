@@ -7,6 +7,41 @@ import GoPlay from '../../../components/GoPlay.astro';
 
 A worker can follow a [`context.Context`](https://pkg.go.dev/context#Context). When that context is done, the worker shuts down. This page covers how to give a worker one, what the shutdown does to running and waiting jobs, and the worker's own [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context).
 
+## Shutting down on a signal or a deadline
+
+A context from [`signal.NotifyContext`](https://pkg.go.dev/os/signal#NotifyContext) shuts the worker down on Ctrl+C. A context from [`context.WithTimeout`](https://pkg.go.dev/context#WithTimeout) does it when the time is up. In both cases, wait for the running jobs with `WaitUntilStopped`:
+
+```go
+ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+defer stop()
+
+worker := varmq.NewWorker(process, 4, varmq.WithContext(ctx))
+queue := worker.BindQueue()
+// ... add jobs ...
+
+<-ctx.Done()              // Ctrl+C
+worker.WaitUntilStopped() // the jobs already running finish first
+```
+
+The [`context-worker` example](https://github.com/goptics/varmq/blob/v1.10.0/examples/context-worker/main.go) in the repository shows a worker with concurrency 10 and three-second jobs that stops on Ctrl+C. The jobs that are running finish, and the ones still waiting do not start.
+
+With `WithContext`, a cancel leaves the queued jobs in the queue. To finish every queued job on SIGTERM, do not tie the worker to the signal context. Wait for the signal, then call [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop):
+
+```go
+ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+defer stop()
+
+worker := varmq.NewWorker(process, 4) // no WithContext
+queue := worker.BindQueue()
+// ... add jobs ...
+
+<-ctx.Done()              // SIGTERM
+worker.WaitAndStop()      // every queued job runs, then the stop starts
+worker.WaitUntilStopped() // only if you need the Stopped state
+```
+
+`WaitAndStop` returns once the stop has started, while the worker can still be `Stopping`. A job added after its wait ends can stay queued, so stop adding jobs before you call it. See [combined calls](/guides/waiting/#combined-calls).
+
 ## Giving a worker a context
 
 [`WithContext`](https://pkg.go.dev/github.com/goptics/varmq#WithContext) sets the context of one worker. [`DefaultCtx`](https://pkg.go.dev/github.com/goptics/varmq#DefaultCtx) sets the context for every worker you create after the call.
@@ -75,21 +110,3 @@ A context that is done stays done. [`Start`](https://pkg.go.dev/github.com/gopti
 Both calls still return `nil`, and the worker shuts down again at once. Before it does, it may hand out some of the jobs waiting in the queue, and they run with `Context()` already cancelled. So a cancelled context ends the worker for good. To run again, create a new worker with a context that is still live. The jobs left in the old queue stay there until you `Purge` them.
 
 A `Stop` has no such problem: `Restart` after a `Stop` brings the worker back, because the context you passed is still live.
-
-## Shutting down on a signal or a deadline
-
-A context from [`signal.NotifyContext`](https://pkg.go.dev/os/signal#NotifyContext) shuts the worker down on Ctrl+C. A context from [`context.WithTimeout`](https://pkg.go.dev/context#WithTimeout) does it when the time is up. In both cases, wait for the running jobs with `WaitUntilStopped`:
-
-```go
-ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-defer stop()
-
-worker := varmq.NewWorker(process, 4, varmq.WithContext(ctx))
-queue := worker.BindQueue()
-// ... add jobs ...
-
-<-ctx.Done()              // Ctrl+C
-worker.WaitUntilStopped() // the jobs already running finish first
-```
-
-The [`context-worker` example](https://github.com/goptics/varmq/blob/v1.10.0/examples/context-worker/main.go) in the repository shows a worker with concurrency 10 and three-second jobs that stops on Ctrl+C. The jobs that are running finish, and the ones still waiting do not start.

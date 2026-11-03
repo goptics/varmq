@@ -6,7 +6,7 @@ description: "Bind queues to a worker, feed one worker from several queues, and 
 import GoPlay from '../../../components/GoPlay.astro';
 import BindScene from '../../../components/learn/BindScene.astro';
 
-A worker runs jobs; a queue holds them until the worker has a free slot. Apart from a producer-only distributed queue ([`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue)), you ask a worker for a queue, and that binds the two.
+A worker runs jobs; a queue holds them until the worker has a free slot. To give a worker a queue, you ask the worker for one, and that binds the two.
 
 ## Binding a queue
 
@@ -28,6 +28,16 @@ queue.Add("hello")
 | `WithPersistentQueue`, `WithDistributedQueue` | a storage adapter, such as redisq or sqliteq |
 | `WithPersistentPriorityQueue`, `WithDistributedPriorityQueue` | a storage adapter's priority queue |
 | `WithTopic` | a subscription to a topic, which you publish to instead of adding |
+
+### Which queue to bind
+
+- **FIFO in-memory queue** (`BindQueue`): jobs leave the queue in the order you add them. The queue lives only while the process runs. See [Queues](/guides/queues/).
+- **Priority queue** (`BindPriorityQueue`): each job has an `int` priority, and a lower number runs first. See [Queues](/guides/queues/#fifo-and-priority-queues).
+- **Persistent queue** (`WithPersistentQueue`): one process wants its jobs to survive a restart. See [Persistence and distribution](/persistence/overview/).
+- **Distributed queue** (`WithDistributedQueue`): workers in several processes share one queue, and each job goes to one of them. See [Persistence and distribution](/persistence/overview/#persistent-or-distributed).
+- **Topic** (`WithTopic`): every subscribed worker must get its own job for each payload. Topics are in-memory only. See [Topics](/guides/topics/).
+
+A process that only adds jobs does not need a worker. [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) wraps a distributed queue's storage with no worker bound to it.
 
 ## One worker, several queues
 
@@ -53,3 +63,5 @@ To get jobs to more than one worker, use a different source:
 
 - **Every worker gets every job:** publish to a [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) and subscribe each worker with `WithTopic`. Topics are in-memory only.
 - **Workers in several processes share the jobs:** bind each one to the same distributed queue with `WithDistributedQueue`. Each job goes to one of them.
+
+Next: [jobs](/concepts/jobs/).

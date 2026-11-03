@@ -36,13 +36,23 @@ A status is a snapshot. Between reading it and acting on it the worker may have 
 
 ## Moving between states
 
-| Call | From | Result | Errors from other states |
-|---|---|---|---|
-| [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) | `Initiated`, `Stopped` | `Idle` | [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker) from `Idle` or `Running`; [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused) or [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) |
-| [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) | `Idle` becomes `Paused`; `Running` becomes `Pausing`, then `Paused` | already `Pausing` or `Paused`: no error | [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) from `Initiated`; `ErrWorkerStopping`; [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) |
-| [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) | `Paused` becomes `Idle`, and the worker pulls jobs again | already `Idle` or `Running`: no error | `ErrNotRunningWorker` from `Initiated`; `ErrWorkerPausing`; `ErrWorkerStopping`; `ErrWorkerStopped` |
-| [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) | `Idle`, `Running`, `Pausing` or `Paused` become `Stopping`, then `Stopped` | already `Stopping` or `Stopped`: no error | `ErrNotRunningWorker` from `Initiated` |
-| [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) | any state but `Initiated` | stops, waits for `Stopped`, starts again: `Idle` | `ErrNotRunningWorker` from `Initiated` |
+| Call | From | Result |
+|---|---|---|
+| [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) | `Initiated`, `Stopped` | `Idle` |
+| [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) | `Idle` becomes `Paused`; `Running` becomes `Pausing`, then `Paused` | already `Pausing` or `Paused`: no error |
+| [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) | `Paused` becomes `Idle`, and the worker pulls jobs again | already `Idle` or `Running`: no error |
+| [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) | `Idle`, `Running`, `Pausing` or `Paused` become `Stopping`, then `Stopped` | already `Stopping` or `Stopped`: no error |
+| [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) | any state but `Initiated` | stops, waits for `Stopped`, starts again: `Idle` |
+
+From any other state, each call returns an error. The errors below are in the same order as the states.
+
+| Call | Returns an error from | Errors |
+|---|---|---|
+| `Start` | `Idle` or `Running`; `Pausing`; `Paused`; `Stopping` | [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker); [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing); [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused); [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) |
+| `Pause` | `Initiated`; `Stopping`; `Stopped` | [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker); `ErrWorkerStopping`; [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) |
+| `Resume` | `Initiated`; `Pausing`; `Stopping`; `Stopped` | `ErrNotRunningWorker`; `ErrWorkerPausing`; `ErrWorkerStopping`; `ErrWorkerStopped` |
+| `Stop` | `Initiated` | `ErrNotRunningWorker` |
+| `Restart` | `Initiated` | `ErrNotRunningWorker` |
 
 The errors are values in the package, listed under [Variables](https://pkg.go.dev/github.com/goptics/varmq#pkg-variables). Two details:
 
