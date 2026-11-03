@@ -73,12 +73,7 @@ The handles in this guide are what an in-memory queue's `Add` returns. On a pers
 
 ## What follows the function
 
-All three constructors take the same trailing arguments, `config ...any`:
-
-- An `int` sets the concurrency. The default is 1, and a value below 1 means one per CPU. [Concurrency](/guides/concurrency/) covers it.
-- A `string` names the worker, the same as [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName).
-- A [`ConfigFunc`](https://pkg.go.dev/github.com/goptics/varmq#ConfigFunc), such as [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), applies that option.
-- A value of any other type is ignored, with no error.
+All three constructors take the same trailing arguments, `config ...any`: an `int` for the concurrency, a `string` for the name, and option functions such as [`WithAutoRun`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun). [Configuration](/guides/configuration/#options-and-positional-arguments) has the rules.
 
 ```go
 worker := varmq.NewResultWorker(parse, 4, "parser", varmq.WithAutoRun(false))

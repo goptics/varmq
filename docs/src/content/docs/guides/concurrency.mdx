@@ -38,7 +38,7 @@ Four methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) r
 |---|---|
 | `NumConcurrency` | the limit |
 | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) | the jobs running right now, counted as busy goroutines |
-| [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | the jobs that have not started: waiting in a queue, in a batch a goroutine took, or parked by a pause or stop. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
+| [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | the jobs that have not started. [Waiting](/guides/waiting/#numpending-and-numprocessing) says what it counts |
 | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | the idle goroutines waiting in the pool for a job |
 
 `NumProcessing` stays at or below the limit, except for a while after `TunePool` lowers the limit. All four are snapshots: they can change right after you read them.

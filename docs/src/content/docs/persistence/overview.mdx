@@ -51,7 +51,7 @@ Three details about step 3:
 
 - **A failed or panicking job is acknowledged too.** VarMQ recovers a panic, counts the job as failed and reports the panic. Then it acknowledges the job like any other. Nothing in VarMQ retries a job.
 - **A job whose acknowledgement fails is reported.** If `Acknowledge` returns `false`, the worker sends [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) to `Errs()` and the handler. The job's function has already run.
-- **Taken jobs run.** A worker with these queues takes one job per free slot and starts it. A [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) or [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) does not park a job the worker already took, because it is unacknowledged and a long wait could let a visibility timeout hand it to another consumer. Call [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) before you close the adapter's queue, so that running jobs can acknowledge.
+- **Taken jobs run.** A worker with these queues takes one job per free slot and starts it. A [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) or [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) does not park a job the worker already took, because it is unacknowledged and a long wait could let a visibility timeout hand it to another consumer. See [shutting down](#shutting-down).
 
 The scene below runs one job through these steps. Pick where the queue lives, then press **Kill the process** at any step. It shows what the storage holds, and what redisq, sqliteq or an adapter of your own does about a job that was taken and not acknowledged.
 
@@ -80,6 +80,17 @@ worker.Start()
 A worker that starts on creation, which is the default, signals its event loop to look for work before you have bound the queue. If the loop reads that signal first, it finds no queue. Unless the adapter signals on bind, as below, nothing signals it again until something in this process does, as listed above, so the old jobs can sit in storage until then. With [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun), [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) runs after the bind and signals the loop itself. [Lifecycle](/concepts/lifecycle/#withautorun) covers the option.
 
 Adapters that implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable) signal the worker when you bind them. redisq and sqliteq both do, so with them the order does not matter.
+
+## Shutting down
+
+Close things in this order, so that every running job can acknowledge:
+
+1. Stop adding jobs.
+2. Call [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) on the worker. Running jobs finish and acknowledge. To run every waiting job first, call [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop), then `WaitUntilStopped`.
+3. Call `Close` on the adapter's queue. With redisq, `Close` puts back every job that queue object took and did not acknowledge, so a job that still runs would run again.
+4. Call `Close` on the adapter's `Queues` value.
+
+With `defer`, the order is the reverse of the calls: defer the `Queues` close first, then the queue close, as the programs on [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) do.
 
 ## Metrics
 

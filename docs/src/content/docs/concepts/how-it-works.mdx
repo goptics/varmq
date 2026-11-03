@@ -42,7 +42,7 @@ A hand-off costs the event loop the same whether a job takes a nanosecond or a m
 ### What batching means for your code
 
 - **Jobs waiting in a batch are still `Queued`.** The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them and `NumProcessing` does not. You can still [close them](/concepts/jobs/#closing-a-queued-job).
-- **On `Stop` or `Pause`,** each goroutine finishes its running job and parks the rest of its batch. `NumPending` counts the parked jobs, but the queue's `Len()` does not. They run first, in order, after `Resume` or `Restart`, and `Purge` closes them. See the [lifecycle](/concepts/lifecycle/#what-happens-to-jobs).
+- **On `Stop` or `Pause`, the rest of a batch is parked.** See [what happens to jobs](/concepts/lifecycle/#what-happens-to-jobs).
 - **Capacity counts only jobs still in the queue.** A bounded queue can have up to 32 more jobs per goroutine pending, held in batches.
 
 Not every source batches:
