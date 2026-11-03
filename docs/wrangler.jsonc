@@ -1,0 +1,10 @@
+// The Worker that serves a pull request's docs preview. The Docs Preview
+// workflow deploys it as varmq-docs-pr-<number>, overriding this name.
+{
+  "name": "varmq-docs-preview",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

@@ -16,6 +16,7 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 | `varmq-multi-queue.svg` | `gen_multi.py` | `multi-queue.tpl.svg` | 3 queues, RoundRobin, concurrency 2 |
 | `varmq-topic.svg` | `gen_topic.py` | `topic.tpl.svg` | in-memory topic, 2 subscribers, per-cursor reads, chunk freeing |
 | `varmq-batch.svg` | `gen_batch.py` | `batch.tpl.svg` | batched dispatch: `Add` ×8, concurrency 2, 4 + 2 jobs per hand-off, then 1 each |
+| `varmq-lifecycle.svg` | `gen_lifecycle.py` | `lifecycle.tpl.svg` | the seven worker states beside a worker walking Start, Pause, Resume, Stop, Restart |
 
 ## How it works
 
@@ -28,7 +29,7 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 ## Rules (why it is built this way)
 
 - **CSS `@keyframes` only.** GitHub renders README SVGs through `<img>`: no JavaScript, and SMIL / `offset-path` are unreliable. Use the `r` attribute, not CSS `r` (Safari).
-- **Seamless loop.** Every animation ends in its start state: empty queues, idle workers.
+- **Seamless loop.** Every animation ends in its start state: empty queues, idle workers. The lifecycle diagram is the exception: it ends with a fresh `Initiated` worker, since no call returns a worker to `Initiated`.
 - **Match varmq's real behaviour.** Queues start empty (the event loop dispatches immediately). `Add` / `AddAll` signal once per job, but the signal channel holds one pending signal, so extra signals are drawn as dropped (`worker_eventloop.go` `notifyToPullNextJobs`). Done workers signal through `releaseProcessingSlot`.
 - **Batches.** `processNextJob` hands a worker its fair share of the backlog, `pending / min(concurrency, pending)`, in one go, and the goroutine signals done once per hand-off. The share is capped by `batchBudget`: just enough jobs that the live workers come back for a hand-off no more than about every 32 µs between them (measured by the last batch), and one job until a batch has run. The diagrams loop, so the jobs count as measured cheap. `varmq-batch.svg` shows it; in the worker-pool diagram (6 jobs, concurrency 4) the share is one job per worker at every wake-up, so no batch appears there. Jobs waiting in a batch are drawn parked inside the worker's channel box.
 - **Themes.** Colours are CSS variables, swapped by `@media (prefers-color-scheme: dark)`. Text must keep WCAG AA contrast (4.5:1) in both themes, also while a shape is flashing.

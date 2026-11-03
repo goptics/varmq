@@ -350,7 +350,9 @@ func withSafeConcurrency(concurrency int) uint32 {
 	if concurrency < 1 {
 		return utils.Cpus()
 	}
-	return uint32(concurrency)
+	// Clamped, not truncated: uint32(1<<32) is 0, a limit no job ever starts
+	// under. Compared as uint64 so it builds where int is 32 bits.
+	return uint32(min(uint64(concurrency), math.MaxUint32))
 }
 
 func clampPercentage(percentage uint8) uint8 {

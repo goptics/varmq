@@ -1,0 +1,76 @@
+---
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
+
+const describe =
+	'A queue with a capacity, and the calls that work on its handle. Add returns a handle and true while there is room, and nil and false when the queue is full or closed. Len counts the jobs that wait in the queue. IsFull compares Len with the capacity. A started worker takes the waiting jobs into a batch, so the queue has room again. Purge closes every waiting job. Close stops the queue taking jobs, and the jobs inside still run.';
+---
+
+<Scene id="queue-handle" title="Queue handle" call={'queue := worker.BindQueue(varmq.WithQueueCapacity(2))'} describe={describe} class="ga">
+	<div class="ga-cols ga-cols--2">
+		<section class="ga-panel" aria-label="The queue and its worker">
+			<p class="ga-label">
+				<strong>In the queue</strong>
+				<span class="ga-tag" data-state>open</span>
+			</p>
+			<div class="ga-rail" role="list" aria-label="Jobs waiting in the queue" data-queue></div>
+			<div class="lane">
+				<span class="lane__id">worker</span>
+				<div class="lane__track" role="list" aria-label="Running job" data-run>
+					<span class="ga-hint" aria-hidden="true">not started</span>
+				</div>
+			</div>
+			<p class="ga-label">
+				<strong>Taken into a batch</strong><span>not in the queue</span>
+			</p>
+			<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs the worker took into a batch" data-batch>
+				<span class="ga-hint" aria-hidden="true">none</span>
+			</div>
+		</section>
+
+		<section class="ga-panel" aria-label="What the handle returns">
+			<dl class="ga-read">
+				<dt>Len()</dt>
+				<dd data-len>0</dd>
+				<dt>IsFull()</dt>
+				<dd data-full>false</dd>
+				<dt>Add()</dt>
+				<dd data-add-result data-tone="dim">not called</dd>
+			</dl>
+			<p class="ga-note" data-why></p>
+			<p class="ga-label">
+				<strong>Purged</strong><span><code>Status()</code> reads <code>Closed</code></span>
+			</p>
+			<div class="ga-rail ga-rail--ghost" role="list" aria-label="Closed jobs" data-closed>
+				<span class="ga-hint" aria-hidden="true">none</span>
+			</div>
+			<p class="ga-label">
+				<strong>Ran</strong>
+			</p>
+			<div class="ga-rail ga-rail--ghost" role="list" aria-label="Jobs that ran" data-ran>
+				<span class="ga-hint" aria-hidden="true">none</span>
+			</div>
+		</section>
+	</div>
+
+	<Fragment slot="controls">
+		<span class="ga-field">
+			<span class="slabel">capacity</span>
+			<span class="stepper" data-cap-step>
+				<button type="button" class="pbtn" data-dec aria-label="Lower the capacity">−</button>
+				<output data-val>2</output>
+				<button type="button" class="pbtn" data-inc aria-label="Raise the capacity">+</button>
+			</span>
+		</span>
+		<button type="button" class="pbtn pbtn--primary" data-add>Add job</button>
+		<button type="button" class="pbtn" data-purge>Purge()</button>
+		<button type="button" class="pbtn" data-close>Close()</button>
+		<span class="sframe__spacer"></span>
+		<button type="button" class="pbtn" data-start>Start worker</button>
+		<button type="button" class="pbtn" data-reset>Reset</button>
+	</Fragment>
+</Scene>
+
+<script>
+	import './queue-handle';
+</script>

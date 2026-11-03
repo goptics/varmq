@@ -36,25 +36,6 @@ func TestResponse(t *testing.T) {
 		assert.Equal(42, val, "should receive the sent value")
 	})
 
-	t.Run("Response Method", func(t *testing.T) {
-		assert := assert.New(t)
-		r := NewResponse[string](1)
-
-		// Send a value
-		go r.Send("hello")
-
-		// Get the response
-		val := r.Response()
-		assert.Equal("hello", val, "should receive the sent value")
-
-		// Test after closing
-		r.Close()
-
-		// Response should still return the last value after closing
-		val = r.Response()
-		assert.Equal("hello", val, "should receive the last stored value after closing")
-	})
-
 	t.Run("Drain", func(t *testing.T) {
 		assert := assert.New(t)
 		r := NewResponse[int](5)
@@ -96,9 +77,9 @@ func TestResponse(t *testing.T) {
 		err := r.Close()
 		assert.NoError(err, "close should not return error")
 
-		// Try to read after closing
-		val := r.Response()
-		assert.Equal(42, val, "should receive the stored value after closing")
+		// A value sent before closing is still readable after it
+		val := <-r.Read()
+		assert.Equal(42, val, "should receive the buffered value after closing")
 
 		// Reading from the channel directly should return zero value and false
 		_, ok := <-r.Read()
@@ -119,7 +100,7 @@ func TestResponse(t *testing.T) {
 		// Read values concurrently
 		var received []int
 		for i := 0; i < 5; i++ {
-			val := r.Response()
+			val := <-r.Read()
 			received = append(received, val)
 		}
 

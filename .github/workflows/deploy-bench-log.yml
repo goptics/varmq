@@ -46,9 +46,17 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: r2 object put varmq-bench-data/merged.json --file=merged.json --content-type=application/json --remote
 
-      - name: Deploy index.html to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload bench-log site
+        uses: actions/upload-artifact@v7
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: pages
-          publish_branch: gh-pages
+          name: site-bench-log
+          path: pages
+          if-no-files-found: error
+
+  publish:
+    needs: bench
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-site.yml
+    with:
+      artifact_pattern: site-bench-log

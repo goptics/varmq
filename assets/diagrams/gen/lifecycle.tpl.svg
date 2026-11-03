@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-labelledby="title desc">
+  <title id="title">VarMQ worker lifecycle</title>
+  <desc id="desc">A state diagram of the seven worker states, next to a worker that walks through them. Created with WithAutoRun(false), the worker is Initiated and three added jobs wait. Start makes it Idle, and it is Running once job 1 starts. Pause while job 1 runs makes it Pausing; job 1 finishes, and the worker is Paused while jobs 2 and 3 wait. Resume makes it Idle, then Running job 2. Stop while job 2 runs makes it Stopping; job 2 finishes, the goroutines go, and the worker is Stopped while job 3 stays waiting. Restart makes it Idle, then Running job 3, then Idle again.</desc>
+  <style>
+    :root {
+      --dur: {D}s;
+      --bg: #f6f8fa; --border: #d0d7de; --box: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #8c959f;
+      --item: #f5c451; --lane: #fff1d6;
+      --el: #8250df; --job: #1a7f37; --worker: #0969da; --signal: #bf3989; --no: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161b22; --border: #30363d; --box: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #6e7681;
+        --item: #d29922; --lane: #2b2111;
+        --el: #a371f7; --job: #3fb950; --worker: #58a6ff; --signal: #db61a2; --no: #f85149;
+      }
+    }
+    .bg { fill: var(--bg); stroke: var(--border); }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .node { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+    .move { stroke-dasharray: 5 3; }
+    .lane { fill: var(--lane); stroke: var(--item); stroke-width: 1.5; }
+    .slot { fill: none; stroke: var(--item); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+    .item { fill: var(--item); }
+    .track { fill: var(--border); }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .arrow { fill: var(--line); }
+    .hl { stroke-width: 2.5; fill-opacity: .18; }
+    .Initiated { fill: var(--line); stroke: var(--line); }
+    .Idle { fill: var(--job); stroke: var(--job); }
+    .Running { fill: var(--worker); stroke: var(--worker); }
+    .Pausing, .Paused { fill: var(--item); stroke: var(--item); }
+    .Stopping, .Stopped { fill: var(--no); stroke: var(--no); }
+    .fl { fill: none; stroke: var(--el); stroke-width: 3; }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--fg); text-anchor: middle; dominant-baseline: central; }
+    .t { font-size: 14px; font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; text-anchor: start; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .call { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; }
+    .st { font-size: 17px; font-weight: 700; }
+    .ex { font-size: 12px; fill: var(--muted); }
+    .n { font-size: 13px; font-weight: 700; fill: #1f2328; }
+    .note { font-size: 12px; fill: var(--muted); text-anchor: start; }
+    .s { text-anchor: start; }
+    .e { text-anchor: end; }
+
+    /* motion: one shared --dur loop; choreography lives in keyframe percentages (generated from a seconds timeline) */
+    .a { animation: var(--dur) cubic-bezier(.65, 0, .35, 1) infinite; transform-box: fill-box; opacity: 0; }
+    .lin { animation-timing-function: linear; }
+    .bar { fill: var(--worker); transform-origin: left center; }
+    /*KEYFRAMES*/
+    @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -{STILL}s; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+      <path class="arrow" d="M0 0L8 4L0 8z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="959" height="399" rx="12"/>
+
+  <!-- left: the state machine -->
+  <text class="h" x="40" y="30">States</text>
+  <text class="m s" x="96" y="30">dashed = on its way to the next state</text>
+
+  <!--EDGES-->
+  <!--FLASHES-->
+  <!--NODES-->
+
+  <text class="m" x="399" y="48">job starts</text>
+  <text class="m" x="401" y="116">jobs done</text>
+  <text class="m" x="199" y="70">Start()</text>
+  <text class="m s" x="324" y="141">Pause()</text>
+  <text class="m e" x="256" y="141">Resume()</text>
+  <text class="m s" x="506" y="141">Pause()</text>
+  <text class="m" x="401" y="190">job ends</text>
+  <text class="m s" x="596" y="200">Stop()</text>
+  <text class="m" x="401" y="310">job ends</text>
+  <text class="m e" x="204" y="212">Start() or</text>
+  <text class="m e" x="204" y="226">Restart()</text>
+  <text class="note" x="40" y="372">Stop() works from Idle, Running, Pausing or Paused.</text>
+
+  <!-- right: what the worker is doing -->
+  <path class="edge" d="M620 24V376" style="stroke: var(--border)"/>
+  <text class="h" x="650" y="30">Your code</text>
+  <rect class="box" x="650" y="44" width="290" height="40" rx="8"/>
+  <!--CALLS-->
+
+  <text class="h" x="650" y="112">worker.Status()</text>
+  <rect class="box" x="650" y="126" width="290" height="40" rx="8"/>
+  <!--PILLS-->
+  <!--STATUS-->
+  <!--EXPLAIN-->
+
+  <text class="h" x="650" y="236">Queue</text>
+  <rect class="lane" x="650" y="252" width="116" height="46" rx="8"/>
+  <rect class="slot" x="658" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="692" y="260" width="30" height="30" rx="5"/>
+  <rect class="slot" x="726" y="260" width="30" height="30" rx="5"/>
+  <path class="edge" d="M766 275H808" marker-end="url(#a)"/>
+  <rect class="box" x="810" y="250" width="130" height="50" rx="8" style="stroke: var(--worker)"/>
+  <!--POOL-->
+  <rect class="track" x="820" y="306" width="110" height="4" rx="2"/>
+  <rect id="bar" class="a lin bar" x="820" y="306" width="110" height="4" rx="2"/>
+  <text class="m" x="875" y="322">running job</text>
+  <text class="note" x="650" y="372">Pause and Stop never interrupt a running job.</text>
+
+  <!--JOBS-->
+</svg>
