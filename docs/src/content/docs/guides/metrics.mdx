@@ -36,7 +36,7 @@ All three jobs were submitted and completed. Two succeeded, and job 2 is the one
 
 - **The counters are cumulative.** They start at zero when the worker is created, and nothing but `Reset` clears them. Pausing, stopping, restarting and purging do not change them.
 - **They are safe to read from any goroutine.** Each method is one atomic read.
-- **Four reads are not one snapshot.** A job can finish between two of them. So four values read while jobs run can be wrong by a small number.
+- **Four reads are not one snapshot.** A job can finish between two of them. So four values read while jobs run can be off by as many jobs as finish between the reads.
 - **A job's own [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) can return a moment before `Completed` counts it.** The worker closes a finished job, which releases `Wait`. Just after that, the worker counts the job as completed. `Successful` and `Failed` are already counted by then. To read settled values, wait for the worker with [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) or [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait) first. [Waiting](/guides/waiting/) compares them.
 
 ## Submitted, NumPending, NumProcessing and Completed
