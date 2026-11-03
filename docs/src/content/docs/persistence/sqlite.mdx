@@ -9,6 +9,10 @@ import { sqliteSetup } from '../../../components/ops/setup-data';
 
 [sqliteq](https://github.com/goptics/sqliteq) is the SQLite adapter for VarMQ. It keeps jobs in SQLite database files, so jobs survive a restart of the process with no server to run. It provides persistent queues only: it has no distributed queue, so [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) does not take it. Read [persistence and distribution](/persistence/overview/) first for what a persistent queue does.
 
+:::caution
+Use one process for each database file. A second process that opens a queue on the same file puts back the jobs the first process is running, and they run twice. See [jobs that were not acknowledged](#jobs-that-were-not-acknowledged).
+:::
+
 ## Setup
 
 Three steps set it up:
