@@ -8,7 +8,7 @@ export const collections = {
 		loader: pageLoader(),
 		schema: pageSchema.extend({
 			// The order of the pages lives in each folder's meta.json; `label` names a page in the sidebar (lib/source.ts).
-			sidebar: z.object({ order: z.number().optional(), label: z.string().optional() }).optional(),
+			sidebar: z.object({ label: z.string().optional() }).optional(),
 		}),
 	}),
 	meta: defineCollection({ loader: metaLoader() }),

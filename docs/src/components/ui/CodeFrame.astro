@@ -8,7 +8,7 @@ interface Props {
 const { title, class: cls, style: _style, icon: _icon, ...rest } = Astro.props;
 ---
 
-<figure class:list={['codeblock', 'not-content not-prose', 'not-prose', { 'has-title': !!title }]}>
+<figure class:list={['codeblock', 'not-content not-prose', { 'has-title': !!title }]}>
 	{
 		title && (
 			<figcaption class="codeblock__head">
@@ -21,20 +21,15 @@ const { title, class: cls, style: _style, icon: _icon, ...rest } = Astro.props;
 </figure>
 
 <script>
+	import { copyText } from './dom';
+
 	// One listener for every code block on the page. Copies the code without the collapsed lines' summaries.
-	document.addEventListener('click', async (e) => {
+	document.addEventListener('click', (e) => {
 		const button = (e.target as Element).closest<HTMLButtonElement>('[data-codecopy]');
-		if (!button) return;
-		const code = button.closest('.codeblock')?.querySelector('code');
-		if (!code) return;
+		const code = button?.closest('.codeblock')?.querySelector('code');
+		if (!button || !code) return;
 		const copy = code.cloneNode(true) as HTMLElement;
 		copy.querySelectorAll('summary').forEach((s) => s.remove());
-		try {
-			await navigator.clipboard.writeText(copy.textContent ?? '');
-			button.textContent = 'Copied';
-		} catch {
-			button.textContent = 'Failed';
-		}
-		setTimeout(() => (button.textContent = 'Copy'), 1600);
+		void copyText(button, copy.textContent ?? '');
 	});
 </script>
