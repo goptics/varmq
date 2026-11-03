@@ -41,7 +41,7 @@ A process that only adds jobs does not need a worker. [`NewDistributedQueue`](ht
 
 ## One worker, several queues
 
-A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together: with concurrency 2, at most two jobs run at once, whichever queues they came from. Press Play below to watch two queues share a worker with concurrency 2, then switch to `RoundRobin` or bind a third queue.
+A worker can have any number of queues bound to it. They all feed the same pool, so the concurrency limit covers all of them together. With concurrency 2, at most two jobs run at the same time, from any of the queues. Press Play below to watch two queues share a worker with concurrency 2, then switch to `RoundRobin` or bind a third queue.
 
 <BindScene />
 
@@ -53,7 +53,7 @@ The worker has concurrency 2 and two queues: `emails`, bound first, and `reports
 
 When a slot frees up, the worker's strategy picks which queue the next job comes from. The default strategy, [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), takes the queue with the lowest priority number. Queues bound without [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) tie, and a tie goes to the queue bound first, which is why every email starts before any report. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) switches to `RoundRobin`, `MaxLen` or `MinLen`.
 
-With more than one queue bound, the worker hands out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may hand a goroutine several waiting jobs at once.
+With more than one queue bound, the worker hands out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may hand a goroutine several waiting jobs together.
 
 ## A queue belongs to one worker
 

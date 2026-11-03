@@ -6,7 +6,7 @@ description: Func, ErrFunc and ResultFunc let you add closures as jobs, instead 
 import GoPlay from '../../../components/GoPlay.astro';
 import HelperWrap from '../../../components/guides-a/HelperWrap.astro';
 
-A worker usually knows what its data means: a `string` is an email address, an `int` is a user ID, and the worker function knows what to do with it. When you only want to run pieces of code on a pool, the data can be a function instead. [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) each return a ready-made worker function that calls the job's function.
+A worker usually knows what its data means. For example, a `string` is an email address, or an `int` is a user ID. The worker function knows what to do with it. When you only want to run pieces of code on a pool, the data can be a function instead. [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) each return a ready-made worker function that calls the job's function.
 
 | Helper | Use it with | The job's data is | [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) returns |
 |---|---|---|---|
@@ -22,7 +22,7 @@ queue := worker.BindQueue()
 queue.Add(func() { fmt.Println("hello") })
 ```
 
-Go works out the data type from the helper, so there is nothing to spell out for `Func` and `ErrFunc`. `ResultFunc` returns a function for any result type, so you name it yourself: `varmq.ResultFunc[string]()`. [Worker types](/guides/worker-types/) covers what each handle gives back.
+Go gets the data type from the helper, so you do not write a type for `Func` and `ErrFunc`. `ResultFunc` returns a function for any result type, so you name it yourself: `varmq.ResultFunc[string]()`. [Worker types](/guides/worker-types/) covers what each handle gives back.
 
 ## Try it
 
@@ -45,7 +45,7 @@ The output, line by line:
 
 **A nil function.** Each helper handles `nil` in its own way:
 
-- `Func` panics. The worker recovers it, so the program carries on, and the panic goes to the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel, because a plain handle has no place for it.
+- `Func` panics. The worker recovers it, so the program continues. The panic goes to the worker's [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) channel, because a plain handle has no place for it.
 - `ErrFunc` returns an error, which you get from `Err()`.
 - `ResultFunc` returns the zero value and an error, which you get from `Result()`.
 

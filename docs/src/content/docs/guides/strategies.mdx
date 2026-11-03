@@ -6,7 +6,7 @@ description: "How a worker with several queues picks the next job: the Priority,
 import GoPlay from '../../../components/GoPlay.astro';
 import StrategyPicker from '../../../components/guides-a/StrategyPicker.astro';
 
-A worker can have several **sources** bound to it. A source is a queue, a priority queue or a [topic](/guides/topics/) subscription. When a slot frees up, the worker needs a rule for which source gives the next job. That rule is the **strategy**. [Workers and queues](/concepts/workers-and-queues/#one-worker-several-queues) introduced it; this page covers all four.
+A worker can have several **sources** bound to it. A source is a queue, a priority queue or a [topic](/guides/topics/) subscription. When a slot becomes free, the worker needs a rule for which source gives the next job. That rule is the **strategy**. [Workers and queues](/concepts/workers-and-queues/#one-worker-several-queues) introduced it; this page covers all four.
 
 ## Choosing a strategy
 
@@ -33,12 +33,12 @@ A few rules hold for all four:
 
 - **Empty sources are skipped.** A strategy only chooses among sources that have a job waiting.
 - **The strategy is fixed when the worker is created.** There is no call to change it later.
-- **It decides every job.** With two or more sources bound, the worker hands out one job at a time and picks the source again each time, reading the source lengths as they are then. [How it works](/concepts/how-it-works/#batched-dispatch) explains why it does not batch in this case. With a single source there is nothing to choose.
+- **It decides every job.** With two or more sources bound, the worker hands out one job at a time. It picks the source again each time, from the source lengths at that moment. [How it works](/concepts/how-it-works/#batched-dispatch) explains why it does not batch in this case. With a single source there is nothing to choose.
 - **The zero value of `Strategy` is `RoundRobin`, not the default.** A worker created without `WithStrategy` uses `Priority`.
 
 ## Priority: the default
 
-`WithQueuePriority` sets the rank of a queue when you bind it. It works on [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue). The programs on this page use a worker with concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun): no job starts until every queue is filled, and the worker takes one job at a time, so the order the jobs print in is the order the worker took them.
+`WithQueuePriority` sets the rank of a queue when you bind it. It works on [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue). The programs on this page use a worker with concurrency 1 and [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun). No job starts until every queue is filled, and the worker takes one job at a time. So the jobs print in the order the worker took them.
 
 <GoPlay example="strategies-priority" />
 
@@ -48,7 +48,7 @@ The emails were added first but run last. Both alerts go before the report, and 
 
 Priority does not share. While a source with a lower rank has jobs waiting, a source with a higher rank gets none. A busy `alerts` queue can keep `emails` waiting.
 
-A topic subscription takes part in the same list. `WithTopicPriority` sets its rank like `WithQueuePriority` does. See [topics](/guides/topics/#priority-and-strategy).
+A topic subscription is in the same list. `WithTopicPriority` sets its rank like `WithQueuePriority` does. See [topics](/guides/topics/#priority-and-strategy).
 
 :::note
 This is the rank of a whole source. It is not the priority you pass to [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue.Add) on a priority queue, which orders the jobs inside that one queue. See [queues](/guides/queues/#fifo-and-priority-queues).
@@ -56,17 +56,17 @@ This is the rank of a whole source. It is not the priority you pass to [`Add`](h
 
 ## RoundRobin
 
-The worker goes through the list one source per job, then starts over. It skips a source that is empty when its turn comes, so once a source runs out the others share the turns.
+The worker goes through the list one source per job, then starts over. It skips a source that is empty when its turn comes, so once a source is empty, the others share the turns.
 
 <GoPlay example="strategies-round-robin" />
 
-One job from each queue in turn. `reports` runs out after its first job, so the later turns go to `alerts` and `emails`.
+One job from each queue in turn. `reports` is empty after its first job, so the later turns go to `alerts` and `emails`.
 
 ## MaxLen and MinLen
 
 Both compare how many jobs are waiting in each source, read again for every job.
 
-- **`MaxLen`** takes from the longest source. Each job it takes makes that source shorter, so while nothing new arrives the turns pass to the next-longest source, and the longest sources are worked down together.
+- **`MaxLen`** takes from the longest source. Each job it takes makes that source shorter. While nothing new arrives, the turns pass to the next-longest source. So the longest sources get shorter together.
 - **`MinLen`** takes from the shortest source that is not empty. It runs a short source to empty, then moves to the next shortest. A long source waits while any shorter source still has jobs.
 
 On a tie, both take the source that comes first in the list.
@@ -79,4 +79,4 @@ The queues start with 2 alerts, 1 report and 3 emails. `MaxLen` takes an email f
 
 ## What priority does under the other strategies
 
-`RoundRobin`, `MaxLen` and `MinLen` do not choose by rank. They still walk the list in rank order, so a rank sets the order of the `RoundRobin` turns and which source wins a tie in `MaxLen` and `MinLen`. If you give no ranks, the list is the bind order.
+`RoundRobin`, `MaxLen` and `MinLen` do not choose by rank. They still go through the list in rank order. So a rank sets the order of the `RoundRobin` turns. It also sets which source wins a tie in `MaxLen` and `MinLen`. If you give no ranks, the list is the bind order.

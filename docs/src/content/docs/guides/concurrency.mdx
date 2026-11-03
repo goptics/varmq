@@ -7,11 +7,11 @@ import GoPlay from '../../../components/GoPlay.astro';
 import ConcurrencyScene from '../../../components/guides-b/ConcurrencyScene.astro';
 import IdleScene from '../../../components/guides-b/IdleScene.astro';
 
-A worker's concurrency is the most jobs it runs at the same time. This page covers how to set it, how to change it while the worker runs, and the options that decide how many idle goroutines the worker keeps. [How it works](/concepts/how-it-works/#the-worker-pool) shows the pool behind it.
+A worker's concurrency is the most jobs it runs at the same time. This page shows how to set the limit and how to change it while the worker runs. It also covers the options that decide how many idle goroutines the worker keeps. [How it works](/concepts/how-it-works/#the-worker-pool) shows the pool behind it.
 
 ## Setting the limit
 
-The default is 1. A plain `int` after the worker function sets it, [`WithConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#WithConcurrency) sets it as an option, and [`DefaultConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#DefaultConcurrency) changes the default for workers created after the call:
+The default is 1. A plain `int` after the worker function sets it. [`WithConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#WithConcurrency) sets it as an option. [`DefaultConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#DefaultConcurrency) changes the default for workers created after the call:
 
 ```go
 // A plain int after the function sets the limit.
@@ -43,7 +43,7 @@ Four methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) r
 
 `NumProcessing` stays at or below the limit, except for a while after `TunePool` lowers the limit. All four are snapshots: they can change right after you read them.
 
-The program below creates a worker with a limit of 100 and holds every job inside the worker function until the program lets go. It adds three jobs, one at a time, and waits for each to start before it adds the next.
+The program below creates a worker with a limit of 100 and blocks every job inside the worker function until the program releases it. It adds three jobs, one at a time, and waits for each to start before it adds the next.
 
 <GoPlay example="concurrency-limit" />
 
@@ -66,15 +66,20 @@ if err := worker.TunePool(8); err != nil {
 It returns an error in two cases:
 
 - [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency): the worker already has that limit.
-- The worker is not `Idle` or `Running`. `TunePool` only works on an active worker, so it returns the error for the worker's state: [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) before [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start), [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing) or [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused) while pausing or paused, and [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) or [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) while stopping or stopped. The [lifecycle](/concepts/lifecycle/) page has the states.
+- The worker is not `Idle` or `Running`. `TunePool` only works on an active worker. In other states it returns the error for the worker's state:
+  - [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) before [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start).
+  - [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing) or [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused) while pausing or paused.
+  - [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) or [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) while stopping or stopped.
+
+  The [lifecycle](/concepts/lifecycle/) page has the states.
 
 ### Raising the limit
 
 The worker starts jobs on new goroutines as soon as it can. That covers the jobs still in a queue and the jobs you add later.
 
-A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1, where one goroutine can take up to 32 jobs at once from an in-memory FIFO queue: raising the limit does not spread out jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches.
+A job a goroutine has already taken into a batch stays with that goroutine, which runs its batch one job after another. This matters most at concurrency 1. There, one goroutine can take up to 32 jobs at once from an in-memory FIFO queue. Raising the limit does not spread out the jobs it already holds. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches.
 
-The program below starts a worker with a limit of 1 and holds every job until the program lets go. With job 1 running, it raises the limit to 3, then adds jobs 2 to 6. It adds them after the change for the reason above.
+The program below starts a worker with a limit of 1 and blocks every job until the program releases it. With job 1 running, it raises the limit to 3, then adds jobs 2 to 6. It adds them after the change for the reason above.
 
 <GoPlay example="concurrency-tunepool" />
 
@@ -86,11 +91,16 @@ Nothing running is interrupted. `NumProcessing` can stay above `NumConcurrency` 
 
 ## Idle goroutines
 
-A worker with default settings keeps one idle goroutine in its pool. A goroutine that finishes a job stays in the pool if more jobs wait than idle goroutines can take, or if the pool has fewer idle goroutines than the minimum, which is one. Otherwise it exits. Two options change this.
+A worker with default settings keeps one idle goroutine in its pool. A goroutine that finishes a job stays in the pool in two cases:
+
+- More jobs wait than the idle goroutines can take.
+- The pool has fewer idle goroutines than the minimum, which is one.
+
+Otherwise it exits. Two options change this.
 
 [`WithMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#WithMinIdleWorkerRatio) sets the share of the limit to keep idle, as a percentage from 1 to 100. The worker keeps `limit * percentage / 100` idle goroutines, rounded down, with a floor of one. With a limit of 4, a ratio of 50 keeps 2 and a ratio of 100 keeps 4. A value outside the range is clamped: `0` becomes 1 and anything above 100 becomes 100. The limit here is the current one, so the minimum follows a `TunePool`.
 
-[`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) makes the pool shrink on a timer instead. With it set, a goroutine that finishes a job goes back to the pool instead of exiting. Once per duration the worker removes the goroutines that have been idle for longer than the duration, down to the minimum above. Because the check runs once per duration, a goroutine can sit idle for up to about twice the duration before it goes. Without the option there is no timer, and the pool shrinks as goroutines finish.
+[`WithIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#WithIdleWorkerExpiryDuration) makes the pool shrink on a timer instead. With it set, a goroutine that finishes a job goes back to the pool instead of exiting. Once per duration the worker removes the goroutines that have been idle for longer than the duration, down to the minimum above. Because the check runs once per duration, a goroutine can stay idle for up to about twice the duration before it exits. Without the option there is no timer, and the pool shrinks as goroutines finish.
 
 ```go
 worker := varmq.NewWorker(process, 100,
@@ -103,4 +113,4 @@ Send a burst below and watch what each setting leaves in the pool.
 
 <IdleScene />
 
-Idle goroutines let the next burst of jobs start without paying to start goroutines. Each one holds a goroutine's memory. [`DefaultMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#DefaultMinIdleWorkerRatio) and [`DefaultIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#DefaultIdleWorkerExpiryDuration) set both for workers created after the call. [Configuration](/guides/configuration/) lists every option and its default.
+Idle goroutines let the next burst of jobs start without the cost of starting goroutines. Each one holds a goroutine's memory. [`DefaultMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#DefaultMinIdleWorkerRatio) and [`DefaultIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#DefaultIdleWorkerExpiryDuration) set both for workers created after the call. [Configuration](/guides/configuration/) lists every option and its default.

@@ -53,7 +53,7 @@ defer stop()
 worker := varmq.NewWorker(process, 4, varmq.WithContext(ctx))
 ```
 
-Without either, the worker follows no context of yours: it behaves as if you had passed [`context.Background()`](https://pkg.go.dev/context#Background), and only [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) and [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) cancel its own `Context()`. A `nil` context is the same as none.
+Without either, the worker follows no context of yours. It behaves as if you had passed [`context.Background()`](https://pkg.go.dev/context#Background). Only [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) and [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) cancel its own `Context()`. A `nil` context is the same as none.
 
 `DefaultCtx` is shared: every worker created after it follows that one context, so cancelling it stops all of them. [Configuration](/guides/configuration/#the-default-functions) says when the `Default*` functions take effect.
 
@@ -63,13 +63,13 @@ The context does not reach your worker function. A [`Job[T]`](https://pkg.go.dev
 
 When the context is done, because you called its cancel function or its deadline passed, the worker shuts down the way `Stop` does. [The lifecycle page](/concepts/lifecycle/) has the states. For jobs, that means:
 
-- **A running job is not interrupted.** VarMQ cannot stop a function. Each running job keeps going until its function returns.
-- **Jobs that are still waiting do not start.** Between the cancel and the moment the worker notices it, the worker may still hand out a job. A waiting job is not lost or closed: it stays `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts it. See [what happens to jobs](/concepts/lifecycle/#what-happens-to-jobs).
+- **A running job is not interrupted.** VarMQ cannot stop a function. Each running job continues until its function returns.
+- **Jobs that are still waiting do not start.** Between the cancel and the moment the worker notices it, the worker may still hand out a job. A waiting job is not lost or closed. It stays `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts it. See [what happens to jobs](/concepts/lifecycle/#what-happens-to-jobs).
 - **The worker is `Stopping` while jobs run, then `Stopped`.** It reaches `Stopped` once the running jobs have returned and its goroutines are gone.
 - **Nothing is reported as an error.** The cancellation does not reach [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) or the [error handler](/guides/errors/).
-- **The queue keeps taking jobs.** [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) still returns `true` after the worker has stopped, and the job waits for a worker that will not run it. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the queue makes `Add` refuse jobs, and [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes the waiting ones. See [queues](/guides/queues/#len-purge-and-close).
+- **The queue keeps taking jobs.** [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) still returns `true` after the worker has stopped. The job then waits for a worker that will not run it. [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the queue makes `Add` refuse jobs, and [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes the waiting ones. See [queues](/guides/queues/#len-purge-and-close).
 
-The program below adds job 1 to a worker with concurrency 1, then adds jobs 2 and 3 while job 1 runs, and cancels the context.
+The program below adds job 1 to a worker with concurrency 1. While job 1 runs, it adds jobs 2 and 3 and cancels the context.
 
 <GoPlay example="context-cancel" />
 
@@ -77,7 +77,7 @@ Right after the cancel, the worker is `Stopping` and job 1 is still running. It 
 
 A job that a worker has already taken into a batch counts in `NumPending` but not in `Len()`. See [batched dispatch](/concepts/how-it-works/#what-batching-means-for-your-code).
 
-Cancelling is not the same as calling `Stop` in two ways. `Stop` sets the status to `Stopping` before it returns. A cancel function returns at once, and the worker changes its status on its own goroutine a moment later, so a status read right after it can still show the old one. And `Stop` can be undone with `Restart`, while a cancelled context cannot: see [starting again after a cancel](#starting-again-after-a-cancel).
+Cancelling is not the same as calling `Stop` in two ways. `Stop` sets the status to `Stopping` before it returns. A cancel function returns at once. The worker changes its status on its own goroutine a moment later. So a status read right after the cancel can still show the old status. And `Stop` can be undone with `Restart`, while a cancelled context cannot: see [starting again after a cancel](#starting-again-after-a-cancel).
 
 To wait for the shutdown, use [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped). [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait) returns as soon as no job is running, which can be while the status is still `Stopping`. [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) keeps waiting on a stopped worker. [Waiting](/guides/waiting/) compares them.
 
@@ -107,6 +107,6 @@ Its [`Err()`](https://pkg.go.dev/context#Context) says why, so a deadline that p
 
 A context that is done stays done. [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) and `Restart` give a stopped worker a new internal context, but they derive it from the context you passed, which is already done. The new one is done from the start.
 
-Both calls still return `nil`, and the worker shuts down again at once. Before it does, it may hand out some of the jobs waiting in the queue, and they run with `Context()` already cancelled. So a cancelled context ends the worker for good. To run again, create a new worker with a context that is still live. The jobs left in the old queue stay there until you `Purge` them.
+Both calls still return `nil`, and the worker shuts down again at once. Before it does, it may hand out some of the jobs waiting in the queue, and they run with `Context()` already cancelled. So a cancelled context ends the worker permanently. To run again, create a new worker with a context that is still live. The jobs left in the old queue stay there until you `Purge` them.
 
 A `Stop` has no such problem: `Restart` after a `Stop` brings the worker back, because the context you passed is still live.

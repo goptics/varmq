@@ -185,7 +185,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 	(carry) => ({
 		title: 'Results and errors',
 		duration: 6200,
-		captions: [{ at: 300, text: 'Jobs hand back a *value* or an *error*' }],
+		captions: [{ at: 300, text: 'Jobs return a *value* or an *error*' }],
 		parts: [
 			{
 				...pool(carry, 'result', {
@@ -376,7 +376,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		title: 'Control',
 		duration: 11600,
 		captions: [
-			{ at: 2300, text: '*Pause* holds new jobs back' },
+			{ at: 2300, text: '*Pause* keeps new jobs waiting' },
 			{ at: 4000, text: '*Resume* starts the jobs that waited' },
 			{ at: 6100, text: '*Stop* ends the loop once jobs finish' },
 			{ at: 7900, text: '*Restart* runs the jobs that waited' },
