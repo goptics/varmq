@@ -4,6 +4,7 @@
 
 ### 🐛 Bug Fixes
 
+- **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
 - **Data race in `AddAll` on result and error workers** (#134): every job of a group stored its result in one shared field as well as sending it, from as many goroutines as the worker runs. Nothing read that field outside tests, so it is gone; results still arrive on `Results()` and `Errs()`.
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
 - **Wrong minimum idle-worker count at very high concurrency** (#142): `numMinIdleWorkers` multiplied concurrency by `WithMinIdleWorkerRatio` in `uint32`, which wraps once the product passes `math.MaxUint32` (concurrency `1<<30` at 50% gave 21474836, not 536870912). It now multiplies in `uint64`.
