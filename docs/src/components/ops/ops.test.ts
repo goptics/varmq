@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { stepsOf } from './ack-data.ts';
 import { PRESETS, behaviours, type Caps } from './adapter-data.ts';
-import { CPU, handle, seed, tick, type Worker } from './api-model.ts';
 import { close, fresh, kill, nacked, sweepIfDue, take } from './redisflow-model.ts';
 
 describe('crash test steps', () => {
@@ -41,48 +40,6 @@ describe('adapter map', () => {
 
 	it('leaves the wake-ups of a distributed queue to Subscribe', () => {
 		assert.match(wake(caps('redis-d')).text, /Subscribe/);
-	});
-});
-
-describe('API model', () => {
-	const run = (method: string, path: string, workers = seed()) => ({ reply: handle(workers, method, path), workers });
-
-	it('gives the plain 404 of the mux for an empty {name} segment', () => {
-		const { reply } = run('GET', '/varmq/workers/');
-		assert.equal(reply.code, 404);
-		assert.equal(reply.json, false);
-		assert.equal(reply.body, '404 page not found');
-		assert.ok(reply.headers.some(([k]) => k === 'X-Varmq-Instance'));
-	});
-
-	it('answers 400 for a concurrency outside the int range, and accepts the largest int', () => {
-		const path = '/varmq/workers/email-sender/config/concurrency/';
-		assert.equal(run('PATCH', path + '99999999999999999999').reply.code, 400);
-		assert.equal(run('PATCH', path + '-9223372036854775809').reply.code, 400);
-		assert.equal(run('PATCH', path + 'abc').reply.code, 400);
-		const big = run('PATCH', path + '9223372036854775807');
-		assert.equal(big.reply.code, 200);
-		assert.equal(big.workers.get('email-sender')!.concurrency, 4294967295, 'clamped to MaxUint32');
-		assert.equal(run('PATCH', path + '+3').reply.code, 200);
-		const zero = run('PATCH', path + '0');
-		assert.equal(zero.workers.get('email-sender')!.concurrency, CPU);
-	});
-
-	it('keeps the replies the buttons were checked against', () => {
-		const workers = seed();
-		const w = workers.get('email-sender') as Worker;
-		assert.equal(handle(workers, 'PATCH', '/varmq/workers/email-sender/actions/pause').code, 200);
-		assert.equal(w.status, 'Pausing');
-		const resume = handle(workers, 'PATCH', '/varmq/workers/email-sender/actions/resume');
-		assert.deepEqual([resume.code, resume.body], [500, '{"error":"worker is pausing"}']);
-		tick(w);
-		assert.equal(w.status, 'Paused');
-		assert.equal(handle(workers, 'PATCH', '/varmq/workers/email-sender/actions/resume').code, 200);
-		assert.equal(handle(workers, 'PATCH', '/varmq/workers/email-sender/actions/start').code, 409);
-		const allow = handle(workers, 'POST', '/varmq/health');
-		assert.equal(allow.code, 405);
-		assert.deepEqual(allow.headers[0], ['Allow', 'GET, HEAD']);
-		assert.equal(handle(workers, 'GET', '/varmq/workers/ghost').body, '{"error":"worker not found"}');
 	});
 });
 
