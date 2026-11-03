@@ -63,7 +63,7 @@ These errors come from the storage, not from your function. The worker sends the
 
 - [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob): the stored bytes do not decode as JSON into the worker's job type. Make sure the producers and the consumers use the same type.
 - [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob): the storage refused the acknowledgement. The job's function has already run. Check that the storage is reachable, and that nothing purged or closed the queue during the job.
-- [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue): the queue was not empty when the worker checked, but it gave no job when the worker pulled. Check that the storage is reachable. With redisq or sqliteq as the worker's only queue, a failed storage call sends the storage's own error instead.
+- [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue): the queue was not empty when the worker checked, but it gave no job when the worker pulled. If other workers or processes share the queue, one of them can take the last job between the check and the pull. Otherwise, check that the storage is reachable. With redisq or sqliteq as the worker's only queue, a failed storage call sends the storage's own error instead.
 
 See [errors](/guides/errors/#sent-to-errs-and-the-handler).
 

@@ -53,13 +53,13 @@ go func() {
 
 select {
 case <-done:
-	// the work is done
+	// Wait returned; on a paused or stopped worker, jobs can still be pending
 case <-time.After(30 * time.Second):
 	// gave up; the goroutine still waits until the work is done
 }
 ```
 
-The goroutine keeps waiting after the timeout. It ends when the worker drains, pauses or stops.
+The goroutine keeps waiting after the timeout. It ends when the worker drains, pauses or stops. Each call that times out leaves one goroutine waiting, so do not retry the timeout in a loop while the worker stays busy. When `Wait` returns, check `NumPending` and the status before you assume every job ran.
 
 ## Waiting for a state
 
