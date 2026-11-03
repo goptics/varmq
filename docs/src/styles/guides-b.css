@@ -573,7 +573,7 @@
 /* Compact fields in a row of options: the shared field look at a smaller size. */
 .gb .gb-opt input[type='number'],
 .gb .gb-opt input[type='text'],
-.gb .gb-opt :is(select, .select) {
+.gb .gb-opt select {
 	min-height: 30px;
 	padding: 0 6px;
 	border: 1px solid var(--panel-rule);

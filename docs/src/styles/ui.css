@@ -568,9 +568,8 @@ button.copy:hover {
 	font-weight: 600;
 }
 
-/* One look for every select, in a scene or not: the dropdown is lib/select.ts, and a native select shows only without JS. */
+/* One look for every select, in a scene or not. */
 select,
-.select,
 .api__path,
 .sfield input[type='number'],
 .sfield input[type='text'] {
@@ -586,105 +585,74 @@ select,
 	color-scheme: dark;
 }
 
-select,
-.select {
+select {
 	min-height: 40px;
 	padding: 6px 10px;
-	border-radius: var(--corner);
 	cursor: pointer;
 }
 
-.select {
-	display: inline-flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	max-width: 100%;
-	text-align: start;
-}
-
-.select:hover:not(:disabled) {
-	background: var(--panel-fill-2);
-}
-
-.select:disabled {
+select:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
 
-.select__native {
-	display: none !important;
-}
+/* ponytail: the list is drawn where the browser lets CSS style it (Chromium 135+); elsewhere it is the browser's own.
+   The picker sits in the top layer, so a scene's `overflow: hidden` cannot clip it. */
+@supports (appearance: base-select) {
+	select,
+	::picker(select) {
+		appearance: base-select;
+	}
 
-.select__label {
-	display: grid;
-	min-width: 0;
-}
+	select:hover:not(:disabled) {
+		background: var(--panel-fill-2);
+	}
 
-.select__label > * {
-	grid-area: 1 / 1;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
+	select::picker-icon {
+		color: var(--panel-accent);
+		transition: rotate 0.2s var(--ease);
+	}
 
-.select__label > [aria-hidden] {
-	visibility: hidden;
-}
+	select:open::picker-icon {
+		rotate: 180deg;
+	}
 
-.select svg {
-	flex: none;
-	width: 16px;
-	height: 16px;
-	fill: none;
-	stroke: var(--panel-accent);
-	stroke-width: 1.75;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
+	::picker(select) {
+		margin-block: 4px;
+		padding: 4px;
+		max-height: 288px;
+		border: 1px solid var(--panel-rule);
+		border-radius: var(--corner);
+		background: var(--panel);
+		color: var(--panel-ink);
+		scrollbar-width: thin;
+		scrollbar-color: var(--panel-rule) transparent;
+	}
 
-.select[aria-expanded='true'] svg {
-	rotate: 180deg;
-}
+	option {
+		padding: 8px 10px;
+		border-radius: var(--corner);
+		white-space: nowrap;
+	}
 
-.select__list {
-	position: fixed;
-	inset: auto;
-	margin: 0;
-	padding: 4px;
-	overflow-y: auto;
-	list-style: none;
-	border: 1px solid var(--panel-rule);
-	border-radius: var(--corner);
-	background: var(--panel);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1.2 var(--mono);
-	scrollbar-width: thin;
-	scrollbar-color: var(--panel-rule) transparent;
-}
+	option::checkmark {
+		display: none;
+	}
 
-.select__list [role='option'] {
-	margin: 0;
-	padding: 8px 10px;
-	border-radius: var(--corner);
-	cursor: pointer;
-	white-space: nowrap;
-}
+	option:is(:hover, :focus-visible) {
+		background: var(--panel-fill-2);
+		outline: none;
+	}
 
-.select__list [role='option']:hover,
-.select__list [data-active] {
-	background: var(--panel-fill-2);
-}
+	option:checked {
+		color: var(--panel-accent);
+	}
 
-.select__list [aria-selected='true'] {
-	color: var(--panel-accent);
-}
-
-.select__list [aria-disabled='true'] {
-	background: none;
-	color: var(--panel-ink-2);
-	opacity: 0.5;
-	cursor: not-allowed;
+	option:disabled {
+		color: var(--panel-ink-2);
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 }
 
 .sfield input[type='number'] {
@@ -918,8 +886,7 @@ input[type='search']::-webkit-search-cancel-button {
 	.sframe .ops-check,
 	.sframe .gb-opt label,
 	select,
-	.select,
-	.select__list [role='option'],
+	option,
 	button.copy,
 	.code__head button.copy {
 		min-height: 44px;
