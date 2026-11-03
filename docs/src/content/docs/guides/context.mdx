@@ -36,7 +36,7 @@ queue := worker.BindQueue()
 // ... add jobs ...
 
 <-ctx.Done()              // SIGTERM
-worker.WaitAndStop()      // every queued job runs, then the stop starts
+worker.WaitAndStop()      // queued jobs run unless the worker is paused, then the stop starts
 worker.WaitUntilStopped() // only if you need the Stopped state
 ```
 

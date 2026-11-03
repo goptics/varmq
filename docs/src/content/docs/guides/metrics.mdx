@@ -41,7 +41,7 @@ All three jobs were submitted and completed. Two succeeded, and job 2 is the one
 
 ## Submitted, NumPending, NumProcessing and Completed
 
-On an idle worker, `Submitted == Completed`. Three things break this: a job that was closed before it ran, storage shared with another worker, and a `Reset` partway. A closed job is the most common case: you purged it, closed it through its handle, or a topic dropped it unread.
+On a worker with no job waiting or running, `Submitted == Completed`. Three things break this: a job that was closed before it ran, storage shared with another worker, and a `Reset` partway. A closed job is the most common case: you purged it, closed it through its handle, or a topic dropped it unread.
 
 The rule comes from a general equation. A job is waiting, running or done, so for a worker with nothing running you might expect:
 
@@ -49,7 +49,7 @@ The rule comes from a general equation. A job is waiting, running or done, so fo
 Submitted == NumPending + NumProcessing + Completed
 ```
 
-[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the jobs that have not started, and [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) is the jobs running right now, counted as busy goroutines. On an idle worker both are 0, so the equation becomes `Submitted == Completed`.
+[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the jobs that have not started, plus the finished jobs of a [batch](/concepts/how-it-works/#batched-dispatch) that has not ended. [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) is the jobs running right now, counted as busy goroutines. With no job waiting or running, both are 0, so the equation becomes `Submitted == Completed`.
 
 ### When the equation does not hold
 
@@ -61,7 +61,7 @@ The equation does not hold in these cases:
 - **Storage shared between workers breaks it.** `Add` counts in `Submitted` on the worker whose handle you call. The worker that takes the job counts it in `Completed`. A queue you wrote and bound to two workers with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) splits the counters between them, so the equation holds for neither.
 - **`Reset` breaks it.** It zeroes `Submitted` and `Completed`. The jobs still waiting or running count on the right side of the equation, and no longer on the left.
 
-So use the equation on a worker with nothing running, where none of these cases applies. If `Submitted == Completed` does not hold on an idle worker, look at the cases above first. Do not use the equation as a live check while jobs run.
+So use the equation on a worker with nothing running, where none of these cases applies. If `Submitted == Completed` does not hold on a worker with no job waiting or running, look at the cases above first. Do not use the equation as a live check while jobs run.
 
 The program below checks the equation on an idle worker, then on a worker paused with [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) with two jobs waiting, then after `Purge`.
 

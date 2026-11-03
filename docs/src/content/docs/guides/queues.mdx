@@ -14,9 +14,11 @@ fifo.Add("first")
 fifo.Add("second")
 
 // Priority: a lower number runs first.
-prio := varmq.NewWorker(process, 4).BindPriorityQueue()
+worker := varmq.NewWorker(process, 4, varmq.WithAutoRun(false))
+prio := worker.BindPriorityQueue()
 prio.Add("report", 5)
 prio.Add("alert", 1)
+worker.Start() // start after both are added, so alert runs first
 ```
 
 [Workers and queues](/concepts/workers-and-queues/) showed how a worker gets a queue. This page covers the in-memory queues: the first-in first-out queue and the priority queue, how to bound them, and the calls that inspect and empty them.

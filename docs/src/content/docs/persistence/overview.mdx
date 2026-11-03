@@ -28,7 +28,7 @@ This page covers what the two kinds of queue do in VarMQ. [Redis](/persistence/r
 
 | Question | Answer |
 |---|---|
-| How often does a job run? | At least once. A job can run twice, so write the job function so that a second run is safe. |
+| How often does a job run? | At least once with redisq and sqliteq. A custom adapter decides, and it can lose a job: see [what this guarantees](#what-this-guarantees). A job can run twice, so write the job function so that a second run is safe. |
 | Does VarMQ retry a failed job? | No. A job that fails or panics is acknowledged like any other. To acknowledge a job is to tell the storage that the job is done, so the storage forgets it. |
 | In what order do jobs leave storage? | In the order the adapter gives: first in, first out, or lowest priority number first. |
 | Is a repeated `Add` stored once? | Only with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) and an adapter that implements [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). redisq and sqliteq do. |
