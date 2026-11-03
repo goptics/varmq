@@ -18,7 +18,7 @@ interface Props {
 const { id, title, tag = 'simulation', describe, call, class: cls = '' } = Astro.props;
 ---
 
-<figure class:list={['sframe', 'not-content', cls]} role="group" aria-labelledby={`${id}-t`} aria-describedby={`${id}-d`} data-scene={id}>
+<figure class:list={['sframe', 'not-content not-prose', cls]} role="group" aria-labelledby={`${id}-t`} aria-describedby={`${id}-d`} data-scene={id}>
 	<div class="sframe__bar">
 		<p class="sframe__title" id={`${id}-t`}>{title} <b>· {tag}</b></p>
 		<slot name="stats" />

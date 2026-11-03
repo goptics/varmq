@@ -1,5 +1,5 @@
 // The example programs (examples/*/main.go) and the versions they run with (examples/go.mod), read at build time for
-// GoPlay.astro on the docs pages and home/Examples.astro on the home page. Server only: the page gets the source in
+// GoPlay.astro. Server only: the page gets the source in
 // its markup, and the browser code (go-play.ts, playground.ts) never imports this module.
 
 import goMod from '../../examples/go.mod?raw';

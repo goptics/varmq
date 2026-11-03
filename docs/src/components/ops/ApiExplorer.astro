@@ -60,7 +60,7 @@ const describe =
 					<div class="api__group" role="group" aria-label={g.title}>
 						<span class="api__gtitle">{g.title}</span>
 						{g.items.map(([m, p, label]) => (
-							<button type="button" class="api__chip" data-method={m} data-path={p}>
+							<button type="button" class="pbtn api__chip" data-method={m} data-path={p}>
 								<b>{m}</b> {label}
 							</button>
 						))}

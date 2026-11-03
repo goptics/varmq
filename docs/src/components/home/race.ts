@@ -1,4 +1,4 @@
-// Benchmark lanes: bars and counters count up once when a lane list is first seen, and again on Replay.
+// Benchmark lanes: bars and counters count up once when a lane list is first seen.
 
 import { reducedMotion } from '../ui/dom.ts';
 
@@ -8,14 +8,9 @@ function format(v: number, dec: number, suffix: string) {
 	return v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suffix;
 }
 
-/** The latest count-up of each value: an earlier one, still running when Replay starts another, stops writing. */
-const runs = new WeakMap<HTMLElement, number>();
-let run = 0;
-
 function play(list: HTMLElement) {
 	if (reducedMotion()) return;
 	const total = 1100;
-	const mine = ++run;
 	list.querySelectorAll<HTMLElement>('.rlane').forEach((lane, i) => {
 		const bar = lane.querySelector<HTMLElement>('.rlane__bar');
 		const val = lane.querySelector<HTMLElement>('.rlane__val');
@@ -25,8 +20,6 @@ function play(list: HTMLElement) {
 		const dec = parseInt(val.dataset.dec ?? '0', 10);
 		const suffix = val.dataset.suffix ?? '';
 		const delay = i * 60;
-		for (const a of bar.getAnimations()) a.cancel();
-		runs.set(val, mine);
 		bar.animate([{ transform: 'scaleX(0)' }, { transform: `scaleX(${target})` }], {
 			duration: total,
 			delay,
@@ -35,7 +28,6 @@ function play(list: HTMLElement) {
 		});
 		const t0 = performance.now() + delay;
 		const tick = (now: number) => {
-			if (runs.get(val) !== mine) return;
 			const p = Math.max(0, Math.min(1, (now - t0) / total));
 			const eased = 1 - Math.pow(1 - p, 3);
 			val.textContent = format(v * eased, dec, suffix);
@@ -63,8 +55,4 @@ if (root) {
 		{ threshold: 0.35 },
 	);
 	lists.forEach((l) => io.observe(l));
-
-	root.querySelector('[data-replay]')?.addEventListener('click', () => {
-		for (const l of lists) if (l.offsetParent !== null) play(l);
-	});
 }

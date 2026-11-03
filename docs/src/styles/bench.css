@@ -1,5 +1,5 @@
 /* Benchmarks page. The explorer is a dark panel in both themes (docs/DESIGN.md: simulation panels).
-   Every rule is scoped under .bench so nothing leaks into the Starlight shell.
+   Every rule is scoped under .bench so nothing leaks into the docs shell.
    The panel measures its own width (container queries), so the layout follows the content column, not the viewport.
    Tabs and buttons are the shared `seg` and `pbtn` (ui.css). */
 
@@ -12,7 +12,7 @@
 	background: var(--panel);
 	color: var(--panel-ink);
 	border: 1px solid var(--panel-rule);
-	border-radius: 16px;
+	border-radius: var(--corner);
 	overflow: hidden;
 	box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--panel) 60%, transparent);
 	font-family: var(--display);
@@ -110,6 +110,7 @@
 }
 
 .bench__title {
+	font-family: var(--headline);
 	font-size: 1.25rem;
 	font-weight: 650;
 	line-height: 1.25;
@@ -128,14 +129,14 @@
 	gap: 10px;
 	padding: 10px 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 }
 
 .bcaption__tag {
 	flex: none;
 	padding: 3px 6px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-fill-2);
 	font: 500 0.6875rem/1 var(--mono);
 	letter-spacing: 0.1em;
@@ -181,16 +182,10 @@
 	color: var(--panel-ink);
 }
 
-.bdet {
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--panel-2);
-}
-
 .bdet > summary {
 	list-style: none;
 	cursor: pointer;
-	padding: 10px 14px;
+	padding: 10px 0;
 	min-height: 44px;
 	display: flex;
 	align-items: center;
@@ -227,7 +222,7 @@
 }
 
 .bdet__body {
-	padding: 4px 14px 14px;
+	padding: 4px 0 14px;
 	display: grid;
 	gap: 10px;
 	color: var(--panel-ink-2);
@@ -235,7 +230,7 @@
 }
 
 .bdet > .btable {
-	margin: 0 14px 14px;
+	margin: 0 0 14px;
 }
 
 /* ---- controls: one wrapping row of selects, the Show choice, Baselines and Clear ---- */
@@ -283,31 +278,13 @@
 	margin-bottom: 6px;
 }
 
-/* The explorer is .on-dark, not .sframe, so ui.css's select rule does not reach it. Same look. */
-.bench select {
-	min-height: 40px;
-	max-width: 100%;
-	padding: 6px 10px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--panel-2);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1.2 var(--mono);
-	color-scheme: dark;
-	cursor: pointer;
-}
-
-.bench select:hover {
-	background: var(--panel-fill-2);
-}
-
 /* Show changes what the lanes measure, so it stays a segmented choice: native radios in one box. */
 .bseg {
 	display: flex;
 	gap: 2px;
 	padding: 3px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 }
 
 .bopt {
@@ -330,7 +307,7 @@
 	align-items: center;
 	min-height: 32px;
 	padding: 6px 12px;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	color: var(--panel-ink-2);
 	font: 600 0.875rem/1.1 var(--display);
 	white-space: nowrap;
@@ -365,17 +342,17 @@
 
 .bopt--check span::before {
 	content: '';
-	width: 14px;
-	height: 14px;
+	width: 16px;
+	height: 16px;
 	margin-right: 8px;
-	border: 1.5px solid var(--panel-ink-2);
-	border-radius: 4px;
+	border: 1px solid var(--panel-ink-2);
+	border-radius: var(--corner);
+	background: var(--panel-2);
 }
 
 .bopt--check input:checked + span::before {
-	background: var(--brand);
 	border-color: var(--brand);
-	box-shadow: inset 0 0 0 2px var(--panel);
+	background: var(--brand) var(--tick) center / 100% no-repeat;
 }
 
 /* Clear shows only while something is filtered, at the row's end. */
@@ -384,7 +361,6 @@
 }
 
 @media (pointer: coarse) {
-	.bench select,
 	.bopt span {
 		min-height: 44px;
 	}
@@ -441,6 +417,7 @@
 }
 
 .bench .rg__title h4 {
+	font-family: var(--headline);
 	font-size: 1rem;
 	font-weight: 650;
 	line-height: 1.2;
@@ -500,7 +477,7 @@
 .bench .rlane__track {
 	position: relative;
 	height: 18px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 }
 
@@ -518,7 +495,7 @@
 .bench .rlane__bar {
 	display: block;
 	height: 100%;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: color-mix(in srgb, var(--panel-ink) 38%, transparent);
 	transform-origin: left center;
 	transform: scaleX(max(var(--s, 1), 0.006));
@@ -658,7 +635,7 @@
 	height: 26px;
 	padding: 0;
 	border: 1.5px solid transparent;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font: 700 0.6875rem/1 var(--mono);
 	letter-spacing: 0.02em;
 	cursor: pointer;
@@ -726,7 +703,7 @@
 	width: 26px;
 	height: 20px;
 	border: 1.5px solid var(--amber);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	color: var(--amber);
 	font-weight: 700;
 	font-size: 0.625rem;
@@ -753,15 +730,13 @@
 /* ---- where VarMQ does not win ---- */
 
 .bloss {
+	--group-rule: color-mix(in srgb, var(--amber) 50%, var(--panel-rule));
 	display: grid;
 	gap: 12px;
-	padding: 16px 18px;
-	border: 1px solid color-mix(in srgb, var(--amber) 50%, var(--panel-rule));
-	border-radius: 10px;
-	background: var(--panel-2);
 }
 
 .bloss h4 {
+	font-family: var(--headline);
 	font-size: 1rem;
 	font-weight: 650;
 	color: var(--amber);
@@ -783,7 +758,7 @@
 	gap: 8px;
 	padding: 4px 10px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font: 400 0.75rem/1.4 var(--mono);
 	color: var(--panel-ink-2);
 }
@@ -793,30 +768,13 @@
 	font-weight: 600;
 }
 
-.bloss .bdet {
-	border: 0;
-	border-top: 1px solid var(--panel-rule);
-	border-radius: 0;
-	background: none;
-}
-
-.bloss .bdet > summary {
-	padding-inline: 0;
-}
-
-.bloss .bdet__body,
-.bloss .bdet > .btable {
-	padding-inline: 0;
-	margin-inline: 0;
-}
-
 /* ---- tables ---- */
 
 .btable {
 	position: relative;
 	overflow-x: auto;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel);
 }
 
@@ -895,7 +853,7 @@
 	padding: 2px 8px;
 	margin-left: 4px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 	color: var(--panel-accent);
 	font: 500 0.6875rem/1 var(--mono);
