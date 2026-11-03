@@ -114,7 +114,7 @@ Binding one wraps it so that `Add` writes JSON and the worker reads with `Dequeu
 
 `WithDistributedQueue` and `WithDistributedPriorityQueue` call `Subscribe` once, while binding, and pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull, and it also feeds the worker's counters. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewDistributedQueue` does not call `Subscribe`, because it has no worker.
 
-For a distributed queue, [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) may differ from what you expect. These docs do not cover how a distributed queue's counters count yet; [Metrics](/guides/metrics/) covers in-memory queues only.
+For the counters of a worker on a persistent or distributed queue, see [the overview](/persistence/overview/#metrics). [Metrics](/guides/metrics/) covers in-memory queues.
 
 ### `IDistributedQueue` and `IDistributedPriorityQueue`
 

@@ -89,6 +89,6 @@ Adapters that implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/
 - **The counters of a worker on a distributed queue may differ from what you expect.** `Submitted` in particular. These docs do not cover how a distributed queue's counters count yet.
 - **[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) asks the storage.** It is the number of jobs waiting there, plus jobs the worker has taken and not yet started. The queue handle's `Len` leaves out the second kind. Each call is a call to the storage.
 
-## Persistent topics are not released
+## Topics
 
-[Topics](/guides/topics/) are in-memory only. A persistent topic was built and then moved out of the main branch before release, in [#110](https://github.com/goptics/varmq/pull/110). It lives on the [`exp/persistent-topic`](https://github.com/goptics/varmq/tree/exp/persistent-topic) branch, it is not part of v1.10.0, and these pages do not describe it. To share jobs between processes, use a distributed queue.
+[Topics](/guides/topics/) are in-memory only. To share jobs between processes, use a distributed queue.
