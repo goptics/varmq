@@ -1,0 +1,1 @@
+function e(n,r=!1){let i=n;for(let n in i){if(i[n]===void 0&&delete i[n],!r)continue;let a=i[n];if(t(a))e(a,r);else if(Array.isArray(a))for(let n of a)t(n)&&e(n,r)}return n}function t(e){if(typeof e!=`object`||!e)return!1;let t=Object.getPrototypeOf(e);return t===null||t===Object.prototype||Object.getPrototypeOf(t)===null}export{e as t};

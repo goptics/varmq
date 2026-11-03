@@ -1,0 +1,1 @@
+import{l as e,n as t}from"./dom.h2kAK2UP.js";t(),document.querySelectorAll(`[data-install]`).forEach(t=>{e(t.querySelector(`[role="tablist"]`))});

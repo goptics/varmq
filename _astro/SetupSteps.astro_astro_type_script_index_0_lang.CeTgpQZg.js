@@ -1,0 +1,1 @@
+import{l as e,n as t}from"./dom.h2kAK2UP.js";document.querySelectorAll(`[data-ops-steps] [role="tablist"]`).forEach(t=>e(t)),t();
