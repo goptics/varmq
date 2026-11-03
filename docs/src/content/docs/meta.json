@@ -16,6 +16,7 @@
 		"[API reference](https://pkg.go.dev/github.com/goptics/varmq)",
 		"reference/benchmarks",
 		"guides/configuration",
+		"reference/glossary",
 		"[Changelog](https://github.com/goptics/varmq/blob/main/CHANGELOG.md)"
 	]
 }
