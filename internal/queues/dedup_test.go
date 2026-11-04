@@ -242,7 +242,11 @@ func TestDrainedIdSetIsEmpty(t *testing.T) {
 		q.Dequeue()
 		pq.Dequeue()
 	}
-	assert.Zero(t, q.ids.Load().len())
+	ids := q.ids.Load()
+	assert.Zero(t, ids.len())
+	for i := range ids.shards {
+		assert.LessOrEqual(t, ids.shards[i].ids.peak, idShardShrinkPeak, "drained shard keeps burst peak")
+	}
 	assert.Nil(t, pq.ids, "a burst's set is dropped once drained")
 	assert.True(t, q.EnqueueOnce(idItem("a"), "a"))
 	assert.True(t, pq.EnqueueOnce(idItem("a"), 0, "a"))
