@@ -191,6 +191,7 @@ func TestJob(t *testing.T) {
 		jsonStr := string(jsonData)
 		assert.Contains(jsonStr, `"id":"job-json"`, "JSON should contain job ID")
 		assert.Contains(jsonStr, `"data":"test data"`, "JSON should contain job data")
+		assert.Regexp(`"enqueued_at":\d{13}`, jsonStr, "JSON should carry enqueued_at in Unix ms")
 		assert.Contains(jsonStr, `"status":"Created"`, "JSON should contain job status")
 	})
 

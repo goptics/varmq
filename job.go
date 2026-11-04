@@ -7,6 +7,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -90,11 +91,13 @@ type jobAck struct {
 	reason *string
 }
 
-// jobView represents a view of a job's state for serialization.
+// jobView is the job envelope persistent and distributed storage holds
+// (spec/redis-storage.md, section 3).
 type jobView[T any] struct {
-	Id      string `json:"id"`
-	Status  string `json:"status"`
-	Payload T      `json:"data"`
+	Id         string `json:"id"`
+	Status     string `json:"status"`
+	Payload    T      `json:"data"`
+	EnqueuedAt int64  `json:"enqueued_at,omitempty"` // Unix ms, producer clock
 }
 
 type Job[T any] interface {
@@ -205,9 +208,10 @@ func (j *job[T]) Wait() {
 
 func (j *job[T]) Json() ([]byte, error) {
 	view := jobView[T]{
-		Id:      j.ID(),
-		Status:  j.Status(),
-		Payload: j.data,
+		Id:         j.ID(),
+		Status:     j.Status(),
+		Payload:    j.data,
+		EnqueuedAt: time.Now().UnixMilli(),
 	}
 
 	return json.Marshal(view)

@@ -1,0 +1,366 @@
+openapi: 3.1.0
+info:
+  title: varmq HTTP API
+  version: 1.0.0
+  description: |
+    The API that `varmq.Handler` serves and that observers such as vartop read.
+    This file is the contract (see adr/0001-spec-is-the-contract.md): every
+    varmq implementation serves these routes, and a change to them starts here
+    with a version bump.
+
+    Paths are relative to the prefix the application mounts the handler under,
+    for example `/varmq`.
+
+    Every response carries the `X-Varmq-Instance` header. The router's own 404
+    and 405 replies, for an unknown path or method, have a plain-text body;
+    every error this API sends itself is an `Error` JSON object.
+
+    Worker routes describe this process only. Queue routes read the queue's
+    storage, so for a queue that several instances share, each instance
+    reports the same numbers; group them by Queue ID, do not add them.
+
+    Changes:
+    - 1.0.0: first version. Worker routes as served before; `/queues` and
+      `/queues/{id}/jobs` added.
+  license:
+    name: MIT
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness check.
+      responses:
+        "200":
+          description: The process is serving.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /workers:
+    get:
+      operationId: listWorkers
+      summary: Summaries of every named worker in this process.
+      description: |
+        Only workers with a name are listed. A stopped worker stays listed
+        until its stopped-retention time runs out (default one minute).
+        The order is unspecified.
+      responses:
+        "200":
+          description: The workers; an empty array when there are none.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkerSummary" }
+
+  /workers/{name}:
+    parameters:
+      - $ref: "#/components/parameters/WorkerName"
+    get:
+      operationId: getWorker
+      summary: One worker, with its metrics.
+      responses:
+        "200":
+          description: The worker.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerDetails" }
+        "404": { $ref: "#/components/responses/WorkerNotFound" }
+
+  /workers/{name}/actions/{action}:
+    parameters:
+      - $ref: "#/components/parameters/WorkerName"
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [pause, resume, restart, start, stop]
+    patch:
+      operationId: workerAction
+      summary: Change a worker's state.
+      responses:
+        "200": { $ref: "#/components/responses/Done" }
+        "400":
+          description: Unknown action (`unknown action`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/WorkerNotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /workers/{name}/config/concurrency/{number}:
+    parameters:
+      - $ref: "#/components/parameters/WorkerName"
+      - name: number
+        in: path
+        required: true
+        description: |
+          The new concurrency. Below 1 means the number of CPU cores; above
+          4294967295 is clamped to 4294967295.
+        schema: { type: integer }
+    patch:
+      operationId: setWorkerConcurrency
+      summary: Change a worker's concurrency.
+      responses:
+        "200": { $ref: "#/components/responses/Done" }
+        "400":
+          description: The number is not an integer (`invalid concurrency value`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/WorkerNotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /queues:
+    get:
+      operationId: listQueues
+      summary: Counts and totals of every inspectable queue bound in this process.
+      description: |
+        A queue is listed when its storage can report shared counts (in Go,
+        it implements `varmq.QueueInspector`), once per Queue ID however many
+        workers bind it. Queues whose storage cannot are left out. Entries
+        are sorted by `id`.
+      responses:
+        "200":
+          description: The queues; an empty array when there are none.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/QueueSummary" }
+
+  /queues/{id}/jobs:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: |
+          The Queue ID, percent-encoded as one path segment. Redis Queue IDs
+          hold `{`, `}` and `:`, and may hold `/`, so a client encodes
+          `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
+        schema: { type: string }
+      - name: state
+        in: query
+        required: true
+        schema: { $ref: "#/components/schemas/JobState" }
+      - name: offset
+        in: query
+        description: Jobs to skip.
+        schema: { type: integer, minimum: 0, default: 0 }
+      - name: limit
+        in: query
+        description: Most jobs to return.
+        schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+    get:
+      operationId: listJobs
+      summary: One page of a queue's jobs in one Job State.
+      description: |
+        Order: `pending` in the order the queue hands jobs out (priority
+        first for a priority queue); `completed` and `failed` newest
+        `finished_at` first; `processing` unspecified. Pages are read
+        separately, so jobs that change state between two requests can be
+        skipped or repeated.
+      responses:
+        "200":
+          description: The jobs; an empty array past the end.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Job" }
+        "400":
+          description: Missing or invalid `state`, `offset` or `limit`.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No inspectable queue with this ID is bound here (`queue not found`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+components:
+  headers:
+    Instance:
+      description: |
+        The answering process's instance ID: by default its hostname (the pod
+        name on Kubernetes), or empty when that is unavailable.
+      schema: { type: string }
+
+  parameters:
+    WorkerName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Done:
+      description: Done. The body is empty.
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+    WorkerNotFound:
+      description: No worker with this name (`worker not found`).
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: |
+        The worker's state does not allow it: `worker is already running`,
+        `worker is not running`, or `worker already has the same concurrency`.
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Any other failure; `error` holds its text.
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    WorkerStatus:
+      type: string
+      enum: [Initiated, Idle, Running, Pausing, Paused, Stopping, Stopped, Unknown]
+
+    WorkerSummary:
+      type: object
+      required: [name, status, concurrency, num_processing, num_pending, num_idle_workers]
+      properties:
+        name: { type: string }
+        status: { $ref: "#/components/schemas/WorkerStatus" }
+        concurrency: { type: integer, description: Most jobs the worker runs at once. }
+        num_processing: { type: integer, description: Jobs this worker is running now. }
+        num_pending:
+          type: integer
+          description: |
+            Jobs waiting in the worker's bound queues, as their `Len` reports
+            it. For shared storage this includes jobs other processes added.
+        num_idle_workers: { type: integer, description: Pool goroutines waiting for a job. }
+
+    WorkerDetails:
+      allOf:
+        - $ref: "#/components/schemas/WorkerSummary"
+        - type: object
+          required: [metrics]
+          properties:
+            metrics:
+              type: object
+              description: Counters of this process only, since start or the last reset.
+              required: [submitted, completed, successful, failed]
+              properties:
+                submitted: { type: integer, minimum: 0, description: Jobs this process added. }
+                completed: { type: integer, minimum: 0, description: Jobs this worker finished, successful or failed. }
+                successful: { type: integer, minimum: 0 }
+                failed: { type: integer, minimum: 0, description: Jobs that returned an error or panicked. }
+
+    JobState:
+      type: string
+      description: |
+        Where a job is in its life. `pending`: in the queue, not handed out.
+        `processing`: handed out to a worker, no outcome yet. `completed`:
+        acknowledged. `failed`: rejected, that is failed for the last time,
+        with no retry.
+      enum: [pending, processing, completed, failed]
+
+    QueueSummary:
+      type: object
+      required: [id]
+      description: |
+        Either `counts` and `totals`, or `error` when the storage could not
+        be read (for example a closed queue or a lost connection).
+      properties:
+        id:
+          type: string
+          description: The Queue ID, the same on every instance; for redisq, the queue's full Redis key.
+        counts:
+          type: object
+          description: |
+            Jobs the queue holds in each state now. `completed` and `failed`
+            count the Job Records storage still keeps, which retention bounds,
+            not every job that ever finished.
+          required: [pending, processing, completed, failed]
+          properties:
+            pending: { type: integer, minimum: 0 }
+            processing: { type: integer, minimum: 0 }
+            completed: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+        totals:
+          type: object
+          description: |
+            Jobs counted since the storage began counting, by every producer
+            and consumer of the queue. Retention does not lower them.
+          required: [submitted, completed, failed]
+          properties:
+            submitted: { type: integer, minimum: 0 }
+            completed: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+        error: { type: string }
+
+    Job:
+      type: object
+      required: [id, state, payload, attempts]
+      properties:
+        id:
+          type: string
+          description: |
+            The Job ID: the ID the producer gave the job, or, for a job given
+            none, the ack ID of its last attempt (see spec/redis-storage.md).
+            Empty for a pending job the producer gave no ID.
+        state: { $ref: "#/components/schemas/JobState" }
+        payload:
+          description: The job's data as the producer serialised it, any JSON value.
+        enqueued_at:
+          type: integer
+          description: Unix milliseconds the producer added the job. Absent when unknown.
+        started_at:
+          type: integer
+          description: Unix milliseconds the last attempt started. Absent before the first.
+        finished_at:
+          type: integer
+          description: Unix milliseconds the job completed or failed. Only on completed and failed jobs.
+        attempts:
+          type: integer
+          minimum: 0
+          description: Times storage handed the job to a worker. 0 for a pending job never handed out.
+        last_error:
+          type: string
+          description: The error of the last failed attempt. Absent when no attempt failed.
