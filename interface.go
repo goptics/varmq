@@ -57,10 +57,12 @@ func enqueuePriority(q IPriorityQueue, item any, priority int, id string) bool {
 // reports its outcome: Acknowledge on success, Reject on its final failure.
 // varmq has no retries, so every failure is final. See spec/redis-storage.md.
 type IAcknowledgeable interface {
-	// Acknowledge marks the item held under ackID completed; false when unknown.
+	// Acknowledge marks the item held under ackID completed; false when
+	// storage could not record it.
 	Acknowledge(ackID string) bool
 	// Reject marks the item held under ackID failed for good, without
-	// requeueing it. reason is the error text. False when unknown.
+	// requeueing it. reason is the error text. False when storage could not
+	// record it.
 	Reject(ackID string, reason string) bool
 	// DequeueWithAckId returns the next item and its ack id; false when empty.
 	DequeueWithAckId() (any, bool, string)

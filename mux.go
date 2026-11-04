@@ -236,7 +236,7 @@ func handleListQueues(w http.ResponseWriter, r *http.Request) {
 
 	queueRegistry.Range(func(key, value any) bool {
 		q := queueSummary{ID: key.(string)}
-		if stats, err := value.(QueueInspector).QueueStats(); err != nil {
+		if stats, err := value.(QueueInspector).QueueStats(r.Context()); err != nil {
 			q.Error = err.Error()
 		} else {
 			q.QueueStats = &stats
@@ -279,7 +279,7 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, err := v.(QueueInspector).Jobs(state, offset, limit)
+	jobs, err := v.(QueueInspector).Jobs(r.Context(), state, offset, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -320,8 +320,13 @@ func handleActionErr(w http.ResponseWriter, err error) {
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set(InstanceHeader, InstanceID)
 	w.Header().Set("Content-Type", "application/json")
+	// Marshal first: a status already sent can't become a 500.
+	body, err := json.Marshal(data)
+	if err != nil {
+		status, body = http.StatusInternalServerError, []byte(`{"error":"encode response"}`)
+	}
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	w.Write(append(body, '\n'))
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

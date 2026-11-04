@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -500,11 +501,11 @@ type inspectedQueue struct {
 
 func (q *inspectedQueue) QueueID() string { return q.id }
 
-func (q *inspectedQueue) QueueStats() (QueueStats, error) {
+func (q *inspectedQueue) QueueStats(context.Context) (QueueStats, error) {
 	return QueueStats{Counts: JobCounts{Pending: 2, Failed: 1}, Totals: JobTotals{Submitted: 5, Failed: 1}}, q.err
 }
 
-func (q *inspectedQueue) Jobs(state JobState, offset, limit int) ([]JobRecord, error) {
+func (q *inspectedQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
 	q.gotState, q.gotPage = state, [2]int{offset, limit}
 	if q.err != nil {
 		return nil, q.err
@@ -571,4 +572,11 @@ func TestMuxQueues(t *testing.T) {
 			assert.Contains(t, rr.Body.String(), `"error"`, path)
 		}
 	})
+}
+
+func TestWriteJSONEncodeError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeJSON(rr, http.StatusOK, []JobRecord{{Payload: json.RawMessage(`{bad`)}})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.JSONEq(t, `{"error":"encode response"}`, rr.Body.String())
 }

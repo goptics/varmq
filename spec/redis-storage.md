@@ -195,7 +195,7 @@ Input: the ack ID. Steps:
 3. Find the envelope `id` (`pcall(cjson.decode, item)`, then take `id` if it is a string). The Job ID is that `id`, or the ack ID when it is empty.
 4. `attempts = 1 + (HGET <base>:attempts <id> or 0)`, then `HDEL <base>:attempts <id>`; both only when the envelope `id` is not empty.
 5. `HINCRBY <base>:stats completed 1`.
-6. If retention keeps completed records: `HSET <base>:jobs <job id> <record>`, `ZADD <base>:completed <now (ms)> <job id>`, and `ZREM <base>:failed <job id>` (a reused Job ID moves to the newest state).
+6. `ZREM <base>:failed <job id>`, so a reused Job ID moves to the newest state. Then, if retention keeps completed records: `HSET <base>:jobs <job id> <record>` and `ZADD <base>:completed <now (ms)> <job id>`; if not: `HDEL <base>:jobs <job id>`.
 7. Trim `:completed` (section 5).
 
 ### 6.4 Reject (failed)
@@ -203,7 +203,7 @@ Input: the ack ID. Steps:
 Input: the ack ID and a reason string. The steps are those of Acknowledge, with these differences:
 
 - step 5 is `HINCRBY <base>:stats failed 1`;
-- step 6 writes the record, with `state` `failed` and one `errors` entry (`attempt` = `attempts`, `at` = now (ms), `error` = the reason), to `<base>:failed`, and removes the Job ID from `<base>:completed`;
+- step 6 removes the Job ID from `<base>:completed`. Then, if retention keeps failed records, it writes the record, with `state` `failed` and one `errors` entry (`attempt` = `attempts`, `at` = now (ms), `error` = the reason), to `<base>:failed`; if not, it does `HDEL <base>:jobs <job id>`;
 - step 7 trims `:failed`.
 
 Reject never puts the item back in the queue.
@@ -220,6 +220,8 @@ Every script that moves an item from processing back to the queue (the visibilit
 - `HDEL <base>:nacked`, `ZREM <base>:timeouts`;
 - since 1.0.0, `HDEL <base>:started <ack id>`;
 - since 1.0.0, when the envelope `id` is not empty, `HINCRBY <base>:attempts <id> 1`.
+
+`:attempts` is keyed by Job ID, not by enqueue. Two jobs in the queue at once with the same Job ID (re-added after the dedupe window) share one count, and the first to finish clears it for both.
 
 The script pushes the item before it removes it from `:nacked`, so a failed push loses nothing. A requeue is neither completed nor failed, so it changes no `:stats` counter.
 
@@ -265,4 +267,5 @@ Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is 
 
 - Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
+- An older requeue does not `HINCRBY <base>:attempts` or `HDEL <base>:started`. A job it requeues gets a too-low `attempts` in its record, and its `:started` entry stays until Purge.
 - A new field in an item or a Job Record is a minor version. A changed meaning, or a removed or renamed key or field, is a major version.

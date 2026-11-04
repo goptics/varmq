@@ -310,6 +310,11 @@ components:
       description: |
         Either `counts` and `totals`, or `error` when the storage could not
         be read (for example a closed queue or a lost connection).
+      oneOf:
+        - required: [counts, totals]
+          not: { required: [error] }
+        - required: [error]
+          not: { anyOf: [{ required: [counts] }, { required: [totals] }] }
       properties:
         id:
           type: string

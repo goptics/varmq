@@ -73,7 +73,7 @@ An in-memory job is done when its function returns. A job in storage needs one m
 
 Three details about step 3:
 
-- **A failed or panicking job is rejected.** VarMQ recovers a panic, counts the job as failed and reports the panic. Then it calls `Reject`, which removes the job from storage like `Acknowledge` does. The job does not run again. Nothing in VarMQ retries a job, so every failure is final.
+- **A failed or panicking job is rejected.** VarMQ recovers a panic, counts the job as failed and reports the panic. Then it calls `Reject`, which removes the job from storage like `Acknowledge` does. The job does not run again, unless `Reject` fails: then the storage can give it out again (see [what this guarantees](#what-this-guarantees)). Nothing in VarMQ retries a job, so every failure is final.
 - **A job whose acknowledgement fails is reported.** If `Acknowledge` or `Reject` returns `false`, the worker sends [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) to `Errs()` and the handler. The job's function has already run.
 - **Taken jobs run.** A worker with these queues takes one job per free slot and starts it. A [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) or [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) does not park a job the worker already took. The job is unacknowledged, and after a long wait a visibility timeout could give it to another consumer. A visibility timeout is the time some storage, such as redisq, waits for an acknowledgement. After that time, the storage gives the job out again. See [shutting down](#shutting-down).
 

@@ -783,6 +783,22 @@ func TestJobOutcome(t *testing.T) {
 		assert.Equal(t, []string{"reason"}, mockQueue.Rejected())
 	})
 
+	t.Run("result worker rejects a returned error", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := NewResultWorker(func(j Job[string]) (int, error) {
+			return 0, errors.New("nope")
+		})
+		q := w.WithQueue(mockQueue)
+
+		_, ok := q.Add("x")
+		require.True(t, ok)
+		w.Wait()
+		w.Stop()
+
+		assert.Empty(t, mockQueue.Acked())
+		assert.Equal(t, []string{"nope"}, mockQueue.Rejected())
+	})
+
 	t.Run("fail without ack storage is a no-op", func(t *testing.T) {
 		j := newJob("test", jobConfigs{})
 		j.fail("reason")

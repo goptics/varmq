@@ -4,7 +4,10 @@
 // importing varmq. varmq re-exports every name here.
 package contract
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 // JobState is where a job is in its life (spec/openapi.yaml, JobState).
 type JobState string
@@ -69,9 +72,9 @@ type QueueInspector interface {
 	// binds it, so observers can group instances' answers by it.
 	QueueID() string
 	// QueueStats returns the queue's counts and totals.
-	QueueStats() (QueueStats, error)
+	QueueStats(ctx context.Context) (QueueStats, error)
 	// Jobs returns up to limit jobs in state, skipping the first offset.
 	// Pending jobs come in the order the queue hands them out; completed
 	// and failed jobs newest first.
-	Jobs(state JobState, offset, limit int) ([]JobRecord, error)
+	Jobs(ctx context.Context, state JobState, offset, limit int) ([]JobRecord, error)
 }
