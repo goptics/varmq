@@ -5,12 +5,33 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 )
 
 // WorkerRegistry safely stores reference to all active workers by Name
 var WorkerRegistry sync.Map
+
+// queueRegistry holds every bound QueueInspector by its QueueID, so a queue
+// bound to several workers is listed once.
+// ponytail: entries are never removed, as queues are never unbound; a closed
+// queue stays listed with the error its QueueStats returns.
+var queueRegistry sync.Map
+
+// registerQueue lists q under GET /queues if it is a QueueInspector.
+func registerQueue(q any) {
+	if qi, ok := q.(QueueInspector); ok {
+		queueRegistry.Store(qi.QueueID(), qi)
+	}
+}
+
+// Default and largest page size of GET /queues/{id}/jobs.
+const (
+	defaultJobsLimit = 50
+	maxJobsLimit     = 1000
+)
 
 // InstanceHeader is the response header carrying [InstanceID]. Clients use it
 // to tell which process answered when several instances sit behind one URL
@@ -67,6 +88,11 @@ func NewServerMux() *http.ServeMux {
 	mux.HandleFunc("PATCH /workers/{name}/actions/{action}", handleWorkerAction)
 	// PATCH /workers/{name}/config/concurrency/{number}
 	mux.HandleFunc("PATCH /workers/{name}/config/concurrency/{number}", handleWorkerConcurrency)
+
+	// GET /queues
+	mux.HandleFunc("GET /queues", handleListQueues)
+	// GET /queues/{id}/jobs?state=...&offset=...&limit=...
+	mux.HandleFunc("GET /queues/{id}/jobs", handleListJobs)
 
 	return mux
 }
@@ -194,6 +220,85 @@ func handleWorkerConcurrency(w http.ResponseWriter, r *http.Request) {
 
 	err = worker.TunePool(concurrency)
 	handleActionErr(w, err)
+}
+
+// queueSummary is one entry of GET /queues: the stats, or the error that
+// kept them from being read.
+type queueSummary struct {
+	ID string `json:"id"`
+	*QueueStats
+	Error string `json:"error,omitempty"`
+}
+
+// handleListQueues returns the stats of every bound QueueInspector.
+func handleListQueues(w http.ResponseWriter, r *http.Request) {
+	queues := make([]queueSummary, 0)
+
+	queueRegistry.Range(func(key, value any) bool {
+		q := queueSummary{ID: key.(string)}
+		if stats, err := value.(QueueInspector).QueueStats(); err != nil {
+			q.Error = err.Error()
+		} else {
+			q.QueueStats = &stats
+		}
+		queues = append(queues, q)
+
+		return true
+	})
+
+	slices.SortFunc(queues, func(a, b queueSummary) int { return strings.Compare(a.ID, b.ID) })
+	writeJSON(w, http.StatusOK, queues)
+}
+
+// handleListJobs returns one page of a queue's jobs in one Job State.
+func handleListJobs(w http.ResponseWriter, r *http.Request) {
+	v, ok := queueRegistry.Load(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "queue not found")
+		return
+	}
+
+	query := r.URL.Query()
+	state := JobState(query.Get("state"))
+	switch state {
+	case JobPending, JobProcessing, JobCompleted, JobFailed:
+	default:
+		writeError(w, http.StatusBadRequest, "state must be pending, processing, completed or failed")
+		return
+	}
+
+	offset, err := queryInt(query.Get("offset"), 0)
+	if err != nil || offset < 0 {
+		writeError(w, http.StatusBadRequest, "invalid offset")
+		return
+	}
+
+	limit, err := queryInt(query.Get("limit"), defaultJobsLimit)
+	if err != nil || limit < 1 || limit > maxJobsLimit {
+		writeError(w, http.StatusBadRequest, "invalid limit")
+		return
+	}
+
+	jobs, err := v.(QueueInspector).Jobs(state, offset, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if jobs == nil {
+		jobs = []JobRecord{}
+	}
+
+	writeJSON(w, http.StatusOK, jobs)
+}
+
+// queryInt parses s, or returns def when s is empty.
+func queryInt(s string, def int) (int, error) {
+	if s == "" {
+		return def, nil
+	}
+
+	return strconv.Atoi(s)
 }
 
 func handleActionErr(w http.ResponseWriter, err error) {

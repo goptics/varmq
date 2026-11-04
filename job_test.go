@@ -10,6 +10,7 @@ import (
 
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJob(t *testing.T) {
@@ -61,6 +62,7 @@ func TestJob(t *testing.T) {
 		assert.LessOrEqual(t, unsafe.Sizeof(job[int]{}), uintptr(64))
 		assert.LessOrEqual(t, unsafe.Sizeof(errorJob[int]{}), uintptr(80))
 		assert.LessOrEqual(t, unsafe.Sizeof(resultJob[int, int]{}), uintptr(80))
+		assert.LessOrEqual(t, unsafe.Sizeof(jobAck{}), uintptr(48))
 	})
 
 	t.Run("job Wait method", func(t *testing.T) {
@@ -557,6 +559,8 @@ func (q statusProbeQueue) Acknowledge(string) bool {
 	return false
 }
 
+func (q statusProbeQueue) Reject(id, _ string) bool { return q.Acknowledge(id) }
+
 func (statusProbeQueue) DequeueWithAckId() (any, bool, string) { return nil, false, "" }
 
 func TestJobAckFailure(t *testing.T) {
@@ -665,6 +669,8 @@ type onceAckQueue struct {
 	hook  func()
 }
 
+func (q *onceAckQueue) Reject(id, _ string) bool { return q.Acknowledge(id) }
+
 func (q *onceAckQueue) Acknowledge(id string) bool {
 	q.calls.Add(1)
 	if h := q.hook; h != nil {
@@ -734,5 +740,52 @@ func TestAckExactlyOnce(t *testing.T) {
 			assert.ElementsMatch(t, []error{nil, ErrJobAlreadyClosed}, errs)
 			assert.Equal(t, int32(1), q.calls.Load(), "acknowledged once")
 		}
+	})
+}
+
+// TestJobOutcome checks a worker reports each job's outcome to acknowledging
+// storage: Acknowledge on success, Reject with the error text on failure.
+func TestJobOutcome(t *testing.T) {
+	t.Run("worker acknowledges success and rejects a panic", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		w := NewWorker(func(j Job[string]) {
+			if j.Data() == "bad" {
+				panic("boom")
+			}
+		})
+		q := w.WithPersistentQueue(mockQueue)
+
+		require.True(t, q.Add("ok"))
+		require.True(t, q.Add("bad"))
+		w.Wait()
+		w.Stop()
+
+		assert.Equal(t, []string{"mock-ack-id"}, mockQueue.Acked())
+		rejected := mockQueue.Rejected()
+		require.Len(t, rejected, 1)
+		assert.Contains(t, rejected[0], "boom")
+	})
+
+	t.Run("failed Reject keeps the job open for a retry", func(t *testing.T) {
+		mockQueue := mocks.NewMockPersistentQueue()
+		mockQueue.ShouldFailReject = true
+
+		j := newJob("test", jobConfigs{})
+		j.setAck(mockQueue, "ack-1")
+		j.fail("reason")
+
+		assert.ErrorIs(t, j.Close(), ErrAcknowledgeJob)
+		assert.Empty(t, mockQueue.Acked(), "a failed job is never acknowledged")
+
+		mockQueue.ShouldFailReject = false
+		assert.NoError(t, j.Close())
+		assert.Equal(t, []string{"reason"}, mockQueue.Rejected())
+	})
+
+	t.Run("fail without ack storage is a no-op", func(t *testing.T) {
+		j := newJob("test", jobConfigs{})
+		j.fail("reason")
+		assert.Nil(t, j.ackRef.Load())
+		assert.NoError(t, j.Close())
 	})
 }
