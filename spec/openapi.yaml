@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
-    This file is the contract (see adr/0001-spec-is-the-contract.md): every
+    This file is the contract: every
     varmq implementation serves these routes, and a change to them starts here
     with a version bump.
 

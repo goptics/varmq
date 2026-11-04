@@ -2,17 +2,17 @@
 
 **Version 1.0.0**
 
-This document is the contract for a varmq queue kept in Redis (see `adr/0001-spec-is-the-contract.md`). redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
+This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
 The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
-- **1.0.0**: first version. Describes the key layout redisq already uses (its ADR-0002), and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
+- **1.0.0**: first version. Describes the key layout redisq already uses, and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
 
 ## Terms
 
-The terms come from `GLOSSARY.md`:
+Terms:
 
 - **Queue ID**: the identity a storage reports for a queue, the same on every instance. Here it is the queue's base key (below), for example `redisq:shop:fifo:{emails}`.
 - **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected).
@@ -48,17 +48,17 @@ The Queue ID that an implementation reports (`QueueInspector.QueueID` in Go, `id
 
 | Key | Type | Contents | Since |
 |---|---|---|---|
-| `<base>` (fifo) | LIST | Items, oldest at the head. Producers push to the tail; consumers pop from the head; requeues push to the head. | redisq ADR-0002 |
-| `<base>` (prio) | ZSET | Score: the priority, lower first. Member: the byte `0xFF`, then the sequence number as 16 lowercase hex digits, then the item. A member that does not start with `0xFF` is a bare item written by an older version. | redisq ADR-0002 |
-| `<base>:seq` | STRING | Prio only. The last sequence number, from `INCR`. It orders equal priorities by arrival. | redisq ADR-0002 |
-| `<base>:nacked` | HASH | Processing jobs: ack ID → item, without the sequence prefix. | redisq ADR-0002 |
-| `<base>:timeouts` | ZSET | Ack ID → visibility deadline (s). Absent when the visibility timeout is 0. | redisq ADR-0002 |
-| `<base>:prio` | HASH | Prio only. Ack ID → the score the item had, so a requeue restores its priority. | redisq ADR-0002 |
-| `<base>:idle` | SET | IDs of distributed consumers waiting for work. | redisq ADR-0002 |
-| `<base>:heartbeats` | ZSET | Owner → time its heartbeat runs out (s). | redisq ADR-0002 |
-| `<base>:heartbeats:clock` | STRING | Time of the last sweep by any owner (s). | redisq ADR-0002 |
-| `<base>:presence` | ZSET | Owner → 0 while it is seen subscribed to its wake channel, else the time it was first seen without a subscriber (s). | redisq ADR-0002 |
-| `<base>:dedup:<job id>` | STRING | `1`, with a `PX` expiry equal to the dedupe window. Its presence means a job with this ID was pushed within the window. | redisq ADR-0002 |
+| `<base>` (fifo) | LIST | Items, oldest at the head. Producers push to the tail; consumers pop from the head; requeues push to the head. | redisq |
+| `<base>` (prio) | ZSET | Score: the priority, lower first. Member: the byte `0xFF`, then the sequence number as 16 lowercase hex digits, then the item. A member that does not start with `0xFF` is a bare item written by an older version. | redisq |
+| `<base>:seq` | STRING | Prio only. The last sequence number, from `INCR`. It orders equal priorities by arrival. | redisq |
+| `<base>:nacked` | HASH | Processing jobs: ack ID → item, without the sequence prefix. | redisq |
+| `<base>:timeouts` | ZSET | Ack ID → visibility deadline (s). Absent when the visibility timeout is 0. | redisq |
+| `<base>:prio` | HASH | Prio only. Ack ID → the score the item had, so a requeue restores its priority. | redisq |
+| `<base>:idle` | SET | IDs of distributed consumers waiting for work. | redisq |
+| `<base>:heartbeats` | ZSET | Owner → time its heartbeat runs out (s). | redisq |
+| `<base>:heartbeats:clock` | STRING | Time of the last sweep by any owner (s). | redisq |
+| `<base>:presence` | ZSET | Owner → 0 while it is seen subscribed to its wake channel, else the time it was first seen without a subscriber (s). | redisq |
+| `<base>:dedup:<job id>` | STRING | `1`, with a `PX` expiry equal to the dedupe window. Its presence means a job with this ID was pushed within the window. | redisq |
 | `<base>:started` | HASH | Ack ID → time the attempt started (ms). | 1.0.0 |
 | `<base>:attempts` | HASH | Job ID given by the producer → number of times the job went back to the queue without an outcome. | 1.0.0 |
 | `<base>:jobs` | HASH | Job ID → Job Record (section 4), as JSON. | 1.0.0 |
@@ -210,7 +210,7 @@ Reject never puts the item back in the queue.
 
 A consumer calls Acknowledge when a job succeeds and Reject when it fails for the last time. A consumer that retries a failed job calls neither: the job stays processing until the consumer finishes it or the storage requeues it. (varmq has no retries in this version, so every failure calls Reject.)
 
-redisq ADR-0003 plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `errors` holds only the Reject entry, and `attempts` counts only hand-outs.
+redisq plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `errors` holds only the Reject entry, and `attempts` counts only hand-outs.
 
 ### 6.5 Requeue
 
@@ -263,6 +263,6 @@ Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is 
 
 ## 8. Compatibility
 
-- Items, `:nacked` and the other redisq ADR-0002 keys are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
+- Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
 - A new field in an item or a Job Record is a minor version. A changed meaning, or a removed or renamed key or field, is a major version.
