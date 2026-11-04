@@ -127,6 +127,7 @@ type CapacitySetter interface {
 type IPurgeValuesQueue interface {
 	PurgeValues() []any
 }
+
 // The types observers read through Handler come from the contract module,
 // the Go copy of spec/ that storage such as redisq imports without varmq.
 type (

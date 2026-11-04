@@ -152,16 +152,24 @@ func (q *Queue[T]) Purge() {
 
 // PurgeValues removes every item, frees their ids and returns the removed
 // items, front first. It is one step, so an Enqueue racing it is either
-// returned or stays queued, never removed unseen. Holding idMu keeps an
-// EnqueueOnce from landing between the purge and the id reset.
+// returned or stays queued, never removed unseen. Holding every shard lock
+// keeps an EnqueueOnce from landing between the purge and the id reset.
 // ponytail: a Dequeue that took an item before Purge and frees its id after a
 // re-add of that id frees the new one, letting one repeat in; no id leaks.
+// PurgeValues makes the set even on a queue that never saw an id (4 KiB), so
+// a racing first EnqueueOnce shares its locks.
 func (q *Queue[T]) PurgeValues() []any {
-	q.idMu.Lock()
-	defer q.idMu.Unlock()
+	ids := q.idSet()
+	for i := range ids.shards {
+		ids.shards[i].mu.Lock()
+	}
 
 	vals := q.cur.Purge()
-	q.ids, q.idsPeak = nil, 0
+
+	for i := range ids.shards {
+		ids.shards[i].ids = idMap{}
+		ids.shards[i].mu.Unlock()
+	}
 
 	return anys(vals)
 }
@@ -174,24 +182,6 @@ func anys[T any](vals []T) []any {
 	}
 
 	return out
-// Purge removes every item and frees their ids. Holding every shard lock
-// keeps an EnqueueOnce from landing between the two.
-// ponytail: a Dequeue that took an item before Purge and frees its id after a
-// re-add of that id frees the new one, letting one repeat in; no id leaks.
-// Purge makes the set even on a queue that never saw an id (4 KiB), so a
-// racing first EnqueueOnce shares its locks.
-func (q *Queue[T]) Purge() {
-	ids := q.idSet()
-	for i := range ids.shards {
-		ids.shards[i].mu.Lock()
-	}
-
-	q.cur.Purge()
-
-	for i := range ids.shards {
-		ids.shards[i].ids = idMap{}
-		ids.shards[i].mu.Unlock()
-	}
 }
 
 // Close makes every later Enqueue return false. Stored items can still be
