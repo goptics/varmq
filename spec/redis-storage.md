@@ -210,6 +210,8 @@ Reject never puts the item back in the queue.
 
 A consumer calls Acknowledge when a job succeeds and Reject when it fails for the last time. A consumer that retries a failed job calls neither: the job stays processing until the consumer finishes it or the storage requeues it. (varmq has no retries in this version, so every failure calls Reject.)
 
+redisq ADR-0003 plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `last_error` comes only from Reject, and `attempts` counts only hand-outs.
+
 ### 6.5 Requeue
 
 Every script that moves an item from processing back to the queue (the visibility timeout, a dead or gone owner found by the sweep, an owner's release on close, and a manual requeue) does, for each item it moves:
@@ -223,7 +225,7 @@ The script pushes the item before it removes it from `:nacked`, so a failed push
 
 ### 6.6 Purge
 
-Purge deletes the base key, which removes every pending job. It does not touch processing jobs, Job Records or counters.
+Purge deletes the base key, which removes every pending job. It does not touch processing jobs, Job Records or counters. A purged job that was requeued before keeps its field in `<base>:attempts`: removing it would mean decoding every pending item. This is a known, small leak; a later version can clean it up.
 
 ## 7. Reading
 

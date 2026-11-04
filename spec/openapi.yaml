@@ -243,7 +243,10 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     InternalError:
-      description: Any other failure; `error` holds its text.
+      description: |
+        Any other failure; `error` holds its text. For the worker routes this
+        includes the worker states that are not a 409: `worker is paused`,
+        `worker is stopped`, `worker is pausing` and `worker is stopping`.
       headers:
         X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
       content:
