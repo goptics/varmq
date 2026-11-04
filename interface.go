@@ -1,39 +1,35 @@
 package varmq
 
-// IBaseQueue is the root interface of queue operations. workers queue needs to implement this interface.
+// IBaseQueue is the part every queue storage implements.
 type IBaseQueue interface {
+	// Len returns how many items wait in the queue.
 	Len() int
+	// Dequeue removes and returns the next item; false when empty.
 	Dequeue() (any, bool)
+	// Values returns the waiting items, front first.
 	Values() []any
+	// Purge removes every waiting item.
 	Purge()
+	// Close releases the storage.
 	Close() error
 }
 
-// IQueue is the root interface of queue operations.
+// IQueue is FIFO storage.
 type IQueue interface {
 	IBaseQueue
+	// Enqueue stores item; false when refused.
 	Enqueue(item any) bool
-	// EnqueueOnce stores item unless an item with the same id is already
-	// stored. A queue adds a job that has an id with it. Storage that does not
-	// dedupe can call Enqueue.
-	//
-	// Persistent and distributed storage keeps an id for a window it sets and
-	// returns true for a repeat too. A storage client's re-send of a push whose
-	// reply was lost, or an Add retried with the same id, then stores the job
-	// once. A repeat still counts as submitted.
-	//
-	// In-memory storage (BindQueue, WithQueue) keeps an id while its item is
-	// in the queue, until Dequeue or Purge takes it, and returns false for a
-	// repeat: Add hands back the job, which would never finish if it was not
-	// stored. The in-memory item is the job itself, and its ID method returns
-	// id. An in-memory Add calls EnqueueOnce only for an id the caller gave
-	// (WithJobId, Item.ID), not a generated one.
+	// EnqueueOnce stores item unless one with the same id is stored. Storage
+	// that does not dedupe can call Enqueue. Persistent storage keeps an id for
+	// a window and returns true for a repeat; in-memory storage keeps it while
+	// the item is queued and returns false for a repeat.
 	EnqueueOnce(item any, id string) bool
 }
 
-// IPriorityQueue is the root interface of priority queue operations.
+// IPriorityQueue is storage that hands out the lowest priority number first.
 type IPriorityQueue interface {
 	IBaseQueue
+	// Enqueue stores item with priority; false when refused.
 	Enqueue(item any, priority int) bool
 	// EnqueueOnce is IQueue.EnqueueOnce with a priority.
 	EnqueueOnce(item any, priority int, id string) bool
@@ -55,69 +51,60 @@ func enqueuePriority(q IPriorityQueue, item any, priority int, id string) bool {
 	return q.Enqueue(item, priority)
 }
 
-// IAcknowledgeable is the root interface of acknowledgeable operations.
+// IAcknowledgeable is storage that holds a dequeued item until acknowledged.
 type IAcknowledgeable interface {
-	// Returns true if the item was successfully acknowledged, false otherwise.
+	// Acknowledge removes the item held under ackID; false when unknown.
 	Acknowledge(ackID string) bool
-	// DequeueWithAckId dequeues an item from the queue
-	// Returns the item, a boolean indicating if the operation was successful, and the acknowledgment ID.
+	// DequeueWithAckId returns the next item and its ack id; false when empty.
 	DequeueWithAckId() (any, bool, string)
 }
 
-// IBatchAcknowledgeable is optional for acknowledgeable storage. A worker
-// whose only source implements it reads that source through one pop per
-// dispatch, with no length probes in between.
+// IBatchAcknowledgeable is optional for acknowledgeable storage: a worker whose
+// only source implements it pops one batch per dispatch.
 type IBatchAcknowledgeable interface {
 	IAcknowledgeable
-	// DequeueBatchWithAckIds moves up to min(len(items), len(ackIDs)) items
-	// to pending in one atomic step, each under its own ack id, into
-	// items[:n] and ackIDs[:n]. remaining is the storage length right after
-	// the move, or a lower bound when the storage caps its count; it is above
-	// 0 whenever items remain. n is 0 with a nil error when the storage is
-	// empty. A short pop (n below the count) normally means the storage ran
-	// dry; storage may also return a short pop with remaining > 0, for
-	// example items it hands back from an earlier failed call. err is a
-	// failure: the worker reports it and pulls again on the next sign of
-	// work.
-	//
-	// A worker bound to it as a distributed queue does not probe the storage
-	// on its own: after a short or failed pop it waits for an "enqueued"
-	// notification. A subscribable implementation must therefore also send
-	// "enqueued" for items no Enqueue announced (visibility-timeout requeues,
-	// other clients' pushes, items left after a failed call), for example
-	// once a second while items wait, as redisq does.
+	// DequeueBatchWithAckIds atomically moves up to min(len(items),
+	// len(ackIDs)) items to pending, into items[:n] and ackIDs[:n]. remaining
+	// is the length left (or a lower bound), above 0 while items remain. As a
+	// distributed queue the worker waits for "enqueued" after a short or failed
+	// pop, so storage must also announce items no Enqueue did (e.g. requeues).
 	DequeueBatchWithAckIds(items []any, ackIDs []string) (n, remaining int, err error)
 }
 
+// IPersistentQueue is FIFO storage with acknowledgement.
 type IPersistentQueue interface {
 	IQueue
 	IAcknowledgeable
 }
 
-// IPersistentPriorityQueue is the root interface of persistent priority queue operations.
+// IPersistentPriorityQueue is priority storage with acknowledgement.
 type IPersistentPriorityQueue interface {
 	IPriorityQueue
 	IAcknowledgeable
 }
 
-// ISubscribable is the root interface of subscribable operations.
+// ISubscribable is storage that notifies of changes, such as "enqueued".
 type ISubscribable interface {
-	Subscribe(func(action string))
+	// Subscribe registers fn to receive each change action.
+	Subscribe(fn func(action string))
 }
 
-// IDistributedQueue is the root interface of distributed queue operations.
+// IDistributedQueue is persistent FIFO storage shared across processes.
 type IDistributedQueue interface {
 	IPersistentQueue
 	ISubscribable
 }
 
-// IDistributedPriorityQueue is the root interface of distributed priority queue operations.
+// IDistributedPriorityQueue is persistent priority storage shared across
+// processes.
 type IDistributedPriorityQueue interface {
 	IPersistentPriorityQueue
 	ISubscribable
 }
 
-// CapacitySetter is the interface for setting the capacity of a queue. (Optional)
+// CapacitySetter is optional: it receives the WithQueueCapacity limit, 0 for
+// none.
 type CapacitySetter interface {
+	// SetCapacity sets the most items the storage accepts.
 	SetCapacity(cap int)
 }
