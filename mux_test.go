@@ -510,6 +510,9 @@ func (q *inspectedQueue) Jobs(_ context.Context, state JobState, offset, limit i
 	if q.err != nil {
 		return nil, q.err
 	}
+	if state == JobProcessing {
+		return nil, nil // storage with nothing to list
+	}
 	return []JobRecord{{ID: "j1", State: state, Payload: json.RawMessage(`{"n":1}`), FinishedAt: 7, Attempts: 1, Errors: []JobError{{Attempt: 1, At: 7, Error: "boom"}}}}, nil
 }
 
@@ -553,6 +556,9 @@ func TestMuxQueues(t *testing.T) {
 
 		get("/queues/" + url.PathEscape(q.id) + "/jobs?state=pending")
 		assert.Equal(t, [2]int{0, defaultJobsLimit}, q.gotPage)
+
+		rr = get("/queues/" + url.PathEscape(q.id) + "/jobs?state=processing")
+		assert.Equal(t, "[]\n", rr.Body.String(), "nil from storage is an empty array")
 	})
 
 	t.Run("errors", func(t *testing.T) {

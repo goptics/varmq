@@ -37,6 +37,17 @@ func TestMockPersistentQueue(t *testing.T) {
 		m.ShouldFailAcknowledge = false
 	})
 
+	t.Run("Reject and Outcomes", func(t *testing.T) {
+		assert.True(t, m.Reject("id", "boom"))
+
+		m.ShouldFailReject = true
+		assert.False(t, m.Reject("id", "lost"))
+		m.ShouldFailReject = false
+
+		assert.Equal(t, []string{"id"}, m.Acked())
+		assert.Equal(t, []string{"boom"}, m.Rejected())
+	})
+
 	t.Run("DequeueWithAckId", func(t *testing.T) {
 		m.Enqueue("test-ack")
 		val, ok, ackID := m.DequeueWithAckId()
@@ -75,6 +86,17 @@ func TestMockPersistentPriorityQueue(t *testing.T) {
 		ok = m.Acknowledge("id")
 		assert.False(t, ok)
 		m.ShouldFailAcknowledge = false
+	})
+
+	t.Run("Reject and Outcomes", func(t *testing.T) {
+		assert.True(t, m.Reject("id", "boom"))
+
+		m.ShouldFailReject = true
+		assert.False(t, m.Reject("id", "lost"))
+		m.ShouldFailReject = false
+
+		assert.Equal(t, []string{"id"}, m.Acked())
+		assert.Equal(t, []string{"boom"}, m.Rejected())
 	})
 
 	t.Run("DequeueWithAckId", func(t *testing.T) {
