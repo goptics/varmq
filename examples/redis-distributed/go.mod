@@ -1,17 +1,20 @@
 module github.com/goptics/varmq/examples/redis-distributed
 
-go 1.24.1
+go 1.26.0
 
 require github.com/goptics/varmq v1.0.0
 
 require github.com/matoous/go-nanoid/v2 v2.1.0
 
 require (
+	go.uber.org/atomic v1.12.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+)
+
+require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/goptics/redisq v1.4.0
-	github.com/lucsky/cuid v1.2.1 // indirect
-	github.com/redis/go-redis/v9 v9.7.3 // indirect
+	github.com/goptics/redisq v1.5.1
+	github.com/redis/go-redis/v9 v9.23.0 // indirect
 )
 
 // Replace the remote module with your local path

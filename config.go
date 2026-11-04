@@ -88,7 +88,7 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 // Default: A no-op generator that returns an empty string (no job ID).
 //
 // A persistent or distributed Add on storage that deduplicates by job id
-// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
 // nanoid, never a business key or a counter that restarts). In-memory queues
 // do not check generated ids.
@@ -298,7 +298,7 @@ func WithAutoRun(run bool) ConfigFunc {
 // If not set there wouldn't be any job id
 //
 // A persistent or distributed Add on storage that deduplicates by job id
-// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
 // nanoid, never a business key or a counter that restarts). In-memory queues
 // do not check generated ids.
@@ -434,7 +434,7 @@ func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
 // WithJobId sets the job ID for the job.
 //
 // A persistent or distributed Add on storage that deduplicates by job id
-// (IDedupQueue, such as redisq) stores nothing for an id it saw within its
+// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
 // nanoid, never a business key or a counter that restarts). An in-memory Add
 // returns false while a job with the same id is in the queue.

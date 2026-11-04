@@ -1954,3 +1954,6 @@ func (n *noAttachQueue) Values() []any         { return n.q.Values() }
 func (n *noAttachQueue) Purge()                { n.q.Purge() }
 func (n *noAttachQueue) Close() error          { return n.q.Close() }
 func (n *noAttachQueue) Enqueue(item any) bool { return n.q.Enqueue(item) }
+func (n *noAttachQueue) EnqueueOnce(item any, id string) bool {
+	return n.q.EnqueueOnce(item, id)
+}

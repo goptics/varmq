@@ -32,7 +32,7 @@ What the worker assumes of any queue:
 
 - **It is safe to call from several goroutines.** Callers add jobs from their own goroutines. The worker's event loop reads. Every job's goroutine acknowledges when it ends.
 - **A read that finds nothing returns `false` for `ok`.** The worker checks [`Len`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Len) before it reads. If a read then finds nothing, for example because another consumer took the job meanwhile, the worker reports [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue) on [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) and to the handler.
-- **Optional interfaces are found on the value you pass.** A wrapper can hold the adapter behind an interface such as `IQueue`. Such a wrapper hides [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue), [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable) and [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). The behaviour they add is then off.
+- **Optional interfaces are found on the value you pass.** A wrapper can hold the adapter behind an interface such as `IQueue`. Such a wrapper hides [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable) and [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). The behaviour they add is then off.
 
 ## The queue interfaces
 
@@ -52,9 +52,9 @@ On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge`
 
 ### `IQueue` and `IPriorityQueue`
 
-[`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) adds [`Enqueue(item any) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue) to `IBaseQueue`. [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) adds [`Enqueue(item any, priority int) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.Enqueue).
+[`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) adds [`Enqueue(item any) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue) and [`EnqueueOnce(item any, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) to `IBaseQueue`. [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) adds [`Enqueue(item any, priority int) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.Enqueue) and [`EnqueueOnce(item any, priority int, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.EnqueueOnce).
 
-The handle's `Add` calls `Enqueue` once for each job, unless the job has an ID and the queue implements [`IDedupQueue`](#idedupqueue-and-ideduppriorityqueue), which it calls instead. `true` means the item is stored. `false` makes `Add` return `false`.
+The handle's `Add` calls `Enqueue` once for each job, or [`EnqueueOnce`](#enqueueonce) when the job has an ID. `true` means the item is stored, or, on persistent or distributed storage, that a job with the same ID already was. `false` makes `Add` return `false`.
 
 The priority is the number the caller passed to `Add`. VarMQ does not order the queue. The worker takes whatever `Dequeue` returns next. So a priority queue has to give out the lowest number first itself. For the built-in queues, and for redisq and sqliteq, a lower number comes first.
 
@@ -97,11 +97,13 @@ With another source bound as well, the worker reads this storage one job at a ti
 
 Binding a storage that implements it also signals the worker, because the storage may already hold jobs and no `Add` will announce them. So the [start-up trap](/persistence/overview/#starting-a-worker-on-a-non-empty-queue) does not arise with it.
 
-### `IDedupQueue` and [`IDedupPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupPriorityQueue)
+### `EnqueueOnce`
 
-[`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue) has [`EnqueueOnce(item any, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue.EnqueueOnce). [`IDedupPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupPriorityQueue) has [`EnqueueOnce(item any, priority int, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IDedupPriorityQueue.EnqueueOnce). Both are optional. `EnqueueOnce` stores the item unless an item with the same ID is already stored.
+`IQueue` and `IPriorityQueue` both have [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). It stores the item unless an item with the same ID is already stored. A storage that does not check IDs can call its `Enqueue` from it.
 
-`Add` calls it, in place of `Enqueue`, for a job whose ID is not empty, when the storage implements it. Which IDs count depends on the queue:
+Earlier releases had it in the optional `IDedupQueue` and `IDedupPriorityQueue` interfaces. Those are removed, so move the method onto your queue type as it is.
+
+`Add` calls it, in place of `Enqueue`, for a job whose ID is not empty. Which IDs count depends on the queue:
 
 - **On a persistent or distributed queue,** every ID counts, including one from a generator. Such storage keeps an ID for a window it sets. It returns `true` for a repeat too. So `Add` returns `true`, but the job is stored once. A persistent `Add` counts the repeat as submitted. That makes a retried `Add` safe after a lost reply. Use IDs that are unique across everything you add, such as a UUID, and not a business key or a counter that restarts.
 - **On an in-memory queue bound with `WithQueue`,** only an ID you gave, with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) or [`Item.ID`](https://pkg.go.dev/github.com/goptics/varmq#Item), counts. The storage keeps an ID while its item is in the queue, until `Dequeue` or `Purge` takes it. A repeat returns `false`, and `Add` returns that, because a job that was not stored would not finish. See [job IDs](/guides/job-ids/#deduplicating).
@@ -162,5 +164,5 @@ They belong to the in-memory queues. A persistent or distributed `Add` returns o
 | `IPersistentQueue`, `IPersistentPriorityQueue` | yes | yes |
 | `ISubscribable`, `IDistributedQueue`, `IDistributedPriorityQueue` | yes, on the `NewDistributed...` queues | no |
 | `IBatchAcknowledgeable` | yes | yes |
-| `IDedupQueue`, `IDedupPriorityQueue` | yes | yes |
+| `EnqueueOnce` checks job IDs | yes | yes |
 | `CapacitySetter` | no | no |

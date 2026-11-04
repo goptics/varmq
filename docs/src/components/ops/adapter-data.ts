@@ -1,9 +1,9 @@
 // The storage interfaces of varmq, as data for the adapter map. Every sentence comes from the
 // Adapters page and from interface.go, source.go and worker_binder.go of the library.
 
-export type Caps = { fifo: boolean; prio: boolean; ack: boolean; sub: boolean; batch: boolean; dedup: boolean; cap: boolean };
+export type Caps = { fifo: boolean; prio: boolean; ack: boolean; sub: boolean; batch: boolean; cap: boolean };
 
-export const NO_CAPS: Caps = { fifo: false, prio: false, ack: false, sub: false, batch: false, dedup: false, cap: false };
+export const NO_CAPS: Caps = { fifo: false, prio: false, ack: false, sub: false, batch: false, cap: false };
 
 export interface NodeDef {
 	id: string;
@@ -62,12 +62,12 @@ export const NODES: NodeDef[] = [
 		enable: useFifo,
 		disable: (c) => {
 			c.fifo = false;
-			c.dedup = c.dedup && c.prio;
 		},
-		methods: ['Enqueue(item any) bool'],
-		adds: 'Adds Enqueue to IBaseQueue. This is how a job gets in.',
+		methods: ['Enqueue(item any) bool', 'EnqueueOnce(item any, id string) bool'],
+		adds: 'Adds Enqueue and EnqueueOnce to IBaseQueue. This is how a job gets in.',
 		worker: [
-			'The handle’s Add calls Enqueue once for each job. It calls EnqueueOnce instead when the job has an ID and the queue is an IDedupQueue.',
+			'The handle’s Add calls Enqueue once for each job. It calls EnqueueOnce instead when the job has an ID.',
+			'EnqueueOnce stores the item unless an item with the same ID is already stored. Storage that does not check IDs can call its Enqueue from it.',
 			'true means the item is stored. false makes Add return false.',
 		],
 		bind: 'WithQueue',
@@ -82,10 +82,9 @@ export const NODES: NodeDef[] = [
 		enable: usePrio,
 		disable: (c) => {
 			c.prio = false;
-			c.dedup = c.dedup && c.fifo;
 		},
-		methods: ['Enqueue(item any, priority int) bool'],
-		adds: 'Adds Enqueue with a priority to IBaseQueue. A type has one Enqueue, so it is a FIFO queue or a priority queue, not both.',
+		methods: ['Enqueue(item any, priority int) bool', 'EnqueueOnce(item any, priority int, id string) bool'],
+		adds: 'Adds Enqueue and EnqueueOnce with a priority to IBaseQueue. A type has one Enqueue, so it is a FIFO queue or a priority queue, not both.',
 		worker: [
 			'The priority is the number the caller passed to Add. VarMQ does not order the queue.',
 			'The worker takes whatever Dequeue returns next, so a priority queue has to hand out the lowest number first itself.',
@@ -213,45 +212,6 @@ export const NODES: NodeDef[] = [
 		by: ['redisq'],
 	},
 	{
-		id: 'IDedupQueue',
-		col: 0,
-		row: 3,
-		kind: 'option',
-		on: (c) => c.fifo && c.dedup,
-		enable: (c) => {
-			useFifo(c);
-			c.dedup = true;
-		},
-		disable: (c) => {
-			c.dedup = false;
-		},
-		methods: ['EnqueueOnce(item any, id string) bool'],
-		adds: 'Optional. Stores the item unless an item with the same ID is already stored.',
-		worker: [
-			'Add calls it, in place of Enqueue, for a job whose ID is not empty.',
-			'On persistent or distributed storage every ID counts. Such storage keeps an ID for a window it sets, and returns true for a repeat. A retried Add stores the job once.',
-		],
-		by: ['redisq', 'sqliteq'],
-	},
-	{
-		id: 'IDedupPriorityQueue',
-		col: 1,
-		row: 3,
-		kind: 'option',
-		on: (c) => c.prio && c.dedup,
-		enable: (c) => {
-			usePrio(c);
-			c.dedup = true;
-		},
-		disable: (c) => {
-			c.dedup = false;
-		},
-		methods: ['EnqueueOnce(item any, priority int, id string) bool'],
-		adds: 'Optional. IDedupQueue for a priority queue.',
-		worker: ['Add calls it, in place of Enqueue, for a job whose ID is not empty.'],
-		by: ['redisq', 'sqliteq'],
-	},
-	{
 		id: 'IBatchAcknowledgeable',
 		parts: 'IAcknowledgeable + 1 method',
 		col: 2,
@@ -309,8 +269,6 @@ export const BINDINGS: { name: string; needs: string[]; test: (c: Caps) => boole
 	{ name: 'NewDistributedPriorityQueue', needs: ['IPriorityQueue', 'IAcknowledgeable', 'ISubscribable'], test: (c) => c.prio && c.ack && c.sub, get: 'DistributedPriorityQueue[T], no worker' },
 ];
 
-const has = (c: Caps, k: keyof Caps) => c[k];
-
 /** What varmq does with a type that has these parts. */
 export function behaviours(c: Caps): { label: string; text: string; on: boolean }[] {
 	const enqueue = c.fifo || c.prio;
@@ -326,13 +284,12 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 		},
 		{
 			label: 'Job ID',
-			on: enqueue && has(c, 'dedup'),
-			text:
-				enqueue && c.dedup
-					? 'Add calls EnqueueOnce for a job with an ID. A retried Add stores the job once.'
-					: c.ack
-						? 'The ID goes into the stored JSON and nothing checks it. VarMQ does not deduplicate for you.'
-						: 'The job keeps its ID, and nothing checks it. VarMQ does not deduplicate for you.',
+			on: enqueue,
+			text: !enqueue
+				? 'There is no EnqueueOnce yet, so a job cannot get in.'
+				: c.ack
+					? 'Add calls EnqueueOnce for a job with an ID. Persistent storage keeps an ID for a window it sets, so a retried Add stores the job once. redisq and sqliteq do.'
+					: 'Add calls EnqueueOnce for a job you gave an ID. Your storage decides whether a repeat is refused.',
 		},
 		{
 			label: 'Taking a job',
@@ -374,8 +331,8 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 }
 
 export const PRESETS: { key: string; label: string; caps: Caps }[] = [
-	{ key: 'redis-p', label: 'redisq persistent', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true, dedup: true } },
-	{ key: 'redis-d', label: 'redisq distributed', caps: { ...NO_CAPS, fifo: true, ack: true, sub: true, batch: true, dedup: true } },
-	{ key: 'sqlite', label: 'sqliteq', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true, dedup: true } },
+	{ key: 'redis-p', label: 'redisq persistent', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true } },
+	{ key: 'redis-d', label: 'redisq distributed', caps: { ...NO_CAPS, fifo: true, ack: true, sub: true, batch: true } },
+	{ key: 'sqlite', label: 'sqliteq', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true } },
 	{ key: 'clear', label: 'Clear', caps: { ...NO_CAPS } },
 ];

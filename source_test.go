@@ -604,6 +604,9 @@ func (q *batchTestQueue) Enqueue(v any) bool {
 	return true
 }
 
+// EnqueueOnce does not dedupe: Adds with an id take the plain push.
+func (q *batchTestQueue) EnqueueOnce(v any, _ string) bool { return q.Enqueue(v) }
+
 func (q *batchTestQueue) Dequeue() (any, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -701,13 +704,19 @@ func (q *batchTestDistQueue) Enqueue(v any) bool {
 	return ok
 }
 
+func (q *batchTestDistQueue) EnqueueOnce(v any, _ string) bool { return q.Enqueue(v) }
+
 type batchTestPrioQueue struct{ *batchTestQueue }
 
 type batchTestDistPrioQueue struct{ *batchTestDistQueue }
 
 func (q *batchTestDistPrioQueue) Enqueue(v any, _ int) bool { return q.batchTestDistQueue.Enqueue(v) }
 
+func (q *batchTestDistPrioQueue) EnqueueOnce(v any, p int, _ string) bool { return q.Enqueue(v, p) }
+
 func (q *batchTestPrioQueue) Enqueue(v any, _ int) bool { return q.batchTestQueue.Enqueue(v) }
+
+func (q *batchTestPrioQueue) EnqueueOnce(v any, p int, _ string) bool { return q.Enqueue(v, p) }
 
 var (
 	_ IPersistentQueue           = (*batchTestQueue)(nil)
@@ -1318,10 +1327,14 @@ func (q *slowEnqQueue) Enqueue(v any) bool {
 	return q.batchTestQueue.Enqueue(v)
 }
 
+func (q *slowEnqQueue) EnqueueOnce(v any, _ string) bool { return q.Enqueue(v) }
+
 // slowEnqPrioQueue is slowEnqQueue for priority storage.
 type slowEnqPrioQueue struct{ *slowEnqQueue }
 
 func (q *slowEnqPrioQueue) Enqueue(v any, _ int) bool { return q.slowEnqQueue.Enqueue(v) }
+
+func (q *slowEnqPrioQueue) EnqueueOnce(v any, p int, _ string) bool { return q.Enqueue(v, p) }
 
 // The poke follows the storage's confirmation: a pop that runs while the add
 // is in flight must not leave the item waiting for the resync.
