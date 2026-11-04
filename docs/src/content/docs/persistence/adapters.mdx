@@ -54,7 +54,7 @@ On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge`
 
 [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) adds [`Enqueue(item any) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue) and [`EnqueueOnce(item any, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) to `IBaseQueue`. [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) adds [`Enqueue(item any, priority int) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.Enqueue) and [`EnqueueOnce(item any, priority int, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.EnqueueOnce).
 
-The handle's `Add` calls `Enqueue` once for each job, or [`EnqueueOnce`](#enqueueonce) when the job has an ID. `true` means the item is stored. `false` makes `Add` return `false`.
+The handle's `Add` calls `Enqueue` once for each job, or [`EnqueueOnce`](#enqueueonce) when the job has an ID. `true` means the item is stored, or, on persistent or distributed storage, that a job with the same ID already was. `false` makes `Add` return `false`.
 
 The priority is the number the caller passed to `Add`. VarMQ does not order the queue. The worker takes whatever `Dequeue` returns next. So a priority queue has to give out the lowest number first itself. For the built-in queues, and for redisq and sqliteq, a lower number comes first.
 
@@ -100,6 +100,8 @@ Binding a storage that implements it also signals the worker, because the storag
 ### `EnqueueOnce`
 
 `IQueue` and `IPriorityQueue` both have [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). It stores the item unless an item with the same ID is already stored. A storage that does not check IDs can call its `Enqueue` from it.
+
+Earlier releases had it in the optional `IDedupQueue` and `IDedupPriorityQueue` interfaces. Those are removed, so move the method onto your queue type as it is.
 
 `Add` calls it, in place of `Enqueue`, for a job whose ID is not empty. Which IDs count depends on the queue:
 
