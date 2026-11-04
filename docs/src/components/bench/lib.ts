@@ -82,8 +82,8 @@ export const VIEWS: View[] = [
 	{ id: 'pool-24cpu', tab: '24 CPUs', title: 'Worker pool, GOMAXPROCS 24', suite: 'pool', sources: ['pool-24cpu'], chart: 'pool-24cpu', blurb: 'Nine pools, 1M tasks per run.' },
 	{ id: 'pool-8cpu', tab: '8 CPUs', title: 'Worker pool, GOMAXPROCS 8', suite: 'pool', sources: ['pool-8cpu'], chart: 'pool-8cpu', blurb: 'The same matrix with GOMAXPROCS 8.' },
 	{ id: 'pool-4cpu', tab: '4 CPUs', title: 'Worker pool, GOMAXPROCS 4', suite: 'pool', sources: ['pool-4cpu'], chart: 'pool-4cpu', blurb: 'The same matrix with GOMAXPROCS 4.' },
-	{ id: 'redis', tab: 'Redis', title: 'Message queues on Redis', suite: 'redis', sources: ['redis'], chart: 'redis', blurb: 'Six subjects from five libraries on Redis 7.2.' },
-	{ id: 'sqlite', tab: 'SQLite', title: 'Message queues on SQLite', suite: 'sqlite', sources: ['sqlite'], chart: 'sqlite', blurb: 'Five subjects from four libraries, WAL checkpoint at 1000 and 10000 pages.' },
+	{ id: 'redis', tab: 'Redis', title: 'Job queues on Redis', suite: 'redis', sources: ['redis'], chart: 'redis', blurb: 'Six subjects from five libraries on Redis 7.2.' },
+	{ id: 'sqlite', tab: 'SQLite', title: 'Job queues on SQLite', suite: 'sqlite', sources: ['sqlite'], chart: 'sqlite', blurb: 'Five subjects from four libraries, WAL checkpoint at 1000 and 10000 pages.' },
 ];
 
 export const viewById = (id: string) => VIEWS.find((v) => v.id === id) ?? VIEWS[0];
@@ -98,9 +98,9 @@ export interface SubjectInfo {
 
 // Display metadata only. The names are the benchmark names, so a reader can search the raw files for them.
 export const SUBJECTS: Record<string, SubjectInfo> = {
-	VarMQ: { code: 'VQ', kind: 'varmq', note: 'varmq. Pool: a worker bound to an in-memory queue. Redis: varmq with redisq, one instance. SQLite: varmq with sqliteq, one file per queue.' },
-	VarMQDistributed: { code: 'VD', kind: 'varmq', note: 'varmq with redisq as a distributed queue.' },
-	VarMQSingleFile: { code: 'VS', kind: 'varmq', note: 'varmq with sqliteq, every queue in one database file. Runs in Mixed10Q only.' },
+	VarMQ: { code: 'VQ', kind: 'varmq', note: 'VarMQ. Pool: a worker bound to an in-memory queue. Redis: VarMQ with redisq, one instance. SQLite: VarMQ with sqliteq, one file per queue.' },
+	VarMQDistributed: { code: 'VD', kind: 'varmq', note: 'VarMQ with redisq as a distributed queue.' },
+	VarMQSingleFile: { code: 'VS', kind: 'varmq', note: 'VarMQ with sqliteq, every queue in one database file. Runs in Mixed10Q only.' },
 	Ants: { code: 'AN', kind: 'lib', note: 'panjf2000/ants, default options. Submit blocks until a worker is free.' },
 	WorkerPool: { code: 'WP', kind: 'lib', note: 'gammazero/workerpool. Submit never blocks.' },
 	Conc: { code: 'CO', kind: 'lib', note: 'sourcegraph/conc pool with a goroutine cap.' },

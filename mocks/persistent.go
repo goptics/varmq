@@ -1,15 +1,52 @@
 package mocks
 
 import (
+	"sync"
+
 	"github.com/goptics/varmq/internal/queues"
 )
+
+// Outcomes records the Acknowledge and Reject calls a mock storage got.
+type Outcomes struct {
+	mu       sync.Mutex
+	acked    []string
+	rejected []string
+}
+
+// Acked returns the ack ids passed to Acknowledge, in call order.
+func (o *Outcomes) Acked() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.acked...)
+}
+
+// Rejected returns the reasons passed to Reject, in call order.
+func (o *Outcomes) Rejected() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.rejected...)
+}
+
+func (o *Outcomes) ack(ackID string) {
+	o.mu.Lock()
+	o.acked = append(o.acked, ackID)
+	o.mu.Unlock()
+}
+
+func (o *Outcomes) reject(reason string) {
+	o.mu.Lock()
+	o.rejected = append(o.rejected, reason)
+	o.mu.Unlock()
+}
 
 // MockPersistentQueue embeds the internal queue and implements IPersistentQueue
 type MockPersistentQueue struct {
 	*queues.Queue[any]
 	ShouldFailEnqueue     bool
 	ShouldFailAcknowledge bool
+	ShouldFailReject      bool
 	ShouldFailDequeue     bool
+	Outcomes
 }
 
 func NewMockPersistentQueue() *MockPersistentQueue {
@@ -23,7 +60,15 @@ func (m *MockPersistentQueue) Acknowledge(ackID string) bool {
 	if m.ShouldFailAcknowledge {
 		return false
 	}
-	// Mock implementation - return true for testing unless failure is requested
+	m.ack(ackID)
+	return true
+}
+
+func (m *MockPersistentQueue) Reject(ackID string, reason string) bool {
+	if m.ShouldFailReject {
+		return false
+	}
+	m.reject(reason)
 	return true
 }
 
@@ -56,7 +101,9 @@ type MockPersistentPriorityQueue struct {
 	*queues.PriorityQueue[any]
 	ShouldFailEnqueue     bool
 	ShouldFailAcknowledge bool
+	ShouldFailReject      bool
 	ShouldFailDequeue     bool
+	Outcomes
 }
 
 func NewMockPersistentPriorityQueue() *MockPersistentPriorityQueue {
@@ -70,7 +117,15 @@ func (m *MockPersistentPriorityQueue) Acknowledge(ackID string) bool {
 	if m.ShouldFailAcknowledge {
 		return false
 	}
-	// Mock implementation - return true for testing unless failure is requested
+	m.ack(ackID)
+	return true
+}
+
+func (m *MockPersistentPriorityQueue) Reject(ackID string, reason string) bool {
+	if m.ShouldFailReject {
+		return false
+	}
+	m.reject(reason)
 	return true
 }
 

@@ -1,6 +1,6 @@
 ---
 title: Adding many jobs
-description: AddAll queues a slice of items in one call and returns one handle for the whole group. Wait for it, count what is pending, and read results or errors as they finish.
+description: "Add a slice of jobs in one call with AddAll, then wait for the group and read its results or errors."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
@@ -47,7 +47,13 @@ The scene shows the same items added both ways. Add the items, then start the wo
 
 <AddAllCompare />
 
-`AddAll` adds the items one at a time, and skips each one the queue does not take: the queue is full or closed, or the item's ID belongs to a job still in the queue. That includes a repeated ID inside the same slice, while the first copy is still in the queue (a running worker may already have taken it). A skipped item never runs and sends nothing to `Results()` or `Errs()`. It does not count in `NumPending`, so `NumPending` can start below `len(items)`.
+`AddAll` adds the items one at a time. It skips each item the queue does not take:
+
+- the queue is full or closed;
+- the item's ID belongs to a job still in the queue;
+- the item's ID repeats an earlier item in the same slice, and the first copy is still in the queue. A running worker may already have taken it.
+
+A skipped item never runs and sends nothing to `Results()` or `Errs()`. It does not count in `NumPending`, so `NumPending` can start below `len(items)`.
 
 `AddAll` does not say which items it skipped. If you need to know, call `Add` for each job: it returns a `bool` per job.
 
@@ -69,12 +75,12 @@ The worker has concurrency 3, so the three result lines can come in a different 
 - `JobId` is the item's ID with the `g:` prefix. It is empty for an item with no ID, unless the worker has a [job ID generator](/guides/job-ids/#giving-a-job-an-id).
 - Results arrive in the order the jobs finish. With concurrency above 1 that is not the order of your slice, so match results to items by `JobId`. With concurrency 1 on a FIFO queue they come back in the order you added them.
 - A job closed before it ran sends nothing.
-- The channel closes once every job in the group has ended, so the `range` loop finishes by itself.
-- The channel has room for one value per item. A slow reader does not hold up the workers.
+- The channel closes once every job in the group has ended, so the `range` loop finishes by itself. For an empty slice, the channel is closed when `AddAll` returns, so the loop ends at once. In v1.10.0 it never closed, and the loop never finished.
+- The channel has room for one value per item. A slow reader does not delay the workers.
 
 ## Reading errors
 
-`Errs()` returns a channel of `error`. It carries failures only: a job that succeeded sends nothing, so the number of values you receive is the number of jobs that failed. A panic counts as a failure. The channel closes once every job has ended, so ranging over it finishes by itself.
+`Errs()` returns a channel of `error`. It carries failures only: a job that succeeded sends nothing, so the number of values you receive is the number of jobs that failed. A panic counts as a failure. The channel closes once every job has ended, so ranging over it finishes by itself. For an empty slice it is closed at once, as for `Results()`.
 
 An error does not say which job it came from. If you need that, put the job's ID in the message, as the worker function below does with [`j.ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID).
 
@@ -85,7 +91,3 @@ Two of the four items are negative, so the loop receives two errors, `g:q` and `
 ## If you do not read the channel
 
 [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain) discards the results or errors the channel still holds, for a caller that is not going to read them.
-
-:::caution
-Do not range over `Results()` or `Errs()` after calling `AddAll` with an empty slice. With no items, no job ever ends, so nothing closes the channel and the loop never finishes. `Wait()` returns at once in that case. Check `len(items) > 0` before you read.
-:::

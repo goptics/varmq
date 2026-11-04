@@ -86,10 +86,10 @@ func (q *dedupDistPrioQueue) EnqueueOnce(item any, priority int, id string) bool
 }
 
 var (
-	_ IDedupQueue         = (*dedupDistQueue)(nil)
-	_ IDedupPriorityQueue = (*dedupDistPrioQueue)(nil)
-	_ IDedupQueue         = (*queues.Queue[iJob[int]])(nil)
-	_ IDedupPriorityQueue = (*queues.PriorityQueue[iJob[int]])(nil)
+	_ IDistributedQueue         = (*dedupDistQueue)(nil)
+	_ IDistributedPriorityQueue = (*dedupDistPrioQueue)(nil)
+	_ IQueue                    = (*queues.Queue[iJob[int]])(nil)
+	_ IPriorityQueue            = (*queues.PriorityQueue[iJob[int]])(nil)
 )
 
 // A job with an id reaches storage that can dedupe through EnqueueOnce, so

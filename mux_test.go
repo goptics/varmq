@@ -1,13 +1,19 @@
 package varmq
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/goptics/varmq/mocks"
 )
 
 func setupMuxServer() (*http.ServeMux, func()) {
@@ -482,4 +488,101 @@ func TestMuxInstanceHeader(t *testing.T) {
 	var body map[string]string
 	assert.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
 	assert.Equal(t, "worker not found", body["error"])
+}
+
+// inspectedQueue is a persistent mock queue that also serves QueueInspector.
+type inspectedQueue struct {
+	*mocks.MockPersistentQueue
+	id       string
+	err      error
+	gotState JobState
+	gotPage  [2]int
+}
+
+func (q *inspectedQueue) QueueID() string { return q.id }
+
+func (q *inspectedQueue) QueueStats(context.Context) (QueueStats, error) {
+	return QueueStats{Counts: JobCounts{Pending: 2, Failed: 1}, Totals: JobTotals{Submitted: 5, Failed: 1}}, q.err
+}
+
+func (q *inspectedQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
+	q.gotState, q.gotPage = state, [2]int{offset, limit}
+	if q.err != nil {
+		return nil, q.err
+	}
+	if state == JobProcessing {
+		return nil, nil // storage with nothing to list
+	}
+	return []JobRecord{{ID: "j1", State: state, Payload: json.RawMessage(`{"n":1}`), FinishedAt: 7, Attempts: 1, Errors: []JobError{{Attempt: 1, At: 7, Error: "boom"}}}}, nil
+}
+
+func TestMuxQueues(t *testing.T) {
+	queueRegistry.Clear()
+	defer queueRegistry.Clear()
+
+	// A Redis-style id needs escaping in the path; two workers bind it.
+	q := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "redisq:ns:fifo:{a/b}"}
+	broken := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "broken", err: errors.New("down")}
+	for _, storage := range []IPersistentQueue{q, q, mocks.NewMockPersistentQueue(), broken} { // the plain mock is left out
+		w := NewWorker(func(Job[string]) {})
+		defer w.Stop()
+		w.WithPersistentQueue(storage)
+	}
+
+	server := NewServerMux()
+	get := func(path string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
+		return rr
+	}
+
+	t.Run("list", func(t *testing.T) {
+		rr := get("/queues")
+		require.Equal(t, http.StatusOK, rr.Code)
+		assert.JSONEq(t, `[
+			{"id":"broken","error":"down"},
+			{"id":"redisq:ns:fifo:{a/b}",
+			 "counts":{"pending":2,"processing":0,"completed":0,"failed":1},
+			 "totals":{"submitted":5,"completed":0,"failed":1}}
+		]`, rr.Body.String())
+	})
+
+	t.Run("jobs", func(t *testing.T) {
+		rr := get("/queues/" + url.PathEscape(q.id) + "/jobs?state=failed&offset=3&limit=2")
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Equal(t, JobFailed, q.gotState)
+		assert.Equal(t, [2]int{3, 2}, q.gotPage)
+		assert.JSONEq(t, `[{"id":"j1","state":"failed","payload":{"n":1},"finished_at":7,"attempts":1,"errors":[{"attempt":1,"at":7,"error":"boom"}]}]`, rr.Body.String())
+
+		get("/queues/" + url.PathEscape(q.id) + "/jobs?state=pending")
+		assert.Equal(t, [2]int{0, defaultJobsLimit}, q.gotPage)
+
+		rr = get("/queues/" + url.PathEscape(q.id) + "/jobs?state=processing")
+		assert.Equal(t, "[]\n", rr.Body.String(), "nil from storage is an empty array")
+	})
+
+	t.Run("errors", func(t *testing.T) {
+		esc := "/queues/" + url.PathEscape(q.id) + "/jobs"
+		for path, code := range map[string]int{
+			"/queues/nope/jobs?state=pending":  http.StatusNotFound,
+			esc:                                http.StatusBadRequest,
+			esc + "?state=done":                http.StatusBadRequest,
+			esc + "?state=pending&offset=-1":   http.StatusBadRequest,
+			esc + "?state=pending&limit=0":     http.StatusBadRequest,
+			esc + "?state=pending&limit=1001":  http.StatusBadRequest,
+			esc + "?state=pending&limit=x":     http.StatusBadRequest,
+			"/queues/broken/jobs?state=failed": http.StatusInternalServerError,
+		} {
+			rr := get(path)
+			assert.Equal(t, code, rr.Code, path)
+			assert.Contains(t, rr.Body.String(), `"error"`, path)
+		}
+	})
+}
+
+func TestWriteJSONEncodeError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeJSON(rr, http.StatusOK, []JobRecord{{Payload: json.RawMessage(`{bad`)}})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.JSONEq(t, `{"error":"encode response"}`, rr.Body.String())
 }

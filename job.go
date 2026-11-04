@@ -7,6 +7,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -84,13 +85,19 @@ type job[T any] struct {
 type jobAck struct {
 	q  IAcknowledgeable
 	id string
+	// reason is set when the run failed: Close then calls Reject with
+	// *reason instead of Acknowledge. A pointer, not a string, keeps jobAck
+	// in the 48-byte size class.
+	reason *string
 }
 
-// jobView represents a view of a job's state for serialization.
+// jobView is the job envelope persistent and distributed storage holds
+// (spec/redis-storage.md, section 3).
 type jobView[T any] struct {
-	Id      string `json:"id"`
-	Status  string `json:"status"`
-	Payload T      `json:"data"`
+	Id         string `json:"id"`
+	Status     string `json:"status"`
+	Payload    T      `json:"data"`
+	EnqueuedAt int64  `json:"enqueued_at,omitempty"` // Unix ms, producer clock
 }
 
 type Job[T any] interface {
@@ -105,6 +112,7 @@ type iJob[T any] interface {
 	changeStatus(s status)
 	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
+	fail(reason string)
 	io.Closer
 }
 
@@ -146,6 +154,16 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 	}
 
 	j.ackRef.Store(&jobAck{q: q, id: id})
+}
+
+// fail records that the run failed, so Close rejects the job with reason
+// instead of acknowledging it. A no-op for jobs with nothing to acknowledge.
+// The worker calls it before Close; a user Close fails while the job is
+// processing, so nothing else reads the ack meanwhile.
+func (j *job[T]) fail(reason string) {
+	if ref := j.ackRef.Load(); ref != nil {
+		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, reason: &reason})
+	}
 }
 
 func (j *job[T]) ID() string {
@@ -190,9 +208,10 @@ func (j *job[T]) Wait() {
 
 func (j *job[T]) Json() ([]byte, error) {
 	view := jobView[T]{
-		Id:      j.ID(),
-		Status:  j.Status(),
-		Payload: j.data,
+		Id:         j.ID(),
+		Status:     j.Status(),
+		Payload:    j.data,
+		EnqueuedAt: time.Now().UnixMilli(),
 	}
 
 	return json.Marshal(view)
@@ -315,16 +334,24 @@ func (j *job[T]) Close() error {
 	return nil
 }
 
-// acknowledge acknowledges the job with its storage at most once: it takes
-// the ack out of the job first, so a concurrent or later call finds nothing
-// to do, and puts it back only when storage refuses, so a retry can ack.
+// acknowledge reports the job's outcome to its storage at most once:
+// Reject after fail, Acknowledge otherwise. It takes the ack out of the job
+// first, so a concurrent or later call finds nothing to do, and puts it back
+// only when storage refuses, so a retry can report again.
 func (j *job[T]) acknowledge() error {
 	ref := j.ackRef.Swap(nil)
 	if ref == nil {
 		return nil
 	}
 
-	if !ref.q.Acknowledge(ref.id) {
+	var ok bool
+	if ref.reason != nil {
+		ok = ref.q.Reject(ref.id, *ref.reason)
+	} else {
+		ok = ref.q.Acknowledge(ref.id)
+	}
+
+	if !ok {
 		j.ackRef.Store(ref)
 		return fmt.Errorf("%w: jobId=%s, ackId=%s", ErrAcknowledgeJob, j.id, ref.id)
 	}
