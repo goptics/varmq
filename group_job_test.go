@@ -558,3 +558,29 @@ func TestGroupJobConcurrentSends(t *testing.T) {
 		assert.Equal(t, len(items), n)
 	})
 }
+
+// #155: an empty AddAll group has no member whose Close would close its
+// channel, so ranging over Results or Errs must still end at once.
+func TestAddAllWithNoItemsClosesChannel(t *testing.T) {
+	rw := NewResultWorker(func(j Job[int]) (int, error) { return j.Data(), nil }, 2)
+	defer rw.Stop()
+	ew := NewErrWorker(func(j Job[int]) error { return errors.New("fail") }, 2)
+	defer ew.Stop()
+
+	for _, items := range [][]Item[int]{nil, {}} {
+		assert.True(t, isClosed(rw.BindQueue().AddAll(items).Results()), "queue Results, items %#v", items)
+		assert.True(t, isClosed(rw.BindPriorityQueue().AddAll(items).Results()), "priority Results, items %#v", items)
+		assert.True(t, isClosed(ew.BindQueue().AddAll(items).Errs()), "queue Errs, items %#v", items)
+		assert.True(t, isClosed(ew.BindPriorityQueue().AddAll(items).Errs()), "priority Errs, items %#v", items)
+	}
+}
+
+// isClosed reports whether ch is closed and empty, without blocking.
+func isClosed[V any](ch <-chan V) bool {
+	select {
+	case _, ok := <-ch:
+		return !ok
+	default:
+		return false
+	}
+}

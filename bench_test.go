@@ -184,6 +184,19 @@ func BenchmarkAddWithId(b *testing.B) {
 	})
 }
 
+// BenchmarkContext reports what Worker.Context costs a worker function that
+// reads it for every job, from every P at once.
+func BenchmarkContext(b *testing.B) {
+	worker := NewWorker(task)
+	defer worker.StopAndWait()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = worker.Context()
+		}
+	})
+}
+
 // BenchmarkAddAll benchmarks the AddAll operation across different queue types.
 func BenchmarkAddAll(b *testing.B) {
 	b.Run("Queue", func(b *testing.B) {

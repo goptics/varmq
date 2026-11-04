@@ -1,9 +1,9 @@
 ---
-// JOB 06 on the home page: where to read next, one row per part of the docs.
+// JOB 05 on the home page: where to read next, one row per part of the docs.
 import '../../styles/home.css';
 
 const index = [
-	{ n: '01', t: 'Start', d: 'Install varmq and run your first worker.', href: '/start/introduction/' },
+	{ n: '01', t: 'Start', d: 'Install VarMQ and run your first worker.', href: '/start/introduction/' },
 	{ n: '02', t: 'Concepts', d: 'Workers, queues, jobs and the lifecycle.', href: '/concepts/workers-and-queues/' },
 	{ n: '03', t: 'Guides', d: 'Concurrency, errors, waiting, metrics and more.', href: '/guides/queues/' },
 	{ n: '04', t: 'Persistence', d: 'Redis and SQLite adapters, and writing your own.', href: '/persistence/overview/' },
@@ -15,7 +15,7 @@ const index = [
 
 <section class="home-row section wrap" aria-labelledby="next-title" style="padding-top:0">
 	<div class="banner">
-		<span class="banner__id">JOB 06</span><span>Index</span><span class="banner__rule"></span><span class="banner__meta">where to read next</span>
+		<span class="banner__id">JOB 05</span><span>Index</span><span class="banner__rule"></span><span class="banner__meta">where to read next</span>
 	</div>
 	<h2 class="sr-only" id="next-title">Where to read next</h2>
 	<ul class="index">
@@ -26,7 +26,7 @@ const index = [
 						<span class="index__n">{i.n}</span>
 						<span class="index__t">{i.t}</span>
 						<span class="index__d">{i.d}</span>
-						<span class="index__go" aria-hidden="true">→</span>
+						<svg class="index__go" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" /></svg>
 					</a>
 				</li>
 			))

@@ -139,7 +139,7 @@ queue := worker.WithDistributedQueue(distributedAdapter) // any IDistributedQueu
 
 Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
 
-When the adapter deduplicates pushes (`IDedupQueue`, e.g. redisq), give each job a unique id such as a UUID. A retried `Add` with the same id is then stored once:
+When the adapter deduplicates pushes (`EnqueueOnce`, e.g. redisq), give each job a unique id such as a UUID. A retried `Add` with the same id is then stored once:
 
 ```go
 id := uuid.NewString() // once, so a retry carries the same id

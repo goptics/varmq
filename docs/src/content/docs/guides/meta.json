@@ -1,0 +1,5 @@
+{
+	"title": "Guides",
+	"icon": "Book",
+	"pages": ["worker-types", "queues", "waiting", "errors", "concurrency", "adding-many", "job-ids", "strategies", "topics", "context", "metrics", "function-helpers"]
+}

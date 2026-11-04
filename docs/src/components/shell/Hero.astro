@@ -1,11 +1,13 @@
 ---
-// The hero slot. The home page opens on the intro with the map and offers the story as a tour (Story.astro). Starlight
-// also draws the 404 page with the hero, which keeps its banner and Starlight's own hero.
-import Default from '@astrojs/starlight/components/Hero.astro';
+// The home page's opening (pages/index.astro): the sprocket-hole rails at the sides, and the intro with the map, which
+// offers the story as a tour (Story.astro).
 import Story from '../Story.astro';
 
-const { id } = Astro.locals.starlightRoute.entry;
-const notFound = id === '404' || id.endsWith('/404');
+interface Props {
+	title: string;
+	tagline: string;
+}
+const { title, tagline } = Astro.props;
 ---
 
 <script>
@@ -89,28 +91,13 @@ const notFound = id === '404' || id.endsWith('/404');
 </script>
 
 {
-	notFound ? (
-		<>
-			<p class="shell-banner">
-				<span class="shell-banner__id">JOB 404</span>
-				<span class="shell-banner__label">Not found</span>
-				<span class="shell-banner__rule" aria-hidden="true" />
-			</p>
-			<Default {...Astro.props}>
-				<slot />
-			</Default>
-		</>
-	) : (
-		<>
-			{['roll--l', 'roll--r'].map((side) => (
-				<div class:list={['roll', side]} aria-hidden="true">
-					<div class="roll-holes" />
-					<div class="roll-band">
-						<div class="roll-lit" />
-					</div>
-				</div>
-			))}
-			<Story />
-		</>
-	)
+	['roll--l', 'roll--r'].map((side) => (
+		<div class:list={['roll', side]} aria-hidden="true">
+			<div class="roll-holes" />
+			<div class="roll-band">
+				<div class="roll-lit" />
+			</div>
+		</div>
+	))
 }
+<Story title={title} tagline={tagline} />

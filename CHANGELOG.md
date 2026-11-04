@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### ⚠️ Breaking Changes
+
+- **`IQueue` and `IPriorityQueue` require `EnqueueOnce`** (#172): `Add` with a job id calls it directly, with no type assertion per `Add`. Custom storage passed to `WithQueue`, `WithPriorityQueue`, `WithPersistent*` or `WithDistributed*` must add it; storage that does not dedupe can call its `Enqueue`. Needs redisq v1.5.0+ and sqliteq v0.3.0+. `IDedupQueue` and `IDedupPriorityQueue` are removed.
+
+### ⚡ Performance
+
+- In-memory queue `EnqueueOnce` spreads ids over 64 locks (#172) and holds only one across the append, not one lock for the whole queue: adds with an id from 24 goroutines into one queue went from 1.29 µs to 0.30 µs each (4 goroutines: 342 ns to 238 ns; one goroutine: 165 ns to 176 ns).
+
 ### ✨ New Features
 
 - **`Reject` on `IAcknowledgeable`**: `Reject(ackID, reason string) bool`. Worker now reports job outcome to ack storage: `Acknowledge` on success, `Reject` with error text when job function returns error or panics. varmq has no retries, so every failure is final. Failed `Reject` → `ErrAcknowledgeJob`, same as failed `Acknowledge`. See `adr/0002-reject-in-iacknowledgeable.md`.
@@ -13,9 +21,13 @@
 
 ### 🐛 Bug Fixes
 
+- **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
 - **Data race in `AddAll` on result and error workers** (#134): every job of a group stored its result in one shared field as well as sending it, from as many goroutines as the worker runs. Nothing read that field outside tests, so it is gone; results still arrive on `Results()` and `Errs()`.
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.
+- **Wrong minimum idle-worker count at very high concurrency** (#142): `numMinIdleWorkers` multiplied concurrency by `WithMinIdleWorkerRatio` in `uint32`, which wraps once the product passes `math.MaxUint32` (concurrency `1<<30` at 50% gave 21474836, not 536870912). It now multiplies in `uint64`.
+- **Data race on `Restart`** (#133): `Restart` wrote the worker's configs while `Add` copied them, and replaced the context while `Context()` read it, without a lock. `Restart` no longer writes the configs, and the context is now loaded atomically, so `Context()` still takes no lock.
 - **A job could start after `Pause` returned with the worker Paused** (#135): the dispatcher moved the worker to Running before it counted the batch, so a `Pause` in between saw nothing running and went straight to Paused. The batch is now counted first, and given back to the dispatcher if a `Pause` or `Stop` got in.
+- **`AddAll` with no items never closed `Results()` or `Errs()`** (#155): the shared channel is closed by the member whose `Close` takes the group's count to zero, and an empty group has no members, so `for range` over it blocked forever and `Drain()` leaked its goroutine. An empty group now closes its channel when it is created.
 
 ## [v1.10.0] (2026-10-25)
 

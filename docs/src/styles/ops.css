@@ -74,7 +74,7 @@
 	height: 28px;
 	padding: 0 4px;
 	border: 1px solid transparent;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--brand);
 	color: var(--brand-ink);
 	font: 600 0.6875rem/1 var(--mono);
@@ -141,7 +141,7 @@
 	min-width: 0;
 	padding: 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 	transition:
 		opacity 0.3s var(--ease),
@@ -242,7 +242,7 @@
 	margin: 0;
 	padding: 8px 10px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	color: var(--panel-ink-2);
 }
 .ack__step.is-now {
@@ -333,10 +333,6 @@
 .flow__key {
 	display: grid;
 	gap: 8px;
-	padding: 10px 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--panel-2);
 }
 .flow__keyhead {
 	display: flex;
@@ -371,7 +367,7 @@
 	gap: 8px;
 	padding: 4px 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 }
 .flow__entry code {
 	font: inherit;
@@ -436,7 +432,7 @@
 	display: inline-block;
 	padding: 2px 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font-size: 0.6875rem;
 	color: var(--panel-ink-2);
 }
@@ -499,7 +495,7 @@
 	align-content: start;
 	padding: 10px 12px;
 	border: 1px dashed var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: transparent;
 	color: var(--panel-ink-2);
 	font: 400 0.75rem/1.35 var(--mono);
@@ -540,7 +536,7 @@
 	margin-top: 4px;
 	padding: 1px 6px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font-size: 0.6875rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -608,7 +604,7 @@
 }
 .amap__methods li {
 	padding: 4px 8px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 }
 .amap__p-list li {
@@ -704,7 +700,7 @@
 	gap: 6px 12px;
 	padding: 8px 12px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 }
 .api__worker.is-changed {
@@ -718,7 +714,7 @@
 .api__state {
 	padding: 1px 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font-size: 0.6875rem;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -750,7 +746,7 @@
 .api__slots i {
 	width: 10px;
 	height: 10px;
-	border-radius: 2px;
+	border-radius: var(--corner);
 	background: var(--panel-fill-2);
 }
 .api__slots i.on {
@@ -779,18 +775,11 @@
 	text-transform: uppercase;
 	color: var(--panel-ink-2);
 }
+/* A small .pbtn: the rows hold many. */
 .api__chip {
 	min-height: 32px;
 	padding: 5px 10px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: transparent;
-	color: var(--panel-ink);
 	font: 400 0.75rem/1.2 var(--mono);
-	cursor: pointer;
-}
-.api__chip:hover {
-	background: var(--panel-fill-2);
 }
 .api__chip b {
 	margin-right: 4px;
@@ -807,18 +796,6 @@
 	min-width: 0;
 	min-height: 40px;
 	padding: 8px 10px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: var(--panel-2);
-	color: var(--panel-ink);
-	font: 500 0.8125rem/1.2 var(--mono);
-	color-scheme: dark;
-}
-.api__res {
-	padding: 12px;
-	border: 1px solid var(--panel-rule);
-	border-radius: 8px;
-	background: color-mix(in srgb, black 26%, var(--panel));
 }
 .api__status {
 	display: flex;
@@ -843,7 +820,7 @@
 .api__code {
 	padding: 2px 10px;
 	border: 1px solid currentColor;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font-weight: 600;
 }
 .api__code--ok {
@@ -913,7 +890,7 @@
 	width: 100%;
 	padding: 8px 10px;
 	border: 1px solid transparent;
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--panel-fill);
 	color: var(--panel-ink);
 	font: 400 0.75rem/1.5 var(--mono);
@@ -964,7 +941,7 @@
 .prom__type {
 	padding: 1px 8px;
 	border: 1px solid var(--panel-rule);
-	border-radius: 4px;
+	border-radius: var(--corner);
 	font-size: 0.6875rem;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -982,10 +959,8 @@
 	color: var(--panel-accent);
 }
 .prom__watch {
+	--group-rule: var(--amber);
 	margin: 0;
-	padding: 8px 10px;
-	border: 1px dashed var(--amber);
-	border-radius: 8px;
 	color: var(--panel-ink);
 }
 .prom__chart {
@@ -1035,7 +1010,7 @@
 	display: block;
 	padding: 6px 8px;
 	border: 0;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--panel-2);
 	font: 400 0.75rem/1.5 var(--mono);
 	color: var(--panel-ink);
@@ -1072,7 +1047,7 @@
 	margin: 0;
 	padding: 16px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--paper);
 	color: var(--ink);
 }
@@ -1081,7 +1056,7 @@
 	place-items: center;
 	width: 32px;
 	height: 28px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--ink);
 	color: var(--paper);
 	font: 500 0.75rem/1 var(--mono);
@@ -1125,7 +1100,7 @@
 .ops-step__note code {
 	padding: 1px 5px;
 	border: 0;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--bar-2);
 	font: 400 0.875em var(--mono);
 	color: var(--ink);
@@ -1153,7 +1128,7 @@
 	margin: 1.75rem 0;
 	padding: 16px;
 	border: 1px solid var(--rule);
-	border-radius: 12px;
+	border-radius: var(--corner);
 	background: var(--paper);
 	color: var(--ink);
 }
@@ -1177,7 +1152,7 @@
 	min-height: 40px;
 	padding: 8px 12px;
 	border: 1px solid var(--rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: var(--paper);
 	color: var(--ink);
 	font: 400 0.9375rem/1.2 var(--display);
@@ -1198,7 +1173,7 @@
 	min-height: 36px;
 	padding: 6px 12px;
 	border: 1px solid var(--rule);
-	border-radius: 8px;
+	border-radius: var(--corner);
 	background: transparent;
 	color: var(--ink-2);
 	font: 500 0.8125rem/1 var(--display);
@@ -1215,9 +1190,9 @@
 .mx__chip b {
 	margin-left: 4px;
 	padding: 0 5px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--amber);
-	color: var(--ink);
+	color: var(--signal-ink);
 	font: 700 0.6875rem/1.5 var(--mono);
 }
 .mx__count {
@@ -1266,7 +1241,7 @@
 }
 .mx__table thead th {
 	position: sticky;
-	top: calc(var(--sl-nav-height, 3.5rem) + var(--sl-mobile-toc-height, 0rem));
+	top: calc(var(--nav-height));
 	z-index: 2;
 	padding-block: 12px;
 	border-bottom: 2px solid var(--ink);
@@ -1305,9 +1280,9 @@
 	display: inline-block;
 	margin-right: 4px;
 	padding: 0 6px;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--amber);
-	color: var(--ink);
+	color: var(--signal-ink);
 	font: 700 0.6875rem/1.6 var(--mono);
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -1365,7 +1340,7 @@
 .mx__notes code {
 	padding: 1px 5px;
 	border: 0;
-	border-radius: 4px;
+	border-radius: var(--corner);
 	background: var(--bar-2);
 	font: 400 0.875em var(--mono);
 	color: var(--ink);

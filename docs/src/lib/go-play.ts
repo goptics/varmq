@@ -1,9 +1,8 @@
 // The `go-play` element: runs a Go program on the Go Playground and plays its output back in the page. GoPlay.astro
-// (the docs pages) and home/Examples.astro (JOB 05 on the home page) each give it their own markup, with these hooks
-// inside: `data-pins` (the go and varmq versions, from examples/go.mod), `[data-read]` (the code as read), `[data-editor]`
-// (a textarea holding the source), the buttons `[data-run]`, `[data-edit]`, `[data-reset]` and `[data-open]`, an
-// optional `[data-copy-src]` (copies the whole program, edits included), and `[data-output]` (a pre). Importing this
-// module defines the element once.
+// gives it its markup, with these hooks inside: `data-pins` (the go and varmq versions, from examples/go.mod),
+// `[data-read]` (the code as read), `[data-editor]` (a textarea holding the source), the buttons `[data-run]`,
+// `[data-edit]`, `[data-reset]`, `[data-open]` and `[data-copy-src]` (copies the whole program, edits included), and
+// `[data-output]` (a pre). Importing this module defines the element once.
 
 import { compile, replay, requestBody, share, type OutKind, type Pins } from './playground';
 import { copyText } from '../components/ui/dom';
@@ -37,8 +36,8 @@ class GoPlay extends HTMLElement {
 		this.editBtn.addEventListener('click', () => this.edit());
 		this.resetBtn.addEventListener('click', () => this.reset());
 		this.querySelector('[data-open]')!.addEventListener('click', () => this.open());
-		const copy = this.querySelector<HTMLElement>('[data-copy-src]');
-		copy?.addEventListener('click', () => void copyText(copy, this.editor.value, this.read));
+		const copy = this.querySelector<HTMLElement>('[data-copy-src]')!;
+		copy.addEventListener('click', () => void copyText(copy, this.editor.value, this.read));
 		this.editor.addEventListener('keydown', (e) => this.onKey(e));
 	}
 

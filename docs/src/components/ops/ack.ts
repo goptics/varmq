@@ -210,7 +210,7 @@ function init(root: HTMLElement) {
 			} else if (s.mode === 'redis') {
 				s.msg = 'redisq keeps job 7 in jobs:nacked until the program has run 30 s in all, or until the 5-minute deadline.';
 			} else {
-				s.msg = 'varmq cannot bring job 7 back. Your adapter decides when, or whether, to hand it out again.';
+				s.msg = 'VarMQ cannot bring job 7 back. Your adapter decides when, or whether, to hand it out again.';
 			}
 		} else {
 			s.msg = 'The process is back and starts on the jobs in storage.';
@@ -231,7 +231,7 @@ function init(root: HTMLElement) {
 		s.orphan = false;
 		s.lost = true;
 		s.stage = 0;
-		s.msg = 'Your adapter never hands job 7 out again. It is lost, and varmq does not retry it.';
+		s.msg = 'Your adapter never hands job 7 out again. It is lost, and VarMQ does not retry it.';
 		render();
 	}
 

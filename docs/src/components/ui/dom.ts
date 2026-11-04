@@ -124,18 +124,20 @@ export function keyBelongsToControl(e: KeyboardEvent) {
 }
 
 /**
- * Copy `text` and say so on the button for 1.6 s: "Copied", or "Select" when the browser refuses
- * (then `fallback` is selected so the reader can copy it by hand). `live` gets the same message.
+ * Copy `text` and say so on the button for 1.6 s: "Copied", or, when it fails, "Select" with `fallback` selected so the
+ * reader can copy it by hand, or "Failed" without one. `live` gets the same message. Text that is still loading comes as
+ * a promise: Safari allows a write only during the click, so it must start before the text has arrived.
  */
-export async function copyText(btn: HTMLElement, text: string, fallback?: Element | null, live?: HTMLElement | null) {
+export async function copyText(btn: HTMLElement, text: string | Promise<string>, fallback?: Element | null, live?: HTMLElement | null) {
 	const label = btn.dataset.label ?? btn.textContent ?? 'Copy';
 	btn.dataset.label = label;
 	try {
-		await navigator.clipboard.writeText(text);
+		if (typeof text === 'string') await navigator.clipboard.writeText(text);
+		else await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })]);
 		btn.textContent = 'Copied';
 		if (live) live.textContent = 'Copied to the clipboard.';
 	} catch {
-		btn.textContent = 'Select';
+		btn.textContent = fallback ? 'Select' : 'Failed';
 		if (fallback) {
 			const range = document.createRange();
 			range.selectNodeContents(fallback);

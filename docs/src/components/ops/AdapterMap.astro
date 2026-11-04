@@ -6,10 +6,10 @@ import Scene from '../ui/Scene.astro';
 import { BASE, NODES, PRESETS } from './adapter-data';
 
 const describe =
-	'A map of the varmq storage interfaces. The root is IBaseQueue, with five methods. A FIFO column has IQueue, IPersistentQueue, IDistributedQueue and IDedupQueue. ' +
-	'A priority column has the same four with a priority. A third column has IAcknowledgeable, ISubscribable, IBatchAcknowledgeable and CapacitySetter. ' +
+	'A map of the VarMQ storage interfaces. The root is IBaseQueue, with five methods. A FIFO column has IQueue, IPersistentQueue and IDistributedQueue. ' +
+	'A priority column has the same three with a priority. A third column has IAcknowledgeable, ISubscribable, IBatchAcknowledgeable and CapacitySetter. ' +
 	'Each box is a button. Press a part to add it to your type. Press it again to remove it. Boxes that combine parts switch on by themselves. ' +
-	'Below the map, one list shows which binding calls accept the type, and another list says what varmq does with it.';
+	'Below the map, one list shows which binding calls accept the type, and another list says what VarMQ does with it.';
 
 const cols = ['FIFO queue', 'Priority queue', 'Either'];
 ---
@@ -49,8 +49,8 @@ const cols = ['FIFO queue', 'Priority queue', 'Either'];
 				<ul class="amap__list" data-bind></ul>
 			</section>
 		</div>
-		<section class="amap__does" aria-label="What varmq does with your type">
-			<p class="amap__h">What varmq does with it</p>
+		<section class="amap__does" aria-label="What VarMQ does with your type">
+			<p class="amap__h">What VarMQ does with it</p>
 			<dl class="amap__dl" data-does></dl>
 		</section>
 	</div>

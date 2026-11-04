@@ -1,8 +1,6 @@
 ---
 title: Worker lifecycle
-description: The seven worker states, how Start, Pause, Resume, Stop and Restart move between them, and the settings WithAutoRun and WithStoppedRetention.
-sidebar:
-  order: 3
+description: "The seven worker states, and how Start, Pause, Resume, Stop and Restart move a worker between them."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
@@ -10,7 +8,7 @@ import LifecycleScene from '../../../components/learn/LifecycleScene.astro';
 
 A worker is always in one of seven states. [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Status) returns the current one as a string, and five `Is*` methods answer yes or no for some of them.
 
-The diagram below is a worker you can drive. Click a state to read about it. Press a method to call it. The worker has three jobs waiting and runs one at a time, taking every waiting job into one batch. Pause and Stop never interrupt a running job, so press Finish to end it.
+The diagram below is a worker you can drive. Click a state to read about it. Press a method to call it. The worker has three jobs waiting and runs one at a time. Pause and Stop never interrupt a running job, so press Finish to end it.
 
 <LifecycleScene />
 
@@ -26,7 +24,7 @@ The diagram below is a worker you can drive. Click a state to read about it. Pre
 | `Stopping` | `Stop` was called. Running jobs finish, then the worker's goroutines are removed. | none |
 | `Stopped` | The event loop has ended and the goroutines are gone. Jobs still in the queue stay there. | [`IsStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.IsStopped) |
 
-`Idle` and `Running` swap on their own as jobs start and finish, so `Running` is a moment, not a mode you set. `IsActive` is true for either of them, which makes it the check for "started and not paused or stopped".
+`Idle` and `Running` swap on their own as jobs start and finish. You cannot set `Running`. The worker sets it while jobs run. `IsActive` is true for either of them, which makes it the check for "started and not paused or stopped".
 
 The program below creates a worker with `WithAutoRun(false)`, adds three jobs, starts it, and pauses it while job 1 runs.
 
@@ -38,17 +36,27 @@ A status is a snapshot. Between reading it and acting on it the worker may have 
 
 ## Moving between states
 
-| Call | From | Result | Errors from other states |
-|---|---|---|---|
-| [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) | `Initiated`, `Stopped` | `Idle` | [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker) from `Idle` or `Running`; [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused) or [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) |
-| [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) | `Idle` becomes `Paused`; `Running` becomes `Pausing`, then `Paused` | already `Pausing` or `Paused`: no error | [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) from `Initiated`; `ErrWorkerStopping`; [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) |
-| [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) | `Paused` becomes `Idle`, and the worker pulls jobs again | already `Idle` or `Running`: no error | `ErrNotRunningWorker` from `Initiated`; `ErrWorkerPausing`; `ErrWorkerStopping`; `ErrWorkerStopped` |
-| [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) | `Idle`, `Running`, `Pausing` or `Paused` become `Stopping`, then `Stopped` | already `Stopping` or `Stopped`: no error | `ErrNotRunningWorker` from `Initiated` |
-| [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) | any state but `Initiated` | stops, waits for `Stopped`, starts again: `Idle` | `ErrNotRunningWorker` from `Initiated` |
+| Call | From | Result |
+|---|---|---|
+| [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start) | `Initiated`, `Stopped` | `Idle` |
+| [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) | `Idle` becomes `Paused`; `Running` becomes `Pausing`, then `Paused` | already `Pausing` or `Paused`: no error |
+| [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) | `Paused` becomes `Idle`, and the worker pulls jobs again | already `Idle` or `Running`: no error |
+| [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) | `Idle`, `Running`, `Pausing` or `Paused` become `Stopping`, then `Stopped` | already `Stopping` or `Stopped`: no error |
+| [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) | any state but `Initiated` | stops, waits for `Stopped`, starts again: `Idle` |
+
+From any other state, each call returns an error. The errors below are in the same order as the states.
+
+| Call | Returns an error from | Errors |
+|---|---|---|
+| `Start` | `Idle` or `Running`; `Pausing`; `Paused`; `Stopping` | [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker); [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing); [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused); [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) |
+| `Pause` | `Initiated`; `Stopping`; `Stopped` | [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker); `ErrWorkerStopping`; [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped) |
+| `Resume` | `Initiated`; `Pausing`; `Stopping`; `Stopped` | `ErrNotRunningWorker`; `ErrWorkerPausing`; `ErrWorkerStopping`; `ErrWorkerStopped` |
+| `Stop` | `Initiated` | `ErrNotRunningWorker` |
+| `Restart` | `Initiated` | `ErrNotRunningWorker` |
 
 The errors are values in the package, listed under [Variables](https://pkg.go.dev/github.com/goptics/varmq#pkg-variables). Two details:
 
-- `Pause`, `Resume` and `Stop` return at once. `Restart` does not: it waits for running jobs to finish before it starts the worker again. If another goroutine restarts the worker first, it returns `ErrRunningWorker`.
+- `Pause`, `Resume` and `Stop` return immediately. `Restart` does not: it waits for running jobs to finish before it starts the worker again. If another goroutine restarts the worker first, it returns `ErrRunningWorker`.
 - A stopped worker cannot be resumed. `Resume` returns `ErrWorkerStopped`. Use `Restart`, or `Start`, which also accepts a stopped worker.
 
 The program below stops a worker, tries to resume it, adds a job while it is stopped, then restarts it.
@@ -61,20 +69,13 @@ The program below stops a worker, tries to resume it, adds a job while it is sto
 
 Pause and stop never interrupt a running job. Each running job finishes first.
 
-Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue at once (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
+Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue together (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
 
 A stop also cancels the worker's [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context). A restart gives the worker a fresh one.
 
 ### Waiting for a state
 
-`Pause`, `Resume` and `Stop` only start the change. These block until it is done:
-
-- [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) is `Pause` followed by `WaitUntilPaused`.
-- [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) is `Stop` followed by `WaitUntilStopped`.
-- [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) and [`WaitUntilStopped`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilStopped) wait for one state, and never return if the worker does not reach it.
-- [`WaitUntilIdle`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilIdle) waits for `Idle` with no pending jobs, so on a paused or stopped worker it keeps waiting until `Resume`, `Restart` or `Start` brings it back to `Idle` and it drains.
-
-[`WaitAndPause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndPause) and [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) go the other way: they call `Wait` first, then pause or stop. [Waiting](/guides/waiting/) compares all of them.
+`Pause`, `Resume` and `Stop` only start the change. To block until it is done, call [`PauseAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.PauseAndWait) or [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait). [Waiting](/guides/waiting/#waiting-for-a-state) covers these and the other wait calls.
 
 ## Settings
 
@@ -88,7 +89,7 @@ Pass `WithAutoRun(false)` to get an `Initiated` worker instead. You can bind que
 
 This setting matters only for a worker with a name ([`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName) or a string argument to `NewWorker`). `Start` adds a named worker to [`WorkerRegistry`](https://pkg.go.dev/github.com/goptics/varmq#WorkerRegistry), the map that the REST [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) reads. A worker without a name is never registered.
 
-When a registered worker reaches `Stopped`, it stays in the registry for a while, so it still shows up as `Stopped`. [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) sets how long. When the time is up and the worker is still stopped, it is removed from the registry.
+When a registered worker reaches `Stopped`, it stays in the registry for a while, so it still appears as `Stopped`. [`WithStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithStoppedRetention) sets how long. When that time has passed and the worker is still stopped, it is removed from the registry.
 
 - The default is one minute. [`DefaultStoppedRetention`](https://pkg.go.dev/github.com/goptics/varmq#DefaultStoppedRetention) changes the default for workers created after the call.
 - `0` turns the cleanup off: a stopped worker stays in the registry for good.

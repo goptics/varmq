@@ -1,4 +1,4 @@
-// The jobs JOB 02's scenes add, and the order they run in, worked out the way varmq works it out, so the scenes
+// The jobs JOB 01's scenes add, and the order they run in, worked out the way varmq works it out, so the scenes
 // (scenes.ts) show what the library does and order.test.ts pins it. No DOM here: the page's still frames are drawn at build time too.
 
 /** A job added to a priority queue: its name and its number. */

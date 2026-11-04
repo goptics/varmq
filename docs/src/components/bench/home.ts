@@ -1,4 +1,4 @@
-// The figures of the home page's benchmark section, JOB 04 (components/home/Race.astro).
+// The figures of the home page's benchmark section, JOB 03 (components/home/Race.astro).
 // They are the explorer's own means (laneSet over a scope of data.json), so the home page and the
 // Benchmarks page cannot disagree. home.test.ts pins them to the values the page states.
 

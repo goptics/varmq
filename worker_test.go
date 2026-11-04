@@ -556,12 +556,13 @@ func TestWorkers(t *testing.T) {
 					ratio       uint8
 					expected    int
 				}{
-					{concurrency: 10, ratio: 10, expected: 1},   // 10% of 10 = 1
-					{concurrency: 10, ratio: 20, expected: 2},   // 20% of 10 = 2
-					{concurrency: 5, ratio: 30, expected: 1},    // 30% of 5 = 1.5, rounded to 1
-					{concurrency: 100, ratio: 15, expected: 15}, // 15% of 100 = 15
-					{concurrency: 3, ratio: 50, expected: 1},    // 50% of 3 = 1.5, rounded to 1
-					{concurrency: 1, ratio: 100, expected: 1},   // 100% of 1 = 1
+					{concurrency: 10, ratio: 10, expected: 1},            // 10% of 10 = 1
+					{concurrency: 10, ratio: 20, expected: 2},            // 20% of 10 = 2
+					{concurrency: 5, ratio: 30, expected: 1},             // 30% of 5 = 1.5, rounded to 1
+					{concurrency: 100, ratio: 15, expected: 15},          // 15% of 100 = 15
+					{concurrency: 3, ratio: 50, expected: 1},             // 50% of 3 = 1.5, rounded to 1
+					{concurrency: 1, ratio: 100, expected: 1},            // 100% of 1 = 1
+					{concurrency: 1 << 30, ratio: 50, expected: 1 << 29}, // product passes MaxUint32
 				}
 
 				for _, tc := range testCases {
@@ -931,6 +932,40 @@ func TestWorkers(t *testing.T) {
 				ctx := context.Background()
 				w := newResultWorker(func(j iResultJob[string, int]) {}, WithContext(ctx))
 				assert.NotNil(t, w.Context(), "ResultWorker context should not be nil when configured")
+			})
+
+			// #133: Restart replaces the context while Add copies Configs and
+			// Context reads it; run with -race.
+			t.Run("Restart does not race with Add or Context", func(t *testing.T) {
+				w := newWorker(func(j iJob[string]) {}, 2)
+				q := newQueue(w, queues.NewQueue[any](), WithQueueCapacity(64))
+
+				stop := make(chan struct{})
+				var wg sync.WaitGroup
+				for _, read := range []func(){
+					func() { q.Add("job") },
+					func() { _ = w.Context() },
+				} {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						for {
+							select {
+							case <-stop:
+								return
+							default:
+								read()
+							}
+						}
+					}()
+				}
+
+				for range 20 {
+					require.NoError(t, w.Restart())
+				}
+				close(stop)
+				wg.Wait()
+				require.NoError(t, w.StopAndWait())
 			})
 		})
 	})
@@ -1579,6 +1614,23 @@ func TestWorkerRegistration(t *testing.T) {
 		assert.False(t, loaded, "worker should be removed from registry after retention")
 	})
 
+	// #132: the stopped worker's timer must not evict a newer one with its name.
+	t.Run("Retention timer keeps a newer worker with the same name", func(t *testing.T) {
+		WorkerRegistry.Clear()
+		defer WorkerRegistry.Clear()
+
+		old := newWorker(func(j iJob[string]) {}, WithName("taken"), WithStoppedRetention(10*time.Millisecond))
+		old.StopAndWait()
+
+		newer := newWorker(func(j iJob[string]) {}, WithName("taken"))
+		defer newer.Stop()
+
+		time.Sleep(50 * time.Millisecond)
+		v, loaded := WorkerRegistry.Load("taken")
+		require.True(t, loaded, "newer worker should stay registered after the old worker's retention")
+		assert.Same(t, newer, v, "registry should hold the newer worker")
+	})
+
 	t.Run("Zero retention keeps worker in registry", func(t *testing.T) {
 		WorkerRegistry.Clear()
 		defer WorkerRegistry.Clear()
@@ -1902,3 +1954,6 @@ func (n *noAttachQueue) Values() []any         { return n.q.Values() }
 func (n *noAttachQueue) Purge()                { n.q.Purge() }
 func (n *noAttachQueue) Close() error          { return n.q.Close() }
 func (n *noAttachQueue) Enqueue(item any) bool { return n.q.Enqueue(item) }
+func (n *noAttachQueue) EnqueueOnce(item any, id string) bool {
+	return n.q.EnqueueOnce(item, id)
+}

@@ -1,0 +1,76 @@
+---
+title: Troubleshooting
+description: "Common problems with VarMQ workers and queues, what causes each one, and what to do about it."
+---
+
+Each section below starts from what you see. It gives the usual causes, what to do, and the page with the details.
+
+## Add returns false
+
+[`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) returns a `nil` handle and `false` in three cases, and it does not say which one. The queue is full, the queue is closed, or an in-memory queue already holds a job with the same ID.
+
+- Check [`IsFull()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) if you set [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity). Treat a full queue as backpressure: try again later, drop the job, or slow down the caller.
+- Look for a call to [`Close`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Close) on the queue. A closed queue stays closed.
+- Look for a repeated [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId). The ID is free again once its job has left the queue.
+
+See [queues](/guides/queues/#capacity) and [job IDs](/guides/job-ids/#deduplicating).
+
+## Jobs never run
+
+A worker created with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) stays `Initiated` until you call [`Start`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Start). A paused or stopped worker does not start new jobs either, but `Add` still accepts them. Call `Start`, `Resume` or `Restart`, as the worker's status needs. The [lifecycle](/concepts/lifecycle/) page has the states.
+
+[`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait) on an `Initiated` worker returns at once, with every job still queued. So the program can exit before any job runs. Start the worker before you call `Wait`. See [waiting](/guides/waiting/#wait-and-waituntilidle).
+
+With your own persistent queue, old jobs can stay in storage if the worker started before you bound the queue. Create the worker with `WithAutoRun(false)`, bind the queue, then call `Start`. redisq and sqliteq signal the worker when you bind them, so with them the order does not matter. See [starting a worker on a non-empty queue](/persistence/overview/#starting-a-worker-on-a-non-empty-queue).
+
+## Wait or WaitUntilIdle never returns
+
+- **You called it from inside the worker's own function.** The calling job counts as running, so the call waits for itself. Call it from outside the worker.
+- **The worker is paused or stopped.** `WaitUntilIdle` waits until the worker is `Idle` again with nothing pending. Call [`Resume`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Resume) or [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart).
+- **You wait for a state the worker does not reach.** [`WaitUntilPaused`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitUntilPaused) keeps waiting if the worker is stopped instead.
+
+See [waiting](/guides/waiting/).
+
+## Memory keeps growing
+
+A queue has no limit by default, so jobs wait in memory when you add them faster than the worker runs them. Set [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) and handle a `false` from `Add`. See [queues](/guides/queues/#capacity).
+
+A topic subscriber that is slow, paused or stopped keeps every payload it has not read. Set [`WithTopicCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicCapacity), or unsubscribe a worker that will not read again. See [topics](/guides/topics/#how-a-topic-stores-payloads).
+
+## A job ran twice on Redis or SQLite
+
+With redisq and sqliteq, the best case is at-least-once delivery. A job that was taken and not acknowledged runs again. Write the job function so that it is safe to run twice. Then check these causes:
+
+- **redisq:** a job ran longer than the visibility timeout, five minutes by default. Keep the timeout longer than your slowest job.
+- **sqliteq:** a second process opened a queue on the same database file. Use one process for each file.
+- **redisq:** the queue was closed while a job still ran. `Close` puts back every job that the queue object took and did not acknowledge. Call [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) on the worker before you close the queue.
+
+See [what this guarantees](/persistence/overview/#what-this-guarantees), [Redis](/persistence/redis/#jobs-that-were-not-acknowledged) and [SQLite](/persistence/sqlite/#jobs-that-were-not-acknowledged).
+
+## Jobs run out of order
+
+With concurrency above 1, jobs run at the same time and finish in any order. A goroutine can also take several jobs as a batch, so a later job on another goroutine can start first. If the order matters, use concurrency 1 and one FIFO queue. See [batched dispatch](/concepts/how-it-works/#batched-dispatch).
+
+A priority queue runs the lowest number first. A worker bound to several queues picks a queue for each job with its strategy. See [queues](/guides/queues/#fifo-and-priority-queues) and [strategies](/guides/strategies/#choosing-a-strategy).
+
+## TunePool returns an error
+
+[`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) means the worker already has that limit, so nothing changed. Any other error means the worker is not `Idle` or `Running`, and the error names its state. Call `TunePool` on an active worker only. See [concurrency](/guides/concurrency/#changing-the-limit-with-tunepool).
+
+## Storage errors on Errs()
+
+These errors come from the storage, not from your function. The worker sends them to [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) and the error handler, and continues.
+
+- [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob): the stored bytes do not decode as JSON into the worker's job type. Make sure the producers and the consumers use the same type.
+- [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob): the storage refused the acknowledgement. The job's function has already run. Check that the storage is reachable, and that nothing purged or closed the queue during the job.
+- [`ErrFailedToDequeue`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToDequeue): the queue was not empty when the worker checked, but it gave no job when the worker pulled. If other workers or processes share the queue, one of them can take the last job between the check and the pull. Otherwise, check that the storage is reachable. With redisq or sqliteq as the worker's only queue, a failed storage call sends the storage's own error instead.
+
+See [errors](/guides/errors/#sent-to-errs-and-the-handler).
+
+## A job does not stop when the worker stops
+
+VarMQ does not interrupt a running function. `Stop` and a cancelled context only keep waiting jobs from starting. To end a job early, pass the worker's [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context) to your calls, or select on its `Done` channel. See [stopping a running job early](/guides/context/#stopping-a-running-job-early).
+
+## The REST API does not list a worker
+
+Only a named worker is in the registry. Give the worker a name with [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName). A worker joins the registry when it starts, and leaves some time after it stops, one minute by default. See [which workers it serves](/operations/rest-api/#which-workers-it-serves).

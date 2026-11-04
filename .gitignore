@@ -14,3 +14,8 @@ docs/node_modules/
 docs/dist/
 docs/.astro/
 docs/.wrangler/
+
+# local agent tooling (skills, hooks, worktrees)
+.claude/
+.impeccable/
+PRODUCT.md

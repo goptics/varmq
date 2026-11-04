@@ -1,5 +1,5 @@
 ---
-// JOB 02 on the home page: three small pieces of the hero map (scenes.ts), each looping on its own while it is in
+// JOB 01 on the home page: three small pieces of the hero map (scenes.ts), each looping on its own while it is in
 // view, with the Go call of each step above it. The page ships each scene's still frame, drawn here at build time.
 import '../../lib/heromap/map.css';
 import '../../styles/home.css';
@@ -24,7 +24,7 @@ const scenes: Scene[] = [
 	},
 	{
 		key: 'strategy',
-		title: 'Several queues, one worker',
+		title: 'Many queues, one worker',
 		text: 'Bind many queues to one worker. A strategy decides which queue gives the next job: Priority, RoundRobin, MaxLen or MinLen.',
 		href: '/guides/strategies/',
 		more: 'Strategies',
@@ -47,14 +47,14 @@ function still(key: SceneKey) {
 }
 ---
 
-<section class="home-row section wrap" aria-labelledby="sched-title">
+<section class="home-row section wrap" aria-labelledby="sched-title" style="padding-top:0">
 	<div class="banner">
-		<span class="banner__id">JOB 02</span><span>Scheduling</span><span class="banner__rule"></span>
+		<span class="banner__id">JOB 01</span><span>Scheduling</span><span class="banner__rule"></span>
 	</div>
 	<div class="section__head">
 		<h2 class="h2" id="sched-title">Order, fairness and fan-out, each in one line.</h2>
 		<p>
-			Each scene shows the order varmq runs the jobs in, with the call that makes it. Typed results and errors, job IDs and deduplication,
+			Each scene shows the order VarMQ runs the jobs in, with the call that makes it. Typed results and errors, job IDs and deduplication,
 			context cancellation, metrics, a REST API and Prometheus are in the <a href="/guides/queues/">guides</a>.
 		</p>
 	</div>
