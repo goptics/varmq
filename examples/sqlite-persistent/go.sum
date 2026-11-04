@@ -1,9 +1,7 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/goptics/sqliteq v0.2.3 h1:pwSmcsRBwDGtytLKiW6q/d0vhgJXRHJP+KEQGH0BUB8=
-github.com/goptics/sqliteq v0.2.3/go.mod h1:Rf8NqVhNVFCDDfnNcQPeREdR9ML/iSnGs8eKgzeLbCI=
-github.com/lucsky/cuid v1.2.1 h1:MtJrL2OFhvYufUIn48d35QGXyeTC8tn0upumW9WwTHg=
-github.com/lucsky/cuid v1.2.1/go.mod h1:QaaJqckboimOmhRSJXSx/+IT+VTfxfPGSo/6mfgUfmE=
+github.com/goptics/sqliteq v0.3.0 h1:5Jff3AqiEt2Em41QK83tBalqNCF64vrBJY1JdWRkfog=
+github.com/goptics/sqliteq v0.3.0/go.mod h1:9FFuDJnO3iC5ToSBDxJGCeds5VORAYgX0xBEZznqgV4=
 github.com/mattn/go-sqlite3 v1.14.28 h1:ThEiQrnbtumT+QMknw63Befp/ce/nUPgBPMlRFEum7A=
 github.com/mattn/go-sqlite3 v1.14.28/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

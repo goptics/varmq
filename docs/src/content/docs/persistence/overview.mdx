@@ -20,7 +20,7 @@ This page covers what the two kinds of queue do in VarMQ. [Redis](/persistence/r
 |---|---|---|
 | Persistent queue and persistent priority queue | yes | yes |
 | Distributed queue and distributed priority queue | yes, on the `NewDistributed...` queues | no |
-| Store a retried `Add` once ([`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue)) | yes | yes |
+| Store a retried `Add` once ([`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce)) | yes | yes |
 
 [Adapters](/persistence/adapters/#what-redisq-and-sqliteq-implement) has the full list of interfaces.
 
@@ -31,7 +31,7 @@ This page covers what the two kinds of queue do in VarMQ. [Redis](/persistence/r
 | How often does a job run? | At least once with redisq and sqliteq. A custom adapter decides, and it can lose a job: see [what this guarantees](#what-this-guarantees). A job can run twice, so write the job function so that a second run is safe. |
 | Does VarMQ retry a failed job? | No. A job that fails or panics is acknowledged like any other. To acknowledge a job is to tell the storage that the job is done, so the storage forgets it. |
 | In what order do jobs leave storage? | In the order the adapter gives: first in, first out, or lowest priority number first. |
-| Is a repeated `Add` stored once? | Only with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) and an adapter that implements [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue). redisq and sqliteq do. |
+| Is a repeated `Add` stored once? | Only with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) and an adapter whose [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) checks IDs. redisq and sqliteq do. |
 
 [What this guarantees](#what-this-guarantees) explains each answer.
 
@@ -89,7 +89,7 @@ What the storage then does with it is the adapter's decision. VarMQ cannot make 
 
 - **A job can run twice.** With these adapters, a job is given out again if its process died while it ran. A job is also given out again if its acknowledgement failed after it ran. Write the job function so that running it twice is safe.
 - **A job can be lost with some adapters.** Some adapters take a job and record it as in progress in two separate steps. Such an adapter can lose the job if the process dies between the steps. redisq and sqliteq do both in one step.
-- **VarMQ does not deduplicate for you.** [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) puts an ID in the stored JSON. Storage that implements [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue) can use it to store a retried `Add` once. This stops a double add. It says nothing about a double run. redisq and sqliteq both implement it.
+- **VarMQ does not deduplicate for you.** [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) puts an ID in the stored JSON. Storage can use it in [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) to store a retried `Add` once. This stops a double add. It says nothing about a double run. redisq and sqliteq both do.
 
 ## Starting a worker on a non-empty queue
 

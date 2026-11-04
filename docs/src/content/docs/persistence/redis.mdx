@@ -290,7 +290,7 @@ The scene below shows the keys of a queue named `jobs`. Take a job, then kill th
 
 ## Job IDs
 
-redisq implements [`IDedupQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupQueue) and [`IDedupPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDedupPriorityQueue). An `Add` with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) stores the job once per ID within a window, five minutes by default. Another `Add` with the same ID in that time stores nothing, and still returns `true`. That covers an `Add` you retry, and a push that the Redis client sent again after its reply was lost. The ID is remembered for the whole window, even after its job has run. [`SetDedupWindow`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetDedupWindow) on the queue object changes the window, and 0 turns the check off.
+redisq checks job IDs in [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). An `Add` with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) stores the job once per ID within a window, five minutes by default. Another `Add` with the same ID in that time stores nothing, and still returns `true`. That covers an `Add` you retry, and a push that the Redis client sent again after its reply was lost. The ID is remembered for the whole window, even after its job has run. [`SetDedupWindow`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetDedupWindow) on the queue object changes the window, and 0 turns the check off.
 
 A job without an ID is not checked. If the reply to its push is lost, the Redis client sends the push again, and the job can be stored twice. Give jobs IDs when that matters.
 

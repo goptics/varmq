@@ -13,56 +13,44 @@ type IBaseQueue interface {
 type IQueue interface {
 	IBaseQueue
 	Enqueue(item any) bool
+	// EnqueueOnce stores item unless an item with the same id is already
+	// stored. A queue adds a job that has an id with it. Storage that does not
+	// dedupe can call Enqueue.
+	//
+	// Persistent and distributed storage keeps an id for a window it sets and
+	// returns true for a repeat too. A storage client's re-send of a push whose
+	// reply was lost, or an Add retried with the same id, then stores the job
+	// once. A repeat still counts as submitted.
+	//
+	// In-memory storage (BindQueue, WithQueue) keeps an id while its item is
+	// in the queue, until Dequeue or Purge takes it, and returns false for a
+	// repeat: Add hands back the job, which would never finish if it was not
+	// stored. The in-memory item is the job itself, and its ID method returns
+	// id. An in-memory Add calls EnqueueOnce only for an id the caller gave
+	// (WithJobId, Item.ID), not a generated one.
+	EnqueueOnce(item any, id string) bool
 }
 
 // IPriorityQueue is the root interface of priority queue operations.
 type IPriorityQueue interface {
 	IBaseQueue
 	Enqueue(item any, priority int) bool
-}
-
-// IDedupQueue is optional for IQueue storage. A queue adds a job that has an
-// id with EnqueueOnce, which stores item unless an item with the same id is
-// already stored.
-//
-// Persistent and distributed storage keeps an id for a window it sets and
-// returns true for a repeat too. A storage client's re-send of a push whose
-// reply was lost, or an Add retried with the same id, then stores the job
-// once. A repeat still counts as submitted.
-//
-// In-memory storage (BindQueue, WithQueue) keeps an id while its item is in
-// the queue, until Dequeue or Purge takes it, and returns false for a repeat:
-// Add hands back the job, which would never finish if it was not stored. The
-// in-memory item is the job itself, and its ID method returns id. An
-// in-memory Add calls EnqueueOnce only for an id the caller gave (WithJobId,
-// Item.ID), not a generated one.
-type IDedupQueue interface {
-	EnqueueOnce(item any, id string) bool
-}
-
-// IDedupPriorityQueue is IDedupQueue for IPriorityQueue storage.
-type IDedupPriorityQueue interface {
+	// EnqueueOnce is IQueue.EnqueueOnce with a priority.
 	EnqueueOnce(item any, priority int, id string) bool
 }
 
-// enqueue stores item in q, once per id when the job has one and q
-// implements IDedupQueue. The id check comes first, so a job without one
-// pays no type assertion.
+// enqueue stores item in q, once per id when the job has one.
 func enqueue(q IQueue, item any, id string) bool {
 	if id != "" {
-		if d, ok := q.(IDedupQueue); ok {
-			return d.EnqueueOnce(item, id)
-		}
+		return q.EnqueueOnce(item, id)
 	}
 	return q.Enqueue(item)
 }
 
-// enqueuePriority is enqueue for priority storage (see IDedupPriorityQueue).
+// enqueuePriority is enqueue for priority storage.
 func enqueuePriority(q IPriorityQueue, item any, priority int, id string) bool {
 	if id != "" {
-		if d, ok := q.(IDedupPriorityQueue); ok {
-			return d.EnqueueOnce(item, priority, id)
-		}
+		return q.EnqueueOnce(item, priority, id)
 	}
 	return q.Enqueue(item, priority)
 }

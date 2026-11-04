@@ -11,7 +11,10 @@ import (
 
 func main() {
 	// Connect to SQLite database using the adapter
-	sdb := sqliteq.New("test.db")
+	sdb, err := sqliteq.New("test.db")
+	if err != nil {
+		panic(err)
+	}
 
 	// Create a persistent queue with optional configuration
 	persistentQueue, err := sdb.NewQueue("test")

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### ⚠️ Breaking Changes
+
+- **`IQueue` and `IPriorityQueue` require `EnqueueOnce`**: `Add` with a job id calls it directly, with no type assertion per `Add`. Custom storage passed to `WithQueue`, `WithPriorityQueue`, `WithPersistent*` or `WithDistributed*` must add it; storage that does not dedupe can call its `Enqueue`. Needs redisq v1.5.0+ and sqliteq v0.3.0+. `IDedupQueue` and `IDedupPriorityQueue` are removed.
+
 ### 🐛 Bug Fixes
 
 - **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
