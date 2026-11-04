@@ -126,7 +126,7 @@ When a job completes or fails, storage writes one Job Record under its Job ID in
 | `started_at` | integer, optional | Time the last attempt started (ms), from `<base>:started`. Absent if not known. |
 | `finished_at` | integer | Time the job completed or failed (ms). The same value as its score in `:completed` or `:failed`. |
 | `attempts` | integer | 1 plus the job's count in `<base>:attempts`. 1 when the envelope `id` is empty. |
-| `last_error` | string, optional | The `reason` given to Reject. Absent on a completed job. |
+| `errors` | array, optional | The job's failed attempts, oldest first, at most the last 10: each `{"attempt": <integer>, "at": <ms>, "error": <string>}`. A writer that adds an 11th entry drops the oldest. Absent on a completed job. |
 
 `enqueued_at` is not copied into the record: a reader takes it from `item.enqueued_at`. A reader MUST ignore fields it does not know, so later versions can add fields.
 
@@ -135,7 +135,7 @@ A script writes integers with `string.format('%.0f', n)`, never with `tostring` 
 Example:
 
 ```json
-{"id":"order-42","state":"failed","item":{"id":"order-42","status":"Created","data":{"sku":"A1","qty":2},"enqueued_at":1762228800000},"started_at":1762228801250,"finished_at":1762228801900,"attempts":2,"last_error":"panic recovered inside worker: out of stock"}
+{"id":"order-42","state":"failed","item":{"id":"order-42","status":"Created","data":{"sku":"A1","qty":2},"enqueued_at":1762228800000},"started_at":1762228801250,"finished_at":1762228801900,"attempts":2,"errors":[{"attempt":2,"at":1762228801900,"error":"panic recovered inside worker: out of stock"}]}
 ```
 
 ## 5. Retention
@@ -203,14 +203,14 @@ Input: the ack ID. Steps:
 Input: the ack ID and a reason string. The steps are those of Acknowledge, with these differences:
 
 - step 5 is `HINCRBY <base>:stats failed 1`;
-- step 6 writes the record with `state` `failed` and `last_error` set to the reason, to `<base>:failed`, and removes the Job ID from `<base>:completed`;
+- step 6 writes the record, with `state` `failed` and one `errors` entry (`attempt` = `attempts`, `at` = now (ms), `error` = the reason), to `<base>:failed`, and removes the Job ID from `<base>:completed`;
 - step 7 trims `:failed`.
 
 Reject never puts the item back in the queue.
 
 A consumer calls Acknowledge when a job succeeds and Reject when it fails for the last time. A consumer that retries a failed job calls neither: the job stays processing until the consumer finishes it or the storage requeues it. (varmq has no retries in this version, so every failure calls Reject.)
 
-redisq ADR-0003 plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `last_error` comes only from Reject, and `attempts` counts only hand-outs.
+redisq ADR-0003 plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `errors` holds only the Reject entry, and `attempts` counts only hand-outs.
 
 ### 6.5 Requeue
 

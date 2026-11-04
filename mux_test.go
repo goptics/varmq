@@ -509,7 +509,7 @@ func (q *inspectedQueue) Jobs(state JobState, offset, limit int) ([]JobRecord, e
 	if q.err != nil {
 		return nil, q.err
 	}
-	return []JobRecord{{ID: "j1", State: state, Payload: json.RawMessage(`{"n":1}`), FinishedAt: 7, Attempts: 1, LastError: "boom"}}, nil
+	return []JobRecord{{ID: "j1", State: state, Payload: json.RawMessage(`{"n":1}`), FinishedAt: 7, Attempts: 1, Errors: []JobError{{Attempt: 1, At: 7, Error: "boom"}}}}, nil
 }
 
 func TestMuxQueues(t *testing.T) {
@@ -548,7 +548,7 @@ func TestMuxQueues(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 		assert.Equal(t, JobFailed, q.gotState)
 		assert.Equal(t, [2]int{3, 2}, q.gotPage)
-		assert.JSONEq(t, `[{"id":"j1","state":"failed","payload":{"n":1},"finished_at":7,"attempts":1,"last_error":"boom"}]`, rr.Body.String())
+		assert.JSONEq(t, `[{"id":"j1","state":"failed","payload":{"n":1},"finished_at":7,"attempts":1,"errors":[{"attempt":1,"at":7,"error":"boom"}]}]`, rr.Body.String())
 
 		get("/queues/" + url.PathEscape(q.id) + "/jobs?state=pending")
 		assert.Equal(t, [2]int{0, defaultJobsLimit}, q.gotPage)

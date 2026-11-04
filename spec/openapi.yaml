@@ -364,6 +364,25 @@ components:
           type: integer
           minimum: 0
           description: Times storage handed the job to a worker. 0 for a pending job never handed out.
-        last_error:
+        errors:
+          type: array
+          maxItems: 10
+          description: |
+            The job's failed attempts, oldest first; the last is its final
+            error. At most the last 10. Absent when no attempt failed.
+          items: { $ref: "#/components/schemas/JobError" }
+
+    JobError:
+      type: object
+      required: [attempt, at, error]
+      properties:
+        attempt:
+          type: integer
+          minimum: 1
+          description: The attempt that failed, counted as in `attempts`.
+        at:
+          type: integer
+          description: Unix milliseconds the attempt failed.
+        error:
           type: string
-          description: The error of the last failed attempt. Absent when no attempt failed.
+          description: The error text.

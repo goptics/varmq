@@ -124,6 +124,7 @@ type (
 	JobTotals      = contract.JobTotals
 	QueueStats     = contract.QueueStats
 	JobRecord      = contract.JobRecord
+	JobError       = contract.JobError
 	QueueInspector = contract.QueueInspector
 )
 

@@ -49,7 +49,15 @@ type JobRecord struct {
 	StartedAt  int64           `json:"started_at,omitempty"`
 	FinishedAt int64           `json:"finished_at,omitempty"`
 	Attempts   int             `json:"attempts"`
-	LastError  string          `json:"last_error,omitempty"`
+	Errors     []JobError      `json:"errors,omitempty"`
+}
+
+// JobError is one failed attempt of a job. A JobRecord keeps at most the last
+// 10, oldest first; the last is the job's final error.
+type JobError struct {
+	Attempt int    `json:"attempt"`
+	At      int64  `json:"at"`
+	Error   string `json:"error"`
 }
 
 // QueueInspector is optional for storage that keeps its own job counts and

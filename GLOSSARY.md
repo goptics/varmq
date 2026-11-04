@@ -21,5 +21,5 @@ The final failure of a job: no retry follows, and it is not requeued. The failur
 _Avoid_: fail, nack, dead
 
 **Job Record**:
-What storage keeps about a completed or failed job after it leaves the queue: its payload, times, attempt count and last error.
+What storage keeps about a completed or failed job after it leaves the queue: its payload, times, attempt count and the errors of its failed attempts.
 _Avoid_: job history, job log, result
