@@ -7,6 +7,7 @@ require github.com/goptics/varmq v1.0.0
 require github.com/matoous/go-nanoid/v2 v2.1.0
 
 require (
+	github.com/goptics/varmq/contract v0.1.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )
@@ -20,3 +21,5 @@ require (
 // Replace the remote module with your local path
 // Assuming your project structure has examples/distributed at the same level as your main module
 replace github.com/goptics/varmq => ../../
+
+replace github.com/goptics/varmq/contract => ../../contract

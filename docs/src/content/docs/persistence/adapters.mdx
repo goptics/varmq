@@ -60,14 +60,15 @@ The priority is the number the caller passed to `Add`. VarMQ does not order the 
 
 ### `IAcknowledgeable`
 
-The interface that makes a queue persistent. It has two methods:
+The interface that makes a queue persistent. It has three methods:
 
 | Method | The worker calls it |
 |---|---|
 | [`DequeueWithAckId() (any, bool, string)`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.DequeueWithAckId) | Once for each job it takes, when a slot is free and `Len` is above 0. It returns the item, whether there was one, and an acknowledgement ID. |
-| [`Acknowledge(ackID string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Acknowledge) | Once for each job, with the ID it was given, when the job's function has returned and the worker closes the job. It returns whether the storage accepted it. |
+| [`Acknowledge(ackID string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Acknowledge) | Once for each job that succeeded, with the ID it was given, when the job's function has returned and the worker closes the job. It returns whether the storage accepted it. |
+| [`Reject(ackID string, reason string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Reject) | In place of `Acknowledge`, for a job whose function returned an error or panicked. `reason` is the error text. The storage removes the job and does not requeue it. It returns whether the storage accepted it. |
 
-The worker keeps the ID on the job and passes it back unchanged. An empty ID means there is nothing to acknowledge, and the worker does not call `Acknowledge` for that job. `Acknowledge` returning `false` makes the worker report [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob). The storage decides what happens to an item that is taken and not acknowledged. It can give it out again after a timeout, at the next start, or never. So the delivery guarantee is the adapter's.
+The worker keeps the ID on the job and passes it back unchanged. An empty ID means there is nothing to acknowledge, and the worker calls neither method for that job. `Acknowledge` or `Reject` returning `false` makes the worker report [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob). The storage decides what happens to an item that is taken and not acknowledged. It can give it out again after a timeout, at the next start, or never. So the delivery guarantee is the adapter's.
 
 A worker takes one job per call. A job it took stays unacknowledged until it has run. If the worker held several, other consumers could not get them. The exception is the batch interface below.
 

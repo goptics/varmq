@@ -53,6 +53,8 @@ func (q *ackTestQueue) Acknowledge(id string) bool {
 	return !q.failAck
 }
 
+func (q *ackTestQueue) Reject(id, _ string) bool { return q.Acknowledge(id) }
+
 func (q *ackTestQueue) ackedIDs() []string {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -630,8 +632,9 @@ func (q *batchTestQueue) Purge() {
 	q.items = nil
 }
 
-func (q *batchTestQueue) Close() error            { return nil }
-func (q *batchTestQueue) Acknowledge(string) bool { return true }
+func (q *batchTestQueue) Close() error               { return nil }
+func (q *batchTestQueue) Acknowledge(string) bool    { return true }
+func (q *batchTestQueue) Reject(string, string) bool { return true }
 
 func (q *batchTestQueue) DequeueWithAckId() (any, bool, string) {
 	v, ok := q.Dequeue()

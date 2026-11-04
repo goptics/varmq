@@ -10,6 +10,15 @@
 
 - In-memory queue `EnqueueOnce` spreads ids over 64 locks (#172) and holds only one across the append, not one lock for the whole queue: adds with an id from 24 goroutines into one queue went from 1.29 µs to 0.30 µs each (4 goroutines: 342 ns to 238 ns; one goroutine: 165 ns to 176 ns).
 
+### ✨ New Features
+
+- **`Reject` on `IAcknowledgeable`**: `Reject(ackID, reason string) bool`. Worker now reports job outcome to ack storage: `Acknowledge` on success, `Reject` with error text when job function returns error or panics. varmq has no retries, so every failure is final. Failed `Reject` → `ErrAcknowledgeJob`, same as failed `Acknowledge`.
+  - **Breaking** for custom `IAcknowledgeable` implementations and mocks: add `Reject`. Ships in v1, no v2 module path.
+  - **Behavioral change**: failed or panicking job on persistent/distributed queue no longer calls `Acknowledge`.
+- **`/queues` REST routes**: `GET /queues` lists counts per Job State and submitted/completed/failed totals; `GET /queues/{id}/jobs?state=pending|processing|completed|failed&offset&limit` pages a queue's jobs with payload, times, attempts and per-attempt errors (`errors[]`, last 10). Served for each bound queue whose storage implements new optional `QueueInspector` (`QueueID`, `QueueStats`, `Jobs`), once per Queue ID. Other queues left out. Types live in new zero-dependency module `github.com/goptics/varmq/contract` (storage imports it without varmq); varmq re-exports them as aliases.
+- **Spec** (`spec/`): `openapi.yaml` 1.0.0 for the REST API, `redis-storage.md` 1.0.0 for Redis key layout, job envelope, Job Records, retention and per-script rules. Contract for varmq-ts, varmq-rs and redisq.
+- Job envelope written to persistent/distributed storage carries `enqueued_at` (Unix ms).
+
 ### 🐛 Bug Fixes
 
 - **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.

@@ -1,5 +1,7 @@
 package varmq
 
+import "github.com/goptics/varmq/contract"
+
 // IBaseQueue is the part every queue storage implements.
 type IBaseQueue interface {
 	// Len returns how many items wait in the queue.
@@ -51,10 +53,17 @@ func enqueuePriority(q IPriorityQueue, item any, priority int, id string) bool {
 	return q.Enqueue(item, priority)
 }
 
-// IAcknowledgeable is storage that holds a dequeued item until acknowledged.
+// IAcknowledgeable is storage that holds a dequeued item until the worker
+// reports its outcome: Acknowledge on success, Reject on its final failure.
+// varmq has no retries, so every failure is final. See spec/redis-storage.md.
 type IAcknowledgeable interface {
-	// Acknowledge removes the item held under ackID; false when unknown.
+	// Acknowledge marks the item held under ackID completed; false when
+	// storage could not record it.
 	Acknowledge(ackID string) bool
+	// Reject marks the item held under ackID failed for good, without
+	// requeueing it. reason is the error text. False when storage could not
+	// record it.
+	Reject(ackID string, reason string) bool
 	// DequeueWithAckId returns the next item and its ack id; false when empty.
 	DequeueWithAckId() (any, bool, string)
 }
@@ -108,3 +117,22 @@ type CapacitySetter interface {
 	// SetCapacity sets the most items the storage accepts.
 	SetCapacity(cap int)
 }
+
+// The types observers read through Handler come from the contract module,
+// the Go copy of spec/ that storage such as redisq imports without varmq.
+type (
+	JobState       = contract.JobState
+	JobCounts      = contract.JobCounts
+	JobTotals      = contract.JobTotals
+	QueueStats     = contract.QueueStats
+	JobRecord      = contract.JobRecord
+	JobError       = contract.JobError
+	QueueInspector = contract.QueueInspector
+)
+
+const (
+	JobPending    = contract.JobPending
+	JobProcessing = contract.JobProcessing
+	JobCompleted  = contract.JobCompleted
+	JobFailed     = contract.JobFailed
+)
