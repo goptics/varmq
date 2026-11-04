@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/goptics/varmq/contract v0.0.0 // indirect
 	github.com/lucsky/cuid v1.2.1 // indirect
 	github.com/mattn/go-sqlite3 v1.14.28 // indirect
 )
@@ -15,3 +16,5 @@ require (
 // Replace the remote module with your local path
 // Assuming your project structure has examples/distributed at the same level as your main module
 replace github.com/goptics/varmq => ../../
+
+replace github.com/goptics/varmq/contract => ../../contract

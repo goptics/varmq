@@ -7,3 +7,7 @@ go 1.25.6
 replace github.com/goptics/varmq => ../../
 
 require github.com/goptics/varmq v0.0.0-00010101000000-000000000000
+
+require github.com/goptics/varmq/contract v0.0.0 // indirect
+
+replace github.com/goptics/varmq/contract => ../../contract

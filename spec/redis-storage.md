@@ -8,7 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
-- **1.0.0**: first version. Describes the key layout redisq already uses (its ADR-0002), and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation.
+- **1.0.0**: first version. Describes the key layout redisq already uses (its ADR-0002), and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
 
 ## Terms
 
@@ -225,7 +225,15 @@ The script pushes the item before it removes it from `:nacked`, so a failed push
 
 ### 6.6 Purge
 
-Purge deletes the base key, which removes every pending job. It does not touch processing jobs, Job Records or counters. A purged job that was requeued before keeps its field in `<base>:attempts`: removing it would mean decoding every pending item. This is a known, small leak; a later version can clean it up.
+Purge deletes all of a queue's jobs and job data in one `DEL`:
+
+- the base key and, for prio, `<base>:seq` and `<base>:prio`;
+- processing jobs: `<base>:nacked`, `<base>:timeouts`, `<base>:started`;
+- `<base>:attempts`;
+- Job Records: `<base>:jobs`, `<base>:completed`, `<base>:failed`;
+- the counters: `<base>:stats`.
+
+Purge keeps the consumer state that live consumers rely on (`<base>:idle`, `<base>:heartbeats`, `<base>:heartbeats:clock`, `<base>:presence`) and the `<base>:dedup:<id>` keys, which expire on their own. A consumer that later acknowledges or rejects a purged job finds no `:nacked` entry, so the operation does nothing (section 6.3, step 1).
 
 ## 7. Reading
 
