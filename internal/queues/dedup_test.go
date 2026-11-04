@@ -39,9 +39,10 @@ func dedupStores() map[string]func() dedupStore {
 				close:   func() { _ = q.Close() },
 				setCap:  q.SetCapacity,
 				held: func() int {
-					q.idMu.Lock()
-					defer q.idMu.Unlock()
-					return len(q.ids)
+					if ids := q.ids.Load(); ids != nil {
+						return ids.len()
+					}
+					return 0
 				},
 				len: q.Len,
 			}
@@ -193,49 +194,57 @@ func TestPriorityEnqueueOnceKeepsOrder(t *testing.T) {
 	assert.Equal(t, idItem("high"), v)
 }
 
-// The hot fields fill Queue's first 128 bytes and the id set sits after them,
-// out of their prefetch pair (see Queue); PriorityQueue stays in class 64.
+// The hot fields fill Queue's first 128 bytes and the id set pointer sits
+// after them (see Queue); PriorityQueue stays in class 64, so its lock never
+// straddles two lines.
 func TestQueueSizeClass(t *testing.T) {
 	var q Queue[int]
-	assert.Equal(t, uintptr(192), unsafe.Sizeof(q))
+	assert.Equal(t, uintptr(144), unsafe.Sizeof(q))
 	assert.GreaterOrEqual(t, unsafe.Offsetof(q.ids), uintptr(128), "the id set is past the hot 128-byte block")
-	assert.Less(t, unsafe.Offsetof(q.idsOn), uintptr(192))
+	assert.Equal(t, uintptr(64), unsafe.Sizeof(idShard{}), "a shard fills one cache line")
 	assert.LessOrEqual(t, unsafe.Sizeof(PriorityQueue[int]{}), uintptr(64))
 }
 
-// A set that held more than idsShrinkPeak ids is dropped once drained, so a
-// burst does not pin its peak memory; a small one is kept for the next id.
-func TestDrainedIdSetIsDropped(t *testing.T) {
+// A shard set that held more than idShardShrinkPeak ids is dropped once
+// drained, so a burst does not pin its peak memory; a small one is kept.
+func TestIdMapDropsDrainedBurst(t *testing.T) {
+	var s idMap
+	assert.True(t, s.add("a"))
+	assert.False(t, s.add("a"), "repeat")
+	s.remove("a")
+	assert.NotNil(t, s.m, "small: kept")
+
+	for i := range idShardShrinkPeak + 1 {
+		s.add(strconv.Itoa(i))
+	}
+	for i := range idShardShrinkPeak {
+		s.remove(strconv.Itoa(i))
+	}
+	assert.NotNil(t, s.m, "not drained yet")
+
+	s.remove(strconv.Itoa(idShardShrinkPeak))
+	assert.Nil(t, s.m)
+	assert.Zero(t, s.peak)
+	assert.True(t, s.add("a"), "a dropped set is made again")
+}
+
+// Draining queues leaves no ids, and a drained id can be added again.
+func TestDrainedIdSetIsEmpty(t *testing.T) {
 	q := NewQueue[idItem]()
 	pq := NewPriorityQueue[idItem]()
-
-	q.EnqueueOnce(idItem("a"), "a")
-	pq.EnqueueOnce(idItem("a"), 0, "a")
-	q.Dequeue()
-	pq.Dequeue()
-	assert.NotNil(t, q.ids, "small: kept")
-	assert.NotNil(t, pq.ids, "small: kept")
 
 	for i := range idsShrinkPeak + 1 {
 		id := strconv.Itoa(i)
 		q.EnqueueOnce(idItem(id), id)
 		pq.EnqueueOnce(idItem(id), 0, id)
 	}
-	for range idsShrinkPeak {
+	for range idsShrinkPeak + 1 {
 		q.Dequeue()
 		pq.Dequeue()
 	}
-	assert.NotNil(t, q.ids, "not drained yet")
-	assert.NotNil(t, pq.ids, "not drained yet")
-
-	q.Dequeue()
-	pq.Dequeue()
-	assert.Nil(t, q.ids)
-	assert.Nil(t, pq.ids)
-	assert.Zero(t, q.idsPeak)
-	assert.Zero(t, pq.idsPeak)
-
-	assert.True(t, q.EnqueueOnce(idItem("a"), "a"), "a dropped set is made again")
+	assert.Zero(t, q.ids.Load().len())
+	assert.Nil(t, pq.ids, "a burst's set is dropped once drained")
+	assert.True(t, q.EnqueueOnce(idItem("a"), "a"))
 	assert.True(t, pq.EnqueueOnce(idItem("a"), 0, "a"))
 }
 
