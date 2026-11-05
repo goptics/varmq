@@ -1,6 +1,6 @@
 # varmq Redis storage
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.1.0**: adds Instance Records (section 8), new keys only, and the reader rule for unknown Job States (section 7). Nothing from 1.0.0 changes.
 - **1.0.0**: first version. Describes the key layout redisq already uses, and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
 
 ## Terms
@@ -15,7 +16,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 Terms:
 
 - **Queue ID**: the identity a storage reports for a queue, the same on every instance. Here it is the queue's base key (below), for example `redisq:shop:fifo:{emails}`.
-- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected).
+- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected). Later versions can add states (section 7).
 - **Reject**: the final failure of a job. No retry follows, and the job is not requeued.
 - **Job Record**: what storage keeps about a completed or failed job after it leaves the queue.
 
@@ -23,6 +24,8 @@ Two more terms are used here:
 
 - **Item**: the bytes stored in the queue for one job. Section 3 defines its format, the envelope.
 - **Owner**: one queue object in one process, identified by a random string. Every item it hands out is pending under an ack ID that starts with the owner.
+- **Instance**: one varmq process. It holds zero or more owners.
+- **Instance Record**: what an instance writes about itself and its workers (section 8). It is not the owner heartbeat in `<base>:heartbeats`.
 
 ## 1. Keys
 
@@ -241,6 +244,8 @@ Purge keeps the consumer state that live consumers rely on (`<base>:idle`, `<bas
 
 A reader (in Go, a `QueueInspector`) answers the two HTTP routes as follows. It SHOULD read each answer in one script or `MULTI` transaction, so that the numbers come from one instant.
 
+A reader MUST accept a Job State it does not know, in a Job Record or from the HTTP API, and show the value as it is. It MUST NOT treat it as an error. `cancelled` is reserved for a later version. This rule lets a later version add a state as a minor change.
+
 ### 7.1 Counts and totals (`GET /queues`)
 
 | Field | Source |
@@ -263,9 +268,77 @@ Page bounds: `start = offset`, `stop = offset + limit - 1`.
 
 Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is the envelope's `enqueued_at`; the other fields come from the record or as above. For an item that is not an envelope, `payload` is the item as a JSON string (or the item itself, if it is valid JSON) and `enqueued_at` is absent.
 
-## 8. Compatibility
+## 8. Instance Records
+
+An Instance Record tells a reader that a varmq process is alive and what its workers are doing. Writing records is optional. A process writes them only when the application turns this on. A reader MUST treat a missing record as "unknown", not as an error, because an instance on an older version writes none.
+
+### 8.1 Keys
+
+These keys belong to a namespace, not to a queue:
+
+| Key | Type | Contents | Since |
+|---|---|---|---|
+| `redisq:[<namespace>:]{instances}` | HASH | Instance ID → Instance Record, as JSON | 1.1.0 |
+| `redisq:[<namespace>:]{instances}:beats` | ZSET | Instance ID → time of its last report (ms) | 1.1.0 |
+
+`<namespace>` follows section 1.1. The braces are a hash tag, so both keys live in one slot and one script can touch both on a cluster. They cannot collide with a queue key: a queue key has `fifo` or `prio` after the namespace, and a namespace cannot contain braces. A queue's Purge (section 6.6) does not touch them.
+
+The **Instance ID** names one process. It is the value the process sends in the `X-Varmq-Instance` header (`spec/openapi.yaml`), so a reader of this section and a reader of the HTTP API name a process the same way. It MUST NOT be empty. Two processes that report to one namespace MUST NOT use the same ID. varmq's default ID is the hostname, so two processes on one host MUST each set their own ID.
+
+### 8.2 Record
+
+The record is a JSON object:
+
+| Field | Type | Contents |
+|---|---|---|
+| `id` | string | The Instance ID. The same as the hash field. |
+| `host` | string | The hostname, or empty. |
+| `pid` | integer | The process ID, or 0. |
+| `version` | string | The varmq version, or empty. |
+| `started_at` | integer | Time the process started (ms), from the process clock. |
+| `interval_ms` | integer | Time between reports. MUST be from 1000 to 60000. |
+| `workers` | array | One entry per worker, below. Empty when the process has no workers. |
+| `owners` | array of strings, optional | Owner IDs (section 2) of the queue objects this instance has open in this namespace. |
+
+Each `workers` entry:
+
+| Field | Type | Contents |
+|---|---|---|
+| `name` | string | The worker's name, as in `GET /workers`. |
+| `status` | string | A `WorkerStatus` value from `spec/openapi.yaml`. A reader MUST accept a value it does not know. |
+| `concurrency` | integer | Most jobs the worker runs at once. |
+| `num_processing` | integer | Jobs the worker is running now. |
+| `num_idle_workers` | integer | Pool goroutines waiting for a job. |
+| `queue_ids` | array of strings | Queue IDs (section 1.1) of the queues the worker is bound to. Empty for a queue with no Queue ID, such as an in-memory queue. |
+
+The record has no time of the last report, and a writer MUST NOT add a `beat_at` or `lost` field. That time is the member's score in `:beats`, from the Redis clock, so that the clocks of the processes do not matter. A reader that serves records (in Go, `InstanceRecord`) sets `beat_at` from the score and `lost` from section 8.5. A reader MUST ignore fields it does not know.
+
+`owners` links a processing job to its process: the ack ID of a processing job starts with its owner (section 2), and the record that lists that owner is the instance that holds the job. A writer MAY leave `owners` out.
+
+### 8.3 Report
+
+An instance reports at start and then once every `interval_ms`. Input: the Instance ID and the record. One script, under the rules for scripts in section 6:
+
+1. now (ms) (section 6).
+2. `HSET <instances> <id> <record>` and `ZADD <instances>:beats <now (ms)> <id>`.
+3. Prune: `stale = ZRANGEBYSCORE <instances>:beats -inf (<now - 300000> LIMIT 0 100`. For each member, `HDEL <instances>` and `ZREM <instances>:beats`.
+
+`<instances>` is `redisq:[<namespace>:]{instances}`. The prune age of 5 minutes is more than 3 times the longest interval, so it never removes a live record. The limit keeps each script short; the next report removes the rest.
+
+### 8.4 Remove
+
+Input: the Instance ID. `HDEL <instances> <id>` and `ZREM <instances>:beats <id>`, in one script or `MULTI`. An instance SHOULD remove its record when it stops cleanly. An instance that stops in any other way leaves its record until a prune.
+
+### 8.5 Reading
+
+A reader reads `TIME`, `ZRANGE <instances>:beats 0 -1 WITHSCORES` and `HGETALL <instances>` in one script or `MULTI`. It skips an ID that has a score but no record, or a record but no score: a prune or a remove ran between two commands of a writer.
+
+A record is **live** when its score is at least `now - 3 × interval_ms`, with now from the same `TIME`. Otherwise it is **lost**: the process probably stopped without a remove. A reader SHOULD show a lost record as lost, not hide it, until a prune removes it.
+
+## 9. Compatibility
 
 - Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
 - An older requeue does not `HINCRBY <base>:attempts` or `HDEL <base>:started`. A job it requeues gets a too-low `attempts` in its record, and its `:started` entry stays until Purge.
-- A new field in an item or a Job Record is a minor version. A changed meaning, or a removed or renamed key or field, is a major version.
+- 1.1.0 adds keys and a reader rule only. A 1.0.0 implementation works unchanged beside a 1.1.0 one. An instance on 1.0.0 writes no Instance Record, so a reader that lists instances from section 8 does not see it.
+- A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.
