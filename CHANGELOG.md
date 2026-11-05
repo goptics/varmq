@@ -21,6 +21,7 @@
 
 ### 🐛 Bug Fixes
 
+- **Purge left jobs added during it open** (#130): `Purge` read the queue with `Values`, then purged it, so a job added in between was removed but never closed and its `Wait` never returned. In-memory queues now remove and return their items in one step, and `Purge` closes exactly those. Custom storage gets the same by implementing the new optional `IPurgeValuesQueue`.
 - **Stopped worker's retention timer removed a newer worker with the same name** (#132): the timer deleted the `WorkerRegistry` entry by name, so a worker that registered under that name after the stop vanished from the registry and the REST API. The timer now removes the entry only while it still points to the stopped worker.
 - **Data race in `AddAll` on result and error workers** (#134): every job of a group stored its result in one shared field as well as sending it, from as many goroutines as the worker runs. Nothing read that field outside tests, so it is gone; results still arrive on `Results()` and `Errs()`.
 - **Concurrency above `math.MaxUint32` froze the worker** (#131): the value wrapped around in the conversion to `uint32`, so `1<<32` became 0 and the worker never started another job. `WithConcurrency`, `DefaultConcurrency`, `TunePool` and `PATCH /workers/{name}/config/concurrency/{number}` now clamp it to `math.MaxUint32`.

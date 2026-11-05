@@ -140,33 +140,48 @@ func (q *Queue[T]) Dequeue() (any, bool) {
 
 // Values returns a copy of the items in the queue, front first.
 func (q *Queue[T]) Values() []any {
-	vals := q.cur.Values()
+	return anys(q.cur.Values())
+}
+
+// Purge removes every item and frees their ids. It exists for IBaseQueue,
+// whose Purge returns nothing; varmq purges through PurgeValues
+// (IPurgeValuesQueue).
+func (q *Queue[T]) Purge() {
+	q.PurgeValues()
+}
+
+// PurgeValues removes every item, frees their ids and returns the removed
+// items, front first. It is one step, so an Enqueue racing it is either
+// returned or stays queued, never removed unseen. Holding every shard lock
+// keeps an EnqueueOnce from landing between the purge and the id reset.
+// ponytail: a Dequeue that took an item before Purge and frees its id after a
+// re-add of that id frees the new one, letting one repeat in; no id leaks.
+// PurgeValues makes the set even on a queue that never saw an id (4 KiB), so
+// a racing first EnqueueOnce shares its locks.
+func (q *Queue[T]) PurgeValues() []any {
+	ids := q.idSet()
+	for i := range ids.shards {
+		ids.shards[i].mu.Lock()
+	}
+
+	vals := q.cur.Purge()
+
+	for i := range ids.shards {
+		ids.shards[i].ids = idMap{}
+		ids.shards[i].mu.Unlock()
+	}
+
+	return anys(vals)
+}
+
+// anys copies vals into the []any that IBaseQueue hands out.
+func anys[T any](vals []T) []any {
 	out := make([]any, len(vals))
 	for i, v := range vals {
 		out[i] = v
 	}
 
 	return out
-}
-
-// Purge removes every item and frees their ids. Holding every shard lock
-// keeps an EnqueueOnce from landing between the two.
-// ponytail: a Dequeue that took an item before Purge and frees its id after a
-// re-add of that id frees the new one, letting one repeat in; no id leaks.
-// Purge makes the set even on a queue that never saw an id (4 KiB), so a
-// racing first EnqueueOnce shares its locks.
-func (q *Queue[T]) Purge() {
-	ids := q.idSet()
-	for i := range ids.shards {
-		ids.shards[i].mu.Lock()
-	}
-
-	q.cur.Purge()
-
-	for i := range ids.shards {
-		ids.shards[i].ids = idMap{}
-		ids.shards[i].mu.Unlock()
-	}
 }
 
 // Close makes every later Enqueue return false. Stored items can still be
