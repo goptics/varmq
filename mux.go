@@ -40,7 +40,8 @@ const InstanceHeader = "X-Varmq-Instance"
 
 // InstanceID identifies this process in every REST API response. It defaults
 // to the hostname (the pod name on Kubernetes), or "" if that is unavailable;
-// set it before serving when several instances share a host.
+// set it before serving when several instances share a host, and before
+// building storage that reports Instance Records (it is read once there).
 var InstanceID, _ = os.Hostname()
 
 type workerSummary struct {

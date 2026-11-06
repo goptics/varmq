@@ -283,7 +283,7 @@ These keys belong to a namespace, not to a queue:
 
 `<namespace>` follows section 1.1. The braces are a hash tag, so both keys live in one slot and one script can touch both on a cluster. They cannot collide with a queue key: a queue key has `fifo` or `prio` after the namespace, and a namespace cannot contain braces. A queue's Purge (section 6.6) does not touch them.
 
-The **Instance ID** names one process. It is the value the process sends in the `X-Varmq-Instance` header (`spec/openapi.yaml`), so a reader of this section and a reader of the HTTP API name a process the same way. It MUST NOT be empty. Two processes that report to one namespace MUST NOT use the same ID. varmq's default ID is the hostname, so two processes on one host MUST each set their own ID.
+The **Instance ID** names one process. It is the value the process sends in the `X-Varmq-Instance` header (`spec/openapi.yaml`), so a reader of this section and a reader of the HTTP API name a process the same way. A writer reads the ID once, when its reports start; if the process changes its ID later, the header and the record differ until the process restarts, so a process SHOULD set its ID before it starts reports. It MUST NOT be empty. Two processes that report to one namespace MUST NOT use the same ID. varmq's default ID is the hostname, so two processes on one host MUST each set their own ID.
 
 ### 8.2 Record
 
