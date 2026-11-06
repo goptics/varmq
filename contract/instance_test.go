@@ -9,14 +9,17 @@ import (
 )
 
 // fakeRegistry logs each call as "report:<id>" or "remove:<id>". Reports fail
-// while failReports is set.
+// while failReports is set; removals fail while failRemoves is set.
 type fakeRegistry struct {
 	events      chan string
 	failReports atomic.Bool
+	failRemoves atomic.Bool
 }
 
+// newFakeRegistry returns a registry with room for 100 unread calls.
 func newFakeRegistry() *fakeRegistry { return &fakeRegistry{events: make(chan string, 100)} }
 
+// ReportInstance logs the report and flags an interval other than 1s.
 func (f *fakeRegistry) ReportInstance(_ context.Context, r InstanceRecord) error {
 	if r.IntervalMS != 1000 {
 		f.events <- "bad interval"
@@ -28,11 +31,16 @@ func (f *fakeRegistry) ReportInstance(_ context.Context, r InstanceRecord) error
 	return nil
 }
 
+// RemoveInstance logs the removal.
 func (f *fakeRegistry) RemoveInstance(_ context.Context, id string) error {
 	f.events <- "remove:" + id
+	if f.failRemoves.Load() {
+		return errors.New("down")
+	}
 	return nil
 }
 
+// Instances is unused by the reporter.
 func (f *fakeRegistry) Instances(context.Context) ([]InstanceRecord, error) { return nil, nil }
 
 // next returns the next call, failing the test after 3s (a tick is 1s).
@@ -47,6 +55,7 @@ func (f *fakeRegistry) next(t *testing.T) string {
 	}
 }
 
+// expect fails the test unless the next calls are want, in order.
 func (f *fakeRegistry) expect(t *testing.T, want ...string) {
 	t.Helper()
 	for _, w := range want {
@@ -67,6 +76,8 @@ func withSource(t *testing.T, id *atomic.Value) {
 	t.Cleanup(func() { instanceSource.Store(old) })
 }
 
+// run starts ReportInstances with a 1s interval; cancel stops it and returns
+// its error.
 func run(reg InstanceRegistry) (cancel func() error) {
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -74,6 +85,7 @@ func run(reg InstanceRegistry) (cancel func() error) {
 	return func() error { stop(); return <-done }
 }
 
+// Reports go out at start and on each tick; stopping removes the record.
 func TestReportInstances(t *testing.T) {
 	var id atomic.Value
 	id.Store("pod-a")
@@ -112,6 +124,37 @@ func TestReportInstancesIDChange(t *testing.T) {
 	reg.expect(t, "remove:b")
 }
 
+// Two ID changes in a row and failing removals: every old ID stays queued
+// until its removal succeeds, and an ID changed back to is not removed.
+func TestReportInstancesPendingIDs(t *testing.T) {
+	var id atomic.Value
+	id.Store("a")
+	withSource(t, &id)
+	reg := newFakeRegistry()
+
+	stop := run(reg)
+	reg.expect(t, "report:a")
+
+	reg.failReports.Store(true)
+	id.Store("b")
+	reg.expect(t, "report:b") // pending: a
+
+	reg.failReports.Store(false)
+	reg.failRemoves.Store(true)
+	id.Store("c")
+	reg.expect(t, "report:c", "remove:a", "remove:b") // both fail, both kept
+
+	reg.failRemoves.Store(false)
+	id.Store("a")                                     // back to a: only b and c are old now
+	reg.expect(t, "report:a", "remove:b", "remove:c") // a is not removed
+
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	reg.expect(t, "remove:a")
+}
+
+// An empty Instance ID after a report removes the reported record.
 func TestReportInstancesEmptyIDAfterReport(t *testing.T) {
 	var id atomic.Value
 	id.Store("a")
@@ -131,6 +174,7 @@ func TestReportInstancesEmptyIDAfterReport(t *testing.T) {
 	}
 }
 
+// Without varmq in the binary there is nothing to report or remove.
 func TestReportInstancesNoSource(t *testing.T) {
 	withSource(t, nil)
 	reg := newFakeRegistry()
@@ -145,6 +189,7 @@ func TestReportInstancesNoSource(t *testing.T) {
 	}
 }
 
+// A bad interval or an empty first ID is an error, and nothing is removed.
 func TestReportInstancesBadArgs(t *testing.T) {
 	reg := newFakeRegistry()
 	for _, d := range []time.Duration{999 * time.Millisecond, 61 * time.Second} {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// init registers instanceRecord, which lists named workers and their Queue IDs.
 func TestInstanceRecord(t *testing.T) {
 	WorkerRegistry.Clear()
 	defer WorkerRegistry.Clear()
@@ -38,6 +39,8 @@ func TestInstanceRecord(t *testing.T) {
 // Queue IDs to report.
 type plainWorker struct{ Worker }
 
+// Registry entries that are not varmq's *worker: a Worker without Queue IDs,
+// and a value that is not a Worker at all.
 func TestInstanceRecordForeignEntries(t *testing.T) {
 	WorkerRegistry.Clear()
 	defer WorkerRegistry.Clear()
@@ -57,12 +60,14 @@ func TestInstanceRecordForeignEntries(t *testing.T) {
 	assert.Equal(t, []string{}, r.Workers[1].QueueIDs)
 }
 
+// A QueueInspector with an empty Queue ID is not listed in queue_ids.
 func TestBindSkipsEmptyQueueID(t *testing.T) {
 	w := newWorker(func(iJob[string]) {})
 	w.bind(&inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: ""}, 0)
 	assert.Equal(t, []string{}, w.boundQueueIDs())
 }
 
+// depVersion finds varmq among the build's dependencies.
 func TestDepVersion(t *testing.T) {
 	assert.Empty(t, depVersion(nil, false))
 	bi := &debug.BuildInfo{Deps: []*debug.Module{{Path: "example.com/x", Version: "v9"}}}

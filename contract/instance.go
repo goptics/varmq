@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -42,16 +43,16 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
-	// id is the ID being reported. old is an ID the process reported before
-	// InstanceID changed; it is removed once a report under id succeeds, and
-	// kept for retry until then. ponytail: a second change before that drops
-	// the first old ID to pruning.
-	var id, old string
+	// id is the ID being reported. old holds IDs the process reported before
+	// InstanceID changed; each is removed once a report under id succeeds,
+	// and kept for retry while a report or its removal fails.
+	var id string
+	var old []string
 	removeAll := func() error {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		var errs []error
-		for _, x := range []string{old, id} {
+		for _, x := range append(old, id) {
 			if x != "" {
 				errs = append(errs, reg.RemoveInstance(rctx, x))
 			}
@@ -66,14 +67,15 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 			}
 			if r.ID != id {
 				if id != "" {
-					old = id
+					old = append(old, id)
 				}
 				id = r.ID
+				old = slices.DeleteFunc(old, func(x string) bool { return x == id }) // changed back
 			}
 			r.IntervalMS = interval.Milliseconds()
 			// ponytail: no error hook for failed reports; add one when someone needs it
-			if reg.ReportInstance(ctx, r) == nil && old != "" && old != id && reg.RemoveInstance(ctx, old) == nil {
-				old = ""
+			if reg.ReportInstance(ctx, r) == nil {
+				old = slices.DeleteFunc(old, func(x string) bool { return reg.RemoveInstance(ctx, x) == nil })
 			}
 		}
 
