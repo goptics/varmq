@@ -26,8 +26,27 @@ func InstanceSnapshot() (InstanceRecord, bool) {
 	return (*f)(), true
 }
 
-// ReportInstances writes InstanceSnapshot to reg at start and then every
-// interval (spec/redis-storage.md, section 8). It blocks until ctx ends, then
+// changed is closed and replaced by each InstanceChanged, so every waiting
+// reporter wakes.
+var changed atomic.Pointer[chan struct{}]
+
+func init() {
+	c := make(chan struct{})
+	changed.Store(&c)
+}
+
+// InstanceChanged tells running reporters that a worker's lifecycle changed
+// (started, stopped, paused, resumed, concurrency tuned, removed), so they
+// report at once instead of at the next tick. varmq calls it; changes that
+// land while a report is written are sent together in the next one.
+func InstanceChanged() {
+	c := make(chan struct{})
+	close(*changed.Swap(&c))
+}
+
+// ReportInstances writes InstanceSnapshot to reg at start, then every
+// interval and at once after each InstanceChanged (spec/redis-storage.md,
+// section 8). It blocks until ctx ends, then
 // removes the record. Storage runs it for an option such as redisq's
 // WithInstanceReports; applications do not call it.
 //
@@ -42,6 +61,7 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 	if interval < time.Second || interval > time.Minute {
 		return errors.New("contract: instance report interval must be from 1s to 60s")
 	}
+	wake := *changed.Load() // before the snapshot, so no change between the two is missed
 	first, ok := InstanceSnapshot()
 	if !ok {
 		return nil
@@ -54,7 +74,7 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
-	for r := first; ; r, _ = InstanceSnapshot() {
+	for r := first; ; {
 		r.ID = id // ponytail: fixed at start, so one record per run; follow changes if someone needs it
 		r.IntervalMS = interval.Milliseconds()
 		_ = reg.ReportInstance(ctx, r) // ponytail: no error hook; add one when someone needs it
@@ -65,6 +85,9 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 			defer cancel()
 			return reg.RemoveInstance(rctx, id)
 		case <-t.C:
+		case <-wake:
 		}
+		wake = *changed.Load()
+		r, _ = InstanceSnapshot()
 	}
 }

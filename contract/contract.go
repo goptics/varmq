@@ -112,6 +112,12 @@ type InstanceWorker struct {
 	Concurrency    int    `json:"concurrency"`
 	NumProcessing  int    `json:"num_processing"`
 	NumIdleWorkers int    `json:"num_idle_workers"`
+	// Completed, Successful and Failed count the jobs this worker finished
+	// in this process (spec redis-storage.md 8.2, since 1.2.0). A queue's
+	// submitted count lives with the queue (QueueStats.Totals), not here.
+	Completed  uint64 `json:"completed"`
+	Successful uint64 `json:"successful"`
+	Failed     uint64 `json:"failed"`
 	// QueueIDs are the Queue IDs of the queues the worker is bound to; queues
 	// without one, such as in-memory queues, are left out.
 	QueueIDs []string `json:"queue_ids"`

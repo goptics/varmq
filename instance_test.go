@@ -1,8 +1,10 @@
 package varmq
 
 import (
+	"context"
 	"runtime/debug"
 	"testing"
+	"time"
 
 	"github.com/goptics/varmq/contract"
 	"github.com/goptics/varmq/mocks"
@@ -74,4 +76,67 @@ func TestDepVersion(t *testing.T) {
 	assert.Empty(t, depVersion(bi, true))
 	bi.Deps = append(bi.Deps, &debug.Module{Path: "github.com/goptics/varmq", Version: "v1.11.0"})
 	assert.Equal(t, "v1.11.0", depVersion(bi, true))
+}
+
+// recordingRegistry sends each reported record on reports.
+type recordingRegistry struct{ reports chan InstanceRecord }
+
+func (r recordingRegistry) ReportInstance(_ context.Context, rec InstanceRecord) error {
+	r.reports <- rec
+	return nil
+}
+func (recordingRegistry) RemoveInstance(context.Context, string) error { return nil }
+func (recordingRegistry) Instances(context.Context) ([]InstanceRecord, error) {
+	return nil, nil
+}
+
+// Lifecycle changes (pause, resume, tune, stop) are reported at once, long
+// before the 60s tick, with the new status and concurrency; the record also
+// carries the worker's processed counts.
+func TestLifecycleReportsAtOnce(t *testing.T) {
+	WorkerRegistry.Clear()
+	defer WorkerRegistry.Clear()
+	oldID := InstanceID
+	InstanceID = "pod-life"
+	defer func() { InstanceID = oldID }()
+
+	w := NewWorker(func(Job[int]) {}, WithName("life"), WithConcurrency(2))
+	q := w.BindQueue()
+	q.Add(1)
+	w.Wait()
+
+	reg := recordingRegistry{reports: make(chan InstanceRecord, 50)}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = contract.ReportInstances(ctx, reg, time.Minute) }()
+	defer func() { cancel(); <-done }() // before InstanceID is restored: the reporter reads it
+
+	next := func(t *testing.T) InstanceWorker {
+		t.Helper()
+		select {
+		case r := <-reg.reports:
+			require.Len(t, r.Workers, 1)
+			return r.Workers[0]
+		case <-time.After(2 * time.Second):
+			t.Fatal("no report within 2s")
+			return InstanceWorker{}
+		}
+	}
+
+	first := next(t)
+	assert.Equal(t, uint64(1), first.Completed)
+	assert.Equal(t, uint64(1), first.Successful)
+	assert.Zero(t, first.Failed)
+
+	require.NoError(t, w.Pause())
+	assert.Equal(t, "Paused", next(t).Status)
+	require.NoError(t, w.Resume())
+	assert.Equal(t, "Idle", next(t).Status)
+	require.NoError(t, w.TunePool(5))
+	assert.Equal(t, 5, next(t).Concurrency)
+
+	require.NoError(t, w.Stop())
+	for s := next(t).Status; s != "Stopped"; s = next(t).Status { // Stopping, then Stopped
+		assert.Equal(t, "Stopping", s)
+	}
 }

@@ -21,6 +21,7 @@ func (w *worker[T, JobType]) TunePool(concurrency int) error {
 	}
 
 	w.concurrency.Store(safeConcurrency)
+	w.lifecycleChanged()
 
 	if safeConcurrency > oldConcurrency {
 		w.notifyToPullNextJobs()

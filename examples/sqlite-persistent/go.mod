@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/goptics/varmq/contract v0.1.0 // indirect
+	github.com/goptics/varmq/contract v0.3.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.28 // indirect
 )
 

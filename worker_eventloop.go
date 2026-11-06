@@ -14,6 +14,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 			select {
 			case <-ctx.Done():
 				w.status.Store(stopping)
+				w.lifecycleChanged() // Stop reported it already; a parent context's cancel did not
 				w.Wait()
 				w.removeAllWorkers()
 				w.mx.Lock()
@@ -21,6 +22,7 @@ func (w *worker[T, JobType]) goEventLoop() {
 				w.waiters.Broadcast()
 				w.scheduleRetentionCleanup()
 				w.mx.Unlock()
+				w.lifecycleChanged()
 				return
 			case <-signal:
 				// A lone batch source pops for every free slot at once; parked
@@ -275,7 +277,9 @@ func (w *worker[T, JobType]) scheduleRetentionCleanup() {
 		w.mx.Lock()
 		if w.IsStopped() {
 			// Delete only if the name still maps to w; a newer worker may have re-registered it.
-			WorkerRegistry.CompareAndDelete(w.Name(), w)
+			if WorkerRegistry.CompareAndDelete(w.Name(), w) {
+				w.lifecycleChanged()
+			}
 		}
 		w.mx.Unlock()
 	})

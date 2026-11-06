@@ -24,6 +24,7 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	}
 
 	if w.status.CompareAndSwap(pausing, paused) {
+		w.lifecycleChanged()
 		return
 	}
 }

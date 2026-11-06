@@ -34,6 +34,7 @@ func (w *worker[T, JobType]) Start() error {
 	w.status.Store(idle)
 	w.waiters.Broadcast()
 	w.notifyToPullNextJobs()
+	w.lifecycleChanged()
 
 	return nil
 }
@@ -50,6 +51,7 @@ func (w *worker[T, JobType]) Stop() error {
 			w.mx.Lock()
 			w.cancel()
 			w.mx.Unlock()
+			w.lifecycleChanged()
 			return nil
 		}
 	}
@@ -68,6 +70,7 @@ func (w *worker[T, JobType]) Pause() error {
 
 	if w.status.CompareAndSwap(idle, paused) {
 		w.waiters.Broadcast()
+		w.lifecycleChanged()
 		return nil
 	}
 
@@ -77,6 +80,7 @@ func (w *worker[T, JobType]) Pause() error {
 		if w.curProcessing.Load() == 0 && w.status.CompareAndSwap(pausing, paused) {
 			w.waiters.Broadcast()
 		}
+		w.lifecycleChanged() // Pausing or Paused; releaseWaiters reports the later Paused
 		return nil
 	}
 
@@ -89,6 +93,7 @@ func (w *worker[T, JobType]) Resume() error {
 		w.waiters.Broadcast()
 		w.mx.Unlock()
 		w.notifyToPullNextJobs()
+		w.lifecycleChanged()
 		return nil
 	}
 
