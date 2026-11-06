@@ -394,6 +394,11 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 
 	w.addSource(src, priority)
 	registerQueue(q)
+	if qi, ok := q.(QueueInspector); ok {
+		if id := qi.QueueID(); id != "" {
+			w.queueIDs.Store(id, struct{}{})
+		}
+	}
 
 	if _, ok := src.(creditSource[JobType]); ok {
 		w.notifyToPullNextJobs() // the storage may already hold items; no add will announce them

@@ -78,3 +78,54 @@ type QueueInspector interface {
 	// and failed jobs newest first.
 	Jobs(ctx context.Context, state JobState, offset, limit int) ([]JobRecord, error)
 }
+
+// InstanceRecord is what one varmq process reports about itself to shared
+// storage (spec/redis-storage.md, section 8). Times are Unix milliseconds.
+type InstanceRecord struct {
+	// ID is the process's Instance ID, the value of its X-Varmq-Instance
+	// header. Two processes in one namespace never share one.
+	ID        string `json:"id"`
+	Host      string `json:"host"`
+	PID       int    `json:"pid"`
+	Version   string `json:"version"`
+	StartedAt int64  `json:"started_at"`
+	// BeatAt is the time of the last report, from the storage clock. Storage
+	// never keeps it in the record; a reader fills it in, and a writer leaves
+	// it 0.
+	BeatAt     int64 `json:"beat_at,omitempty"`
+	IntervalMS int64 `json:"interval_ms"`
+	// Lost is true when BeatAt is older than 3 × IntervalMS by the storage
+	// clock: the process probably stopped without removing its record. A
+	// reader sets it; storage never keeps it.
+	Lost    bool             `json:"lost,omitempty"`
+	Workers []InstanceWorker `json:"workers"`
+	// Owners are the IDs of the queue objects this process has open, which
+	// prefix the ack IDs of the jobs it holds. Storage fills them in.
+	Owners []string `json:"owners,omitempty"`
+}
+
+// InstanceWorker is one worker in an InstanceRecord. Its fields match the
+// WorkerSummary of GET /workers.
+type InstanceWorker struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"` // a WorkerStatus value
+	Concurrency    int    `json:"concurrency"`
+	NumProcessing  int    `json:"num_processing"`
+	NumIdleWorkers int    `json:"num_idle_workers"`
+	// QueueIDs are the Queue IDs of the queues the worker is bound to; queues
+	// without one, such as in-memory queues, are left out.
+	QueueIDs []string `json:"queue_ids"`
+}
+
+// InstanceRegistry is optional for shared storage that keeps Instance
+// Records (spec/redis-storage.md, section 8), so observers can list live
+// processes without calling them.
+type InstanceRegistry interface {
+	// ReportInstance writes r and marks it seen now.
+	ReportInstance(ctx context.Context, r InstanceRecord) error
+	// RemoveInstance deletes the record with this Instance ID.
+	RemoveInstance(ctx context.Context, id string) error
+	// Instances returns every record storage still keeps, with BeatAt and
+	// Lost set from the storage clock.
+	Instances(ctx context.Context) ([]InstanceRecord, error)
+}

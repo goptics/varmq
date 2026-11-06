@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.0.0
+  version: 1.0.1
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,8 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.0.1: a client MUST accept a `JobState` it does not know; `Job.state`
+      is an open string. No route or field changes.
     - 1.0.0: first version. Worker routes as served before; `/queues` and
       `/queues/{id}/jobs` added.
   license:
@@ -302,6 +304,9 @@ components:
         `processing`: handed out to a worker, no outcome yet. `completed`:
         acknowledged. `failed`: rejected, that is failed for the last time,
         with no retry.
+
+        A client MUST accept a value it does not know and show it as it is.
+        Later versions can add states; `cancelled` is reserved.
       enum: [pending, processing, completed, failed]
 
     QueueSummary:
@@ -353,7 +358,12 @@ components:
             The Job ID: the ID the producer gave the job, or, for a job given
             none, the ack ID of its last attempt (see spec/redis-storage.md).
             Empty for a pending job the producer gave no ID.
-        state: { $ref: "#/components/schemas/JobState" }
+        state:
+          type: string
+          description: |
+            A `JobState` value. Open, not an enum, so a client that validates
+            responses accepts a state a later version adds. The `state` query
+            parameter stays the closed `JobState` enum.
         payload:
           description: The job's data as the producer serialised it, any JSON value.
         enqueued_at:
