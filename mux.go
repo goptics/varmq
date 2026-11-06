@@ -151,7 +151,6 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 	details := struct {
 		workerSummary
 		Metrics struct {
-			Submitted  uint64 `json:"submitted"`
 			Completed  uint64 `json:"completed"`
 			Successful uint64 `json:"successful"`
 			Failed     uint64 `json:"failed"`
@@ -167,7 +166,6 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	details.Metrics.Submitted = metrics.Submitted()
 	details.Metrics.Completed = metrics.Completed()
 	details.Metrics.Successful = metrics.Successful()
 	details.Metrics.Failed = metrics.Failed()

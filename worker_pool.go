@@ -125,6 +125,10 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			if !j.startProcessing() {
 				continue
 			}
+			t := j.memTotals()
+			if t != nil {
+				t.processing.Add(1)
+			}
 
 			w.workerFunc(j)
 
@@ -134,6 +138,10 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()
+			if t != nil {
+				t.processing.Add(-1)
+				t.completed.Add(1)
+			}
 			ran++
 		}
 

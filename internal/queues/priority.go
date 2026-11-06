@@ -1,6 +1,8 @@
 package queues
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -38,11 +40,21 @@ func (q *PriorityQueue[T]) Len() int {
 	return q.internal.Len()
 }
 
-// Values returns a slice of all values in the priority queue.
+// Values returns a copy of the values in the order Dequeue hands them out:
+// lower priority first, then insertion order. O(n log n).
 func (q *PriorityQueue[T]) Values() []any {
 	q.mx.RLock()
-	defer q.mx.RUnlock()
-	return q.values()
+	items := slices.Clone(q.internal.items)
+	q.mx.RUnlock()
+
+	slices.SortFunc(items, func(a, b enqItem[T]) int {
+		return cmp.Or(cmp.Compare(a.Priority, b.Priority), cmp.Compare(a.Index, b.Index))
+	})
+	values := make([]any, len(items))
+	for i := range items {
+		values[i] = items[i].Value
+	}
+	return values
 }
 
 // values copies the stored values. Callers hold mx.

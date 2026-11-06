@@ -21,7 +21,6 @@ func main() {
 	worker.WaitUntilIdle()
 
 	m := worker.Metrics()
-	fmt.Println("submitted", m.Submitted())
 	fmt.Println("completed", m.Completed())
 	fmt.Println("successful", m.Successful())
 	fmt.Println("failed", m.Failed())

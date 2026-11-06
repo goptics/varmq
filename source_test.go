@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -558,8 +559,9 @@ func TestMaxBatch(t *testing.T) {
 		assert.Equal(t, 0, q.Len(), "the whole backlog went to the one worker as a batch")
 		assert.Equal(t, 4, w.NumPending())
 		assert.Equal(t, 1, w.NumProcessing())
-		m := w.Metrics()
-		assert.Equal(t, int(m.Submitted()), w.NumPending()+w.NumProcessing()+int(m.Completed()))
+		st, err := q.(*queue[int]).totals.QueueStats(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int(st.Totals.Submitted), w.NumPending()+w.NumProcessing()+int(st.Totals.Completed))
 		assert.Equal(t, "Processing", jobs[0].Status())
 		assert.Equal(t, "Queued", jobs[1].Status(), "waiting in the batch")
 
@@ -1060,7 +1062,6 @@ func TestBatchSourceDistributedWake(t *testing.T) {
 	assert.False(t, r.has("a"), "dry until something announces work")
 	q.announce()
 	require.Eventually(t, func() bool { return r.has("a") }, 500*time.Millisecond, time.Millisecond)
-	assert.EqualValues(t, 1, wb.Metrics().Submitted(), "the wake-up still counts")
 }
 
 // NumPending is the storage's exact length, not the hint.

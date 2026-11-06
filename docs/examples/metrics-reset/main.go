@@ -16,8 +16,8 @@ func main() {
 	queue.Add(1)
 	queue.Add(2)
 	worker.WaitUntilIdle()
-	fmt.Println("before Reset: submitted", m.Submitted(), "completed", m.Completed())
+	fmt.Println("before Reset: completed", m.Completed())
 
 	m.Reset()
-	fmt.Println("after Reset: submitted", m.Submitted(), "completed", m.Completed())
+	fmt.Println("after Reset: completed", m.Completed())
 }

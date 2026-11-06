@@ -37,7 +37,6 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 		return false
 	}
 
-	q.w.Metrics().incSubmitted()
 	if q.poke != nil {
 		q.poke() // after the storage confirmed: a pop must not mark it empty before the item lands
 	}

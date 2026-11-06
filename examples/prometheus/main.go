@@ -96,19 +96,6 @@ func registerMetrics(w varmq.Worker, namespace string) {
 		prometheus.NewCounterFunc(
 			prometheus.CounterOpts{
 				Namespace: namespace,
-				Name:      "submitted_total",
-				Help:      "Total number of tasks submitted",
-			},
-			func() float64 {
-				return float64(w.Metrics().Submitted())
-			},
-		),
-	)
-
-	prometheus.MustRegister(
-		prometheus.NewCounterFunc(
-			prometheus.CounterOpts{
-				Namespace: namespace,
 				Name:      "completed_total",
 				Help:      "Total number of tasks that completed processing",
 			},

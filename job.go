@@ -77,7 +77,10 @@ type job[T any] struct {
 	data   T
 	status atomic.Uint32
 	wg     sync.WaitGroup
-	ackRef atomic.Pointer[jobAck] // nil for in-memory jobs; set by ackSource.Next, taken by acknowledge
+	// ackRef is set by ackSource.Next and taken by acknowledge. An in-memory
+	// queue's job shares one ack-less jobAck per queue that only names its
+	// QueueInspector (memQueue.ref): no allocation per job.
+	ackRef atomic.Pointer[jobAck]
 }
 
 // jobAck holds the storage that handed out a job and the ack id it gave.
@@ -89,6 +92,8 @@ type jobAck struct {
 	// *reason instead of Acknowledge. A pointer, not a string, keeps jobAck
 	// in the 48-byte size class.
 	reason *string
+	// totals is set, and q nil, on an in-memory queue's shared jobAck.
+	totals *memQueue
 }
 
 // jobView is the job envelope persistent and distributed storage holds
@@ -113,6 +118,7 @@ type iJob[T any] interface {
 	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
 	fail(reason string)
+	memTotals() *memQueue
 	io.Closer
 }
 
@@ -157,14 +163,35 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 }
 
 // fail records that the run failed, so Close rejects the job with reason
-// instead of acknowledging it. A no-op for jobs with nothing to acknowledge.
+// instead of acknowledging it, and counts it failed for its in-memory queue.
 // The worker calls it before Close; a user Close fails while the job is
 // processing, so nothing else reads the ack meanwhile.
 func (j *job[T]) fail(reason string) {
-	if ref := j.ackRef.Load(); ref != nil {
+	if ref := j.ackRef.Load(); ref != nil && ref.q == nil {
+		ref.totals.failed.Add(1)
+	} else if ref != nil {
 		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, reason: &reason})
 	}
 }
+
+// memTotals is the in-memory queue that counts this job, nil for storage
+// that counts its own.
+func (j *job[T]) memTotals() *memQueue {
+	if ref := j.ackRef.Load(); ref != nil {
+		return ref.totals
+	}
+	return nil
+}
+
+// countedBy marks the job as one of m's. Nil m: nothing to count.
+func (j *job[T]) countedBy(m *memQueue) {
+	if m != nil {
+		j.ackRef.Store(&m.ref)
+	}
+}
+
+// recordOf is what an in-memory queue's Jobs lists for a pending job.
+func (j *job[T]) recordOf() (string, any) { return j.id, j.data }
 
 func (j *job[T]) ID() string {
 	return j.id
@@ -308,7 +335,7 @@ func (j *job[T]) startProcessing() bool {
 // shows Closed while unacked, so a failed ack leaves it untouched: a worker
 // that took it still runs it, and a finished one stays Finished and unwaited.
 func (j *job[T]) closeOnce() error {
-	if j.ackRef.Load() != nil {
+	if ref := j.ackRef.Load(); ref != nil && ref.q != nil {
 		if err := closeable(j.status.Load()); err != nil {
 			return err
 		}

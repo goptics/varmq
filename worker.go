@@ -111,8 +111,7 @@ type Worker interface {
 	// batch and waiting their turn, or parked by a Stop or Pause. A bound
 	// queue's own Len counts only the former. A job closed while it waits in
 	// storage, a batch or the park counts until the worker reaches and
-	// discards it. Submitted == NumPending + NumProcessing + Completed, except
-	// for an instant while a stopping worker parks its batch.
+	// discards it.
 	NumPending() int
 	// NumConcurrency returns the upper bound on jobs processed at once. It
 	// is a limit, not a pool size: goroutines are spawned on demand and only
@@ -128,8 +127,8 @@ type Worker interface {
 	//
 	// The context is cancelled when the worker is Stopped or Restarted.
 	Context() context.Context
-	// Metrics returns the metrics collected for this worker,
-	// including submitted, completed, successful, and failed job counts.
+	// Metrics returns the jobs this worker processed: completed, successful
+	// and failed counts.
 	Metrics() Metrics
 	// TunePool adjusts the concurrency (pool size) of the worker
 	// up or down. This takes effect immediately for new jobs.
