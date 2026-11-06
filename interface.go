@@ -138,6 +138,10 @@ type (
 	JobRecord      = contract.JobRecord
 	JobError       = contract.JobError
 	QueueInspector = contract.QueueInspector
+
+	InstanceRecord   = contract.InstanceRecord
+	InstanceWorker   = contract.InstanceWorker
+	InstanceRegistry = contract.InstanceRegistry
 )
 
 const (

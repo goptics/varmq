@@ -61,6 +61,9 @@ type worker[T any, JobType iJob[T]] struct {
 	parkUnsorted bool                   // parked gained a batch since unpark last sorted it by Seq
 	hookOnce     sync.Once
 	hook         *parkHook // how a Purge reaches parked; storage holds it weakly
+	// queueIDs holds the Queue ID of each bound QueueInspector, for
+	// ReportInstance. ponytail: never pruned, as registerQueue never is.
+	queueIDs sync.Map
 }
 
 // Worker represents a worker that processes Jobs.
