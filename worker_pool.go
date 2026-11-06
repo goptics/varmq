@@ -106,6 +106,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// fails only if the user closed it meanwhile; Purge ignores that too.
 			if stamp.Stale() {
 				_ = j.Close()
+				memTaken(j.memTotals(), -1)
 				continue
 			}
 			// Stopping or pausing: park the unstarted rest (see park). Parked
@@ -123,11 +124,8 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
 			if !j.startProcessing() {
+				memTaken(j.memTotals(), -1)
 				continue
-			}
-			t := j.memTotals()
-			if t != nil {
-				t.processing.Add(1)
 			}
 
 			w.workerFunc(j)
@@ -138,10 +136,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()
-			if t != nil {
-				t.processing.Add(-1)
-				t.completed.Add(1)
-			}
+			memTaken(j.memTotals(), -1)
 			ran++
 		}
 

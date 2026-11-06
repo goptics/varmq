@@ -24,13 +24,15 @@ type memQueue struct {
 	ref jobAck // what each of its jobs points to: no storage, only totals
 }
 
-// withMemInspector gives eq an in-memory QueueInspector and lists it under
-// GET /queues, unless eq's storage inspects itself. The ID is
+// withMemInspector gives eq an in-memory QueueInspector, unless eq's storage
+// inspects itself. GET /queues lists it while its worker is listed under
+// GET /workers (addMemQueue), so short-lived unnamed workers leave nothing. The ID is
 // "memory:<InstanceID>:<n>", n unique in the process; InstanceID is read now.
 // The ID is not a worker's Instance Record queue_ids: no other process can
 // read it.
 func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
-	if _, ok := eq.q.(QueueInspector); ok {
+	switch eq.q.(type) {
+	case QueueInspector, IAcknowledgeable: // counts its own, or acks bypass the shared jobAck
 		return eq
 	}
 
@@ -40,22 +42,35 @@ func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
 	}
 	m.ref.totals = m
 	eq.totals = m
-	registerQueue(eq.totals)
+	eq.w.addMemQueue(m)
 
 	return eq
 }
 
-// added counts a job the queue accepted. Nil-safe.
-func (m *memQueue) added() {
+// added counts a job the queue accepts, before it is stored so a fast
+// worker never shows completed above submitted; -1 takes back a refused
+// one. Nil-safe.
+func (m *memQueue) added(n int) {
 	if m != nil {
-		m.submitted.Add(1)
+		m.submitted.Add(uint64(n)) // -1 wraps: a subtraction
+	}
+}
+
+// memTaken moves a job of m in (+1, handed to the worker) or out (-1,
+// finished, skipped or dropped) of its processing count. Nil-safe.
+func memTaken(m *memQueue, n int64) {
+	if m != nil {
+		m.processing.Add(n)
 	}
 }
 
 func (m *memQueue) QueueID() string { return m.id }
 
-// QueueStats reports pending and processing jobs and the totals. Finished
-// jobs are not kept in memory, so counts.completed and counts.failed are 0.
+// QueueStats reports the totals and the jobs pending (in the queue) and
+// processing (handed to the worker: in a batch, parked or running), as
+// redisq counts a popped, unacknowledged job. Finished jobs are not kept in
+// memory, so counts.completed and counts.failed are 0; totals.completed
+// counts successful jobs only, as redisq's does.
 func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 	return QueueStats{
 		Counts: JobCounts{Pending: int64(m.q.Len()), Processing: max(0, m.processing.Load())},
@@ -73,8 +88,15 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 		return out, nil
 	}
 
+	if offset >= m.q.Len() { // before copying the queue
+		return out, nil
+	}
 	values := m.q.Values()
-	for _, v := range values[min(offset, len(values)):min(offset+limit, len(values))] {
+	if offset >= len(values) {
+		return out, nil
+	}
+	// no offset+limit: offset may be near MaxInt
+	for _, v := range values[offset : offset+min(limit, len(values)-offset)] {
 		out = append(out, pendingRecord(v))
 	}
 

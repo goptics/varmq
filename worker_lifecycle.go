@@ -23,7 +23,12 @@ func (w *worker[T, JobType]) Start() error {
 	}
 
 	if name := w.Name(); name != "" {
-		WorkerRegistry.Store(name, w)
+		if old, _ := WorkerRegistry.Swap(name, w); old != any(w) {
+			if d, ok := old.(interface{ dropMemQueues() }); ok {
+				d.dropMemQueues() // replaced under its name: unlisted
+			}
+		}
+		w.memQueues.Range(func(_, m any) bool { registerQueue(m); return true })
 	}
 
 	w.goEventLoop()
@@ -121,4 +126,24 @@ func (w *worker[T, JobType]) Restart() error {
 	w.mx.Unlock()
 
 	return w.Start()
+}
+
+// addMemQueue records one of the worker's in-memory QueueInspectors and
+// lists it under GET /queues if the worker is listed under GET /workers;
+// Start lists the rest.
+func (w *worker[T, JobType]) addMemQueue(m *memQueue) {
+	w.memQueues.Store(m.id, m)
+	listed := func() bool { v, ok := WorkerRegistry.Load(w.Name()); return ok && v == any(w) }
+	if listed() {
+		registerQueue(m)
+		// a drop that ran between the check and the store missed m
+		if !listed() {
+			queueRegistry.CompareAndDelete(m.id, m)
+		}
+	}
+}
+
+// dropMemQueues unlists the worker's in-memory queues from GET /queues.
+func (w *worker[T, JobType]) dropMemQueues() {
+	w.memQueues.Range(func(id, m any) bool { queueRegistry.CompareAndDelete(id, m); return true })
 }

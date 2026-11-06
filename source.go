@@ -111,7 +111,11 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 		return zero, ErrFailedToDequeue
 	}
 
-	return toJob[T, JobType](v)
+	j, err := toJob[T, JobType](v)
+	if err == nil {
+		memTaken(j.memTotals(), 1)
+	}
+	return j, err
 }
 
 // ackSource reads acknowledging storage: persistent and distributed queues.

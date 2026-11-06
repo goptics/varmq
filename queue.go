@@ -54,13 +54,14 @@ func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newJob(data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -76,12 +77,13 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -125,13 +127,14 @@ func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, b
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newErrorJob(data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -147,12 +150,13 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -195,13 +199,14 @@ func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResul
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newResultJob[T, R](data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -217,12 +222,13 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}

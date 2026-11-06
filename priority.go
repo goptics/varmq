@@ -36,13 +36,14 @@ func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newJob(data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -58,13 +59,14 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -107,13 +109,14 @@ func (q *resultPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConf
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newResultJob[T, R](data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -129,13 +132,14 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -178,13 +182,14 @@ func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFu
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newErrorJob(data, c)
 	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.totals.added()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -200,13 +205,14 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
 		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.totals.added()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}

@@ -138,8 +138,9 @@ paths:
       description: |
         A queue is listed when its storage can report shared counts (in Go,
         it implements `varmq.QueueInspector`), once per Queue ID however many
-        workers bind it. Since 1.1.0 in-memory queues are listed too, under
-        `memory:<instance>:<n>`: this process's counts only; they keep no
+        workers bind it. Since 1.1.0 in-memory queues of listed (named)
+        workers are listed too, under `memory:<instance>:<n>`: this
+        process's counts only; they keep no
         finished jobs, so `counts.completed` and `counts.failed` are 0 and
         their `completed` and `failed` pages are empty. Other queues whose
         storage cannot report are left out. Entries are sorted by `id`.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -48,7 +49,7 @@ func TestMemQueueCounts(t *testing.T) {
 			return errors.New("boom")
 		}
 		return nil
-	}, 1)
+	}, 1, WithName("memq-counts"))
 	defer w.Stop()
 	q := w.BindQueue()
 	m := memOf(t, q)
@@ -76,15 +77,18 @@ func TestMemQueueCounts(t *testing.T) {
 	assert.Equal(t, JobPending, jobs[1].State)
 	page, _ := m.Jobs(context.Background(), JobPending, 1, 1)
 	assert.JSONEq(t, `2`, string(page[0].Payload), "offset and limit")
+	past, err := m.Jobs(context.Background(), JobPending, math.MaxInt, 1000)
+	require.NoError(t, err, "no offset+limit overflow")
+	assert.Empty(t, past)
 	none, _ := m.Jobs(context.Background(), JobCompleted, 0, 10)
 	assert.Empty(t, none, "finished jobs are not kept")
 	assert.NotNil(t, none, "an empty page, not null")
 
 	close(release)
-	require.Eventually(t, func() bool { return stats(t, m).Totals.Completed == 3 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed+s.Totals.Failed == 3 }, time.Second, time.Millisecond)
 	s = stats(t, m)
 	assert.Equal(t, JobCounts{}, s.Counts)
-	assert.Equal(t, JobTotals{Submitted: 3, Completed: 3, Failed: 1}, s.Totals)
+	assert.Equal(t, JobTotals{Submitted: 3, Completed: 2, Failed: 1}, s.Totals, "completed counts successful jobs, as redisq")
 }
 
 // Two unnamed workers' queues get distinct IDs.
@@ -141,4 +145,94 @@ func TestPendingRecord(t *testing.T) {
 	r := pendingRecord(newJob("x", jobConfigs{Id: "id-1"}))
 	assert.Equal(t, "id-1", r.ID)
 	assert.JSONEq(t, `"x"`, string(r.Payload))
+}
+
+// GET /queues lists a memory queue while its worker is listed under GET
+// /workers: never for an unnamed worker, until the stopped retention for a
+// named one.
+func TestMemQueueListedWithItsWorker(t *testing.T) {
+	anon := NewWorker(func(Job[int]) {})
+	defer anon.Stop()
+	_, listed := queueRegistry.Load(memOf(t, anon.BindQueue()).QueueID())
+	assert.False(t, listed, "unnamed worker: not listed")
+
+	w := NewWorker(func(Job[int]) {}, WithName("memq-retention"), WithStoppedRetention(20*time.Millisecond))
+	id := memOf(t, w.BindQueue()).QueueID()
+	_, listed = queueRegistry.Load(id)
+	assert.True(t, listed)
+
+	require.NoError(t, w.Stop())
+	require.Eventually(t, func() bool { _, ok := queueRegistry.Load(id); return !ok }, time.Second, time.Millisecond, "gone after retention")
+	require.NoError(t, w.Start())
+	_, listed = queueRegistry.Load(id)
+	assert.True(t, listed, "back on restart")
+	require.NoError(t, w.Stop())
+}
+
+// Jobs a worker took in a batch but has not started count as processing, so
+// pending + processing + completed + failed adds up to submitted.
+func TestMemQueueCountsBatchedJobs(t *testing.T) {
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		if j.Data() == 0 {
+			<-release
+		}
+	}, 1)
+	defer w.Stop()
+	w.(*workerBinder[int]).jobNanos.Store(1) // measured: cheap jobs batch
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	q.Add(0)
+	require.Eventually(t, func() bool { return stats(t, m).Counts.Processing == 1 }, time.Second, time.Millisecond)
+	for i := 1; i <= 100; i++ {
+		q.Add(i)
+	}
+	s := stats(t, m)
+	assert.EqualValues(t, 101, s.Totals.Submitted)
+	assert.EqualValues(t, 101, s.Counts.Pending+s.Counts.Processing, "every job pending or processing")
+
+	close(release)
+	require.Eventually(t, func() bool { return stats(t, m).Totals.Completed == 101 }, time.Second, time.Millisecond)
+	assert.Equal(t, JobCounts{}, stats(t, m).Counts)
+}
+
+// A worker that takes over another's name unlists the other's memory queues.
+func TestMemQueueNameTakeover(t *testing.T) {
+	a := NewWorker(func(Job[int]) {}, WithName("memq-takeover"))
+	defer a.Stop()
+	idA := memOf(t, a.BindQueue()).QueueID()
+	_, listed := queueRegistry.Load(idA)
+	require.True(t, listed)
+
+	b := NewWorker(func(Job[int]) {}, WithName("memq-takeover"))
+	defer b.Stop()
+	idB := memOf(t, b.BindQueue()).QueueID()
+	_, listed = queueRegistry.Load(idA)
+	assert.False(t, listed, "a's queue left with a's name")
+	_, listed = queueRegistry.Load(idB)
+	assert.True(t, listed)
+}
+
+// Acknowledging storage keeps its own counts: no in-memory inspector.
+func TestMemQueueSkipsAckStorage(t *testing.T) {
+	w := NewWorker(func(Job[int]) {})
+	defer w.Stop()
+	q := w.WithQueue(ackMemQueue{queues.NewQueue[any]()})
+	assert.Nil(t, q.(*queue[int]).totals)
+}
+
+type ackMemQueue struct{ *queues.Queue[any] }
+
+func (ackMemQueue) Acknowledge(string) bool               { return true }
+func (ackMemQueue) Reject(string, string) bool            { return true }
+func (ackMemQueue) DequeueWithAckId() (any, bool, string) { return nil, false, "" }
+
+// A foreign value under the name is replaced without a panic.
+func TestMemQueueForeignRegistryEntry(t *testing.T) {
+	WorkerRegistry.Store("memq-foreign", "not a worker")
+	w := NewWorker(func(Job[int]) {}, WithName("memq-foreign"))
+	defer w.Stop()
+	_, listed := queueRegistry.Load(memOf(t, w.BindQueue()).QueueID())
+	assert.True(t, listed)
 }

@@ -210,6 +210,7 @@ func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) 
 			return
 		}
 		if j.IsClosed() {
+			memTaken(j.memTotals(), -1)
 			continue
 		}
 		buf[n] = j
@@ -278,6 +279,7 @@ func (w *worker[T, JobType]) scheduleRetentionCleanup() {
 		if w.IsStopped() {
 			// Delete only if the name still maps to w; a newer worker may have re-registered it.
 			if WorkerRegistry.CompareAndDelete(w.Name(), w) {
+				w.dropMemQueues()
 				w.lifecycleChanged()
 			}
 		}

@@ -64,6 +64,10 @@ type worker[T any, JobType iJob[T]] struct {
 	// queueIDs holds the Queue ID of each bound QueueInspector, for
 	// ReportInstance. ponytail: never pruned, as registerQueue never is.
 	queueIDs sync.Map
+	// memQueues holds this worker's in-memory QueueInspectors by Queue ID.
+	// They are listed under GET /queues while the worker is in
+	// WorkerRegistry: named, and not past its stopped retention.
+	memQueues sync.Map
 }
 
 // Worker represents a worker that processes Jobs.
@@ -312,6 +316,7 @@ type Worker interface {
 
 	configs() configs
 	notifyToPullNextJobs()
+	addMemQueue(m *memQueue)
 }
 
 // newWorker creates a new worker with the given worker function and configurations

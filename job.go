@@ -118,6 +118,7 @@ type iJob[T any] interface {
 	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
 	fail(reason string)
+	succeed()
 	memTotals() *memQueue
 	io.Closer
 }
@@ -171,6 +172,13 @@ func (j *job[T]) fail(reason string) {
 		ref.totals.failed.Add(1)
 	} else if ref != nil {
 		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, reason: &reason})
+	}
+}
+
+// succeed counts the job completed for its in-memory queue, if any.
+func (j *job[T]) succeed() {
+	if ref := j.ackRef.Load(); ref != nil && ref.q == nil {
+		ref.totals.completed.Add(1)
 	}
 }
 
