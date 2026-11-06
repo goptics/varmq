@@ -46,6 +46,9 @@ func instanceRecord() InstanceRecord {
 			Concurrency:    w.NumConcurrency(),
 			NumProcessing:  w.NumProcessing(),
 			NumIdleWorkers: w.NumIdleWorkers(),
+			Completed:      w.Metrics().Completed(),
+			Successful:     w.Metrics().Successful(),
+			Failed:         w.Metrics().Failed(),
 			QueueIDs:       []string{},
 		}
 		if q, ok := v.(interface{ boundQueueIDs() []string }); ok {
@@ -57,6 +60,16 @@ func instanceRecord() InstanceRecord {
 	slices.SortFunc(r.Workers, func(a, b InstanceWorker) int { return strings.Compare(a.Name, b.Name) })
 
 	return r
+}
+
+// lifecycleChanged makes instance reporters report now: the worker started,
+// stopped, paused, resumed, was tuned or left the registry. Idle/Running
+// flips are not lifecycle changes and wait for the next tick. Unnamed
+// workers are not in records, so they skip it.
+func (w *worker[T, JobType]) lifecycleChanged() {
+	if w.Name() != "" {
+		contract.InstanceChanged()
+	}
 }
 
 // boundQueueIDs returns the Queue IDs of the worker's bound QueueInspectors,

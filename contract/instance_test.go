@@ -15,11 +15,8 @@ type fakeRegistry struct {
 // newFakeRegistry returns a registry with room for 100 unread calls.
 func newFakeRegistry() *fakeRegistry { return &fakeRegistry{events: make(chan string, 100)} }
 
-// ReportInstance logs the report and flags an interval other than 1s.
+// ReportInstance logs the report.
 func (f *fakeRegistry) ReportInstance(_ context.Context, r InstanceRecord) error {
-	if r.IntervalMS != 1000 {
-		f.events <- "bad interval"
-	}
 	f.events <- "report:" + r.ID
 	return nil
 }
@@ -68,11 +65,56 @@ func withSource(t *testing.T, id *atomic.Value) {
 
 // run starts ReportInstances with a 1s interval; cancel stops it and returns
 // its error.
-func run(reg InstanceRegistry) (cancel func() error) {
+func run(reg InstanceRegistry) (cancel func() error) { return runEvery(reg, time.Second) }
+
+// runEvery is run with the given interval.
+func runEvery(reg InstanceRegistry, interval time.Duration) (cancel func() error) {
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- ReportInstances(ctx, reg, time.Second) }()
+	go func() { done <- ReportInstances(ctx, reg, interval) }()
 	return func() error { stop(); return <-done }
+}
+
+// A lifecycle change reports at once, long before the 60s tick, in every
+// running reporter; a report carries the reporter's interval.
+func TestReportInstancesOnChange(t *testing.T) {
+	var id atomic.Value
+	id.Store("pod-a")
+	withSource(t, &id)
+	a, b := newFakeRegistry(), newFakeRegistry()
+
+	intervals := make(chan int64, 10)
+	stopA, stopB := runEvery(a, time.Minute), runEvery(intervalSpy{b, intervals}, time.Minute)
+	a.expect(t, "report:pod-a")
+	b.expect(t, "report:pod-a")
+	if got := <-intervals; got != 60_000 {
+		t.Fatalf("interval_ms = %d, want 60000", got)
+	}
+
+	InstanceChanged()
+	a.expect(t, "report:pod-a") // within 3s, not at the 60s tick
+	b.expect(t, "report:pod-a")
+
+	for _, stop := range []func() error{stopA, stopB} {
+		if err := stop(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.expect(t, "remove:pod-a")
+	b.expect(t, "remove:pod-a")
+}
+
+// intervalSpy passes calls to a fakeRegistry and sends each report's
+// IntervalMS on c.
+type intervalSpy struct {
+	*fakeRegistry
+	c chan int64
+}
+
+// ReportInstance records the interval, then logs the report.
+func (s intervalSpy) ReportInstance(ctx context.Context, r InstanceRecord) error {
+	s.c <- r.IntervalMS
+	return s.fakeRegistry.ReportInstance(ctx, r)
 }
 
 // Reports go out at start and on each tick under the ID read at start, even

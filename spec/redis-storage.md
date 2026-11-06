@@ -1,6 +1,6 @@
 # varmq Redis storage
 
-**Version 1.1.0**
+**Version 1.2.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.2.0**: a worker entry gains `completed`, `successful` and `failed`; an instance reports at once on a lifecycle change (section 8.3). Nothing from 1.1.0 changes.
 - **1.1.0**: adds Instance Records (section 8), new keys only, and the reader rule for unknown Job States (section 7). Nothing from 1.0.0 changes.
 - **1.0.0**: first version. Describes the key layout redisq already uses, and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
 
@@ -309,6 +310,7 @@ Each `workers` entry:
 | `concurrency` | integer | Most jobs the worker runs at once. |
 | `num_processing` | integer | Jobs the worker is running now. |
 | `num_idle_workers` | integer | Pool goroutines waiting for a job. |
+| `completed`, `successful`, `failed` | integer | Since 1.2.0. Jobs this worker finished in this process: all, without error, with an error or panic. Absent from a 1.1.0 writer; a reader takes absent as 0. How many jobs a queue received is the queue's `submitted` total (section 7.1), not a worker's. |
 | `queue_ids` | array of strings | Queue IDs (section 1.1) of the queues the worker is bound to. Empty for a queue with no Queue ID, such as an in-memory queue. |
 
 The record has no time of the last report, and a writer MUST NOT add a `beat_at` or `lost` field. That time is the member's score in `:beats`, from the Redis clock, so that the clocks of the processes do not matter. A reader that serves records (in Go, `InstanceRecord`) sets `beat_at` from the score and `lost` from section 8.5. A reader MUST ignore fields it does not know.
@@ -317,7 +319,7 @@ The record has no time of the last report, and a writer MUST NOT add a `beat_at`
 
 ### 8.3 Report
 
-An instance reports at start and then once every `interval_ms`. Input: the Instance ID and the record. One script, under the rules for scripts in section 6:
+An instance reports at start and then once every `interval_ms`. Since 1.2.0 it SHOULD also report at once on a lifecycle change: a worker starts or stops, is paused or resumed, has its concurrency changed, or leaves the process. Load changes (`Idle` to `Running` and back, busy and processed counts) wait for the next interval. Input: the Instance ID and the record. One script, under the rules for scripts in section 6:
 
 1. now (ms) (section 6).
 2. `HSET <instances> <id> <record>` and `ZADD <instances>:beats <now (ms)> <id>`.
@@ -341,5 +343,6 @@ A record is **live** when its score is at least `now - 3 × interval_ms`, with n
 - Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
 - An older requeue does not `HINCRBY <base>:attempts` or `HDEL <base>:started`. A job it requeues gets a too-low `attempts` in its record, and its `:started` entry stays until Purge.
+- 1.2.0 adds worker fields and a reporting rule only. A 1.1.0 reader ignores the new fields.
 - 1.1.0 adds keys and a reader rule only. A 1.0.0 implementation works unchanged beside a 1.1.0 one. An instance on 1.0.0 writes no Instance Record, so a reader that lists instances from section 8 does not see it.
 - A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.
