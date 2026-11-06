@@ -65,6 +65,11 @@ type workerSummary struct {
 //
 // Handler sets [InstanceHeader] on every response, including the 404 and 405
 // replies ServeMux generates itself for unknown paths or methods.
+//
+// The PATCH routes change state and have no auth: protect Handler. The
+// worker routes act on this process only, but PATCH /queues/{id}/actions
+// pauses a shared queue for every process that consumes it, and the pause
+// outlives restarts.
 func Handler(prefix string) http.Handler {
 	mux := http.StripPrefix(prefix, NewServerMux())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

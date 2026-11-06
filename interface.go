@@ -139,7 +139,10 @@ type IPurgeValuesQueue interface {
 // once the flag is stored. Paused is a local read: O(1), no I/O. A dequeue
 // that finds the flag set must make Paused true before it returns and, for
 // a batch pop, report remaining 0, so a stale Paused costs one empty pop,
-// never a spin. See spec/redis-storage.md and adr 0004.
+// never a spin. While Paused is true the worker does not dequeue, so the
+// storage must itself turn Paused false after a Resume from any process
+// it serves (redisq: control channel and a 1 s check). See
+// spec/redis-storage.md and adr 0004.
 type QueuePauser interface {
 	Pause() error
 	Resume() error
@@ -147,9 +150,9 @@ type QueuePauser interface {
 }
 
 // PauseNotifier is optional for a QueuePauser: fn runs on every change of
-// Paused, from this process or another. A bound worker uses it to start at
-// once on a Resume; without it a Resume waits for the next add or wake-up.
-// cancel stops the calls.
+// Paused, from this process or another, with the value Paused has then. A
+// bound worker uses it to start at once on a Resume; without it the worker
+// sees the Resume at its next add or wake-up. cancel stops the calls.
 type PauseNotifier interface {
 	OnPauseChange(fn func(paused bool)) (cancel func())
 }

@@ -17,7 +17,7 @@ type pauseState struct {
 // Pause stops Dequeue. Idempotent; the first pause time is kept.
 func (p *pauseState) Pause() error {
 	if p.at.CompareAndSwap(0, time.Now().UnixMilli()) {
-		p.notify(true)
+		p.notify()
 	}
 	return nil
 }
@@ -25,7 +25,7 @@ func (p *pauseState) Pause() error {
 // Resume lets Dequeue hand out items again. Idempotent.
 func (p *pauseState) Resume() error {
 	if p.at.Swap(0) != 0 {
-		p.notify(false)
+		p.notify()
 	}
 	return nil
 }
@@ -38,6 +38,9 @@ func (p *pauseState) PausedAt() int64 { return p.at.Load() }
 
 // OnPauseChange calls fn after every Pause or Resume that changes the state,
 // until cancel.
+// ponytail: hooks of workers collected without unbinding are dropped by the
+// next Pause or Resume (varmq's hook cancels itself), not on register; one
+// small closure per such bind until then.
 func (p *pauseState) OnPauseChange(fn func(paused bool)) (cancel func()) {
 	h := &fn
 	p.mu.Lock()
@@ -54,8 +57,11 @@ func (p *pauseState) OnPauseChange(fn func(paused bool)) (cancel func()) {
 	}
 }
 
-// notify calls the hooks outside mu, so a hook may cancel or register.
-func (p *pauseState) notify(paused bool) {
+// notify calls the hooks outside mu, so a hook may cancel or register. It
+// passes the state as of now, not the change that called it: with a Pause
+// and a Resume racing, the last call any hook gets is the final state.
+func (p *pauseState) notify() {
+	paused := p.Paused()
 	p.mu.Lock()
 	fns := make([]func(bool), 0, len(p.hooks))
 	for h := range p.hooks {

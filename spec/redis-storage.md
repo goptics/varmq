@@ -266,6 +266,8 @@ Input: none. One script:
 
 A consumer SHOULD subscribe to `<base>:control` and update its own view of the pause on each message. Pub/sub can lose a message, so a consumer SHOULD also read `EXISTS <base>:paused` at least once a second, and before its first pop.
 
+The key decides; messages are hints. A consumer MUST ignore a `<base>:control` message it does not know, and MUST NOT use the `<ms>` of a `paused:` message for anything but display. A pop checks the key itself (section 6.2), so a lost or forged message costs at most one empty pop or one second of waiting.
+
 ## 7. Reading
 
 A reader (in Go, a `QueueInspector`) answers the two HTTP routes as follows. It SHOULD read each answer in one script or `MULTI` transaction, so that the numbers come from one instant.
@@ -281,7 +283,7 @@ A reader MUST accept a Job State it does not know, in a Job Record or from the H
 | `counts.completed` | `ZCARD <base>:completed` |
 | `counts.failed` | `ZCARD <base>:failed` |
 | `totals.submitted`, `totals.completed`, `totals.failed` | `HMGET <base>:stats submitted completed failed`, a missing field as 0 |
-| `paused`, `paused_at` | Since 1.3.0: `GET <base>:paused`. Absent: `paused` false, no `paused_at`. Present: `paused` true, `paused_at` its value. |
+| `paused`, `paused_at` | Since 1.3.0: `GET <base>:paused`. Absent: `paused` false, no `paused_at`. Present: `paused` true, `paused_at` its value, or no `paused_at` if the value is not an integer. |
 
 `counts.completed` and `counts.failed` are the records retention keeps. The totals count every job since the counters began.
 

@@ -21,22 +21,22 @@ type parkedBatch[JobType any] struct {
 // and the jobs parked by a stop or pause. Like the sources, it leaves out
 // the jobs of a paused queue (held).
 func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
-	n := int(w.nParked.Load())
-	if n > 0 {
-		n -= w.held()
+	n := 0
+	if w.nParked.Load() > 0 {
+		n = w.unheld()
 	}
 
 	return m.Len() + n
 }
 
-// held counts the parked jobs whose queue is paused.
-func (w *worker[T, JobType]) held() int {
+// unheld counts the parked jobs whose queue is not paused.
+func (w *worker[T, JobType]) unheld() int {
 	w.parkMx.Lock()
 	defer w.parkMx.Unlock()
 
 	n := 0
 	for _, b := range w.parked {
-		if b.stamp.Held() {
+		if !b.stamp.Held() {
 			n += len(b.jobs)
 		}
 	}

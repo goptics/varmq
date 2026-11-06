@@ -159,8 +159,8 @@ func (s *staleStorage) Dequeue() (any, bool) {
 // A stale cache costs one empty dequeue, never a spin.
 func TestQueuePauseStaleCache(t *testing.T) {
 	s := &staleStorage{Queue: queues.NewQueue[any]()}
-	var ran atomic.Int64
-	w := NewWorker(func(Job[int]) { ran.Add(1) })
+	var ran, errs atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, WithErrHandler(func(Worker, error) { errs.Add(1) }))
 	defer w.Stop()
 	q := w.WithQueue(s)
 
@@ -173,6 +173,7 @@ func TestQueuePauseStaleCache(t *testing.T) {
 	require.NoError(t, q.Resume()) // no PauseNotifier: the next add wakes it
 	q.Add(2)
 	require.Eventually(t, func() bool { return ran.Load() == 2 }, time.Second, time.Millisecond)
+	assert.Zero(t, errs.Load(), "a refused dequeue is not an error")
 }
 
 // Storage that cannot pause says so.
@@ -267,8 +268,8 @@ func TestMuxQueueActions(t *testing.T) {
 
 // Pause and Resume racing workers and adds stay consistent (run with -race).
 func TestQueuePauseRace(t *testing.T) {
-	var ran atomic.Int64
-	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4)
+	var ran, errs atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4, WithErrHandler(func(Worker, error) { errs.Add(1) }))
 	defer w.Stop()
 	q := w.BindQueue()
 
@@ -290,4 +291,5 @@ func TestQueuePauseRace(t *testing.T) {
 	wg.Wait()
 	require.NoError(t, q.Resume())
 	require.Eventually(t, func() bool { return ran.Load() == 2000 }, 5*time.Second, time.Millisecond)
+	assert.Zero(t, errs.Load(), "a Pause between Len and Dequeue is not an error")
 }

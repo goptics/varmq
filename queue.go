@@ -268,8 +268,9 @@ type IExternalBaseQueue interface {
 	// queue until Resume: a flag the storage keeps, so it outlives a
 	// restart. Adds still land, running jobs finish. Not the same as
 	// Worker.Pause, which pauses one worker in this process; a worker takes
-	// a job only when neither is paused. ErrPauseUnsupported when the
-	// storage is not a QueuePauser.
+	// a job only when neither is paused. While paused, the queue's jobs are
+	// not the worker's pending: Wait and WaitUntilIdle return without them.
+	// ErrPauseUnsupported when the storage is not a QueuePauser.
 	Pause() error
 	// Resume undoes Pause. Idempotent.
 	Resume() error

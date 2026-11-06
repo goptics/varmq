@@ -178,6 +178,10 @@ paths:
         restart. Not the same as a worker's `pause`, which stops one worker
         in this process. Idempotent: pausing a paused queue keeps its
         `paused_at`. The reply comes after the flag is stored.
+
+        For shared storage this reaches every process that consumes the
+        queue, also ones that serve no API, and only a `resume` ends it.
+        Protect it at least as well as the worker routes.
       responses:
         "200":
           description: Done. The queue's entry, as `GET /queues` lists it.
@@ -413,8 +417,10 @@ components:
           type: boolean
           description: |
             Since 1.2.0, with `counts`. True while the queue is paused: its
-            storage hands out no job. Absent from older servers; read absent
-            as false.
+            storage hands out no job. Jobs a worker took before the pause
+            stay in `counts.processing` until they finish or, for the
+            unstarted rest of an in-memory batch, the queue is resumed.
+            Absent from older servers; read absent as false.
         paused_at:
           type: integer
           description: |

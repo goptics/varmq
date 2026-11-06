@@ -151,9 +151,7 @@ func (w *worker[T, JobType]) processNextJob() (bool, error) {
 	// atomic load per job on the dispatcher, the serial ceiling.
 	stamp := pool.Stamp{Gen: m.purgeGen()}
 	if stamp.Gen != nil { // a source that batches
-		if pz := m.pauser(); pz != nil { // a nil pauser must stay a nil Hold
-			stamp.Hold = pz
-		}
+		stamp.Hold = m.pauser()
 		stamp.Epoch = stamp.Gen.Load()
 		stamp.Seq = w.dispatched
 		w.dispatched += uint64(n)

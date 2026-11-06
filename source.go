@@ -48,6 +48,16 @@ func queuePaused(pz QueuePauser) bool {
 	return pz != nil && pz.Paused()
 }
 
+// emptyErr is why a dequeue came back empty: a pause (a Pause that landed
+// after Len, or one the storage just found) is "nothing to do", not a
+// failure the user hears about.
+func emptyErr(pz QueuePauser) error {
+	if queuePaused(pz) {
+		return errNoReadySource
+	}
+	return ErrFailedToDequeue
+}
+
 // ackQueue is storage that hands out an ack id with each item.
 type ackQueue interface {
 	IBaseQueue
@@ -126,7 +136,7 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 	v, ok := s.q.Dequeue()
 	if !ok {
 		var zero JobType
-		return zero, ErrFailedToDequeue
+		return zero, emptyErr(s.pz)
 	}
 
 	return toJob[T, JobType](v)
@@ -163,7 +173,7 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 	v, ok, ackID := s.q.DequeueWithAckId()
 	if !ok {
 		var zero JobType
-		return zero, ErrFailedToDequeue
+		return zero, emptyErr(s.pz)
 	}
 
 	j, err := toJob[T, JobType](v)
@@ -485,11 +495,21 @@ func (w *worker[T, JobType]) onResume(q IBaseQueue, src source[JobType]) {
 		w.notifyToPullNextJobs()
 	}}
 	wh := weak.Make(h)
-	h.cancel = pn.OnPauseChange(func(paused bool) {
-		if h := wh.Value(); h != nil && !paused {
+	var self atomic.Pointer[func()]
+	cancel := pn.OnPauseChange(func(paused bool) {
+		h := wh.Value()
+		if h == nil { // worker collected: drop the hook from the storage
+			if c := self.Load(); c != nil {
+				(*c)()
+			}
+			return
+		}
+		if !paused {
 			h.resumed()
 		}
 	})
+	self.Store(&cancel)
+	h.cancel = cancel
 	w.pauseHooks.Store(src, h)
 }
 

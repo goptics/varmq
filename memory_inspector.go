@@ -97,12 +97,12 @@ func (m *memQueue) Resume() error { return resumeQueue(m.q) }
 func (m *memQueue) Paused() bool  { return isQueuePaused(m.q) }
 
 // QueueStats reports the totals and the jobs pending (in the queue) and
-// processing (handed to the worker: in a batch, parked or running), as
-// redisq counts a popped, unacknowledged job. Processing moves once per
-// batch, so a finished job counts until its batch ends (as NumProcessing).
-// Finished jobs are not kept in memory, so counts.completed and
-// counts.failed are 0; totals.completed counts successful jobs only, as
-// redisq's does.
+// processing (handed to the worker: in a batch, parked or running, also the
+// rest of a batch parked by a queue Pause), as redisq counts a popped,
+// unacknowledged job. Processing moves once per batch, so a finished job
+// counts until its batch ends (as NumProcessing). Finished jobs are not
+// kept in memory, so counts.completed and counts.failed are 0;
+// totals.completed counts successful jobs only, as redisq's does.
 func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 	s := QueueStats{
 		Counts: JobCounts{Pending: int64(m.q.Len()), Processing: max(0, m.processing.Load())},
