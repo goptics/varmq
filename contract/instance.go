@@ -42,28 +42,44 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
-	var id string // last reported ID, removed at the end
+	// id is the ID being reported. old is an ID the process reported before
+	// InstanceID changed; it is removed once a report under id succeeds, and
+	// kept for retry until then. ponytail: a second change before that drops
+	// the first old ID to pruning.
+	var id, old string
+	removeAll := func() error {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		var errs []error
+		for _, x := range []string{old, id} {
+			if x != "" {
+				errs = append(errs, reg.RemoveInstance(rctx, x))
+			}
+		}
+		return errors.Join(errs...)
+	}
+
 	for {
 		if r, ok := InstanceSnapshot(); ok {
 			if r.ID == "" {
-				return errors.New("contract: instance reports need a non-empty Instance ID")
+				return errors.Join(errors.New("contract: instance reports need a non-empty Instance ID"), removeAll())
+			}
+			if r.ID != id {
+				if id != "" {
+					old = id
+				}
+				id = r.ID
 			}
 			r.IntervalMS = interval.Milliseconds()
-			if id != "" && id != r.ID { // InstanceID changed after start
-				_ = reg.RemoveInstance(ctx, id)
+			// ponytail: no error hook for failed reports; add one when someone needs it
+			if reg.ReportInstance(ctx, r) == nil && old != "" && old != id && reg.RemoveInstance(ctx, old) == nil {
+				old = ""
 			}
-			id = r.ID
-			_ = reg.ReportInstance(ctx, r) // ponytail: no error hook; add one when someone needs it
 		}
 
 		select {
 		case <-ctx.Done():
-			if id == "" {
-				return nil
-			}
-			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			return reg.RemoveInstance(rctx, id)
+			return removeAll()
 		case <-t.C:
 		}
 	}

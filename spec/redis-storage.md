@@ -322,8 +322,9 @@ An instance reports at start and then once every `interval_ms`. Input: the Insta
 1. now (ms) (section 6).
 2. `HSET <instances> <id> <record>` and `ZADD <instances>:beats <now (ms)> <id>`.
 3. Prune: `stale = ZRANGEBYSCORE <instances>:beats -inf (<now - 300000> LIMIT 0 100`. For each member, `HDEL <instances>` and `ZREM <instances>:beats`.
+4. `PEXPIRE <instances> 300000` and `PEXPIRE <instances>:beats 300000`.
 
-`<instances>` is `redisq:[<namespace>:]{instances}`. The prune age of 5 minutes is more than 3 times the longest interval, so it never removes a live record. The limit keeps each script short; the next report removes the rest.
+`<instances>` is `redisq:[<namespace>:]{instances}`. The prune age of 5 minutes is more than 3 times the longest interval, so it never removes a live record. The limit keeps each script short; the next report removes the rest. Step 4 cleans up when no reporter is left: if no instance reports for 5 minutes, Redis deletes both keys.
 
 ### 8.4 Remove
 
@@ -333,7 +334,7 @@ Input: the Instance ID. `HDEL <instances> <id>` and `ZREM <instances>:beats <id>
 
 A reader reads `TIME`, `ZRANGE <instances>:beats 0 -1 WITHSCORES` and `HGETALL <instances>` in one script or `MULTI`. It skips an ID that has a score but no record, or a record but no score: a prune or a remove ran between two commands of a writer.
 
-A record is **live** when its score is at least `now - 3 × interval_ms`, with now from the same `TIME`. Otherwise it is **lost**: the process probably stopped without a remove. A reader SHOULD show a lost record as lost, not hide it, until a prune removes it.
+A record is **live** when its score is at least `now - 3 × interval_ms`, with now from the same `TIME`. Otherwise it is **lost**: the process probably stopped without a remove. A reader SHOULD show a lost record as lost, not hide it. A reader MUST skip a record whose score is older than `now - 300000`: a prune would remove it, and the last reporter may be gone (section 8.3).
 
 ## 9. Compatibility
 

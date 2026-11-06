@@ -71,8 +71,10 @@ func (w *worker[T, JobType]) boundQueueIDs() []string {
 
 // varmqVersion is the varmq module version this binary was built with, or ""
 // when unknown (tests, builds without module info).
-func varmqVersion() string {
-	bi, ok := debug.ReadBuildInfo()
+func varmqVersion() string { return depVersion(debug.ReadBuildInfo()) }
+
+// depVersion is varmq's version in bi, or "" when bi is missing or lacks it.
+func depVersion(bi *debug.BuildInfo, ok bool) string {
 	if !ok {
 		return ""
 	}
