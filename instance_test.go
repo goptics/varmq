@@ -47,11 +47,14 @@ func TestInstanceRecordForeignEntries(t *testing.T) {
 	WorkerRegistry.Delete("real")
 	WorkerRegistry.Store("plain", plainWorker{w})
 	WorkerRegistry.Store("junk", "not a worker") // skipped
+	first := NewWorker(func(Job[string]) {}, WithName("a-first"))
+	defer first.Stop()
 
 	r := instanceRecord()
-	require.Len(t, r.Workers, 1)
-	assert.Equal(t, "real", r.Workers[0].Name) // Name comes from the wrapped worker
-	assert.Equal(t, []string{}, r.Workers[0].QueueIDs)
+	require.Len(t, r.Workers, 2)
+	assert.Equal(t, "a-first", r.Workers[0].Name) // sorted by name
+	assert.Equal(t, "real", r.Workers[1].Name)    // Name comes from the wrapped worker
+	assert.Equal(t, []string{}, r.Workers[1].QueueIDs)
 }
 
 func TestBindSkipsEmptyQueueID(t *testing.T) {
