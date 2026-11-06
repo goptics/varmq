@@ -90,6 +90,12 @@ func (r *memRun) flush() {
 
 func (m *memQueue) QueueID() string { return m.id }
 
+// Pause, Resume and Paused forward to the storage, so GET /queues and
+// PATCH /queues/{id}/actions reach it.
+func (m *memQueue) Pause() error  { return pauseQueue(m.q) }
+func (m *memQueue) Resume() error { return resumeQueue(m.q) }
+func (m *memQueue) Paused() bool  { return isQueuePaused(m.q) }
+
 // QueueStats reports the totals and the jobs pending (in the queue) and
 // processing (handed to the worker: in a batch, parked or running), as
 // redisq counts a popped, unacknowledged job. Processing moves once per
@@ -98,10 +104,17 @@ func (m *memQueue) QueueID() string { return m.id }
 // counts.failed are 0; totals.completed counts successful jobs only, as
 // redisq's does.
 func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
-	return QueueStats{
+	s := QueueStats{
 		Counts: JobCounts{Pending: int64(m.q.Len()), Processing: max(0, m.processing.Load())},
 		Totals: JobTotals{Submitted: m.submitted.Load(), Completed: m.completed.Load(), Failed: m.failed.Load()},
-	}, nil
+		Paused: m.Paused(),
+	}
+	if p, ok := m.q.(interface{ PausedAt() int64 }); ok { // one read: a Resume in between can't leave Paused without a time
+		s.PausedAt = p.PausedAt()
+		s.Paused = s.PausedAt != 0
+	}
+
+	return s, nil
 }
 
 // Jobs lists pending jobs in hand-out order; other states hold none in

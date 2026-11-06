@@ -24,6 +24,15 @@ type PriorityQueue[T any] struct {
 	idsPeak        uint32 // most ids held since ids was made; under mx
 }
 
+// The queue pause lives in heapQueue, so PriorityQueue stays in class 64.
+func (q *PriorityQueue[T]) Pause() error    { return q.internal.Pause() }
+func (q *PriorityQueue[T]) Resume() error   { return q.internal.Resume() }
+func (q *PriorityQueue[T]) Paused() bool    { return q.internal.Paused() }
+func (q *PriorityQueue[T]) PausedAt() int64 { return q.internal.PausedAt() }
+func (q *PriorityQueue[T]) OnPauseChange(fn func(paused bool)) (cancel func()) {
+	return q.internal.OnPauseChange(fn)
+}
+
 // newPriorityQueue initializes an empty priority queue.
 func NewPriorityQueue[T any]() *PriorityQueue[T] {
 	return &PriorityQueue[T]{internal: &heapQueue[T]{}}
@@ -148,9 +157,13 @@ func (q *PriorityQueue[T]) enqueue(item any, priority int, id string) bool {
 	return true
 }
 
-// Dequeue removes and returns the item with the *smallest* Priority.
+// Dequeue removes and returns the item with the *smallest* Priority, or
+// false while the queue is paused.
 // Time complexity: O(log n)
 func (q *PriorityQueue[T]) Dequeue() (any, bool) {
+	if q.Paused() {
+		return nil, false
+	}
 	q.mx.Lock()
 	defer q.mx.Unlock()
 	var zeroValue T

@@ -18,9 +18,30 @@ type parkedBatch[JobType any] struct {
 }
 
 // pending is what the worker has not handed out yet: the jobs in its sources
-// and the jobs parked by a stop or pause.
+// and the jobs parked by a stop or pause. Like the sources, it leaves out
+// the jobs of a paused queue (held).
 func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
-	return m.Len() + int(w.nParked.Load())
+	n := int(w.nParked.Load())
+	if n > 0 {
+		n -= w.held()
+	}
+
+	return m.Len() + n
+}
+
+// held counts the parked jobs whose queue is paused.
+func (w *worker[T, JobType]) held() int {
+	w.parkMx.Lock()
+	defer w.parkMx.Unlock()
+
+	n := 0
+	for _, b := range w.parked {
+		if b.stamp.Held() {
+			n += len(b.jobs)
+		}
+	}
+
+	return n
 }
 
 // park sets aside the unstarted jobs of a batch whose worker is stopping or
@@ -49,7 +70,8 @@ func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 }
 
 // unpark moves up to len(buf) parked jobs into buf, the oldest first, and
-// returns how many and the stamp they carry. 0 when nothing is parked.
+// returns how many and the stamp they carry. 0 when nothing is parked but
+// jobs of paused queues, which stay until their Resume.
 func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 	w.parkMx.Lock()
 	defer w.parkMx.Unlock()
@@ -65,7 +87,12 @@ func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 		w.parkUnsorted = false
 	}
 
-	b := &w.parked[0]
+	i := slices.IndexFunc(w.parked, func(b parkedBatch[JobType]) bool { return !b.stamp.Held() })
+	if i < 0 {
+		return 0, pool.Stamp{}
+	}
+
+	b := &w.parked[i]
 	n := copy(buf, b.jobs)
 	stamp := b.stamp
 
@@ -73,9 +100,13 @@ func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 	b.jobs = b.jobs[n:]
 	b.stamp.Seq += uint64(n)
 	if len(b.jobs) == 0 {
-		// Off the front without shifting the rest: draining stays linear.
-		w.parked[0] = parkedBatch[JobType]{}
-		w.parked = w.parked[1:]
+		if i == 0 {
+			// Off the front without shifting the rest: draining stays linear.
+			w.parked[0] = parkedBatch[JobType]{}
+			w.parked = w.parked[1:]
+		} else {
+			w.parked = slices.Delete(w.parked, i, i+1) // behind held batches of a paused queue
+		}
 		if len(w.parked) == 0 {
 			w.parked = nil
 		}

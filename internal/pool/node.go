@@ -18,10 +18,18 @@ type Payload[T any] struct {
 // The batch goes stale once the counter moves on. A nil Gen never does.
 // Seq is the dispatch number of the batch's first job, so batches set aside
 // by different workers can be put back in the order they were handed out.
+// Hold is the pause of the queue the batch came from, nil if it has none:
+// the rest of a held batch waits.
 type Stamp struct {
 	Gen   *atomic.Uint64
 	Epoch uint64
 	Seq   uint64
+	Hold  interface{ Paused() bool }
+}
+
+// Held reports whether the batch's queue is paused.
+func (s Stamp) Held() bool {
+	return s.Hold != nil && s.Hold.Paused()
 }
 
 // Stale reports whether the counter has moved since the batch was stamped.

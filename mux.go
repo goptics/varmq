@@ -95,6 +95,8 @@ func NewServerMux() *http.ServeMux {
 	mux.HandleFunc("GET /queues", handleListQueues)
 	// GET /queues/{id}/jobs?state=...&offset=...&limit=...
 	mux.HandleFunc("GET /queues/{id}/jobs", handleListJobs)
+	// PATCH /queues/{id}/actions/{action}
+	mux.HandleFunc("PATCH /queues/{id}/actions/{action}", handleQueueAction)
 
 	return mux
 }
@@ -230,24 +232,61 @@ type queueSummary struct {
 	Error string `json:"error,omitempty"`
 }
 
+// summarize reads one queue's entry of GET /queues.
+func summarize(r *http.Request, id string, qi QueueInspector) queueSummary {
+	q := queueSummary{ID: id}
+	if stats, err := qi.QueueStats(r.Context()); err != nil {
+		q.Error = err.Error()
+	} else {
+		q.QueueStats = &stats
+	}
+
+	return q
+}
+
 // handleListQueues returns the stats of every bound QueueInspector.
 func handleListQueues(w http.ResponseWriter, r *http.Request) {
 	queues := make([]queueSummary, 0)
 
 	queueRegistry.Range(func(key, value any) bool {
-		q := queueSummary{ID: key.(string)}
-		if stats, err := value.(QueueInspector).QueueStats(r.Context()); err != nil {
-			q.Error = err.Error()
-		} else {
-			q.QueueStats = &stats
-		}
-		queues = append(queues, q)
+		queues = append(queues, summarize(r, key.(string), value.(QueueInspector)))
 
 		return true
 	})
 
 	slices.SortFunc(queues, func(a, b queueSummary) int { return strings.Compare(a.ID, b.ID) })
 	writeJSON(w, http.StatusOK, queues)
+}
+
+// handleQueueAction pauses or resumes a queue (QueuePauser) and returns its
+// entry of GET /queues once the flag is stored.
+func handleQueueAction(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	v, ok := queueRegistry.Load(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "queue not found")
+		return
+	}
+
+	var err error
+	switch r.PathValue("action") {
+	case "pause":
+		err = pauseQueue(v)
+	case "resume":
+		err = resumeQueue(v)
+	default:
+		writeError(w, http.StatusBadRequest, "unknown action")
+		return
+	}
+
+	switch {
+	case errors.Is(err, ErrPauseUnsupported):
+		writeError(w, http.StatusNotImplemented, err.Error())
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+	default:
+		writeJSON(w, http.StatusOK, summarize(r, id, v.(QueueInspector)))
+	}
 }
 
 // handleListJobs returns one page of a queue's jobs in one Job State.

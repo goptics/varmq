@@ -5,7 +5,8 @@ package queues
 // that of container/heap with the same Less: lower Priority first, then lower
 // insertion Index.
 type heapQueue[T any] struct {
-	items []enqItem[T]
+	items      []enqItem[T]
+	pauseState // PriorityQueue's; Dequeue hands out nothing while paused
 }
 
 // Len returns the number of items in the heap.

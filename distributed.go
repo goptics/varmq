@@ -25,6 +25,10 @@ func NewDistributedQueue[T any](internalQueue IDistributedQueue, configs ...Queu
 	}
 }
 
+func (dq *distributedQueue[T]) Pause() error   { return pauseQueue(dq.IDistributedQueue) }
+func (dq *distributedQueue[T]) Resume() error  { return resumeQueue(dq.IDistributedQueue) }
+func (dq *distributedQueue[T]) IsPaused() bool { return isQueuePaused(dq.IDistributedQueue) }
+
 func (dq *distributedQueue[T]) NumPending() int {
 	return dq.Len()
 }

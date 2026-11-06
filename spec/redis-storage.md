@@ -1,6 +1,6 @@
 # varmq Redis storage
 
-**Version 1.2.0**
+**Version 1.3.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.3.0**: queue pause (sections 6.7, 6.8): key `<base>:paused` and channel `<base>:control`; every pop checks the key. Nothing from 1.2.0 changes while the key is absent.
 - **1.2.0**: a worker entry gains `completed`, `successful` and `failed`; an instance reports at once on a lifecycle change (section 8.3). Nothing from 1.1.0 changes.
 - **1.1.0**: adds Instance Records (section 8), new keys only, and the reader rule for unknown Job States (section 7). Nothing from 1.0.0 changes.
 - **1.0.0**: first version. Describes the key layout redisq already uses, and adds Job Records, retention, the `:stats` counters, the `:started` and `:attempts` hashes, the `enqueued_at` envelope field and the `Reject` operation. Purge deletes all job data, as redisq PR #28 does, plus the new keys.
@@ -69,8 +70,11 @@ The Queue ID that an implementation reports (`QueueInspector.QueueID` in Go, `id
 | `<base>:completed` | ZSET | Job ID → time the job completed (ms). | 1.0.0 |
 | `<base>:failed` | ZSET | Job ID → time the job failed (ms). | 1.0.0 |
 | `<base>:stats` | HASH | Counters `submitted`, `completed`, `failed`. A missing field is 0. | 1.0.0 |
+| `<base>:paused` | STRING | Present while the queue is paused: the time it was paused (ms). No expiry. | 1.3.0 |
 
 Pub/sub channel `<base>:wake:<owner>` carries the message `enqueued`. Each owner subscribes to its own channel while it is open, and other owners use the subscriber count to tell that it is alive.
+
+Since 1.3.0, pub/sub channel `<base>:control` carries `paused:<ms>` and `resumed` (sections 6.7, 6.8).
 
 ## 2. Ack IDs and owners
 
@@ -190,6 +194,8 @@ Every script that moves items from the queue to processing (one item or a batch,
 
 A pop that runs again with the same ack IDs (a client re-sent the command after a lost reply) finds them in `:nacked` and hands those items back. It MUST NOT pop new items or change `:started`.
 
+Since 1.3.0, after that re-send check, a pop MUST check `EXISTS <base>:paused`. While the key exists the pop hands out nothing, does not add the consumer to `<base>:idle`, reports 0 items left, and tells its caller that the queue is paused, so the caller stops popping until a Resume (section 6.8). This holds for every pop, plain or distributed, one item or a batch.
+
 ### 6.3 Acknowledge (completed)
 
 Input: the ack ID. Steps:
@@ -241,6 +247,25 @@ Purge deletes all of a queue's jobs and job data in one `DEL`:
 
 Purge keeps the consumer state that live consumers rely on (`<base>:idle`, `<base>:heartbeats`, `<base>:heartbeats:clock`, `<base>:presence`) and the `<base>:dedup:<id>` keys, which expire on their own. A consumer that later acknowledges or rejects a purged job finds no `:nacked` entry, so the operation does nothing (section 6.3, step 1).
 
+### 6.7 Pause (since 1.3.0)
+
+Input: none. One script:
+
+1. `SET <base>:paused <now (ms)> NX`. Pausing a paused queue keeps the first time.
+2. If the `SET` stored the key, `PUBLISH <base>:control paused:<now (ms)>`.
+
+Pause stops hand-outs only. Enqueue, Acknowledge, Reject and every Requeue (section 6.5) work as before; requeued items wait in the queue. Purge (section 6.6) and any expiry a client sets on the queue's keys leave `<base>:paused` alone: only Resume ends a pause.
+
+### 6.8 Resume (since 1.3.0)
+
+Input: none. One script:
+
+1. `DEL <base>:paused`. If it deleted nothing, stop.
+2. Wake idle consumers as Enqueue does (section 6.1), up to one per waiting item.
+3. `PUBLISH <base>:control resumed`.
+
+A consumer SHOULD subscribe to `<base>:control` and update its own view of the pause on each message. Pub/sub can lose a message, so a consumer SHOULD also read `EXISTS <base>:paused` at least once a second, and before its first pop.
+
 ## 7. Reading
 
 A reader (in Go, a `QueueInspector`) answers the two HTTP routes as follows. It SHOULD read each answer in one script or `MULTI` transaction, so that the numbers come from one instant.
@@ -256,6 +281,7 @@ A reader MUST accept a Job State it does not know, in a Job Record or from the H
 | `counts.completed` | `ZCARD <base>:completed` |
 | `counts.failed` | `ZCARD <base>:failed` |
 | `totals.submitted`, `totals.completed`, `totals.failed` | `HMGET <base>:stats submitted completed failed`, a missing field as 0 |
+| `paused`, `paused_at` | Since 1.3.0: `GET <base>:paused`. Absent: `paused` false, no `paused_at`. Present: `paused` true, `paused_at` its value. |
 
 `counts.completed` and `counts.failed` are the records retention keeps. The totals count every job since the counters began.
 
@@ -343,6 +369,7 @@ A record is **live** when its score is at least `now - 3 × interval_ms`, with n
 - Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
 - An older requeue does not `HINCRBY <base>:attempts` or `HDEL <base>:started`. A job it requeues gets a too-low `attempts` in its record, and its `:started` entry stays until Purge.
+- 1.3.0 adds a key, a channel and a pop rule. A pre-1.3.0 consumer ignores `<base>:paused` and keeps popping, so a queue is paused only once every consumer of it runs 1.3.0. For varmq that means every consumer process runs a varmq with queue pause and a storage on 1.3.0: a varmq without it, on a 1.3.0 storage, keeps asking a paused queue for work and gets none.
 - 1.2.0 adds worker fields and a reporting rule only. A 1.1.0 reader ignores the new fields.
 - 1.1.0 adds keys and a reader rule only. A 1.0.0 implementation works unchanged beside a 1.1.0 one. An instance on 1.0.0 writes no Instance Record, so a reader that lists instances from section 8 does not see it.
 - A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.

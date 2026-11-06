@@ -56,6 +56,8 @@ func (m *emptyManager[JobType]) maxBatch() int { return 1 }
 
 func (m *emptyManager[JobType]) purgeGen() *atomic.Uint64 { return nil }
 
+func (m *emptyManager[JobType]) pauser() QueuePauser { return nil }
+
 func (m *emptyManager[JobType]) Next() (JobType, error) {
 	var zero JobType
 	return zero, errNoReadySource
@@ -93,6 +95,8 @@ func (m *directManager[JobType]) Len() int { return m.src.Len() }
 func (m *directManager[JobType]) maxBatch() int { return m.src.maxBatch() }
 
 func (m *directManager[JobType]) purgeGen() *atomic.Uint64 { return m.src.purgeGen() }
+
+func (m *directManager[JobType]) pauser() QueuePauser { return m.src.pauser() }
 
 // Next reports an empty source as errNoReadySource, as strategyManager's
 // pick does, so the scheduler treats it as "nothing to do". Without the
@@ -180,6 +184,8 @@ func (sm *strategyManager[JobType]) maxBatch() int { return 1 }
 
 // purgeGen is nil: batches of one never wait behind another job.
 func (sm *strategyManager[JobType]) purgeGen() *atomic.Uint64 { return nil }
+
+func (sm *strategyManager[JobType]) pauser() QueuePauser { return nil }
 
 func (sm *strategyManager[JobType]) next() (source[JobType], bool) {
 	switch sm.strategy {

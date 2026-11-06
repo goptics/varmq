@@ -543,7 +543,7 @@ func TestMuxQueues(t *testing.T) {
 			{"id":"broken","error":"down"},
 			{"id":"redisq:ns:fifo:{a/b}",
 			 "counts":{"pending":2,"processing":0,"completed":0,"failed":1},
-			 "totals":{"submitted":5,"completed":0,"failed":1}}
+			 "totals":{"submitted":5,"completed":0,"failed":1},"paused":false}
 		]`, rr.Body.String())
 	})
 

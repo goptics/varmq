@@ -23,10 +23,12 @@ type Queue[T any] struct {
 	attachOnce sync.Once
 	attached   any
 
+	pauseState // Dequeue reads it, Pause and Resume write it; in the padding, so Queue keeps its size
+
 	// Every Enqueue reads log. Padded to 128 bytes, so that read never shares
 	// a line with the cursor, allocated just before and written on every
 	// Dequeue.
-	_ [128 - 8 - 8 - 16 - 16]byte
+	_ [128 - 8 - 8 - 16 - 16 - 24]byte
 
 	ids   atomic.Pointer[idSet] // ids of stored items EnqueueOnce added; nil until the first
 	idsOn atomic.Bool           // set by the first EnqueueOnce, before its Append
@@ -120,8 +122,11 @@ func (q *Queue[T]) idSet() *idSet {
 }
 
 // Dequeue removes and returns the front item, freeing its id if
-// EnqueueOnce stored it.
+// EnqueueOnce stored it. It returns false while the queue is paused.
 func (q *Queue[T]) Dequeue() (any, bool) {
+	if q.Paused() {
+		return nil, false
+	}
 	v, ok := q.cur.Dequeue()
 
 	// Read after the dequeue: EnqueueOnce sets idsOn before its Append, so an

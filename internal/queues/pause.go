@@ -1,0 +1,69 @@
+package queues
+
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// pauseState is an in-memory storage's queue pause (varmq.QueuePauser and
+// varmq.PauseNotifier): Dequeue hands out nothing while at is set.
+type pauseState struct {
+	at    atomic.Int64 // Unix ms of the Pause; 0 while running
+	mu    sync.Mutex
+	hooks map[*func(bool)]struct{}
+}
+
+// Pause stops Dequeue. Idempotent; the first pause time is kept.
+func (p *pauseState) Pause() error {
+	if p.at.CompareAndSwap(0, time.Now().UnixMilli()) {
+		p.notify(true)
+	}
+	return nil
+}
+
+// Resume lets Dequeue hand out items again. Idempotent.
+func (p *pauseState) Resume() error {
+	if p.at.Swap(0) != 0 {
+		p.notify(false)
+	}
+	return nil
+}
+
+// Paused reports whether the queue is paused.
+func (p *pauseState) Paused() bool { return p.at.Load() != 0 }
+
+// PausedAt is the Unix ms of the Pause, 0 while running.
+func (p *pauseState) PausedAt() int64 { return p.at.Load() }
+
+// OnPauseChange calls fn after every Pause or Resume that changes the state,
+// until cancel.
+func (p *pauseState) OnPauseChange(fn func(paused bool)) (cancel func()) {
+	h := &fn
+	p.mu.Lock()
+	if p.hooks == nil {
+		p.hooks = map[*func(bool)]struct{}{}
+	}
+	p.hooks[h] = struct{}{}
+	p.mu.Unlock()
+
+	return func() {
+		p.mu.Lock()
+		delete(p.hooks, h)
+		p.mu.Unlock()
+	}
+}
+
+// notify calls the hooks outside mu, so a hook may cancel or register.
+func (p *pauseState) notify(paused bool) {
+	p.mu.Lock()
+	fns := make([]func(bool), 0, len(p.hooks))
+	for h := range p.hooks {
+		fns = append(fns, *h)
+	}
+	p.mu.Unlock()
+
+	for _, fn := range fns {
+		fn(paused)
+	}
+}

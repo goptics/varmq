@@ -1,6 +1,10 @@
 package varmq
 
-import "github.com/goptics/varmq/contract"
+import (
+	"errors"
+
+	"github.com/goptics/varmq/contract"
+)
 
 // IBaseQueue is the part every queue storage implements.
 type IBaseQueue interface {
@@ -127,6 +131,32 @@ type CapacitySetter interface {
 type IPurgeValuesQueue interface {
 	PurgeValues() []any
 }
+
+// QueuePauser is optional for any storage: a durable queue pause, kept in
+// the storage and seen by every process that reads it. While paused the
+// storage's Dequeue (and DequeueWithAckId, DequeueBatchWithAckIds) hands
+// out nothing; adds still land. Pause and Resume are idempotent and return
+// once the flag is stored. Paused is a local read: O(1), no I/O. A dequeue
+// that finds the flag set must make Paused true before it returns and, for
+// a batch pop, report remaining 0, so a stale Paused costs one empty pop,
+// never a spin. See spec/redis-storage.md and adr 0004.
+type QueuePauser interface {
+	Pause() error
+	Resume() error
+	Paused() bool
+}
+
+// PauseNotifier is optional for a QueuePauser: fn runs on every change of
+// Paused, from this process or another. A bound worker uses it to start at
+// once on a Resume; without it a Resume waits for the next add or wake-up.
+// cancel stops the calls.
+type PauseNotifier interface {
+	OnPauseChange(fn func(paused bool)) (cancel func())
+}
+
+// ErrPauseUnsupported is returned by a queue's Pause and Resume when its
+// storage is not a QueuePauser.
+var ErrPauseUnsupported = errors.New("varmq: storage does not support pause")
 
 // The types observers read through Handler come from the contract module,
 // the Go copy of spec/ that storage such as redisq imports without varmq.

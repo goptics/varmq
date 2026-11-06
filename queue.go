@@ -264,7 +264,44 @@ type IExternalBaseQueue interface {
 	Purge()
 	// Close closes the queue, no more jobs can be added to the queue after closing the queue.
 	Close() error
+	// Pause stops every worker, in every process, taking jobs from this
+	// queue until Resume: a flag the storage keeps, so it outlives a
+	// restart. Adds still land, running jobs finish. Not the same as
+	// Worker.Pause, which pauses one worker in this process; a worker takes
+	// a job only when neither is paused. ErrPauseUnsupported when the
+	// storage is not a QueuePauser.
+	Pause() error
+	// Resume undoes Pause. Idempotent.
+	Resume() error
+	// IsPaused reports whether the queue is paused, as this process last
+	// saw it.
+	IsPaused() bool
 }
+
+// pauseQueue, resumeQueue and isQueuePaused are the queue handles' Pause,
+// Resume and IsPaused on storage q.
+func pauseQueue(q any) error {
+	if pz, ok := q.(QueuePauser); ok {
+		return pz.Pause()
+	}
+	return ErrPauseUnsupported
+}
+
+func resumeQueue(q any) error {
+	if pz, ok := q.(QueuePauser); ok {
+		return pz.Resume()
+	}
+	return ErrPauseUnsupported
+}
+
+func isQueuePaused(q any) bool {
+	pz, ok := q.(QueuePauser)
+	return ok && pz.Paused()
+}
+
+func (eq *externalBaseQueue) Pause() error   { return pauseQueue(eq.q) }
+func (eq *externalBaseQueue) Resume() error  { return resumeQueue(eq.q) }
+func (eq *externalBaseQueue) IsPaused() bool { return isQueuePaused(eq.q) }
 
 func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purge *purgeState) *externalBaseQueue {
 	if cap, ok := q.(CapacitySetter); ok {

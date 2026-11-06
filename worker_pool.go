@@ -110,13 +110,14 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				run.add(j.memTotals(), -1)
 				continue
 			}
-			// Stopping or pausing: park the unstarted rest (see park). Parked
-			// before the processing count drops, so Paused and Stopped are
-			// reached only once they are accounted for. The first job always
-			// runs: NumProcessing has counted it since the hand-off, so Stop
-			// waits for it. A job from a source that never batches (priority,
-			// acknowledging, several sources) has no Gen and runs likewise.
-			if i > 0 && stamp.Gen != nil && w.halting() {
+			// Stopping or pausing, or its queue paused: park the unstarted
+			// rest (see park). Parked before the processing count drops, so
+			// Paused and Stopped are reached only once they are accounted for.
+			// The first job always runs: NumProcessing has counted it since
+			// the hand-off, so Stop waits for it. A job from a source that
+			// never batches (priority, acknowledging, several sources) has no
+			// Gen and runs likewise.
+			if i > 0 && stamp.Gen != nil && (w.halting() || stamp.Held()) {
 				rest := stamp
 				rest.Seq += uint64(i)
 				w.park(jobs[i:], rest)
