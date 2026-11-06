@@ -394,8 +394,10 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 
 	w.addSource(src, priority)
 	registerQueue(q)
-	if qi, ok := q.(QueueInspector); ok && qi.QueueID() != "" {
-		w.queueIDs.Store(qi.QueueID(), struct{}{})
+	if qi, ok := q.(QueueInspector); ok {
+		if id := qi.QueueID(); id != "" {
+			w.queueIDs.Store(id, struct{}{})
+		}
 	}
 
 	if _, ok := src.(creditSource[JobType]); ok {

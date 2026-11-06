@@ -52,7 +52,7 @@ func ReportInstances(ctx context.Context, reg InstanceRegistry, interval time.Du
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		var errs []error
-		for _, x := range append(old, id) {
+		for _, x := range slices.Concat(old, []string{id}) {
 			if x != "" {
 				errs = append(errs, reg.RemoveInstance(rctx, x))
 			}

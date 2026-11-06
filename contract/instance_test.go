@@ -21,11 +21,12 @@ func newFakeRegistry() *fakeRegistry { return &fakeRegistry{events: make(chan st
 
 // ReportInstance logs the report and flags an interval other than 1s.
 func (f *fakeRegistry) ReportInstance(_ context.Context, r InstanceRecord) error {
+	fail := f.failReports.Load() // before the event, so the test's next flag change cannot reach this call
 	if r.IntervalMS != 1000 {
 		f.events <- "bad interval"
 	}
 	f.events <- "report:" + r.ID
-	if f.failReports.Load() {
+	if fail {
 		return errors.New("down")
 	}
 	return nil
@@ -33,8 +34,9 @@ func (f *fakeRegistry) ReportInstance(_ context.Context, r InstanceRecord) error
 
 // RemoveInstance logs the removal.
 func (f *fakeRegistry) RemoveInstance(_ context.Context, id string) error {
+	fail := f.failRemoves.Load() // before the event, as in ReportInstance
 	f.events <- "remove:" + id
-	if f.failRemoves.Load() {
+	if fail {
 		return errors.New("down")
 	}
 	return nil

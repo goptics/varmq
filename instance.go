@@ -14,6 +14,9 @@ import (
 // StartedAt.
 var processStart = time.Now()
 
+// hostname is read once; it does not change while the process runs.
+var hostname, _ = os.Hostname()
+
 // init hands this process's description to the contract module, so storage
 // with instance reports turned on (redisq.WithInstanceReports) can write it
 // without importing varmq. Nothing is written unless storage turns it on.
@@ -23,10 +26,9 @@ func init() { contract.SetInstanceSource(instanceRecord) }
 // workers GET /workers lists. The reporter fills IntervalMS; storage fills
 // Owners, BeatAt and Lost.
 func instanceRecord() InstanceRecord {
-	host, _ := os.Hostname()
 	r := InstanceRecord{
 		ID:        InstanceID,
-		Host:      host,
+		Host:      hostname,
 		PID:       os.Getpid(),
 		Version:   varmqVersion(),
 		StartedAt: processStart.UnixMilli(),
