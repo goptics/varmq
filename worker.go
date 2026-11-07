@@ -31,9 +31,7 @@ var (
 
 type worker[T any, JobType iJob[T]] struct {
 	workerFunc func(j JobType)
-	// mk builds the job kind this worker runs from a stored envelope.
-	mk   func(data T, c jobConfigs) JobType
-	pool *pool.Pool[JobType]
+	pool       *pool.Pool[JobType]
 	// sources holds the current sourceManager (empty, direct or strategy) in
 	// a managerBox. The event loop only loads it; sourcesMx serialises the
 	// add/remove calls that swap it.
@@ -80,6 +78,9 @@ type worker[T any, JobType iJob[T]] struct {
 	// pokers holds the queuePoker of each bound source with a Queue ID, by
 	// source; localPokers holds them weakly.
 	pokers sync.Map
+	// mk builds the job kind this worker runs from a stored envelope. Last,
+	// so the hot fields keep their offsets.
+	mk func(data T, c jobConfigs) JobType
 }
 
 // Worker represents a worker that processes Jobs.

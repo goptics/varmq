@@ -140,7 +140,7 @@ type iJob[T any] interface {
 	setAck(q IAcknowledgeable, id string)
 	setTask(tag taskTag)
 	taskTag() *taskTag
-	endTask(o Outcome, reason string, result []byte)
+	endTask(o Outcome, reason string, result []byte) *jobAck
 	fail(reason string)
 	succeed()
 	memTotals() *memQueue
@@ -225,17 +225,20 @@ func (j *job[T]) setTask(tag taskTag) {
 }
 
 // endTask records how a workflow task's run ended, for Close to report.
-// Nothing for a plain job. Copies the ack, as setTask does.
-func (j *job[T]) endTask(o Outcome, reason string, result []byte) {
+// Nothing for a plain job. Copies the ack, as setTask does. Returns the ack
+// now held, so callers need not load it again.
+func (j *job[T]) endTask(o Outcome, reason string, result []byte) *jobAck {
 	old := j.ackRef.Load()
 	if old == nil || old.ext == nil || old.ext.task == nil {
-		return
+		return old
 	}
 
 	ref, ext := *old, *old.ext
 	ext.end = &TaskEnd{Outcome: o, Reason: reason, Result: result}
 	ref.ext = &ext
 	j.ackRef.Store(&ref)
+
+	return &ref
 }
 
 // fail records that the run failed, so Close rejects the job with reason
@@ -264,8 +267,7 @@ func (j *job[T]) succeed() { j.succeedWith(nil) }
 
 // succeedWith is succeed with the task's Result.
 func (j *job[T]) succeedWith(result []byte) {
-	j.endTask(OutcomeCompleted, "", result)
-	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
+	if ref := j.endTask(OutcomeCompleted, "", result); ref != nil && ref.totals != nil {
 		ref.totals.completed.Add(1)
 	}
 }
