@@ -58,15 +58,15 @@ func TestWorkflowRunsDAG(t *testing.T) {
 		return j.Data() * 10, nil
 	}, 2).BindQueue()
 
-	var got []string
+	var got []int
 	mailQ := NewErrWorker(func(j Job[string]) error {
 		log.add("email")
 		for _, dep := range []string{"thumb-s", "thumb-l"} {
-			b, err := store.DepResult(ctx, "dag", dep)
-			if err != nil {
+			var n int
+			if err := TaskOf(j).Result(dep, &n); err != nil {
 				return err
 			}
-			got = append(got, string(b))
+			got = append(got, n)
 		}
 		return nil
 	}).BindQueue()
@@ -85,7 +85,7 @@ func TestWorkflowRunsDAG(t *testing.T) {
 	assert.Equal(t, "upload", ran[0])
 	assert.ElementsMatch(t, []string{"thumb-64", "thumb-512"}, ran[1:3])
 	assert.Equal(t, "email", ran[3], "email after both thumbs")
-	assert.Equal(t, []string{"640", "5120"}, got)
+	assert.Equal(t, []int{640, 5120}, got)
 
 	b, err := store.DepResult(ctx, "dag", "upload")
 	require.NoError(t, err)
@@ -470,4 +470,64 @@ func TestNonWorkflowJobUnchanged(t *testing.T) {
 		assert.LessOrEqual(t, mem, float64(1))
 		assert.LessOrEqual(t, durable, float64(8))
 	})
+}
+
+func TestTaskOf(t *testing.T) {
+	ctx := context.Background()
+	assert.Nil(t, TaskOf(newJob("plain", jobConfigs{Id: "plain"})), "plain job: no task")
+
+	var (
+		upErr, strangerErr, failedErr error
+		upVal                         string
+		failed, okDep, stranger       bool
+		name, wfID                    string
+		undo, undoCtx                 bool
+		undoOwn                       string
+		undoOwnErr                    error
+	)
+	q := NewResultWorker(func(j Job[string]) (string, error) {
+		switch j.Data() {
+		case "up":
+			return "file", nil
+		case "bad", "boom":
+			return "", errors.New(j.Data())
+		case "join":
+			tc := TaskOf(j)
+			name, wfID, undo = tc.Name, tc.WorkflowID, tc.Undo
+			upErr = tc.Result("up", &upVal)
+			strangerErr = tc.Result("stranger", &upVal)
+			failedErr = tc.Result("bad", &upVal)
+			failed, okDep, stranger = tc.Failed("bad"), tc.Failed("up"), tc.Failed("stranger")
+		case "undo-up":
+			tc := TaskOf(j)
+			undoOwnErr = tc.Result("up", &undoOwn)
+			undoCtx = tc.Undo
+		}
+		return j.Data(), nil
+	}, 2).BindQueue()
+
+	wf := NewWorkflow(NewWorkflowStore(), WithWorkflowID("tof"))
+	up := wf.Add("up", q, "up").Undo(q, "undo-up")
+	bad := wf.Add("bad", q, "bad").After(up)
+	join := wf.Add("join", q, "join").After(up, bad).Always()
+	wf.Add("boom", q, "boom").After(join)
+	require.NoError(t, wf.Submit(ctx))
+
+	r := waitWF(t, wf)
+	assert.Equal(t, WorkflowCompensated, r.State, "boom fails the workflow; up is undone")
+
+	assert.Equal(t, "join", name)
+	assert.Equal(t, "tof", wfID)
+	assert.NoError(t, upErr)
+	assert.Equal(t, "file", upVal)
+	assert.ErrorIs(t, strangerErr, ErrNoResult, "stranger is no dep")
+	assert.ErrorIs(t, failedErr, ErrDepFailed)
+	assert.True(t, failed)
+	assert.False(t, okDep)
+	assert.False(t, stranger, "a non-dep never reads as failed")
+
+	assert.NoError(t, undoOwnErr, "an undo reads its own task's result")
+	assert.Equal(t, "file", undoOwn)
+	assert.True(t, undoCtx)
+	assert.False(t, undo)
 }
