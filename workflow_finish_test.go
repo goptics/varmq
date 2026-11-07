@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -589,4 +590,105 @@ func TestTaskOf(t *testing.T) {
 	assert.Equal(t, "file", undoOwn)
 	assert.True(t, undoCtx)
 	assert.False(t, undo)
+}
+
+// endRec records every TaskEnd FinishTask gets, by task.
+type endRec struct {
+	mu   sync.Mutex
+	ends map[string]TaskEnd
+}
+
+func (r *endRec) finish(e TaskEnd) ([]string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ends[e.Task] = e
+	return nil, true
+}
+
+func (r *endRec) get() map[string]TaskEnd {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return maps.Clone(r.ends)
+}
+
+// endStorage is durable storage popping one job per call; endBatchStorage
+// pops batches (IBatchAcknowledgeable). Both record task ends.
+type endStorage struct {
+	*mocks.MockPersistentQueue
+	wfStorage
+	rec *endRec
+}
+
+func (s endStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) { return s.rec.finish(e) }
+
+type endBatchStorage struct {
+	*batchTestQueue
+	wfStorage
+	rec *endRec
+}
+
+func (s endBatchStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) { return s.rec.finish(e) }
+
+// TestWorkflowDurableEnds: result and error workers on durable storage, one
+// job or a batch per pop, report each task's Outcome, Reason and Result (R
+// as JSON) to FinishTask.
+func TestWorkflowDurableEnds(t *testing.T) {
+	type storage interface {
+		IPersistentQueue
+		WorkflowAcknowledgeable
+	}
+	sources := map[string]func(*endRec) storage{
+		"single": func(r *endRec) storage {
+			return endStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-e", "s"}, r}
+		},
+		"batch": func(r *endRec) storage {
+			s := endBatchStorage{&batchTestQueue{}, wfStorage{"q-e", "s"}, r}
+			var _ IBatchAcknowledgeable = s
+			return s
+		},
+	}
+	boom := errors.New("boom")
+	workers := map[string]func(storage){
+		"result": func(s storage) {
+			NewResultWorker(func(j Job[int]) (string, error) {
+				if j.Data() == 2 {
+					return "", boom
+				}
+				return fmt.Sprint("r-", j.Data()), nil
+			}).WithPersistentQueue(s)
+		},
+		"err": func(s storage) {
+			NewErrWorker(func(j Job[int]) error {
+				if j.Data() == 2 {
+					return boom
+				}
+				return nil
+			}).WithPersistentQueue(s)
+		},
+	}
+
+	for sName, newStorage := range sources {
+		for wName, bind := range workers {
+			t.Run(sName+"/"+wName, func(t *testing.T) {
+				rec := &endRec{ends: map[string]TaskEnd{}}
+				s := newStorage(rec)
+				require.True(t, s.Enqueue(taskBytes(t, "e2e", "ok", 1)))
+				require.True(t, s.Enqueue(taskBytes(t, "e2e", "bad", 2)))
+				bind(s) // binding pulls what the storage holds
+
+				require.Eventually(t, func() bool { return len(rec.get()) == 2 }, 5*time.Second, time.Millisecond)
+				ends := rec.get()
+
+				var okResult []byte
+				if wName == "result" {
+					okResult = []byte(`"r-1"`)
+				}
+				assert.Equal(t, TaskEnd{Workflow: "e2e", Task: "ok", Outcome: OutcomeCompleted, Result: okResult}, ends["ok"])
+				assert.Equal(t, TaskEnd{Workflow: "e2e", Task: "bad", Outcome: OutcomeFailed, Reason: "boom"}, ends["bad"])
+				if b, ok := s.(endBatchStorage); ok {
+					assert.Positive(t, b.pops.Load(), "popped through the batch source")
+				}
+			})
+		}
+	}
 }
