@@ -26,6 +26,16 @@ func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue,
 	}
 }
 
+func (dpq *distributedPriorityQueue[T]) Pause() error {
+	return pauseQueue(dpq.IDistributedPriorityQueue)
+}
+func (dpq *distributedPriorityQueue[T]) Resume() error {
+	return resumeQueue(dpq.IDistributedPriorityQueue)
+}
+func (dpq *distributedPriorityQueue[T]) IsPaused() bool {
+	return isQueuePaused(dpq.IDistributedPriorityQueue)
+}
+
 func (dpq *distributedPriorityQueue[T]) NumPending() int {
 	return dpq.Len()
 }

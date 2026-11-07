@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/goptics/varmq/internal/pool"
-	"github.com/stretchr/testify/require"
 	"math"
 	"math/rand"
 	"reflect"
@@ -15,6 +13,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/goptics/varmq/internal/pool"
+	"github.com/stretchr/testify/require"
 
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
@@ -1956,4 +1957,89 @@ func (n *noAttachQueue) Close() error          { return n.q.Close() }
 func (n *noAttachQueue) Enqueue(item any) bool { return n.q.Enqueue(item) }
 func (n *noAttachQueue) EnqueueOnce(item any, id string) bool {
 	return n.q.EnqueueOnce(item, id)
+}
+
+// unpark skips batches of a paused queue: it hands out a later unheld one,
+// and nothing while only held ones remain.
+func TestUnparkSkipsHeld(t *testing.T) {
+	w := newWorker(func(iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	held := queues.NewQueue[any]()
+	require.NoError(t, held.Pause())
+	w.park([]iJob[int]{newJob(1, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: 1, Hold: held})
+	w.park([]iJob[int]{newJob(2, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: 2})
+
+	buf := make([]iJob[int], 4)
+	n, _ := w.unpark(buf)
+	require.Equal(t, 1, n)
+	assert.Equal(t, 2, buf[0].Data(), "the unheld batch behind the held one")
+	assert.Equal(t, 0, w.unheld())
+	n, _ = w.unpark(buf)
+	assert.Zero(t, n, "only a held batch left")
+
+	require.NoError(t, held.Resume())
+	n, _ = w.unpark(buf)
+	require.Equal(t, 1, n)
+	assert.Equal(t, 1, buf[0].Data())
+}
+
+// pending skips the scan of parked batches until one may be held, and a
+// queue paused after its batch parked is left out at once (its hook).
+func TestPendingHeldAfterPark(t *testing.T) {
+	w := newWorker(func(iJob[int]) {}, WithAutoRun(false))
+	storage := queues.NewQueue[any]()
+	w.bind(storage, 0) // registers the pause hook
+	w.park([]iJob[int]{newJob(1, jobConfigs{}), newJob(2, jobConfigs{})}, pool.Stamp{Gen: &atomic.Uint64{}, Hold: storage})
+	assert.False(t, w.parkHeld.Load(), "nothing held: no scan")
+	assert.Equal(t, 2, w.pending(w.manager()))
+
+	require.NoError(t, storage.Pause())
+	assert.True(t, w.parkHeld.Load(), "the hook flags it")
+	assert.Equal(t, 0, w.pending(w.manager()))
+
+	require.NoError(t, storage.Resume())
+	assert.Equal(t, 2, w.pending(w.manager()))
+	assert.False(t, w.parkHeld.Load(), "the scan found none held and cleared it")
+}
+
+type pausableIQ interface {
+	IQueue
+	QueuePauser
+}
+
+// noNotify is a QueuePauser without PauseNotifier.
+type noNotify struct{ pausableIQ }
+
+// A queue that can pause but has no hook: its parked batch stays out of
+// pending once paused, so Wait returns.
+func TestPendingUnhookedHeld(t *testing.T) {
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		if j.Data() == 0 {
+			<-release
+		}
+	}, 1)
+	defer w.Stop()
+	st := noNotify{queues.NewQueue[any]()}
+	q := w.WithQueue(st)
+	require.NoError(t, w.Pause())
+	for i := range 4 {
+		q.Add(i)
+	}
+	require.NoError(t, w.Resume()) // concurrency 1: one batch of all 4
+	require.Eventually(t, func() bool { return q.Len() == 0 }, time.Second, time.Millisecond)
+	require.NoError(t, w.Pause()) // job 0 running: the other 3 park
+	close(release)
+	require.Eventually(t, w.IsPaused, time.Second, time.Millisecond)
+	require.Equal(t, 3, w.NumPending()) // parked, not held yet
+	require.NoError(t, st.Pause())      // no hook tells the worker
+	assert.Zero(t, w.NumPending(), "held: out of pending")
+	require.NoError(t, w.Resume())
+	done := make(chan struct{})
+	go func() { w.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("Wait hangs: pending=%d", w.NumPending())
+	}
 }

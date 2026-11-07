@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -1438,4 +1439,136 @@ func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 	close(release)
 	require.NoError(t, wb.Resume())
 	require.Eventually(t, func() bool { return ran.Load() == 10 }, time.Second, time.Millisecond, "parked jobs run first")
+}
+
+// Unbinding a queue cancels its Resume hook.
+func TestQueuePauseHookCancelled(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}).(*workerBinder[int])
+	defer w.Stop()
+	storage := queues.NewQueue[any]()
+	src := w.bind(storage, 0)
+	_, ok := w.pauseHooks.Load(src)
+	require.True(t, ok)
+
+	w.removeSource(src)
+	_, ok = w.pauseHooks.Load(src)
+	assert.False(t, ok)
+	storage.Pause() // the cancelled hook is gone: Resume calls nothing
+	assert.NoError(t, storage.Resume())
+}
+
+// pausableBatchQueue is batch-acknowledging storage with a pause: the credit
+// path (a worker's sole IBatchAcknowledgeable source).
+type pausableBatchQueue struct {
+	*batchTestQueue
+	p *queues.Queue[any] // only its pause
+}
+
+func (q *pausableBatchQueue) Pause() error  { return q.p.Pause() }
+func (q *pausableBatchQueue) Resume() error { return q.p.Resume() }
+func (q *pausableBatchQueue) Paused() bool  { return q.p.Paused() }
+func (q *pausableBatchQueue) OnPauseChange(fn func(bool)) func() {
+	return q.p.OnPauseChange(fn)
+}
+func (q *pausableBatchQueue) DequeueBatchWithAckIds(items []any, ackIDs []string) (int, int, error) {
+	if q.p.Paused() {
+		return 0, 0, nil
+	}
+	return q.batchTestQueue.DequeueBatchWithAckIds(items, ackIDs)
+}
+
+// On the credit path a paused queue is not popped, and a Resume pokes the
+// ready hint so every job runs.
+func TestQueuePauseCreditPath(t *testing.T) {
+	s := &pausableBatchQueue{batchTestQueue: &batchTestQueue{}, p: queues.NewQueue[any]()}
+	var ran atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4)
+	defer w.Stop()
+	q := w.WithPersistentQueue(s)
+	_, credit := w.(*workerBinder[int]).manager().(*creditManager[iJob[int]])
+	require.True(t, credit, "sole batch source: credit path")
+
+	require.NoError(t, q.Pause())
+	pops := s.pops.Load()
+	for i := range 10 {
+		q.Add(i)
+	}
+	stays(t, func() bool { return s.pops.Load() > pops }, "no pop while paused")
+
+	require.NoError(t, q.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 10 }, time.Second, time.Millisecond)
+}
+
+// countingPause counts the cancels of its pause hooks.
+type countingPause struct {
+	*queues.Queue[any]
+	cancels atomic.Int64
+}
+
+func (q *countingPause) OnPauseChange(fn func(bool)) func() {
+	c := q.Queue.OnPauseChange(fn)
+	return func() { q.cancels.Add(1); c() }
+}
+
+// The hook of a worker collected without unbinding drops itself from the
+// storage at the next Pause or Resume.
+func TestPauseHookOfCollectedWorker(t *testing.T) {
+	s := &countingPause{Queue: queues.NewQueue[any]()}
+	func() {
+		w := NewWorker(func(Job[int]) {})
+		w.WithQueue(s)
+		require.NoError(t, w.Stop())
+	}()
+
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		require.NoError(t, s.Pause())
+		require.NoError(t, s.Resume())
+		return s.cancels.Load() == 1
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// A dequeue refused for a pause is never reported as a failure, however
+// Pauses and Resumes race it: the queue never empties, so every empty
+// dequeue here is a refusal.
+func TestPauseGateNeverMisreports(t *testing.T) {
+	q := queues.NewQueue[any]()
+	for i := range 1 << 12 {
+		q.Enqueue(i)
+	}
+	g := gateOf(q)
+	var stop atomic.Bool
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for !stop.Load() {
+				q.Pause()
+				runtime.Gosched()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for !stop.Load() {
+				q.Resume()
+				runtime.Gosched()
+			}
+		}()
+	}
+	defer func() { stop.Store(true); wg.Wait() }()
+
+	refused := 0
+	for i := 0; i < 200_000; i++ {
+		if q.Paused() { // the Len gate
+			continue
+		}
+		e := g.epoch()
+		if v, ok := q.Dequeue(); ok {
+			q.Enqueue(v)
+			continue
+		}
+		refused++
+		require.ErrorIs(t, g.emptyErr(e), errNoReadySource, "refusal %d", refused)
+	}
 }

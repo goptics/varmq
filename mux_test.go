@@ -543,7 +543,7 @@ func TestMuxQueues(t *testing.T) {
 			{"id":"broken","error":"down"},
 			{"id":"redisq:ns:fifo:{a/b}",
 			 "counts":{"pending":2,"processing":0,"completed":0,"failed":1},
-			 "totals":{"submitted":5,"completed":0,"failed":1}}
+			 "totals":{"submitted":5,"completed":0,"failed":1},"paused":false}
 		]`, rr.Body.String())
 	})
 
@@ -585,4 +585,58 @@ func TestWriteJSONEncodeError(t *testing.T) {
 	writeJSON(rr, http.StatusOK, []JobRecord{{Payload: json.RawMessage(`{bad`)}})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.JSONEq(t, `{"error":"encode response"}`, rr.Body.String())
+}
+
+// plainInspector is a listed queue that cannot pause.
+type plainInspector struct{}
+
+func (plainInspector) QueueID() string { return "custom:plain" }
+func (plainInspector) QueueStats(context.Context) (QueueStats, error) {
+	return QueueStats{}, nil
+}
+func (plainInspector) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
+	return nil, nil
+}
+
+// failingPauser is a listed queue whose storage cannot store the flag.
+type failingPauser struct{ plainInspector }
+
+func (failingPauser) QueueID() string { return "custom:failing" }
+func (failingPauser) Pause() error    { return errors.New("redis down") }
+func (failingPauser) Resume() error   { return errors.New("redis down") }
+func (failingPauser) Paused() bool    { return false }
+
+func TestMuxQueueActions(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithName("pause-rest"))
+	defer w.Stop()
+	m := memOf(t, w.BindQueue())
+	queueRegistry.Store("custom:plain", plainInspector{})
+	queueRegistry.Store("custom:failing", failingPauser{})
+	defer queueRegistry.Delete("custom:plain")
+	defer queueRegistry.Delete("custom:failing")
+
+	server := NewServerMux()
+	patch := func(id, action string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("PATCH", "/queues/"+id+"/actions/"+action, nil))
+		return rr
+	}
+
+	rr := patch(m.QueueID(), "pause")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), `"paused":true`)
+	assert.Contains(t, rr.Body.String(), `"paused_at":`)
+	s, _ := m.QueueStats(context.Background())
+	assert.True(t, s.Paused)
+	assert.NotZero(t, s.PausedAt)
+
+	rr = patch(m.QueueID(), "resume")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"paused":false`)
+	assert.NotContains(t, rr.Body.String(), "paused_at")
+
+	assert.Equal(t, http.StatusBadRequest, patch(m.QueueID(), "stop").Code)
+	assert.Equal(t, http.StatusNotFound, patch("nope", "pause").Code)
+	assert.Equal(t, http.StatusNotImplemented, patch("custom:plain", "pause").Code)
+	assert.Equal(t, http.StatusServiceUnavailable, patch("custom:failing", "resume").Code)
 }

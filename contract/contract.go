@@ -37,9 +37,15 @@ type JobTotals struct {
 }
 
 // QueueStats is a queue's counts and totals, as GET /queues serves them.
+// Paused is the durable queue pause: storage hands out no job while it is
+// set. PausedAt is when it was set, Unix ms on the storage's clock. A
+// QueueInspector whose storage can pause reports both: varmq passes on what
+// storage reports and does not fill them in for it.
 type QueueStats struct {
-	Counts JobCounts `json:"counts"`
-	Totals JobTotals `json:"totals"`
+	Counts   JobCounts `json:"counts"`
+	Totals   JobTotals `json:"totals"`
+	Paused   bool      `json:"paused"`
+	PausedAt int64     `json:"paused_at,omitempty"`
 }
 
 // JobRecord is one job as GET /queues/{id}/jobs serves it. Times are Unix

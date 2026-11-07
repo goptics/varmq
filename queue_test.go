@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/goptics/varmq/internal/queues"
+	"github.com/goptics/varmq/mocks"
 )
 
 // Setup functions for each queue type
@@ -1565,4 +1566,234 @@ func TestParkedJobsPurgeAndUnsubscribe(t *testing.T) {
 		assert.Equal(t, int32(32), f.ran.Load(), "the job that ran plus the 31 parked")
 		f.w.Stop()
 	})
+}
+
+// stays fails if cond holds at any point within d.
+func stays(t *testing.T, cond func() bool, msg string) {
+	t.Helper()
+	assert.Never(t, cond, 50*time.Millisecond, time.Millisecond, msg)
+}
+
+// A paused queue runs nothing; adds land; the handle counts its jobs, the
+// worker does not, so Wait returns; Resume runs them all.
+func TestQueuePause(t *testing.T) {
+	var ran atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, 2)
+	defer w.Stop()
+
+	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
+	pq := w.WithPersistentQueue(mocks.NewMockPersistentQueue()) // acknowledging storage: the ack path
+	for name, c := range map[string]struct {
+		IExternalBaseQueue
+		add func(int)
+	}{
+		"fifo":       {fifo, func(i int) { fifo.Add(i) }},
+		"priority":   {prio, func(i int) { prio.Add(i, i) }},
+		"persistent": {pq, func(i int) { pq.Add(i) }},
+	} {
+		q := c.IExternalBaseQueue
+		t.Run(name, func(t *testing.T) {
+			ran.Store(0)
+			require.NoError(t, q.Pause())
+			assert.True(t, q.IsPaused())
+			for i := range 5 {
+				c.add(i)
+			}
+
+			stays(t, func() bool { return ran.Load() > 0 }, "nothing runs while paused")
+			assert.Equal(t, 5, q.Len(), "the handle counts paused jobs")
+			assert.Zero(t, w.NumPending(), "the worker does not")
+			w.Wait() // returns: paused jobs are not the worker's
+
+			require.NoError(t, q.Resume())
+			require.Eventually(t, func() bool { return ran.Load() == 5 }, time.Second, time.Millisecond)
+		})
+	}
+}
+
+// A Resume wakes every worker bound to the storage, through any handle.
+func TestQueueResumeWakesEveryWorker(t *testing.T) {
+	storage := &resumeCounting{Queue: queues.NewQueue[any]()}
+	var ran atomic.Int64
+	var handles []Queue[int]
+	for range 3 {
+		w := NewWorker(func(Job[int]) { ran.Add(1) })
+		defer w.Stop()
+		handles = append(handles, w.WithQueue(storage))
+	}
+
+	require.NoError(t, handles[0].Pause())
+	for i, h := range handles {
+		h.Add(i)
+	}
+	stays(t, func() bool { return ran.Load() > 0 }, "paused for every worker")
+
+	require.NoError(t, handles[2].Resume())
+	assert.EqualValues(t, 3, storage.resumes.Load(), "each worker's hook heard the Resume")
+	require.Eventually(t, func() bool { return ran.Load() == 3 }, time.Second, time.Millisecond)
+}
+
+// resumeCounting counts the Resume calls its hooks get, one per bound worker.
+type resumeCounting struct {
+	*queues.Queue[any]
+	resumes atomic.Int64
+}
+
+func (q *resumeCounting) OnPauseChange(fn func(bool)) func() {
+	return q.Queue.OnPauseChange(func(p bool) {
+		if !p {
+			q.resumes.Add(1)
+		}
+		fn(p)
+	})
+}
+
+// The worker pause and the queue pause are separate: a job runs only when
+// neither is paused, and resuming one does not resume the other.
+func TestWorkerAndQueuePause(t *testing.T) {
+	var ran atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) })
+	defer w.Stop()
+	q := w.BindQueue()
+
+	require.NoError(t, w.Pause())
+	require.NoError(t, q.Pause())
+	q.Add(1)
+
+	require.NoError(t, w.Resume())
+	stays(t, func() bool { return ran.Load() > 0 }, "queue still paused")
+
+	require.NoError(t, w.Pause())
+	require.NoError(t, q.Resume())
+	stays(t, func() bool { return ran.Load() > 0 }, "worker still paused")
+
+	require.NoError(t, w.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 1 }, time.Second, time.Millisecond)
+}
+
+// A batch the worker took before the Pause is cut at the next job: the rest
+// waits, out of the worker's pending, until the Resume.
+func TestQueuePauseParksBatchTail(t *testing.T) {
+	release := make(chan struct{})
+	var ran atomic.Int64
+	w := NewWorker(func(j Job[int]) {
+		if j.Data() == 0 {
+			<-release
+		}
+		ran.Add(1)
+	}, 1)
+	defer w.Stop()
+	q := w.BindQueue()
+
+	require.NoError(t, w.Pause())
+	for i := range 10 {
+		q.Add(i)
+	}
+	require.NoError(t, w.Resume()) // concurrency 1: one batch of all 10
+	require.Eventually(t, func() bool { return q.Len() == 0 }, time.Second, time.Millisecond, "taken in one batch")
+
+	require.NoError(t, q.Pause())
+	close(release)
+	require.Eventually(t, func() bool { return ran.Load() == 1 }, time.Second, time.Millisecond)
+	stays(t, func() bool { return ran.Load() > 1 }, "the rest waits")
+	assert.Zero(t, w.NumPending(), "held jobs are not pending")
+	w.Wait()
+
+	require.NoError(t, q.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 10 }, time.Second, time.Millisecond)
+}
+
+// staleStorage is paused by another process: its Paused cache says running
+// until a Dequeue finds the flag, as QueuePauser requires.
+type staleStorage struct {
+	*queues.Queue[any]
+	remote   atomic.Bool
+	cache    atomic.Bool
+	dequeues atomic.Int64
+}
+
+func (s *staleStorage) Pause() error  { s.remote.Store(true); s.cache.Store(true); return nil }
+func (s *staleStorage) Resume() error { s.remote.Store(false); s.cache.Store(false); return nil }
+func (s *staleStorage) Paused() bool  { return s.cache.Load() }
+func (s *staleStorage) Dequeue() (any, bool) {
+	s.dequeues.Add(1)
+	if s.remote.Load() {
+		s.cache.Store(true)
+		return nil, false
+	}
+	return s.Queue.Dequeue()
+}
+
+// A stale cache costs one empty dequeue, never a spin.
+func TestQueuePauseStaleCache(t *testing.T) {
+	s := &staleStorage{Queue: queues.NewQueue[any]()}
+	var ran, errs atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, WithErrHandler(func(Worker, error) { errs.Add(1) }))
+	defer w.Stop()
+	q := w.WithQueue(s)
+
+	s.remote.Store(true) // paused elsewhere; this process has not heard
+	q.Add(1)
+	stays(t, func() bool { return ran.Load() > 0 }, "the storage refuses")
+	assert.LessOrEqual(t, s.dequeues.Load(), int64(2), "no spin")
+	assert.True(t, q.IsPaused(), "the refused dequeue set the cache")
+
+	require.NoError(t, q.Resume()) // no PauseNotifier: the next add wakes it
+	q.Add(2)
+	require.Eventually(t, func() bool { return ran.Load() == 2 }, time.Second, time.Millisecond)
+	assert.Zero(t, errs.Load(), "a refused dequeue is not an error")
+}
+
+// Storage that cannot pause says so.
+func TestQueuePauseUnsupported(t *testing.T) {
+	w := NewWorker(func(Job[int]) {})
+	defer w.Stop()
+	// Embedding an interface hides the mocks' in-memory pause.
+	q := w.WithPersistentQueue(struct{ IPersistentQueue }{mocks.NewMockPersistentQueue()})
+	assert.ErrorIs(t, q.Pause(), ErrPauseUnsupported)
+	assert.ErrorIs(t, q.Resume(), ErrPauseUnsupported)
+	assert.False(t, q.IsPaused())
+
+	dq := NewDistributedQueue[int](struct{ IDistributedQueue }{mocks.NewMockDistributedQueue()})
+	assert.ErrorIs(t, dq.Pause(), ErrPauseUnsupported)
+	dpq := NewDistributedPriorityQueue[int](struct{ IDistributedPriorityQueue }{mocks.NewMockDistributedPriorityQueue()})
+	assert.ErrorIs(t, dpq.Resume(), ErrPauseUnsupported)
+
+	pausable := NewDistributedQueue[int](mocks.NewMockDistributedQueue())
+	require.NoError(t, pausable.Pause(), "a distributed handle forwards to its storage")
+	assert.True(t, pausable.IsPaused())
+	require.NoError(t, pausable.Resume())
+	pprio := NewDistributedPriorityQueue[int](mocks.NewMockDistributedPriorityQueue())
+	require.NoError(t, pprio.Pause())
+	assert.True(t, pprio.IsPaused())
+	require.NoError(t, pprio.Resume())
+	assert.False(t, pprio.IsPaused())
+}
+
+// Pause and Resume racing workers and adds stay consistent (run with -race).
+func TestQueuePauseRace(t *testing.T) {
+	var ran, errs atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4, WithErrHandler(func(Worker, error) { errs.Add(1) }))
+	defer w.Stop()
+	q := w.BindQueue()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := range 2000 {
+			q.Add(i)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 200 {
+			q.Pause()
+			q.Resume()
+		}
+	}()
+	wg.Wait()
+	require.NoError(t, q.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 2000 }, 5*time.Second, time.Millisecond)
+	assert.Zero(t, errs.Load(), "a Pause between Len and Dequeue is not an error")
 }

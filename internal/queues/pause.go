@@ -1,0 +1,101 @@
+package queues
+
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// pauseState is an in-memory storage's queue pause (varmq.QueuePauser and
+// varmq.PauseNotifier): Dequeue hands out nothing while at is set.
+type pauseState struct {
+	at       atomic.Int64  // Unix ms of the Pause; 0 while running
+	refusals atomic.Uint64 // Dequeues refused for a pause (PauseRefusals)
+	mu       sync.Mutex
+	hooks    map[*func(bool)]struct{}
+	notifyMu sync.Mutex // one notify at a time, so calls arrive in order
+}
+
+// Pause stops Dequeue. Idempotent; the first pause time is kept.
+func (p *pauseState) Pause() error {
+	if p.at.CompareAndSwap(0, time.Now().UnixMilli()) {
+		p.notify()
+	}
+	return nil
+}
+
+// Resume lets Dequeue hand out items again. Idempotent.
+func (p *pauseState) Resume() error {
+	if p.at.Swap(0) != 0 {
+		p.notify()
+	}
+	return nil
+}
+
+// Paused reports whether the queue is paused.
+func (p *pauseState) Paused() bool { return p.at.Load() != 0 }
+
+// PauseRefusals counts the Dequeues refused for a pause. A Dequeue that
+// came back empty while it did not move was not refused, however a Pause
+// and Resume raced it.
+func (p *pauseState) PauseRefusals() uint64 { return p.refusals.Load() }
+
+// refuse is Dequeue's gate: true, and counted, while paused.
+func (p *pauseState) refuse() bool {
+	if p.Paused() {
+		p.refusals.Add(1)
+		return true
+	}
+	return false
+}
+
+// PausedAt is the Unix ms of the Pause, 0 while running.
+func (p *pauseState) PausedAt() int64 { return p.at.Load() }
+
+// OnPauseChange calls fn after every Pause or Resume that changes the state,
+// until cancel.
+// ponytail: hooks of workers collected without unbinding are dropped by the
+// next Pause or Resume (varmq's hook cancels itself), not on register; one
+// small closure per such bind until then.
+func (p *pauseState) OnPauseChange(fn func(paused bool)) (cancel func()) {
+	h := &fn
+	p.mu.Lock()
+	if p.hooks == nil {
+		p.hooks = map[*func(bool)]struct{}{}
+	}
+	p.hooks[h] = struct{}{}
+	p.mu.Unlock()
+
+	return func() {
+		p.mu.Lock()
+		delete(p.hooks, h)
+		p.mu.Unlock()
+	}
+}
+
+// notify calls the hooks with the state as of now, one notify at a time:
+// with a Pause and a Resume racing, the last call any hook gets is the
+// final state. It calls them outside mu, so a hook may cancel or register,
+// but under notifyMu, so a hook must not Pause or Resume. A hook cancelled
+// before its turn is skipped.
+func (p *pauseState) notify() {
+	p.notifyMu.Lock()
+	defer p.notifyMu.Unlock()
+
+	paused := p.Paused()
+	p.mu.Lock()
+	hs := make([]*func(bool), 0, len(p.hooks))
+	for h := range p.hooks {
+		hs = append(hs, h)
+	}
+	p.mu.Unlock()
+
+	for _, h := range hs {
+		p.mu.Lock()
+		_, live := p.hooks[h]
+		p.mu.Unlock()
+		if live {
+			(*h)(paused)
+		}
+	}
+}

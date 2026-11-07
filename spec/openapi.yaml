@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,10 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.2.0: `PATCH /queues/{id}/actions/{action}` pauses and resumes a queue;
+      `QueueSummary` gains `paused` and `paused_at`. Additive.
+    - 1.1.0: `GET /workers/{name}` drops `metrics.submitted`; in-memory
+      queues of named workers are listed under `GET /queues`.
     - 1.0.1: a client MUST accept a `JobState` it does not know; `Job.state`
       is an open string. No route or field changes.
     - 1.0.0: first version. Worker routes as served before; `/queues` and
@@ -155,16 +159,63 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/QueueSummary" }
 
-  /queues/{id}/jobs:
+  /queues/{id}/actions/{action}:
     parameters:
-      - name: id
+      - $ref: "#/components/parameters/QueueID"
+      - name: action
         in: path
         required: true
-        description: |
-          The Queue ID, percent-encoded as one path segment. Redis Queue IDs
-          hold `{`, `}` and `:`, and may hold `/`, so a client encodes
-          `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
-        schema: { type: string }
+        schema:
+          type: string
+          enum: [pause, resume]
+    patch:
+      operationId: queueAction
+      summary: Pause or resume a queue, for every process that reads it.
+      description: |
+        Since 1.2.0. A paused queue's storage hands out no job, to any
+        worker in any process, until it is resumed; adds still land and
+        running jobs finish. The flag lives in the storage, so it outlives a
+        restart. Not the same as a worker's `pause`, which stops one worker
+        in this process. Idempotent: pausing a paused queue keeps its
+        `paused_at`. The reply comes after the flag is stored.
+
+        For shared storage this reaches every process that consumes the
+        queue, also ones that serve no API, and only a `resume` ends it.
+        Protect it at least as well as the worker routes.
+      responses:
+        "200":
+          description: Done. The queue's entry, as `GET /queues` lists it.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueSummary" }
+        "400":
+          description: Unknown action (`unknown action`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/QueueNotFound" }
+        "501":
+          description: "The queue's storage cannot pause (`varmq: storage does not support pause`)."
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: The storage could not store the flag; `error` holds why.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /queues/{id}/jobs:
+    parameters:
+      - $ref: "#/components/parameters/QueueID"
       - name: state
         in: query
         required: true
@@ -203,13 +254,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-        "404":
-          description: No inspectable queue with this ID is bound here (`queue not found`).
-          headers:
-            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/QueueNotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
 components:
@@ -226,6 +271,15 @@ components:
       in: path
       required: true
       schema: { type: string }
+    QueueID:
+      name: id
+      in: path
+      required: true
+      description: |
+        The Queue ID, percent-encoded as one path segment. Redis Queue IDs
+        hold `{`, `}` and `:`, and may hold `/`, so a client encodes
+        `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
+      schema: { type: string }
 
   responses:
     Done:
@@ -234,6 +288,13 @@ components:
         X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
     WorkerNotFound:
       description: No worker with this name (`worker not found`).
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    QueueNotFound:
+      description: No inspectable queue with this ID is bound here (`queue not found`).
       headers:
         X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
       content:
@@ -352,6 +413,19 @@ components:
             submitted: { type: integer, minimum: 0 }
             completed: { type: integer, minimum: 0 }
             failed: { type: integer, minimum: 0 }
+        paused:
+          type: boolean
+          description: |
+            Since 1.2.0, with `counts`. True while the queue is paused: its
+            storage hands out no job. Jobs a worker took before the pause
+            stay in `counts.processing` until they finish or, for the
+            unstarted rest of an in-memory batch, the queue is resumed.
+            Absent from older servers; read absent as false.
+        paused_at:
+          type: integer
+          description: |
+            Since 1.2.0. When the queue was paused, Unix ms on the storage's
+            clock; present only while `paused`.
         error: { type: string }
 
     Job:

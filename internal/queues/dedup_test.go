@@ -200,6 +200,7 @@ func TestPriorityEnqueueOnceKeepsOrder(t *testing.T) {
 func TestQueueSizeClass(t *testing.T) {
 	var q Queue[int]
 	assert.Equal(t, uintptr(144), unsafe.Sizeof(q))
+	assert.Less(t, unsafe.Offsetof(q.pauseState), uintptr(128), "the pause is in the hot block's padding")
 	assert.GreaterOrEqual(t, unsafe.Offsetof(q.ids), uintptr(128), "the id set is past the hot 128-byte block")
 	assert.Equal(t, uintptr(64), unsafe.Sizeof(idShard{}), "a shard fills one cache line")
 	assert.LessOrEqual(t, unsafe.Sizeof(PriorityQueue[int]{}), uintptr(64))

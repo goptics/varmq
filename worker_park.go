@@ -18,9 +18,51 @@ type parkedBatch[JobType any] struct {
 }
 
 // pending is what the worker has not handed out yet: the jobs in its sources
-// and the jobs parked by a stop or pause.
+// and the jobs parked by a stop or pause. Like the sources, it leaves out
+// the jobs of a paused queue (held). It runs per dispatch, so it scans the
+// parked batches only while one may be held (parkHeld).
 func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
-	return m.Len() + int(w.nParked.Load())
+	n := int(w.nParked.Load())
+	if n > 0 && w.parkHeld.Load() {
+		n = w.unheld()
+	}
+
+	return m.Len() + n
+}
+
+// mayHold reports whether a batch can become held with no hook to set
+// parkHeld: its queue can pause but tells no one.
+// ponytail: a source unbound while its batches stay parked has its hook
+// cancelled too; only topics unbind, and they never hold.
+func mayHold(s pool.Stamp) bool {
+	_, hooked := s.Hold.(PauseNotifier)
+	return s.Hold != nil && !hooked
+}
+
+// unheld counts the parked jobs whose queue is not paused, and clears
+// parkHeld when none is. It clears first, so a pause hook that sets it
+// meanwhile is not lost: the scan then sees that queue paused.
+func (w *worker[T, JobType]) unheld() int {
+	w.parkMx.Lock()
+	defer w.parkMx.Unlock()
+
+	w.parkHeld.Store(false)
+	n, held := 0, false
+	for _, b := range w.parked {
+		if b.stamp.Held() {
+			held = true
+		} else {
+			n += len(b.jobs)
+			if mayHold(b.stamp) {
+				held = true // no hook would set parkHeld again on its pause
+			}
+		}
+	}
+	if held {
+		w.parkHeld.Store(true)
+	}
+
+	return n
 }
 
 // park sets aside the unstarted jobs of a batch whose worker is stopping or
@@ -44,12 +86,16 @@ func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 	}
 
 	w.parked = append(w.parked, parkedBatch[JobType]{jobs: slices.Clone(jobs), stamp: stamp})
+	if stamp.Held() || mayHold(stamp) {
+		w.parkHeld.Store(true)
+	}
 	w.parkUnsorted = true
 	w.nParked.Add(int64(len(jobs)))
 }
 
 // unpark moves up to len(buf) parked jobs into buf, the oldest first, and
-// returns how many and the stamp they carry. 0 when nothing is parked.
+// returns how many and the stamp they carry. 0 when nothing is parked but
+// jobs of paused queues, which stay until their Resume.
 func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 	w.parkMx.Lock()
 	defer w.parkMx.Unlock()
@@ -65,7 +111,12 @@ func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 		w.parkUnsorted = false
 	}
 
-	b := &w.parked[0]
+	i := slices.IndexFunc(w.parked, func(b parkedBatch[JobType]) bool { return !b.stamp.Held() })
+	if i < 0 {
+		return 0, pool.Stamp{}
+	}
+
+	b := &w.parked[i]
 	n := copy(buf, b.jobs)
 	stamp := b.stamp
 
@@ -73,9 +124,13 @@ func (w *worker[T, JobType]) unpark(buf []JobType) (int, pool.Stamp) {
 	b.jobs = b.jobs[n:]
 	b.stamp.Seq += uint64(n)
 	if len(b.jobs) == 0 {
-		// Off the front without shifting the rest: draining stays linear.
-		w.parked[0] = parkedBatch[JobType]{}
-		w.parked = w.parked[1:]
+		if i == 0 {
+			// Off the front without shifting the rest: draining stays linear.
+			w.parked[0] = parkedBatch[JobType]{}
+			w.parked = w.parked[1:]
+		} else {
+			w.parked = slices.Delete(w.parked, i, i+1) // behind held batches of a paused queue
+		}
 		if len(w.parked) == 0 {
 			w.parked = nil
 		}

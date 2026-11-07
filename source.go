@@ -4,7 +4,9 @@ import (
 	"math"
 	"sync/atomic"
 	"time"
+	"weak"
 
+	"github.com/goptics/varmq/internal/pool"
 	"github.com/goptics/varmq/internal/topics"
 )
 
@@ -35,6 +37,54 @@ type source[JobType any] interface {
 	// with it, and the worker closes, instead of running, a job whose batch
 	// is older than the counter. nil for sources that never batch.
 	purgeGen() *atomic.Uint64
+}
+
+// queuePaused reports whether pz is a paused queue. It is the scheduler's gate:
+// a hint read before asking storage, which is the real gate.
+func queuePaused(pz pool.Holder) bool {
+	return pz != nil && pz.Paused()
+}
+
+// holderOf is q's pause, nil (not a typed nil) if q cannot pause.
+func holderOf(q any) pool.Holder {
+	if pz, ok := q.(QueuePauser); ok {
+		return pz
+	}
+	return nil
+}
+
+// pauseRefusals is QueuePauser's optional PauseRefusals (see QueuePauser).
+type pauseRefusals interface{ PauseRefusals() uint64 }
+
+// pauseGate is a source's view of its queue's pause.
+type pauseGate struct {
+	pz pool.Holder   // q's pause (QueuePauser), nil if it has none
+	ep pauseRefusals // nil unless pz has one
+}
+
+func gateOf(q any) pauseGate {
+	g := pauseGate{pz: holderOf(q)}
+	g.ep, _ = q.(pauseRefusals)
+	return g
+}
+
+// epoch is the refusal count read before a dequeue, for emptyErr.
+func (g pauseGate) epoch() uint64 {
+	if g.ep == nil {
+		return 0
+	}
+	return g.ep.PauseRefusals()
+}
+
+// emptyErr is why a dequeue that began at refusal count e came back empty:
+// a pause, now or counted since (a Pause and Resume both between Len and
+// the check), is "nothing to do"; anything else is a failure the user
+// hears about.
+func (g pauseGate) emptyErr(e uint64) error {
+	if queuePaused(g.pz) || g.ep != nil && g.ep.PauseRefusals() != e {
+		return errNoReadySource
+	}
+	return ErrFailedToDequeue
 }
 
 // ackQueue is storage that hands out an ack id with each item.
@@ -75,11 +125,20 @@ type queueSource[T any, JobType iJob[T]] struct {
 	q     IBaseQueue
 	batch int         // decided once in bind: 1 for priority storage
 	purge *purgeState // shared by every worker bound to q when q supports it; nil if it never batches
+	pauseGate
 }
 
+// Len is 0 while the queue is paused: nothing to hand out.
 func (s *queueSource[T, JobType]) Len() int {
+	if queuePaused(s.pz) {
+		return 0
+	}
 	return s.q.Len()
 }
+
+// holder is the pause the scheduler stamps each batch with, so the worker
+// parks the unstarted rest of a batch whose queue got paused.
+func (s *queueSource[T, JobType]) holder() pool.Holder { return s.pz }
 
 func (s *queueSource[T, JobType]) maxBatch() int {
 	return s.batch
@@ -105,10 +164,11 @@ func (s *queueSource[T, JobType]) purgeStateOf() *purgeState {
 }
 
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
+	e := s.epoch()
 	v, ok := s.q.Dequeue()
 	if !ok {
 		var zero JobType
-		return zero, ErrFailedToDequeue
+		return zero, s.emptyErr(e)
 	}
 
 	return toJob[T, JobType](v)
@@ -118,9 +178,14 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 // Each job it returns carries its storage and ack id so job.Close can ack it.
 type ackSource[T any, JobType iJob[T]] struct {
 	q ackQueue
+	pauseGate
 }
 
+// Len is 0 while the queue is paused: nothing to hand out.
 func (s *ackSource[T, JobType]) Len() int {
+	if queuePaused(s.pz) {
+		return 0
+	}
 	return s.q.Len()
 }
 
@@ -135,10 +200,11 @@ func (s *ackSource[T, JobType]) purgeGen() *atomic.Uint64 {
 }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
+	e := s.epoch()
 	v, ok, ackID := s.q.DequeueWithAckId()
 	if !ok {
 		var zero JobType
-		return zero, ErrFailedToDequeue
+		return zero, s.emptyErr(e)
 	}
 
 	j, err := toJob[T, JobType](v)
@@ -206,13 +272,17 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 }
 
 func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
-	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q}, bq: bq, w: w}
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pauseGate: gateOf(q)}, bq: bq, w: w}
 	s.dryAt.Store(neverDry)
 
 	return s
 }
 
+// ready is 0 while the queue is paused; the Resume pokes.
 func (s *batchAckSource[T, JobType]) ready() int {
+	if queuePaused(s.pz) {
+		return 0
+	}
 	if r := s.remaining.Load(); r > 0 {
 		return int(r)
 	}
@@ -377,21 +447,23 @@ var (
 // callers must pass to removeSource later.
 func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	var src source[JobType]
+	g := gateOf(q)
 
 	if aq, ok := q.(ackQueue); ok {
 		if bq, ok := q.(IBatchAcknowledgeable); ok {
 			src = newBatchAckSource(aq, bq, w)
 		} else {
-			src = &ackSource[T, JobType]{q: aq}
+			src = &ackSource[T, JobType]{q: aq, pauseGate: g}
 		}
 	} else if _, ok := q.(IPriorityQueue); ok {
-		src = &queueSource[T, JobType]{q: q, batch: 1}
+		src = &queueSource[T, JobType]{q: q, batch: 1, pauseGate: g}
 	} else {
 		purge := purgeStateFor(q)
 		purge.register(w.parkHook())
-		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge}
+		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge, pauseGate: g}
 	}
 
+	w.onResume(q, src)
 	w.addSource(src, priority)
 	registerQueue(q)
 	if qi, ok := q.(QueueInspector); ok {
@@ -400,9 +472,9 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		}
 	}
 
-	if _, ok := src.(creditSource[JobType]); ok {
-		w.notifyToPullNextJobs() // the storage may already hold items; no add will announce them
-	}
+	// The storage may already hold items no add will announce, and a Resume
+	// between onResume and addSource woke the loop before src was there.
+	w.notifyToPullNextJobs()
 
 	return src
 }
@@ -426,8 +498,58 @@ func (w *worker[T, JobType]) addSource(src source[JobType], priority int) {
 	w.sources.Store(managerBox[JobType]{w.manager().add(src, priority, w.Configs.strategy)})
 }
 
+// pauseHook is what a queue's Resume runs on a worker bound to it. The
+// worker holds it (pauseHooks); the storage holds it only weakly, so binding
+// a queue never keeps a discarded worker alive.
+type pauseHook struct {
+	paused  func()
+	resumed func()
+	cancel  func()
+}
+
+// onResume wakes the worker when q, a PauseNotifier, is resumed by any
+// handle or process: src's ready hint is poked, then the event loop. Every
+// source kind registers, so every bound worker wakes.
+func (w *worker[T, JobType]) onResume(q IBaseQueue, src source[JobType]) {
+	pn, ok := q.(PauseNotifier)
+	if !ok {
+		return
+	}
+
+	poke := pokeOf(src)
+	h := &pauseHook{paused: func() { w.parkHeld.Store(true) }, resumed: func() {
+		if poke != nil {
+			poke()
+		}
+		w.notifyToPullNextJobs()
+	}}
+	wh := weak.Make(h)
+	var self atomic.Pointer[func()]
+	cancel := pn.OnPauseChange(func(paused bool) {
+		h := wh.Value()
+		if h == nil { // worker collected: drop the hook from the storage
+			if c := self.Load(); c != nil {
+				(*c)()
+			}
+			return
+		}
+		if paused {
+			h.paused()
+		} else {
+			h.resumed()
+		}
+	})
+	self.Store(&cancel)
+	h.cancel = cancel
+	w.pauseHooks.Store(src, h)
+}
+
 // removeSource unbinds src, swapping in the manager for the remaining sources.
 func (w *worker[T, JobType]) removeSource(src source[JobType]) {
+	if h, ok := w.pauseHooks.LoadAndDelete(src); ok {
+		h.(*pauseHook).cancel()
+	}
+
 	w.sourcesMx.Lock()
 	defer w.sourcesMx.Unlock()
 
