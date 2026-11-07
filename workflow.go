@@ -18,10 +18,10 @@ import (
 // DAG can't change.
 var ErrWorkflowSubmitted = errors.New("varmq: workflow already submitted")
 
-var (
-	taskNameRe   = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
-	workflowIDRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
-)
+var nameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// validName: 1 to max characters of [A-Za-z0-9_.-].
+func validName(s string, max int) bool { return len(s) <= max && nameRe.MatchString(s) }
 
 // Workflow is a DAG of tasks, each a job bound for a queue (adr/0005). Build
 // it with Add and the Task methods; the DAG is fixed at Submit. Builder
@@ -192,7 +192,10 @@ func (t *Task) Priority(p int) *Task {
 }
 
 // validWorkflowID: `[A-Za-z0-9_.-]{1,128}`, not "index" (the index key).
-func validWorkflowID(id string) bool { return workflowIDRe.MatchString(id) && id != "index" }
+func validWorkflowID(id string) bool { return validName(id, 128) && id != "index" }
+
+// validTaskName: `[A-Za-z0-9_.-]{1,64}`.
+func validTaskName(name string) bool { return validName(name, 64) }
 
 // taskJobID is a task's job ID; its undo's adds ":undo".
 func taskJobID(wf, task string) string { return "wf:" + wf + ":" + task }
@@ -240,7 +243,7 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 	seen := make(map[string]bool, len(wf.tasks))
 
 	for i, t := range wf.tasks {
-		if !taskNameRe.MatchString(t.name) {
+		if !validTaskName(t.name) {
 			add("varmq: invalid task name %q", t.name)
 		} else if seen[t.name] {
 			add("varmq: duplicate task name %q", t.name)

@@ -569,7 +569,7 @@ func TestResultWorkerDistributed(t *testing.T) {
 }
 
 func TestParseToJobKeepsWorkflowTagInResultJob(t *testing.T) {
-	src := newJob("x", jobConfigs{Id: "j1:undo"})
+	src := newJob("x", jobConfigs{Id: "wf:w1:a:undo"})
 	src.setTask(taskTag{wf: "w1", task: "a", undo: true})
 	b, err := src.Json()
 	require.NoError(t, err)
@@ -583,5 +583,5 @@ func TestParseToJobKeepsWorkflowTagInResultJob(t *testing.T) {
 	assert.Equal(t, "a", tag.task)
 	assert.True(t, tag.undo)
 	assert.Equal(t, "x", j.Data())
-	assert.Equal(t, "j1:undo", j.ID())
+	assert.Equal(t, "wf:w1:a:undo", j.ID())
 }

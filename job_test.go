@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -808,7 +809,7 @@ func TestJobOutcome(t *testing.T) {
 
 func TestEnvelopeWorkflowTag(t *testing.T) {
 	t.Run("tagged job round-trips", func(t *testing.T) {
-		j := newJob(1, jobConfigs{Id: "j1"})
+		j := newJob(1, jobConfigs{Id: "wf:w1:a"})
 		j.setTask(taskTag{wf: "w1", task: "a"})
 
 		b, err := j.Json()
@@ -828,7 +829,7 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 	})
 
 	t.Run("undo job round-trips", func(t *testing.T) {
-		j := newJob(1, jobConfigs{Id: "j1:undo"})
+		j := newJob(1, jobConfigs{Id: "wf:w1:a:undo"})
 		j.setTask(taskTag{wf: "w1", task: "a", undo: true})
 
 		b, err := j.Json()
@@ -891,6 +892,39 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 		assert.NotPanics(t, func() { assert.NoError(t, j.Close()) })
 		assert.True(t, j.IsClosed())
 	})
+}
+
+// TestEnvelopeWorkflowTagInvalid: an envelope whose workflow fields could
+// not come from a Submit is unparsable, so no store key is built from it.
+func TestEnvelopeWorkflowTagInvalid(t *testing.T) {
+	for name, env := range map[string]string{
+		"wf without task":    `{"id":"wf:w1:","status":"Created","data":1,"wf":"w1"}`,
+		"task without wf":    `{"id":"x","status":"Created","data":1,"task":"a"}`,
+		"undo without wf":    `{"id":"x","status":"Created","data":1,"undo":true}`,
+		"wf index":           `{"id":"wf:index:a","status":"Created","data":1,"wf":"index","task":"a"}`,
+		"wf bad char":        `{"id":"wf:w 1:a","status":"Created","data":1,"wf":"w 1","task":"a"}`,
+		"wf with colon":      `{"id":"wf:w:1:a","status":"Created","data":1,"wf":"w:1","task":"a"}`,
+		"wf too long":        `{"id":"wf:` + strings.Repeat("w", 129) + `:a","status":"Created","data":1,"wf":"` + strings.Repeat("w", 129) + `","task":"a"}`,
+		"task bad char":      `{"id":"wf:w1:a/b","status":"Created","data":1,"wf":"w1","task":"a/b"}`,
+		"task too long":      `{"id":"wf:w1:` + strings.Repeat("a", 65) + `","status":"Created","data":1,"wf":"w1","task":"` + strings.Repeat("a", 65) + `"}`,
+		"id mismatch":        `{"id":"order-1","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		"id of another task": `{"id":"wf:w1:b","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		"undo id lacks undo": `{"id":"wf:w1:a","status":"Created","data":1,"wf":"w1","task":"a","undo":true}`,
+		"task id has undo":   `{"id":"wf:w1:a:undo","status":"Created","data":1,"wf":"w1","task":"a"}`,
+	} {
+		_, err := parseToJob([]byte(env), newJob[int])
+		assert.ErrorIs(t, err, ErrParseJob, name)
+	}
+
+	for _, env := range []string{
+		`{"id":"wf:w1:a","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		`{"id":"wf:w1:a:undo","status":"Created","data":1,"wf":"w1","task":"a","undo":true}`,
+		`{"id":"wf:` + strings.Repeat("w", 128) + `:` + strings.Repeat("a", 64) + `","status":"Created","data":1,"wf":"` + strings.Repeat("w", 128) + `","task":"` + strings.Repeat("a", 64) + `"}`,
+		`{"id":"plain","status":"Created","data":1,"undo":false}`,
+	} {
+		_, err := parseToJob([]byte(env), newJob[int])
+		assert.NoError(t, err, env)
+	}
 }
 
 func TestJobAckSizeClass(t *testing.T) {

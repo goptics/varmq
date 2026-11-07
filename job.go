@@ -114,6 +114,22 @@ type taskTag struct {
 	store    WorkflowStore
 }
 
+// matches: t is no tag (no wf, task or undo), or one a Submit could write
+// for job id: valid ID and name, id "wf:<wf>:<task>" (+":undo"). Anything
+// else is unparsable, so no store key is built from it.
+func (t taskTag) matches(id string) bool {
+	if t.wf == "" {
+		return t.task == "" && !t.undo
+	}
+
+	want := taskJobID(t.wf, t.task)
+	if t.undo {
+		want += ":undo"
+	}
+
+	return validWorkflowID(t.wf) && validTaskName(t.task) && id == want
+}
+
 // jobView is the job envelope persistent and distributed storage holds
 // (spec/redis-storage.md, section 3).
 type jobView[T any] struct {
@@ -371,9 +387,14 @@ func parseToJob[T any, J iJob[T]](data []byte, mk func(T, jobConfigs) J) (J, err
 		return zero, fmt.Errorf("invalid status: %s", view.Status)
 	}
 
+	tag := taskTag{wf: view.Wf, task: view.Task, undo: view.Undo}
+	if !tag.matches(view.Id) {
+		return zero, fmt.Errorf("%w: bad workflow tag", ErrParseJob)
+	}
+
 	j := mk(view.Payload, jobConfigs{Id: view.Id})
 	if view.Wf != "" {
-		j.setTask(taskTag{wf: view.Wf, task: view.Task, undo: view.Undo}) // store bound later
+		j.setTask(tag) // store bound later
 	}
 	j.changeStatus(st)
 
