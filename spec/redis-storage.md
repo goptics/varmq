@@ -85,7 +85,7 @@ Workflow keys belong to a namespace, not to a queue (section 6.9):
 
 | Field | Value |
 |---|---|
-| `meta` | JSON: `state`, `created_at` and `finished_at` (ms, the latter absent while running), `fail_fast`, `undo_on_cancel`, `cancelled` (a cancel was called), `failed` (an unabsorbed failure happened before any cancel), `hash` (the plan hash), and `tasks`, the task names in Add order (a topological order). |
+| `meta` | JSON: `state`, `created_at` and `finished_at` (ms, the latter absent while running), `fail_fast`, `undo_on_cancel` (Submit's option; a Cancel that gives `undo` overwrites it, section 6.11), `cancelled` (a cancel was called), `failed` (an unabsorbed failure happened before any cancel), `hash` (the plan hash), and `tasks`, the task names in Add order (a topological order). |
 | `t:<task>` | JSON, written at Submit and never changed: the queue's base key and kind (`fifo` or `prio`), priority, `deps`, `dependents` (names, in Add order), `always` (the dependency policy), the job ID, and `undo` (the undo's queue base key, kind, priority, job ID and envelope, embedded verbatim) or absent. |
 | `s:<task>` | The task's state: `waiting`, `pending`, `completed`, `failed` or `cancelled`. A pop does not write it, so it stays `pending` while the task is queued or processing. |
 | `n:<task>` | Integer: dependencies not ended yet. Present while the task is `waiting`. |
@@ -264,7 +264,7 @@ The script pushes the item before it removes it from `:nacked`, so a failed push
 
 ### 6.6 Purge
 
-Purge deletes all of a queue's jobs and job data in one `DEL`. Since 1.5.0 it first cancels the workflow tasks it removes (below).
+Purge deletes all of a queue's jobs and job data in one `DEL`. Since 1.5.0 the same script then cancels the workflow tasks the `DEL` removed (below).
 
 - the base key and, for prio, `<base>:seq` and `<base>:prio`;
 - processing jobs: `<base>:nacked`, `<base>:timeouts`, `<base>:started`;
@@ -274,7 +274,7 @@ Purge deletes all of a queue's jobs and job data in one `DEL`. Since 1.5.0 it fi
 
 Purge keeps the consumer state that live consumers rely on (`<base>:idle`, `<base>:heartbeats`, `<base>:heartbeats:clock`, `<base>:presence`) and the `<base>:dedup:<id>` keys, which expire on their own. A consumer that later acknowledges or rejects a purged job finds no `:nacked` entry, so the operation does nothing (section 6.3, step 1).
 
-Since 1.5.0, a purged item that names a workflow (`wf` and `task`) would leave the workflow waiting for a task that is gone. So Purge reads the queued items (`LRANGE` or `ZRANGE`) and `HVALS <base>:nacked` first and collects the distinct `wf` IDs. It runs its script with, in `KEYS`: the keys the `DEL` removes, then for each such workflow its hash `wf:<id>` and the push-target queues of section 6.10 (every queue the workflow can push into). The script runs the `DEL` first. Then, for each tagged item read, in the order read, it applies a `cancelled` Outcome to the task (or to its undo, for `undo` true) as section 6.10 does, so a dependent or undo that the Outcome releases is pushed after the `DEL` and is not lost with it. Dependents follow their policy, and a purged task is never recorded as completed. A queue with no workflow item pays one extra scan only. The script MUST re-read the queued items and `:nacked` before the `DEL` and, if it finds a `wf` ID whose hash is not in `KEYS` (an item arrived since the caller read), do nothing and tell the caller to read again.
+Since 1.5.0, a purged item that names a workflow (`wf` and `task`) would leave the workflow waiting for a task that is gone. So Purge reads the queued items (`LRANGE` or `ZRANGE`) and `HVALS <base>:nacked` first and collects the distinct `wf` IDs. It runs its script with, in `KEYS`: the keys the `DEL` removes, then for each such workflow its hash `wf:<id>` and the push-target queues of section 6.10 (every queue the workflow can push into). The script runs the `DEL` first. Then, for each tagged item read, in the order read, it applies a `cancelled` end to the task (or to its undo, for `undo` true) with steps 4 to 6 of section 6.10, with no `:nacked` check and no settle (the `DEL` removed the item and its records), so a dependent or undo that the end releases is pushed after the `DEL` and is not lost with it. Dependents follow their policy, and a purged task is never recorded as completed. A queue with no workflow item pays one extra scan only. The script MUST re-read the queued items and `:nacked` before the `DEL` and, if it finds a `wf` ID whose hash is not in `KEYS` (an item arrived since the caller read), do nothing and tell the caller to read again.
 
 ### 6.7 Pause (since 1.3.0)
 
@@ -301,12 +301,12 @@ The key decides; messages are hints. A consumer MUST ignore a `<base>:control` m
 
 A workflow is a DAG of tasks fixed at Submit: no task is added later. Each task has a name, a queue, an envelope, dependencies (earlier tasks, so the DAG has no cycle), a dependency policy and optionally an undo. All queues of one workflow MUST live in one Redis instance and one namespace; a script that touches the keys of several queues needs that. (Redis Cluster is not supported by 1.5.0: queue keys hash on different slots.)
 
-Input: the workflow ID, its options (`fail_fast`, `undo_on_cancel`), the plan hash, and per task the data of `t:<task>` and its envelope. The job ID of a task is `wf:<id>:<task>`, and of its undo `wf:<id>:<task>:undo`; a user job ID on a task is refused.
+Input: the workflow ID, its options (`fail_fast`, `undo_on_cancel`), the plan hash, and per task the data of `t:<task>` and its envelope. The job ID of a task is `wf:<id>:<task>`, and of its undo `wf:<id>:<task>:undo`.
 
 The plan hash is the lowercase hex SHA-256 of this byte stream, so every implementation produces the same hash for the same plan. `str(x)` is the unsigned LEB128 (uvarint) length of the UTF-8 bytes of `x`, then the bytes. `field(b)` is the same for raw bytes. `flag(v)` is one byte, 1 for true and 0 for false. `num(n)` is the signed varint (zigzag, then uvarint, as Go's `binary.AppendVarint`) of `n`. In order: `num(task count)`; then for each task in Add order: `str(name)`, `str(queue ID)`, `flag(has priority)`, `num(priority)` (0 when it has none), `num(dependency count)`, `str(dep)` for each dependency sorted by byte order, `flag(always)`, `flag(has undo)`, and if it has an undo `str(undo queue ID)` and `field(undo data)`, then `field(task data)`; then `flag(fail_fast)` and `flag(undo_on_cancel)`. `data` is the JSON bytes of the envelope's `data` member, not the envelope, so `enqueued_at` does not change the hash. `KEYS`: the workflow hash, `wf:index`, then per distinct queue of a root task its base key, `:stats`, `:idle` and, for prio only, `:seq`. One script:
 
 1. If the hash exists: stop. Return 1 when its `meta.hash` equals the input hash (a repeated Submit succeeds), else 0 (the caller reports `ErrWorkflowExists`).
-2. `HSET` `meta` (`state` `running`, `created_at` now (ms)), and per task `t:`, `s:` and `n:`. A task with no dependency has `s:` `pending` and no `n:`; any other has `s:` `waiting`, `n:` its dependency count and `i:` its envelope.
+2. `HSET` `meta` (`state` `running`, `created_at` now (ms), `cancelled` and `failed` false, and the options, hash and task names of the input), and per task `t:`, `s:` and `n:`. A task with no dependency has `s:` `pending` and no `n:`; any other has `s:` `waiting`, `n:` its dependency count and `i:` its envelope.
 3. Push each root task as Enqueue does (section 6.1), in task order: its envelope into its queue, `submitted` counted, idle consumers woken. Deduplication does not apply: a task job ID is unique to its workflow.
 4. `ZADD wf:index <now (ms)> <id>`.
 
@@ -316,7 +316,7 @@ A caller MUST write the envelope of a task with `status` `Created`, and with `wf
 
 A consumer that takes an item whose envelope has `wf` MUST finish it with this operation, not with Acknowledge or Reject (section 6.3, 6.4). It settles the item as they do and applies the outcome to the workflow in the same script, so no moment exists where a task has ended and its dependents are neither waiting nor queued.
 
-Input: the ack ID and a task end: workflow, task, `undo`, outcome (`completed`, `failed` or `cancelled`), reason, result bytes; and the result limit (default 65536 bytes) and retention (default 7 days) of the caller.
+Input: the ack ID and a task end: workflow, task, `undo`, outcome (`completed`, `failed` or `cancelled`), reason, result bytes; and the result limit (default 65536 bytes) and retention (default 7 days) of the store.
 
 The caller reads the static `t:` fields of the workflow before the script (`t:` never changes after Submit, so a caller MAY cache them) and passes in `KEYS`, in this order:
 
@@ -328,7 +328,7 @@ Every queue is passed, not only the dependents' queues, because one end can push
 
 Steps:
 
-1. If `<base>:nacked` has no `item` for the ack ID, stop and change nothing in the workflow: the task already ended (a re-send, or a requeue that another consumer finished). Return success and, so that a wake lost with the first reply is not lost for good, the queue IDs of all push-target queues. If `wf:<id>` does not exist, settle the item (step 3) and change nothing else; a Go implementation returns `ErrWorkflowNotFound`.
+1. If `<base>:nacked` has no `item` for the ack ID, stop and change nothing in the workflow: the task already ended (a re-send, or a requeue that another consumer finished). Return success and, so that a wake lost with the first reply is not lost for good, the queue IDs of all push-target queues. If `wf:<id>` does not exist (the workflow ended and expired), settle the item (step 3), change nothing else, and return success (ok=true) with no queue IDs: a failure would redeliver the item forever. (The Go `WorkflowStore` methods, such as `Record` and `Cancel`, still report `ErrWorkflowNotFound` for it.)
 2. Before settling: for a `completed` end that is not an undo, if `len(result)` is above the limit, change the outcome to `failed`, reason `varmq: task result too large`, and no result. (So no `completed` Job Record is written for it.) An undo's and a non-completed end's result is dropped.
 3. Settle the item as section 6.3 (outcome `completed`) or 6.4 (`failed` and `cancelled`, with the reason).
 4. Apply the end to the workflow with the rules below, writing `s:`, `n:`, `r:` (the result, when the task completed), `e:` (the reason, when it failed or was cancelled), `u:` and `meta`.
@@ -343,16 +343,16 @@ An end for a task that is not `pending` or `processing` (waiting, cancelled or e
 - **Release.** A `completed` task releases each dependent that is `waiting`: `n:` is reduced by 1, and at 0 the dependent becomes `pending` and is pushed.
 - **Dependency policy.** A `failed` or `cancelled` task applies to each `waiting` dependent: with `always` true the dependent counts the task as ended (released, so it runs and may see the failure); otherwise it becomes `cancelled` and applies the same rule to its own dependents, down the DAG. A cancelled task is not pushed and has no outcome record.
 - **Absorbed failures.** A failure is absorbed when the failed task has dependents and every one has `always` true. A failed task with no dependent, or with a dependent that is not `always`, is an unabsorbed failure: `meta.failed` becomes true, unless `meta.cancelled` is already true (after a cancel, the ends of tasks are not failures). A `cancelled` end before any workflow Cancel (a Purge, a pre-run cancel of a task nobody asked to cancel) counts exactly as a `failed` end for this rule, FailFast and `meta.failed`; only its task state differs (`cancelled`).
-- **FailFast.** With `fail_fast`, only the first unabsorbed failure cancels every `waiting` task at once, except the failed task's own `always` dependents, which it keeps; each cancelled task applies the dependency policy to its dependents, so those `always` tasks count it. Later failures do not repeat this.
+- **FailFast.** With `fail_fast`, only the first unabsorbed failure cancels every `waiting` task at once, except the failed task's own `always` dependents, which it keeps; each cancelled task applies the dependency policy to its dependents, so those `always` tasks count it. Later failures do not repeat this. From then on the pre-run check (section 6.12) stops every queued task that is not `always`, so a task pushed before the failure and not yet started ends `cancelled` without running.
 - **End of the run.** When no task is `waiting`, `pending` or `processing`, the run is over. If `meta.failed` is true, or `meta.cancelled` and `undo_on_cancel` are both true, compensation starts if any `completed` task has an undo; otherwise the state is `failed` when `meta.failed` is true (even if `meta.cancelled` is too), else `cancelled` when `meta.cancelled` is true, else `completed`. So a cancel after an unabsorbed failure keeps that failure's compensation.
 - **Compensation.** The state becomes `compensating`. Each `completed` task with an undo gets `u:<task>` `waiting` with `open` = the number of its transitive descendants that are `completed` and have an undo (tasks without an undo are looked through, so the order is a saga's, the reverse of the DAG). A task with `open` 0 becomes `pending` and its undo is pushed. An undo end (`undo` true) sets `u:` `completed` for outcome `completed` and `failed` for any other outcome (a cancelled undo counts as failed), and for each transitive ancestor whose `u:` is `waiting` reduces `open` by 1; at 0 that undo is pushed. A failed undo does not stop the others. When no undo is `waiting`, `pending` or `processing`, the state is `compensated`, or `compensation_failed` if any undo failed. An undo never has an undo.
 
 ### 6.11 Cancel a workflow (since 1.5.0)
 
-Input: the workflow ID and `undo` (whether compensation also runs). `KEYS`: the workflow hash, then the push-target queues of section 6.10 (every queue the workflow can push into). One script:
+Input: the workflow ID and, optionally, `undo` (whether compensation also runs). Without `undo`, the workflow's own `meta.undo_on_cancel` (set at Submit) decides. `KEYS`: the workflow hash, then the push-target queues of section 6.10 (every queue the workflow can push into). One script:
 
 1. If the hash does not exist, return not found. If `meta.state` is not `running`, or `meta.cancelled` is true, stop: cancelling an ended or cancelled workflow changes nothing.
-2. Set `meta.cancelled` true and `meta.undo_on_cancel` to `undo`. Every `waiting` task becomes `cancelled` (no dependency policy applies: they are all cancelled).
+2. Set `meta.cancelled` true and, only when the caller gave `undo`, `meta.undo_on_cancel` to it. Every `waiting` task becomes `cancelled` (no dependency policy applies: they are all cancelled).
 3. `pending` and `processing` tasks stay as they are. A `pending` task is stopped by the pre-run check (section 6.12) when a consumer reaches it, and ends as `cancelled`; a `processing` task finishes normally. This is why Cancel returns a `running` workflow when tasks are in flight.
 4. Apply "End of the run" of section 6.10 and push what it makes ready, as 6.10 steps 5 and 6.
 
@@ -360,10 +360,10 @@ A cancel does not remove queued items.
 
 ### 6.12 Runnable (since 1.5.0)
 
-The pre-run check. A consumer MUST call it for an item whose envelope has `wf`, after popping it and before running it. Input: workflow ID, task, `undo`. One `HMGET wf:<id> meta s:<task> u:<task>`:
+The pre-run check. A consumer MUST call it for an item whose envelope has `wf`, after popping it and before running it. Input: workflow ID, task, `undo`. One `HMGET wf:<id> meta t:<task> s:<task> u:<task>`:
 
 - Not found (the hash is gone: the workflow ended and expired): not runnable.
-- `undo` false: runnable only when `meta.state` is `running`, `meta.cancelled` is not true and `s:<task>` is `pending`.
+- `undo` false: runnable only when `meta.state` is `running`, `meta.cancelled` is not true, `s:<task>` is `pending`, and not (`meta.fail_fast` and `meta.failed` are true and `t:<task>.always` is false): once FailFast fired (section 6.10), only `always` tasks start.
 - `undo` true: runnable only when `meta.state` is `compensating` and `u:<task>.state` is `pending`.
 
 A consumer that gets "not runnable" MUST finish the item with FinishTask outcome `cancelled` (reason `workflow cancelled`) without running it. When the check fails with an error, it SHOULD run the item: delivery is at least once, and a store that cannot answer cannot finish it either. A job without `wf` skips this check.
@@ -401,11 +401,11 @@ Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is 
 
 Since 1.5.0. A reader answers the HTTP routes `GET /workflows`, `GET /workflows/{id}` and `PATCH /workflows/{id}/actions/cancel` (the last is section 6.11).
 
-- **List**: `ZREVRANGE wf:index start stop` gives the newest first, with `start = offset` and `stop = offset + limit - 1`. For each ID, `HGET wf:<id> meta`; skip an ID whose hash is gone (it expired before a trim). `offset` counts matches: with a `state` filter, a reader skips `offset` workflows in that state and then returns up to `limit` more, reading further entries as needed. An `offset` above 10000 is rejected (HTTP 400), not clamped. `GET /workflows` returns the records mapped below.
+- **List**: a scan of `wf:index` from the newest entry (`ZREVRANGE`). For each ID, `HGET wf:<id> meta`; skip an ID whose hash is gone (it expired before a trim). `offset` and `limit` count matches: the reader skips the first `offset` workflows that match (every one without a `state` filter, else those in that state) and returns up to `limit` more, reading further entries as needed. Without a `state` filter and with no gone hash, this is `ZREVRANGE wf:index offset offset+limit-1`. An `offset` above 10000 is rejected (HTTP 400), not clamped. `GET /workflows` returns the records mapped below.
 - **One**: `HGETALL wf:<id>`; not found when the hash is absent.
 - **Trim**: an implementation SHOULD, in its sweep, remove from `wf:index` the members whose score is at or below `now - retention`, since the hash expires by itself (section 6.10 step 6).
 
-Mapping to `WorkflowRecord`: `id`, `state`, `created_at` and `finished_at` from `meta`; per task, in `meta.tasks` order: `name`; `state` from `s:<task>`, with a `waiting` or `cancelled` state shown as it is; `deps`, `always`, `queue_id` (the queue's base key) and `job_id` from `t:<task>`; `reason` from `e:<task>`; `result_size` = the length of `r:<task>`, or absent; `undo`, when `t:<task>` has one, from `t:<task>.undo` (queue ID, job ID) and the state in `u:<task>`; an undo with no `u:` shows `waiting`. A reader MUST NOT show the result bytes.
+Mapping to `WorkflowRecord`: `id`, `state`, `created_at`, `finished_at` and `undo_on_cancel` from `meta`; per task, in `meta.tasks` order: `name`; `state` from `s:<task>`, with a `waiting` or `cancelled` state shown as it is; `deps`, `always`, `queue_id` (the queue's base key) and `job_id` from `t:<task>`; `reason` from `e:<task>`; `result_size` = the length of `r:<task>`, or absent; `undo`, when `t:<task>` has one, from `t:<task>.undo` (queue ID, job ID) and the state in `u:<task>`; an undo with no `u:` shows `waiting`. A reader MUST NOT show the result bytes.
 
 ## 8. Instance Records
 

@@ -282,7 +282,7 @@ var src string
 varmq.TaskOf(j).Result("upload", &src)
 ```
 
-Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store. Runnable example: [`examples/workflow`](./examples/workflow). Design: [ADR 0005](./adr/0005-workflows.md).
+Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store, and its `Cancel` follows the workflow's `WithUndoOnCancel`. Runnable example: [`examples/workflow`](./examples/workflow). Storage rules: [spec §6.9](./spec/redis-storage.md#69-submit-a-workflow-since-150).
 
 ### Function Helpers
 
