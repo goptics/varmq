@@ -396,3 +396,22 @@ func TestPauseHookOfCollectedWorker(t *testing.T) {
 		return s.cancels.Load() == 1
 	}, 5*time.Second, 10*time.Millisecond)
 }
+
+// pending skips the scan of parked batches until one may be held, and a
+// queue paused after its batch parked is left out at once (its hook).
+func TestPendingHeldAfterPark(t *testing.T) {
+	w := newWorker(func(iJob[int]) {}, WithAutoRun(false))
+	storage := queues.NewQueue[any]()
+	w.bind(storage, 0) // registers the pause hook
+	w.park([]iJob[int]{newJob(1, jobConfigs{}), newJob(2, jobConfigs{})}, pool.Stamp{Gen: &atomic.Uint64{}, Hold: storage})
+	assert.False(t, w.parkHeld.Load(), "nothing held: no scan")
+	assert.Equal(t, 2, w.pending(w.manager()))
+
+	require.NoError(t, storage.Pause())
+	assert.True(t, w.parkHeld.Load(), "the hook flags it")
+	assert.Equal(t, 0, w.pending(w.manager()))
+
+	require.NoError(t, storage.Resume())
+	assert.Equal(t, 2, w.pending(w.manager()))
+	assert.False(t, w.parkHeld.Load(), "the scan found none held and cleared it")
+}

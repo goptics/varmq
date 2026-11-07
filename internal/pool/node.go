@@ -24,8 +24,11 @@ type Stamp struct {
 	Gen   *atomic.Uint64
 	Epoch uint64
 	Seq   uint64
-	Hold  interface{ Paused() bool }
+	Hold  Holder
 }
+
+// Holder is a queue's pause, as a batch sees it.
+type Holder interface{ Paused() bool }
 
 // Held reports whether the batch's queue is paused.
 func (s Stamp) Held() bool {

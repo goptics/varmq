@@ -6,6 +6,7 @@ import (
 	"time"
 	"weak"
 
+	"github.com/goptics/varmq/internal/pool"
 	"github.com/goptics/varmq/internal/topics"
 )
 
@@ -36,23 +37,27 @@ type source[JobType any] interface {
 	// with it, and the worker closes, instead of running, a job whose batch
 	// is older than the counter. nil for sources that never batch.
 	purgeGen() *atomic.Uint64
-	// pauser is the storage's queue pause, nil if it has none. The scheduler
-	// stamps each batch with it, and the worker parks the unstarted rest of
-	// a batch whose queue got paused.
-	pauser() QueuePauser
 }
 
 // queuePaused reports whether pz is a paused queue. It is the scheduler's gate:
 // a hint read before asking storage, which is the real gate.
-func queuePaused(pz QueuePauser) bool {
+func queuePaused(pz pool.Holder) bool {
 	return pz != nil && pz.Paused()
+}
+
+// holderOf is q's pause, nil (not a typed nil) if q cannot pause.
+func holderOf(q any) pool.Holder {
+	if pz, ok := q.(QueuePauser); ok {
+		return pz
+	}
+	return nil
 }
 
 // emptyErr is why a dequeue came back empty. Storage that can pause may
 // refuse for a pause that ended before this check (Pause and Resume both
 // between Len and Dequeue), so any refusal of a QueuePauser is "nothing to
 // do", not a failure the user hears about.
-func emptyErr(pz QueuePauser) error {
+func emptyErr(pz pool.Holder) error {
 	if pz != nil {
 		return errNoReadySource
 	}
@@ -97,7 +102,7 @@ type queueSource[T any, JobType iJob[T]] struct {
 	q     IBaseQueue
 	batch int         // decided once in bind: 1 for priority storage
 	purge *purgeState // shared by every worker bound to q when q supports it; nil if it never batches
-	pz    QueuePauser // q's pause, nil if it has none
+	pz    pool.Holder // q's pause (QueuePauser), nil if it has none
 }
 
 // Len is 0 while the queue is paused: nothing to hand out.
@@ -108,7 +113,9 @@ func (s *queueSource[T, JobType]) Len() int {
 	return s.q.Len()
 }
 
-func (s *queueSource[T, JobType]) pauser() QueuePauser { return s.pz }
+// holder is the pause the scheduler stamps each batch with, so the worker
+// parks the unstarted rest of a batch whose queue got paused.
+func (s *queueSource[T, JobType]) holder() pool.Holder { return s.pz }
 
 func (s *queueSource[T, JobType]) maxBatch() int {
 	return s.batch
@@ -147,7 +154,7 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 // Each job it returns carries its storage and ack id so job.Close can ack it.
 type ackSource[T any, JobType iJob[T]] struct {
 	q  ackQueue
-	pz QueuePauser // q's pause, nil if it has none
+	pz pool.Holder // q's pause (QueuePauser), nil if it has none
 }
 
 // Len is 0 while the queue is paused: nothing to hand out.
@@ -157,8 +164,6 @@ func (s *ackSource[T, JobType]) Len() int {
 	}
 	return s.q.Len()
 }
-
-func (s *ackSource[T, JobType]) pauser() QueuePauser { return s.pz }
 
 // maxBatch is 1: a dequeued message stays unacknowledged until its job is
 // done, so a batch would hide messages from other consumers and delay acks.
@@ -242,8 +247,7 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 }
 
 func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
-	pz, _ := q.(QueuePauser)
-	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pz: pz}, bq: bq, w: w}
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pz: holderOf(q)}, bq: bq, w: w}
 	s.dryAt.Store(neverDry)
 
 	return s
@@ -396,8 +400,6 @@ func (s *topicSource[T]) purgeGen() *atomic.Uint64 {
 	return &s.purge.gen
 }
 
-func (s *topicSource[T]) pauser() QueuePauser { return nil }
-
 func (s *topicSource[T]) Next() (iJob[T], error) {
 	data, ok := s.cursor.Dequeue()
 	if !ok {
@@ -420,7 +422,7 @@ var (
 // callers must pass to removeSource later.
 func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	var src source[JobType]
-	pz, _ := q.(QueuePauser)
+	pz := holderOf(q)
 
 	if aq, ok := q.(ackQueue); ok {
 		if bq, ok := q.(IBatchAcknowledgeable); ok {
@@ -475,6 +477,7 @@ func (w *worker[T, JobType]) addSource(src source[JobType], priority int) {
 // worker holds it (pauseHooks); the storage holds it only weakly, so binding
 // a queue never keeps a discarded worker alive.
 type pauseHook struct {
+	paused  func()
 	resumed func()
 	cancel  func()
 }
@@ -489,7 +492,7 @@ func (w *worker[T, JobType]) onResume(q IBaseQueue, src source[JobType]) {
 	}
 
 	poke := pokeOf(src)
-	h := &pauseHook{resumed: func() {
+	h := &pauseHook{paused: func() { w.parkHeld.Store(true) }, resumed: func() {
 		if poke != nil {
 			poke()
 		}
@@ -505,7 +508,9 @@ func (w *worker[T, JobType]) onResume(q IBaseQueue, src source[JobType]) {
 			}
 			return
 		}
-		if !paused {
+		if paused {
+			h.paused()
+		} else {
 			h.resumed()
 		}
 	})

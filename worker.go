@@ -72,6 +72,9 @@ type worker[T any, JobType iJob[T]] struct {
 	// pauseHooks holds the pauseHook of each bound source whose storage is a
 	// PauseNotifier, by source; removeSource cancels it.
 	pauseHooks sync.Map
+	// parkHeld is set while a parked batch may be held (its queue paused):
+	// by park, and by a queue's pause hook. pending scans only then.
+	parkHeld atomic.Bool
 }
 
 // Worker represents a worker that processes Jobs.

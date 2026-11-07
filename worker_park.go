@@ -19,26 +19,35 @@ type parkedBatch[JobType any] struct {
 
 // pending is what the worker has not handed out yet: the jobs in its sources
 // and the jobs parked by a stop or pause. Like the sources, it leaves out
-// the jobs of a paused queue (held).
+// the jobs of a paused queue (held). It runs per dispatch, so it scans the
+// parked batches only while one may be held (parkHeld).
 func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
-	n := 0
-	if w.nParked.Load() > 0 {
+	n := int(w.nParked.Load())
+	if n > 0 && w.parkHeld.Load() {
 		n = w.unheld()
 	}
 
 	return m.Len() + n
 }
 
-// unheld counts the parked jobs whose queue is not paused.
+// unheld counts the parked jobs whose queue is not paused, and clears
+// parkHeld when none is. It clears first, so a pause hook that sets it
+// meanwhile is not lost: the scan then sees that queue paused.
 func (w *worker[T, JobType]) unheld() int {
 	w.parkMx.Lock()
 	defer w.parkMx.Unlock()
 
-	n := 0
+	w.parkHeld.Store(false)
+	n, held := 0, false
 	for _, b := range w.parked {
-		if !b.stamp.Held() {
+		if b.stamp.Held() {
+			held = true
+		} else {
 			n += len(b.jobs)
 		}
+	}
+	if held {
+		w.parkHeld.Store(true)
 	}
 
 	return n
@@ -65,6 +74,10 @@ func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 	}
 
 	w.parked = append(w.parked, parkedBatch[JobType]{jobs: slices.Clone(jobs), stamp: stamp})
+	// held now, or may be held later with no hook to say so
+	if _, hooked := stamp.Hold.(PauseNotifier); stamp.Held() || stamp.Hold != nil && !hooked {
+		w.parkHeld.Store(true)
+	}
 	w.parkUnsorted = true
 	w.nParked.Add(int64(len(jobs)))
 }
