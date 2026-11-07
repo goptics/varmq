@@ -115,7 +115,7 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 		return out, nil
 	}
 
-	if offset >= m.q.Len() { // before copying the queue
+	if offset < 0 || limit < 1 || offset >= m.q.Len() { // before copying the queue
 		return out, nil
 	}
 	if p, ok := m.q.(interface{ Page(offset, limit int) []any }); ok {

@@ -233,5 +233,7 @@ func TestPriorityPage(t *testing.T) {
 	assert.Equal(t, all[3:], q.Page(3, 100))
 	assert.Empty(t, q.Page(5, 1))
 	assert.Empty(t, q.Page(math.MaxInt, 1))
+	assert.Empty(t, q.Page(0, -1), "a bad page is empty, not a panic")
+	assert.Empty(t, q.Page(-1, 3))
 	assert.Equal(t, 5, q.Len(), "the queue is unchanged")
 }

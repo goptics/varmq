@@ -66,7 +66,7 @@ func (q *PriorityQueue[T]) Page(offset, limit int) []any {
 	h := heapQueue[T]{items: slices.Clone(q.internal.items)}
 	q.mx.RUnlock()
 
-	if offset >= len(h.items) {
+	if offset < 0 || limit < 1 || offset >= len(h.items) {
 		return []any{}
 	}
 	end := offset + min(limit, len(h.items)-offset) // no offset+limit: offset may be near MaxInt

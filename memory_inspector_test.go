@@ -326,3 +326,16 @@ func TestMemQueueLateDrop(t *testing.T) {
 	_, listed := queueRegistry.Load(id)
 	assert.True(t, listed)
 }
+
+// A bad page from a Go caller is empty, not a panic (HTTP rejects it first).
+func TestMemQueueJobsBadPage(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	defer w.Stop()
+	m := memOf(t, w.BindQueue())
+	m.q.(interface{ Enqueue(any) bool }).Enqueue(newJob(1, jobConfigs{}))
+	for _, p := range [][2]int{{0, -1}, {-1, 5}, {0, 0}} {
+		jobs, err := m.Jobs(context.Background(), JobPending, p[0], p[1])
+		require.NoError(t, err)
+		assert.Empty(t, jobs, "%v", p)
+	}
+}
