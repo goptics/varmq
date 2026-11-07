@@ -54,8 +54,6 @@ func memoryScope() string { return "memory:" + InstanceID }
 // memWorkflowItem is a WorkflowItem of an in-memory handle. store puts item
 // into the storage once per id (FIFO storage ignores prio); mk makes the
 // job of the kind the handle's worker runs, and its embedded job.
-// ponytail: storage still applies its own capacity; promotion can't bypass
-// it without a storage method.
 func memWorkflowItem[T any](eq *externalBaseQueue, priority bool, store func(item any, prio int, id string) bool,
 	mk func(jobID string) (any, *job[T])) (WorkflowItem, error) {
 	m := eq.totals
@@ -96,14 +94,33 @@ func memWorkflowItem[T any](eq *externalBaseQueue, priority bool, store func(ite
 	}, nil
 }
 
+// onceForcer and priorityOnceForcer are storage that can store past its
+// capacity (the internal queues): promotion ignores capacity. Other storage
+// gets a plain EnqueueOnce, which may refuse.
+type onceForcer interface {
+	EnqueueOnceForce(item any, id string) bool
+}
+
+type priorityOnceForcer interface {
+	EnqueueOnceForce(item any, priority int, id string) bool
+}
+
 func memFIFOItem[T any](eq *externalBaseQueue, q IQueue, mk func(string) (any, *job[T])) (WorkflowItem, error) {
-	return memWorkflowItem(eq, false, func(item any, _ int, id string) bool { return enqueue(q, item, id) }, mk)
+	store := func(item any, _ int, id string) bool { return enqueue(q, item, id) }
+	if f, ok := q.(onceForcer); ok {
+		store = func(item any, _ int, id string) bool { return f.EnqueueOnceForce(item, id) }
+	}
+
+	return memWorkflowItem(eq, false, store, mk)
 }
 
 func memPriorityItem[T any](eq *externalBaseQueue, q IPriorityQueue, mk func(string) (any, *job[T])) (WorkflowItem, error) {
-	return memWorkflowItem(eq, true, func(item any, prio int, id string) bool {
-		return enqueuePriority(q, item, prio, id)
-	}, mk)
+	store := func(item any, prio int, id string) bool { return enqueuePriority(q, item, prio, id) }
+	if f, ok := q.(priorityOnceForcer); ok {
+		store = func(item any, prio int, id string) bool { return f.EnqueueOnceForce(item, prio, id) }
+	}
+
+	return memWorkflowItem(eq, true, store, mk)
 }
 
 // taskJob, errTaskJob and resultTaskJob make data's job for a Worker,

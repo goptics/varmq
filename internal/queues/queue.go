@@ -77,6 +77,17 @@ func (q *Queue[T]) Enqueue(item any) bool {
 	return q.log.Append(typedItem) > 0
 }
 
+// EnqueueForce is Enqueue past the capacity: it stores item even when the
+// queue is full. Workflow promotion uses it.
+func (q *Queue[T]) EnqueueForce(item any) bool {
+	typedItem, ok := item.(T)
+	if !ok {
+		return false
+	}
+
+	return q.log.AppendForce(typedItem) > 0
+}
+
 // EnqueueOnce adds item, which must return id from its ID method, unless an
 // item with the same id is in the queue. It returns false for a repeat and
 // where Enqueue would. The id is free again once Dequeue or Purge takes the
@@ -85,6 +96,15 @@ func (q *Queue[T]) Enqueue(item any) bool {
 // It holds only the lock of id's shard across the Append, so adds of
 // different ids rarely wait on each other or on a Dequeue.
 func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
+	return q.enqueueOnce(item, id, false)
+}
+
+// EnqueueOnceForce is EnqueueOnce past the capacity, see EnqueueForce.
+func (q *Queue[T]) EnqueueOnceForce(item any, id string) bool {
+	return q.enqueueOnce(item, id, true)
+}
+
+func (q *Queue[T]) enqueueOnce(item any, id string, force bool) bool {
 	typedItem, ok := item.(T)
 	if !ok {
 		return false
@@ -102,7 +122,13 @@ func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
 		return false
 	}
 
-	if q.log.Append(typedItem) == 0 {
+	var n int
+	if force {
+		n = q.log.AppendForce(typedItem)
+	} else {
+		n = q.log.Append(typedItem)
+	}
+	if n == 0 {
 		sh.ids.remove(id)
 		return false
 	}

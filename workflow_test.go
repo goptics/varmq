@@ -15,10 +15,12 @@ import (
 // fakeWFStore is a WorkflowStore that only names its scope.
 type fakeWFStore struct{ scope string }
 
-func (s fakeWFStore) ScopeID() string                                      { return s.scope }
-func (fakeWFStore) Submit(context.Context, WorkflowPlan) error             { return nil }
-func (fakeWFStore) Cancel(context.Context, string, bool) error             { return nil }
-func (fakeWFStore) Runnable(context.Context, string, string) (bool, error) { return true, nil }
+func (s fakeWFStore) ScopeID() string                          { return s.scope }
+func (fakeWFStore) Submit(context.Context, WorkflowPlan) error { return nil }
+func (fakeWFStore) Cancel(context.Context, string, bool) error { return nil }
+func (fakeWFStore) Runnable(context.Context, string, string, bool) (bool, error) {
+	return true, nil
+}
 func (fakeWFStore) DepResult(context.Context, string, string) ([]byte, error) {
 	return nil, ErrNoResult
 }

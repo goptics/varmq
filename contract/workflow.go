@@ -103,8 +103,9 @@ type WorkflowStore interface {
 	Submit(ctx context.Context, w WorkflowPlan) error
 	// Cancel cancels the workflow. undo also runs compensation.
 	Cancel(ctx context.Context, id string, undo bool) error
-	// Runnable reports whether the task may run now.
-	Runnable(ctx context.Context, workflowID, task string) (bool, error)
+	// Runnable reports whether the task (undo: its undo job) may run now:
+	// the pre-run check.
+	Runnable(ctx context.Context, workflowID, task string, undo bool) (bool, error)
 	// DepResult returns the stored result of the task's dependency.
 	DepResult(ctx context.Context, workflowID, task string) ([]byte, error)
 	Record(ctx context.Context, id string) (WorkflowRecord, error)
