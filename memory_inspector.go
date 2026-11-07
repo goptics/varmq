@@ -105,9 +105,10 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 }
 
 // Jobs lists pending jobs in hand-out order; other states hold none in
-// memory, so their pages are empty.
-// ponytail: Values copies the whole queue per page; a paged storage read if
-// in-memory queues of millions get inspected often.
+// memory, so their pages are empty. A priority queue pages without sorting
+// (Page).
+// ponytail: a FIFO page still copies the whole queue (Values); a paged
+// cursor read if in-memory queues of millions get inspected often.
 func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
 	out := []JobRecord{}
 	if state != JobPending {
@@ -115,6 +116,12 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 	}
 
 	if offset >= m.q.Len() { // before copying the queue
+		return out, nil
+	}
+	if p, ok := m.q.(interface{ Page(offset, limit int) []any }); ok {
+		for _, v := range p.Page(offset, limit) {
+			out = append(out, pendingRecord(v))
+		}
 		return out, nil
 	}
 	values := m.q.Values()

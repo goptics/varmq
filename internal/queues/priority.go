@@ -57,6 +57,28 @@ func (q *PriorityQueue[T]) Values() []any {
 	return values
 }
 
+// Page returns up to limit values from offset, in the order Dequeue hands
+// them out, without sorting the whole queue: a copy of the heap is popped
+// offset+limit times. O(n + (offset+limit) log n), and O(n) memory for the
+// copy.
+func (q *PriorityQueue[T]) Page(offset, limit int) []any {
+	q.mx.RLock()
+	h := heapQueue[T]{items: slices.Clone(q.internal.items)}
+	q.mx.RUnlock()
+
+	if offset >= len(h.items) {
+		return []any{}
+	}
+	end := offset + min(limit, len(h.items)-offset) // no offset+limit: offset may be near MaxInt
+	out := make([]any, 0, end-offset)
+	for i := range end {
+		if v := h.pop().Value; i >= offset {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // values copies the stored values. Callers hold mx.
 func (q *PriorityQueue[T]) values() []any {
 	values := make([]any, 0, len(q.internal.items))

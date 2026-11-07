@@ -1,6 +1,7 @@
 package queues
 
 import (
+	"math"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -218,4 +219,19 @@ func TestPriorityQueue(t *testing.T) {
 			assert.Equal(t, 2, pq.Len())
 		})
 	})
+}
+
+// Page returns a window of hand-out order, as Values would, without
+// changing the queue.
+func TestPriorityPage(t *testing.T) {
+	q := NewPriorityQueue[int]()
+	for i, p := range []int{5, 1, 3, 1, 2} {
+		q.Enqueue(i, p)
+	}
+	all := q.Values()
+	assert.Equal(t, all[1:4], q.Page(1, 3))
+	assert.Equal(t, all[3:], q.Page(3, 100))
+	assert.Empty(t, q.Page(5, 1))
+	assert.Empty(t, q.Page(math.MaxInt, 1))
+	assert.Equal(t, 5, q.Len(), "the queue is unchanged")
 }
