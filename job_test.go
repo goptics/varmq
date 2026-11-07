@@ -810,11 +810,12 @@ func TestJobOutcome(t *testing.T) {
 func TestEnvelopeWorkflowTag(t *testing.T) {
 	t.Run("tagged job round-trips", func(t *testing.T) {
 		j := newJob(1, jobConfigs{Id: "j1"})
-		j.setTask("w1", "a")
+		j.setTask(taskTag{wf: "w1", task: "a"})
 
 		b, err := j.Json()
 		require.NoError(t, err)
 		assert.Contains(t, string(b), `"wf":"w1","task":"a"`)
+		assert.NotContains(t, string(b), `"undo"`)
 
 		p, err := parseToJob[int](b)
 		require.NoError(t, err)
@@ -823,7 +824,23 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 		require.NotNil(t, tag)
 		assert.Equal(t, "w1", tag.wf)
 		assert.Equal(t, "a", tag.task)
+		assert.False(t, tag.undo)
 		assert.Nil(t, tag.store)
+	})
+
+	t.Run("undo job round-trips", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1:undo"})
+		j.setTask(taskTag{wf: "w1", task: "a", undo: true})
+
+		b, err := j.Json()
+		require.NoError(t, err)
+		assert.Contains(t, string(b), `"wf":"w1","task":"a","undo":true`)
+
+		p, err := parseToJob[int](b)
+		require.NoError(t, err)
+		tag := p.(*job[int]).taskTag()
+		require.NotNil(t, tag)
+		assert.True(t, tag.undo)
 	})
 
 	t.Run("untagged job has no wf key", func(t *testing.T) {
@@ -835,7 +852,7 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 
 	t.Run("tag survives setAck and fail", func(t *testing.T) {
 		j := newJob(1, jobConfigs{Id: "j1"})
-		j.setTask("w1", "a")
+		j.setTask(taskTag{wf: "w1", task: "a"})
 		j.setAck(mocks.NewMockPersistentQueue(), "ack1")
 		j.fail("boom")
 		require.NotNil(t, j.taskTag())

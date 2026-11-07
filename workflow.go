@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 	"slices"
 )
@@ -35,9 +34,9 @@ type Task struct {
 	name   string
 	wf     *Workflow
 	index  int // in wf.tasks; -1 when not added
-	target taskTarget
+	item   WorkflowItem
+	err    error // the queue can't take it
 	data   any
-	item   func(jobID string, tag taskTag) (any, error)
 	deps   []*Task
 	always bool
 	prio   *int
@@ -46,9 +45,9 @@ type Task struct {
 
 // undoSpec is a task's compensation job.
 type undoSpec struct {
-	target taskTarget
-	data   any
-	item   func(jobID string, tag taskTag) (any, error)
+	item WorkflowItem
+	err  error
+	data any
 }
 
 type workflowConfig struct {
@@ -104,21 +103,11 @@ func (wf *Workflow) Add[T any](name string, q TaskQueue[T], data T) *Task {
 		return t
 	}
 
-	t.target, t.item = targetOf(q, data)
+	t.item, t.err = itemOf(q, data)
 	t.index = len(wf.tasks)
 	wf.tasks = append(wf.tasks, t)
 
 	return t
-}
-
-// targetOf resolves handle q for data of type T.
-func targetOf[T any](q TaskQueue[T], data T) (taskTarget, func(string, taskTag) (any, error)) {
-	tq, ok := q.(taskQueue[T])
-	if !ok {
-		return taskTarget{err: fmt.Errorf("varmq: queue %T doesn't take %v data", q, reflect.TypeFor[T]())}, nil
-	}
-
-	return tq.taskTarget(), func(jobID string, tag taskTag) (any, error) { return tq.taskItem(data, jobID, tag) }
 }
 
 // usable records an error and reports false when t can't change anymore.
@@ -174,7 +163,7 @@ func (t *Task) Undo[U any](q TaskQueue[U], data U) *Task {
 	}
 
 	u := &undoSpec{data: data}
-	u.target, u.item = targetOf(q, data)
+	u.item, u.err = itemOf(q, data)
 	t.undo = u
 
 	return t
@@ -185,7 +174,7 @@ func (t *Task) Priority(p int) *Task {
 	if !t.usable("Priority") {
 		return t
 	}
-	if t.target.err == nil && !t.target.priority {
+	if t.err == nil && !t.item.target.priority {
 		t.wf.errs = append(t.wf.errs, fmt.Errorf("varmq: task %q: Priority on a FIFO queue", t.name))
 		return t
 	}
@@ -218,11 +207,12 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 		scope = wf.store.ScopeID()
 	}
 
-	// target checks t's queue: usable and in the store's scope.
-	target := func(task string, tt taskTarget) bool {
+	// target checks a task's queue: usable and in the store's scope.
+	target := func(task string, it WorkflowItem, err error) bool {
+		tt := it.target
 		switch {
-		case tt.err != nil:
-			errs = append(errs, fmt.Errorf("task %q: %w", task, tt.err))
+		case err != nil:
+			errs = append(errs, fmt.Errorf("task %q: %w", task, err))
 		case wf.store != nil && tt.scope != scope:
 			add("%w: task %q queue %s is in %s, the store in %s", ErrScopeMismatch, task, tt.queueID, tt.scope, scope)
 		default:
@@ -245,8 +235,8 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 		}
 		seen[t.name] = true
 
-		tp := TaskPlan{Name: t.name, JobID: taskJobID(wf.id, t.name), QueueID: t.target.queueID,
-			Queue: t.target.queue, Always: t.always}
+		tp := TaskPlan{Name: t.name, JobID: taskJobID(wf.id, t.name), QueueID: t.item.target.queueID,
+			Queue: t.item.target.queue, Always: t.always}
 		if t.prio != nil {
 			tp.Priority, tp.HasPriority = *t.prio, true
 		}
@@ -256,8 +246,8 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 
 		var err error
 		tag := taskTag{wf: wf.id, task: t.name}
-		if target(t.name, t.target) {
-			if tp.Item, err = t.item(tp.JobID, tag); err != nil {
+		if target(t.name, t.item, t.err) {
+			if tp.Item, err = t.item.build(tp.JobID, tag); err != nil {
 				add("varmq: task %q: %w", t.name, err)
 			}
 		}
@@ -266,9 +256,10 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 		}
 
 		if u := t.undo; u != nil {
-			up := &UndoPlan{JobID: tp.JobID + ":undo", QueueID: u.target.queueID, Queue: u.target.queue}
-			if target(t.name+" undo", u.target) {
-				if up.Item, err = u.item(up.JobID, tag); err != nil {
+			up := &UndoPlan{JobID: tp.JobID + ":undo", QueueID: u.item.target.queueID, Queue: u.item.target.queue}
+			if target(t.name+" undo", u.item, u.err) {
+				undoTag := taskTag{wf: wf.id, task: t.name, undo: true}
+				if up.Item, err = u.item.build(up.JobID, undoTag); err != nil {
 					add("varmq: task %q undo: %w", t.name, err)
 				}
 			}

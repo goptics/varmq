@@ -2,6 +2,7 @@ package varmq
 
 // DistributedQueue is a external queue wrapper of an any IDistributedQueue
 type DistributedQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 	// Add data to the queue
 	Add(data T, configs ...JobConfigFunc) bool
@@ -55,10 +56,7 @@ func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
 	return true
 }
 
-// taskTarget and taskItem make the handle a workflow task target (workflow_target.go).
-func (dq *distributedQueue[T]) taskTarget() taskTarget {
-	return durableTaskTarget(dq.IDistributedQueue, false)
-}
-func (dq *distributedQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
-	return durableTaskItem(data, jobID, tag)
+// WorkflowItem makes the handle a workflow task target (workflow_target.go).
+func (dq *distributedQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(dq.IDistributedQueue, false, data)
 }

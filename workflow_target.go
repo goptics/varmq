@@ -1,33 +1,38 @@
 package varmq
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
-// TaskQueue is a queue handle a workflow task targets: any handle varmq
-// returns (Queue, PriorityQueue, ErrQueue, ResultQueue, persistent and
-// distributed ones). T is the job data type.
-// ponytail: T only drives inference. Handle interfaces don't carry the
-// unexported taskQueue methods (that would change them for users), so a
-// handle of another data type is caught by plan, not by the compiler.
+// TaskQueue is a queue handle a workflow task targets: every handle varmq
+// returns (Queue, PriorityQueue, their Err and Result kinds, persistent and
+// distributed ones). T is the job data type, so Add checks q and data
+// together at compile time:
+//
+//	wf.Add("thumb", thumbQ, Thumb{Size: 64}) // thumbQ: Queue[Thumb]
 type TaskQueue[T any] interface {
-	IExternalBaseQueue
+	// WorkflowItem is data as a job of this queue. Used by Workflow.Add and
+	// Task.Undo; not for direct use.
+	WorkflowItem(data T) (WorkflowItem, error)
 }
 
-// taskQueue is what every handle type implements for workflows.
-type taskQueue[T any] interface {
-	taskTarget() taskTarget
-	// taskItem is the item the store pushes: envelope bytes for durable
-	// storage, the tagged job for in-memory storage.
-	taskItem(data T, jobID string, tag taskTag) (any, error)
+// WorkflowItem is a job bound for a queue handle, made by
+// TaskQueue.WorkflowItem. Used by Workflow.Add and Task.Undo; not for
+// direct use.
+type WorkflowItem struct {
+	target taskTarget
+	// build makes the item the store pushes: envelope bytes for durable
+	// storage, the tagged job for in-memory storage. Called at Submit.
+	build func(jobID string, tag taskTag) (any, error)
 }
 
-// taskTarget is where a task's job goes. err is set when the handle can't
-// take workflow tasks.
+// taskTarget is where a task's job goes.
 type taskTarget struct {
 	queueID  string
 	queue    any // TaskPlan.Queue: memTarget or the durable storage
 	scope    string
 	priority bool
-	err      error
 }
 
 // memTarget is an in-memory queue in TaskPlan.Queue: the in-memory store
@@ -46,14 +51,16 @@ type memTaskJob interface {
 // memoryScope is the Atomic Scope of every in-memory queue of this process.
 func memoryScope() string { return "memory:" + InstanceID }
 
-// memTaskTarget targets an in-memory handle. store puts item into the
-// storage once per id (prio is ignored by FIFO storage).
+// memWorkflowItem is a WorkflowItem of an in-memory handle. store puts item
+// into the storage once per id (FIFO storage ignores prio); mk makes the
+// job of the kind the handle's worker runs, and its embedded job.
 // ponytail: storage still applies its own capacity; promotion can't bypass
 // it without a storage method.
-func memTaskTarget(eq *externalBaseQueue, priority bool, store func(item any, prio int, id string) bool) taskTarget {
+func memWorkflowItem[T any](eq *externalBaseQueue, priority bool, store func(item any, prio int, id string) bool,
+	mk func(jobID string) (any, *job[T])) (WorkflowItem, error) {
 	m := eq.totals
 	if m == nil { // storage that counts or acks on its own: not plain in-memory
-		return taskTarget{err: fmt.Errorf("varmq: queue storage %T can't take workflow tasks", eq.q)}
+		return WorkflowItem{}, fmt.Errorf("varmq: queue storage %T can't take workflow tasks", eq.q)
 	}
 
 	w := eq.w
@@ -75,29 +82,56 @@ func memTaskTarget(eq *externalBaseQueue, priority bool, store func(item any, pr
 		return true
 	}
 
-	return taskTarget{queueID: m.id, queue: memTarget{queueID: m.id, push: push}, scope: memoryScope(), priority: priority}
+	// Its own ack, counted by m and tagged (tag.store nil: the store binds
+	// it). Not countedBy: m.ref is shared and has no tag.
+	build := func(jobID string, tag taskTag) (any, error) {
+		item, j := mk(jobID)
+		j.ackRef.Store(&jobAck{totals: m, ext: &ackExt{task: &tag}})
+		return item, nil
+	}
+
+	return WorkflowItem{
+		target: taskTarget{queueID: m.id, queue: memTarget{queueID: m.id, push: push}, scope: memoryScope(), priority: priority},
+		build:  build,
+	}, nil
 }
 
-func memFIFOTarget(eq *externalBaseQueue, q IQueue) taskTarget {
-	return memTaskTarget(eq, false, func(item any, _ int, id string) bool { return enqueue(q, item, id) })
+func memFIFOItem[T any](eq *externalBaseQueue, q IQueue, mk func(string) (any, *job[T])) (WorkflowItem, error) {
+	return memWorkflowItem(eq, false, func(item any, _ int, id string) bool { return enqueue(q, item, id) }, mk)
 }
 
-func memPriorityTarget(eq *externalBaseQueue, q IPriorityQueue) taskTarget {
-	return memTaskTarget(eq, true, func(item any, prio int, id string) bool {
+func memPriorityItem[T any](eq *externalBaseQueue, q IPriorityQueue, mk func(string) (any, *job[T])) (WorkflowItem, error) {
+	return memWorkflowItem(eq, true, func(item any, prio int, id string) bool {
 		return enqueuePriority(q, item, prio, id)
-	})
+	}, mk)
 }
 
-// tagMemJob gives an in-memory task job its own ack: counted by m, tagged
-// (tag.store nil: the store binds it). Not countedBy: m.ref is shared and
-// has no tag.
-func tagMemJob[T any](j *job[T], m *memQueue, tag taskTag) {
-	j.ackRef.Store(&jobAck{totals: m, ext: &ackExt{task: &tag}})
+// taskJob, errTaskJob and resultTaskJob make data's job for a Worker,
+// ErrWorker and ResultWorker queue.
+func taskJob[T any](data T) func(string) (any, *job[T]) {
+	return func(id string) (any, *job[T]) {
+		j := newJob(data, jobConfigs{Id: id})
+		return j, j
+	}
 }
 
-// durableTaskTarget targets persistent or distributed storage, which must
-// finish workflow tasks itself.
-func durableTaskTarget(storage any, priority bool) taskTarget {
+func errTaskJob[T any](data T) func(string) (any, *job[T]) {
+	return func(id string) (any, *job[T]) {
+		j := newErrorJob(data, jobConfigs{Id: id})
+		return j, &j.job
+	}
+}
+
+func resultTaskJob[T, R any](data T) func(string) (any, *job[T]) {
+	return func(id string) (any, *job[T]) {
+		j := newResultJob[T, R](data, jobConfigs{Id: id})
+		return j, &j.job
+	}
+}
+
+// durableWorkflowItem is a WorkflowItem of persistent or distributed
+// storage, which must finish workflow tasks itself.
+func durableWorkflowItem[T any](storage any, priority bool, data T) (WorkflowItem, error) {
 	qi, inspectable := storage.(QueueInspector)
 	wa, ok := storage.(WorkflowAcknowledgeable)
 	if !ok || !inspectable {
@@ -106,16 +140,28 @@ func durableTaskTarget(storage any, priority bool) taskTarget {
 			name = qi.QueueID()
 		}
 
-		return taskTarget{err: fmt.Errorf("%w: queue %s can't take workflow tasks", ErrScopeMismatch, name)}
+		return WorkflowItem{}, fmt.Errorf("%w: queue %s can't take workflow tasks", ErrScopeMismatch, name)
 	}
 
-	return taskTarget{queueID: qi.QueueID(), queue: storage, scope: wa.ScopeID(), priority: priority}
+	build := func(jobID string, tag taskTag) (any, error) {
+		j := newJob(data, jobConfigs{Id: jobID})
+		j.setTask(tag)
+		return j.Json()
+	}
+
+	return WorkflowItem{
+		target: taskTarget{queueID: qi.QueueID(), queue: storage, scope: wa.ScopeID(), priority: priority},
+		build:  build,
+	}, nil
 }
 
-// durableTaskItem is the job envelope of a task, tagged with its workflow.
-func durableTaskItem[T any](data T, jobID string, tag taskTag) (any, error) {
-	j := newJob(data, jobConfigs{Id: jobID})
-	j.setTask(tag.wf, tag.task)
+var errNilTaskQueue = errors.New("varmq: nil queue")
 
-	return j.Json()
+// itemOf is data as a job of q.
+func itemOf[T any](q TaskQueue[T], data T) (WorkflowItem, error) {
+	if q == nil {
+		return WorkflowItem{}, errNilTaskQueue
+	}
+
+	return q.WorkflowItem(data)
 }

@@ -2,6 +2,7 @@ package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 type PersistentQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -51,11 +52,8 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 	return true
 }
 
-// taskTarget and taskItem override the embedded in-memory queue's: the
+// WorkflowItem overrides the embedded in-memory queue's: the
 // storage finishes and promotes tasks (workflow_target.go).
-func (q *persistentQueue[T]) taskTarget() taskTarget {
-	return durableTaskTarget(q.internalQueue, false)
-}
-func (q *persistentQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
-	return durableTaskItem(data, jobID, tag)
+func (q *persistentQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(q.internalQueue, false, data)
 }

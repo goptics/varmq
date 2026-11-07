@@ -59,6 +59,21 @@ func newWFPersistent(id, scope string) wfPersistent {
 	return wfPersistent{mocks.NewMockPersistentQueue(), wfStorage{id, scope}}
 }
 
+// Every handle a task can target is a TaskQueue of its data type: a
+// signature drift breaks the build.
+var (
+	_ TaskQueue[int] = Queue[int](nil)
+	_ TaskQueue[int] = PriorityQueue[int](nil)
+	_ TaskQueue[int] = ErrQueue[int](nil)
+	_ TaskQueue[int] = ErrPriorityQueue[int](nil)
+	_ TaskQueue[int] = ResultQueue[int, string](nil)
+	_ TaskQueue[int] = ResultPriorityQueue[int, string](nil)
+	_ TaskQueue[int] = PersistentQueue[int](nil)
+	_ TaskQueue[int] = PersistentPriorityQueue[int](nil)
+	_ TaskQueue[int] = DistributedQueue[int](nil)
+	_ TaskQueue[int] = DistributedPriorityQueue[int](nil)
+)
+
 func TestWorkflowBuilder(t *testing.T) {
 	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 	fifo := w.BindQueue()
@@ -110,6 +125,8 @@ func TestWorkflowBuilder(t *testing.T) {
 		ju, ok := tc.Undo.Item.(*job[int])
 		require.True(t, ok)
 		assert.Equal(t, "c", ju.taskTag().task)
+		assert.True(t, ju.taskTag().undo)
+		assert.False(t, ja.taskTag().undo)
 		assert.Equal(t, 9, ju.Data())
 
 		// in-memory target: push stores, counts and wakes
@@ -178,6 +195,7 @@ func TestWorkflowBuilder(t *testing.T) {
 		assert.Equal(t, "wf:w1:b:undo", view.Id)
 		assert.Equal(t, "undo-b", view.Payload)
 		assert.Equal(t, "b", view.Task)
+		assert.True(t, view.Undo)
 	})
 
 	t.Run("every handle", func(t *testing.T) {
@@ -192,43 +210,42 @@ func TestWorkflowBuilder(t *testing.T) {
 			*mocks.MockDistributedQueue
 			wfStorage
 		}{mocks.NewMockDistributedQueue(), st("c")}
-		errPrio := ew.BindPriorityQueue().(*errorPriorityQueue[string])
-		res := rw.BindQueue().(*resultQueue[int, int])
-		resPrio := rw.BindPriorityQueue().(*resultPriorityQueue[int, int])
 		mem, durable := memoryScope(), "redis://x"
-
-		for name, c := range map[string]struct {
-			target   taskTarget
-			scope    string
-			priority bool
-		}{
-			"queue":           {fifo.(*queue[int]).taskTarget(), mem, false},
-			"priority":        {prio.(*priorityQueue[int]).taskTarget(), mem, true},
-			"err":             {errQ.(*errorQueue[string]).taskTarget(), mem, false},
-			"err priority":    {errPrio.taskTarget(), mem, true},
-			"result":          {res.taskTarget(), mem, false},
-			"result priority": {resPrio.taskTarget(), mem, true},
-			"persistent": {dw.WithPersistentQueue(newWFPersistent("a", "redis://x")).(*persistentQueue[int]).taskTarget(),
-				durable, false},
-			"persistent priority": {dw.WithPersistentPriorityQueue(pp).(*persistentPriorityQueue[int]).taskTarget(),
-				durable, true},
-			"distributed": {NewDistributedQueue[int](dq).(*distributedQueue[int]).taskTarget(), durable, false},
-			"distributed priority": {NewDistributedPriorityQueue[int](wfDistributedPrio{
-				mocks.NewMockDistributedPriorityQueue(), st("d")}).(*distributedPriorityQueue[int]).taskTarget(), durable, true},
-		} {
-			require.NoError(t, c.target.err, name)
-			assert.Equal(t, c.scope, c.target.scope, name)
-			assert.Equal(t, c.priority, c.target.priority, name)
-			assert.NotEmpty(t, c.target.queueID, name)
+		isJob := func(v any) bool { _, ok := v.(*job[int]); return ok }
+		isErr := func(v any) bool { _, ok := v.(iErrorJob[string]); return ok }
+		isResult := func(v any) bool { _, ok := v.(iResultJob[int, int]); return ok }
+		isBytes := func(v any) bool { _, ok := v.([]byte); return ok }
+		item := func(it WorkflowItem, err error) WorkflowItem {
+			require.NoError(t, err)
+			return it
 		}
 
-		// in-memory items are the job kind the worker asserts
-		v, _ := errPrio.taskItem("x", "j", taskTag{})
-		assert.Implements(t, (*iErrorJob[string])(nil), v)
-		v, _ = res.taskItem(1, "j", taskTag{})
-		assert.Implements(t, (*iResultJob[int, int])(nil), v)
-		v, _ = resPrio.taskItem(1, "j", taskTag{})
-		assert.Implements(t, (*iResultJob[int, int])(nil), v)
+		for name, c := range map[string]struct {
+			item     WorkflowItem
+			scope    string
+			priority bool
+			kind     func(any) bool
+		}{
+			"queue":           {item(fifo.WorkflowItem(1)), mem, false, isJob},
+			"priority":        {item(prio.WorkflowItem(1)), mem, true, isJob},
+			"err":             {item(errQ.WorkflowItem("x")), mem, false, isErr},
+			"err priority":    {item(ew.BindPriorityQueue().WorkflowItem("x")), mem, true, isErr},
+			"result":          {item(rw.BindQueue().WorkflowItem(1)), mem, false, isResult},
+			"result priority": {item(rw.BindPriorityQueue().WorkflowItem(1)), mem, true, isResult},
+			"persistent": {item(dw.WithPersistentQueue(newWFPersistent("a", "redis://x")).WorkflowItem(1)),
+				durable, false, isBytes},
+			"persistent priority": {item(dw.WithPersistentPriorityQueue(pp).WorkflowItem(1)), durable, true, isBytes},
+			"distributed":         {item(NewDistributedQueue[int](dq).WorkflowItem(1)), durable, false, isBytes},
+			"distributed priority": {item(NewDistributedPriorityQueue[int](wfDistributedPrio{
+				mocks.NewMockDistributedPriorityQueue(), st("d")}).WorkflowItem(1)), durable, true, isBytes},
+		} {
+			assert.Equal(t, c.scope, c.item.target.scope, name)
+			assert.Equal(t, c.priority, c.item.target.priority, name)
+			assert.NotEmpty(t, c.item.target.queueID, name)
+			v, err := c.item.build("j", taskTag{wf: "w", task: "t"})
+			require.NoError(t, err, name)
+			assert.True(t, c.kind(v), "%s: item %T", name, v)
+		}
 	})
 
 	planErr := func(t *testing.T, wf *Workflow) error {
@@ -309,10 +326,10 @@ func TestWorkflowBuilder(t *testing.T) {
 		assert.ErrorIs(t, planErr(t, wf), ErrScopeMismatch)
 	})
 
-	t.Run("queue of another data type", func(t *testing.T) {
+	t.Run("nil queue", func(t *testing.T) {
 		wf := NewWorkflow(memStore())
-		wf.Add("a", fifo, "not an int")
-		assert.ErrorContains(t, planErr(t, wf), "string")
+		wf.Add("a", TaskQueue[int](nil), 1)
+		assert.ErrorContains(t, planErr(t, wf), "nil queue")
 	})
 
 	t.Run("call after Submit", func(t *testing.T) {

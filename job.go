@@ -107,6 +107,7 @@ type ackExt struct {
 // taskTag names the workflow task a job runs. store is nil until bound.
 type taskTag struct {
 	wf, task string
+	undo     bool // the task's undo job, not the task
 	store    WorkflowStore
 }
 
@@ -119,6 +120,7 @@ type jobView[T any] struct {
 	EnqueuedAt int64  `json:"enqueued_at,omitempty"` // Unix ms, producer clock
 	Wf         string `json:"wf,omitempty"`          // workflow id, workflow task only
 	Task       string `json:"task,omitempty"`        // task name within Wf
+	Undo       bool   `json:"undo,omitempty"`        // Task's undo job
 }
 
 type Job[T any] interface {
@@ -192,9 +194,9 @@ func (j *job[T]) taskTag() *taskTag {
 	return nil
 }
 
-// setTask tags the job as workflow task `task` of wf. Copies the ack: an
-// in-memory queue's jobAck is shared.
-func (j *job[T]) setTask(wf, task string) {
+// setTask tags the job as the workflow task (or undo) tag names. Copies the
+// ack: an in-memory queue's jobAck is shared.
+func (j *job[T]) setTask(tag taskTag) {
 	ref := jobAck{}
 	if old := j.ackRef.Load(); old != nil {
 		ref = *old
@@ -205,7 +207,7 @@ func (j *job[T]) setTask(wf, task string) {
 		ext = *ref.ext
 	}
 
-	ext.task = &taskTag{wf: wf, task: task}
+	ext.task = &tag
 	ref.ext = &ext
 	j.ackRef.Store(&ref)
 }
@@ -301,7 +303,7 @@ func (j *job[T]) Json() ([]byte, error) {
 		EnqueuedAt: time.Now().UnixMilli(),
 	}
 	if t := j.taskTag(); t != nil {
-		view.Wf, view.Task = t.wf, t.task
+		view.Wf, view.Task, view.Undo = t.wf, t.task, t.undo
 	}
 
 	return json.Marshal(view)
@@ -318,7 +320,7 @@ func parseToJob[T any](data []byte) (any, error) {
 	})
 
 	if view.Wf != "" {
-		j.setTask(view.Wf, view.Task) // store bound later
+		j.setTask(taskTag{wf: view.Wf, task: view.Task, undo: view.Undo}) // store bound later
 	}
 
 	// Set the status

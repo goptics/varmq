@@ -1,6 +1,7 @@
 package varmq
 
 type PersistentPriorityQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -45,11 +46,8 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 	return true
 }
 
-// taskTarget and taskItem override the embedded in-memory queue's: the
+// WorkflowItem overrides the embedded in-memory queue's: the
 // storage finishes and promotes tasks (workflow_target.go).
-func (q *persistentPriorityQueue[T]) taskTarget() taskTarget {
-	return durableTaskTarget(q.internalQueue, true)
-}
-func (q *persistentPriorityQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
-	return durableTaskItem(data, jobID, tag)
+func (q *persistentPriorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(q.internalQueue, true, data)
 }
