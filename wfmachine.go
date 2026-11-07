@@ -24,7 +24,7 @@ type wfTask struct {
 	Reason    string
 	Result    []byte
 	UndoState JobState // "" none, waiting, pending, completed, failed
-	UndoOpen  int      // undos of completed dependents not ended yet
+	UndoOpen  int      // undos of completed descendants not ended yet
 }
 
 // wfEffect is one thing storage must do: push a task (or its undo), and/or
@@ -85,7 +85,7 @@ func (s *wfState) finish(e TaskEnd) ([]wfEffect, error) {
 		return nil, fmt.Errorf("varmq: workflow %q task %q: unknown outcome %q", e.Workflow, e.Task, e.Outcome)
 	}
 	if e.Undo {
-		return s.finishUndo(t, e.Outcome), nil
+		return s.finishUndo(t, e), nil
 	}
 	if s.State != WorkflowRunning || !active(t.State) {
 		return nil, nil
@@ -108,7 +108,7 @@ func (s *wfState) finish(e TaskEnd) ([]wfEffect, error) {
 	if !s.absorbed(e.Task) {
 		s.failed = true
 		if s.FailFast {
-			s.cancelWaiting()
+			s.failFast(e.Task, push)
 		}
 	}
 	s.drop(e.Task, push)
@@ -141,23 +141,24 @@ func (s *wfState) runnable(task string) bool {
 	return false
 }
 
-func (s *wfState) finishUndo(t *wfTask, out Outcome) []wfEffect {
+func (s *wfState) finishUndo(t *wfTask, e TaskEnd) []wfEffect {
 	if s.State != WorkflowCompensating || !active(t.UndoState) {
 		return nil
 	}
 	t.UndoState = JobFailed
-	if out == OutcomeCompleted {
+	if e.Outcome == OutcomeCompleted {
 		t.UndoState = JobCompleted
 	}
 	push := map[string]bool{}
-	for _, d := range t.Plan.Deps {
-		x := s.Tasks[d]
-		if x.UndoState != JobWaiting {
+	up := s.reach(e.Task, true)
+	for _, name := range s.Order {
+		x := s.Tasks[name]
+		if !up[name] || x.UndoState != JobWaiting {
 			continue
 		}
 		if x.UndoOpen--; x.UndoOpen == 0 {
 			x.UndoState = JobPending
-			push[d] = true
+			push[name] = true
 		}
 	}
 	fx := s.emit(push, true)
@@ -221,6 +222,48 @@ func (s *wfState) absorbed(name string) bool {
 	return true
 }
 
+// failFast cancels every waiting task on an unabsorbed failure, except the
+// failed task's Always dependents (like GitHub Actions' always()). Each
+// cancelled task is dropped so those Always dependents still count it.
+func (s *wfState) failFast(failed string, push map[string]bool) {
+	keep := map[string]bool{}
+	for _, d := range s.next[failed] {
+		keep[d] = s.Tasks[d].Plan.Always
+	}
+	var cancelled []string
+	for _, name := range s.Order {
+		if t := s.Tasks[name]; t.State == JobWaiting && !keep[name] {
+			t.State = JobCancelled
+			cancelled = append(cancelled, name)
+		}
+	}
+	for _, name := range cancelled {
+		s.drop(name, push)
+	}
+}
+
+// reach returns every task reachable from name: ancestors when up, else
+// descendants. name itself is not included.
+func (s *wfState) reach(name string, up bool) map[string]bool {
+	seen := map[string]bool{}
+	stack := []string{name}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		edges := s.next[n]
+		if up {
+			edges = s.Tasks[n].Plan.Deps
+		}
+		for _, m := range edges {
+			if !seen[m] {
+				seen[m] = true
+				stack = append(stack, m)
+			}
+		}
+	}
+	return seen
+}
+
 func (s *wfState) cancelWaiting() {
 	for _, name := range s.Order {
 		if t := s.Tasks[name]; t.State == JobWaiting {
@@ -259,8 +302,8 @@ func (s *wfState) settle(push map[string]bool) []wfEffect {
 }
 
 // compensate marks the undo of every completed task waiting on the undos of
-// its completed dependents that have one; a dependent without an undo
-// counts as ended. Returns the undos ready now.
+// all its completed descendants that have one (transitive, so tasks without
+// an undo are looked through: saga order). Returns the undos ready now.
 func (s *wfState) compensate() []wfEffect {
 	push := map[string]bool{}
 	for _, name := range s.Order {
@@ -269,7 +312,7 @@ func (s *wfState) compensate() []wfEffect {
 			continue
 		}
 		t.UndoState, t.UndoOpen = JobWaiting, 0
-		for _, d := range s.next[name] {
+		for d := range s.reach(name, false) { // a count: map order is harmless
 			if dt := s.Tasks[d]; dt.State == JobCompleted && dt.Plan.Undo != nil {
 				t.UndoOpen++
 			}
