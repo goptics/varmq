@@ -199,6 +199,11 @@ func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[Job
 // stored, whether to keep dispatching, and any storage error.
 func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) (n int, cont bool, err error) {
 	cont = true
+	defer func() { // counted processing once per batch; a batch has one source
+		if n > 0 {
+			memTaken(buf[0].memTotals(), int64(n))
+		}
+	}()
 	for n < len(buf) {
 		j, nextErr := m.Next()
 		if nextErr != nil {
@@ -210,7 +215,6 @@ func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) 
 			return
 		}
 		if j.IsClosed() {
-			memTaken(j.memTotals(), -1)
 			continue
 		}
 		buf[n] = j
