@@ -855,12 +855,11 @@ func TestWorkers(t *testing.T) {
 				assert.Eventually(t, func() bool { return w.pool.Len() <= w.numMinIdleWorkers()+1 }, 200*time.Millisecond, 5*time.Millisecond, "Pool should be cleaned up")
 			})
 
-			t.Run("processNextJob with cast failure after parse", func(t *testing.T) {
+			t.Run("processNextJob parses stored bytes into the error job kind", func(t *testing.T) {
 				mockQueue := mocks.NewMockPersistentQueue()
 				w := newErrWorker(func(j iErrorJob[string]) {}, WithAutoRun(false))
 
-				// Create a valid JSON that parseToJob will accept and return *job[string]
-				// *job[string] does NOT implement iErrorJob[string]
+				// the envelope parses into *errorJob[string], not a plain *job[string]
 				jobData := []byte(`{"id":"123","payload":"test","status":"Created"}`)
 				mockQueue.Queue.Enqueue(jobData)
 
@@ -869,8 +868,7 @@ func TestWorkers(t *testing.T) {
 
 				w.status.Store(idle) // as Start leaves it: dispatch runs only on an active worker
 				_, err := w.processNextJob()
-				assert.Error(t, err)
-				assert.Equal(t, ErrFailedToCastJob, err)
+				assert.NoError(t, err)
 			})
 
 			t.Run("processNextJob returns false when all queues empty", func(t *testing.T) {

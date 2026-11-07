@@ -1,6 +1,7 @@
 package varmq
 
 type PersistentPriorityQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -15,7 +16,7 @@ type persistentPriorityQueue[T any] struct {
 	poke func() // the source's ready hint; nil unless the storage pops in batches
 }
 
-func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+func newPersistentPriorityQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
 
@@ -43,4 +44,10 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 	q.w.notifyToPullNextJobs()
 
 	return true
+}
+
+// WorkflowItem overrides the embedded in-memory queue's: the
+// storage finishes and promotes tasks (workflow_target.go).
+func (q *persistentPriorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(q.internalQueue, true, data)
 }

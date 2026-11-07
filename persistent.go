@@ -2,6 +2,7 @@ package varmq
 
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 type PersistentQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -19,7 +20,7 @@ type persistentQueue[T any] struct {
 
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
-func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+func newPersistentQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
 
@@ -49,4 +50,10 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 	q.w.notifyToPullNextJobs()
 
 	return true
+}
+
+// WorkflowItem overrides the embedded in-memory queue's: the
+// storage finishes and promotes tasks (workflow_target.go).
+func (q *persistentQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(q.internalQueue, false, data)
 }

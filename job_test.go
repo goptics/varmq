@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -112,12 +113,11 @@ func TestJob(t *testing.T) {
 
 		// Test valid JSON parsing
 		validJSON := []byte(`{"id":"test-id","status":"Created","data":"test data"}`)
-		result, err := parseToJob[string](validJSON)
+		result, err := parseToJob(validJSON, newJob[string])
 		assert.NoError(err, "parseToJob should not error with valid JSON")
 		assert.NotNil(result, "parseToJob result should not be nil")
 
-		j, ok := result.(*job[string])
-		assert.True(ok, "result should be a *job[string]")
+		j := result
 		assert.Equal("test-id", j.ID(), "job ID should match")
 		assert.Equal("test data", j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should match")
@@ -126,21 +126,21 @@ func TestJob(t *testing.T) {
 		statuses := []string{"Queued", "Processing", "Finished", "Closed"}
 		for _, status := range statuses {
 			jsonWithStatus := []byte(`{"id":"test-id","status":"` + status + `","data":"test data"}`)
-			result, err := parseToJob[string](jsonWithStatus)
+			result, err := parseToJob(jsonWithStatus, newJob[string])
 			assert.NoError(err, "parseToJob should not error with status "+status)
-			j, _ := result.(*job[string])
+			j := result
 			assert.Equal(status, j.Status(), "job status should match "+status)
 		}
 
 		// Test invalid status
 		invalidStatus := []byte(`{"id":"test-id","status":"Invalid","data":"test data"}`)
-		_, err = parseToJob[string](invalidStatus)
+		_, err = parseToJob(invalidStatus, newJob[string])
 		assert.Error(err, "parseToJob should error with invalid status")
 		assert.Contains(err.Error(), "invalid status", "error should mention invalid status")
 
 		// Test invalid JSON
 		invalidJSON := []byte(`{invalid json}`)
-		_, err = parseToJob[string](invalidJSON)
+		_, err = parseToJob(invalidJSON, newJob[string])
 		assert.Error(err, "parseToJob should error with invalid JSON")
 		assert.Contains(err.Error(), "failed to parse job", "error should mention parsing failure")
 	})
@@ -805,4 +805,128 @@ func TestJobOutcome(t *testing.T) {
 		assert.Nil(t, j.ackRef.Load())
 		assert.NoError(t, j.Close())
 	})
+}
+
+func TestEnvelopeWorkflowTag(t *testing.T) {
+	t.Run("tagged job round-trips", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "wf:w1:a"})
+		j.setTask(taskTag{wf: "w1", task: "a"})
+
+		b, err := j.Json()
+		require.NoError(t, err)
+		assert.Contains(t, string(b), `"wf":"w1","task":"a"`)
+		assert.NotContains(t, string(b), `"undo"`)
+
+		p, err := parseToJob(b, newJob[int])
+		require.NoError(t, err)
+
+		tag := p.taskTag()
+		require.NotNil(t, tag)
+		assert.Equal(t, "w1", tag.wf)
+		assert.Equal(t, "a", tag.task)
+		assert.False(t, tag.undo)
+		assert.Nil(t, tag.store)
+	})
+
+	t.Run("undo job round-trips", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "wf:w1:a:undo"})
+		j.setTask(taskTag{wf: "w1", task: "a", undo: true})
+
+		b, err := j.Json()
+		require.NoError(t, err)
+		assert.Contains(t, string(b), `"wf":"w1","task":"a","undo":true`)
+
+		p, err := parseToJob(b, newJob[int])
+		require.NoError(t, err)
+		tag := p.taskTag()
+		require.NotNil(t, tag)
+		assert.True(t, tag.undo)
+	})
+
+	t.Run("untagged job has no wf key", func(t *testing.T) {
+		b, err := newJob(1, jobConfigs{Id: "j1"}).Json()
+		require.NoError(t, err)
+		assert.NotContains(t, string(b), `"wf"`)
+		assert.NotContains(t, string(b), `"task"`)
+	})
+
+	t.Run("tag survives setAck and fail", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask(taskTag{wf: "w1", task: "a"})
+		j.setAck(mocks.NewMockPersistentQueue(), "ack1")
+		j.fail("boom")
+		require.NotNil(t, j.taskTag())
+		ext := j.ackRef.Load().ext
+		assert.Nil(t, ext.reason, "a task's failure is its end, not a Reject")
+		assert.Equal(t, TaskEnd{Outcome: OutcomeFailed, Reason: "boom"}, *ext.end)
+	})
+
+	t.Run("setAck keeps the tag, not a stale reason", func(t *testing.T) {
+		pq := mocks.NewMockPersistentQueue()
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setAck(pq, "ack1")
+		j.fail("old run")
+		j.setTask(taskTag{wf: "w1", task: "a"})
+		j.setAck(pq, "ack2")
+		ref := j.ackRef.Load()
+		assert.Equal(t, "ack2", ref.id)
+		assert.Nil(t, ref.ext.reason)
+		assert.Nil(t, ref.ext.end)
+		assert.Equal(t, "a", ref.ext.task.task)
+	})
+
+	t.Run("failed task on storage that can't finish tasks is rejected", func(t *testing.T) {
+		pq := mocks.NewMockPersistentQueue()
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask(taskTag{wf: "w1", task: "a"})
+		j.setAck(pq, "ack1")
+		j.fail("boom")
+		require.NoError(t, j.Close())
+		assert.Equal(t, []string{"boom"}, pq.Rejected())
+		assert.Empty(t, pq.Acked())
+	})
+
+	t.Run("Close of a tag-only job", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask(taskTag{wf: "w1", task: "a"}) // no ack id, no store
+		assert.NotPanics(t, func() { assert.NoError(t, j.Close()) })
+		assert.True(t, j.IsClosed())
+	})
+}
+
+// TestEnvelopeWorkflowTagInvalid: an envelope whose workflow fields could
+// not come from a Submit is unparsable, so no store key is built from it.
+func TestEnvelopeWorkflowTagInvalid(t *testing.T) {
+	for name, env := range map[string]string{
+		"wf without task":    `{"id":"wf:w1:","status":"Created","data":1,"wf":"w1"}`,
+		"task without wf":    `{"id":"x","status":"Created","data":1,"task":"a"}`,
+		"undo without wf":    `{"id":"x","status":"Created","data":1,"undo":true}`,
+		"wf index":           `{"id":"wf:index:a","status":"Created","data":1,"wf":"index","task":"a"}`,
+		"wf bad char":        `{"id":"wf:w 1:a","status":"Created","data":1,"wf":"w 1","task":"a"}`,
+		"wf with colon":      `{"id":"wf:w:1:a","status":"Created","data":1,"wf":"w:1","task":"a"}`,
+		"wf too long":        `{"id":"wf:` + strings.Repeat("w", 129) + `:a","status":"Created","data":1,"wf":"` + strings.Repeat("w", 129) + `","task":"a"}`,
+		"task bad char":      `{"id":"wf:w1:a/b","status":"Created","data":1,"wf":"w1","task":"a/b"}`,
+		"task too long":      `{"id":"wf:w1:` + strings.Repeat("a", 65) + `","status":"Created","data":1,"wf":"w1","task":"` + strings.Repeat("a", 65) + `"}`,
+		"id mismatch":        `{"id":"order-1","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		"id of another task": `{"id":"wf:w1:b","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		"undo id lacks undo": `{"id":"wf:w1:a","status":"Created","data":1,"wf":"w1","task":"a","undo":true}`,
+		"task id has undo":   `{"id":"wf:w1:a:undo","status":"Created","data":1,"wf":"w1","task":"a"}`,
+	} {
+		_, err := parseToJob([]byte(env), newJob[int])
+		assert.ErrorIs(t, err, ErrParseJob, name)
+	}
+
+	for _, env := range []string{
+		`{"id":"wf:w1:a","status":"Created","data":1,"wf":"w1","task":"a"}`,
+		`{"id":"wf:w1:a:undo","status":"Created","data":1,"wf":"w1","task":"a","undo":true}`,
+		`{"id":"wf:` + strings.Repeat("w", 128) + `:` + strings.Repeat("a", 64) + `","status":"Created","data":1,"wf":"` + strings.Repeat("w", 128) + `","task":"` + strings.Repeat("a", 64) + `"}`,
+		`{"id":"plain","status":"Created","data":1,"undo":false}`,
+	} {
+		_, err := parseToJob([]byte(env), newJob[int])
+		assert.NoError(t, err, env)
+	}
+}
+
+func TestJobAckSizeClass(t *testing.T) {
+	assert.LessOrEqual(t, unsafe.Sizeof(jobAck{}), uintptr(48))
 }

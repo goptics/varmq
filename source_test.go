@@ -67,7 +67,7 @@ func TestQueueSource(t *testing.T) {
 	t.Run("ready job passes through", func(t *testing.T) {
 		q := queues.NewQueue[any]()
 		q.Enqueue(newJob("x", jobConfigs{Id: "job-1"}))
-		src := &queueSource[string, iJob[string]]{q: q}
+		src := &queueSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		assert.Equal(t, 1, src.Len())
 
@@ -84,7 +84,7 @@ func TestQueueSource(t *testing.T) {
 
 		q := queues.NewQueue[any]()
 		q.Enqueue(b)
-		src := &queueSource[string, iJob[string]]{q: q}
+		src := &queueSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		j, err := src.Next()
 		assert.NoError(t, err)
@@ -95,7 +95,7 @@ func TestQueueSource(t *testing.T) {
 	t.Run("invalid bytes report ErrParseJob", func(t *testing.T) {
 		q := queues.NewQueue[any]()
 		q.Enqueue([]byte("not json"))
-		src := &queueSource[string, iJob[string]]{q: q}
+		src := &queueSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		_, err := src.Next()
 		assert.ErrorIs(t, err, ErrParseJob)
@@ -104,14 +104,14 @@ func TestQueueSource(t *testing.T) {
 	t.Run("wrong type reports ErrFailedToCastJob", func(t *testing.T) {
 		q := queues.NewQueue[any]()
 		q.Enqueue(123)
-		src := &queueSource[string, iJob[string]]{q: q}
+		src := &queueSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		_, err := src.Next()
 		assert.ErrorIs(t, err, ErrFailedToCastJob)
 	})
 
 	t.Run("empty queue reports ErrFailedToDequeue", func(t *testing.T) {
-		src := &queueSource[string, iJob[string]]{q: queues.NewQueue[any]()}
+		src := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any]()}
 
 		_, err := src.Next()
 		assert.ErrorIs(t, err, ErrFailedToDequeue)
@@ -125,7 +125,7 @@ func TestAckSource(t *testing.T) {
 
 		q := newAckTestQueue()
 		q.Enqueue(b)
-		src := &ackSource[string, iJob[string]]{q: q}
+		src := &ackSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		assert.Equal(t, 1, src.Len())
 
@@ -141,7 +141,7 @@ func TestAckSource(t *testing.T) {
 	t.Run("ready job through ack source acknowledges on close", func(t *testing.T) {
 		q := newAckTestQueue()
 		q.Enqueue(newJob("x", jobConfigs{Id: "r-1"}))
-		src := &ackSource[string, iJob[string]]{q: q}
+		src := &ackSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		j, err := src.Next()
 		assert.NoError(t, err)
@@ -155,7 +155,7 @@ func TestAckSource(t *testing.T) {
 		q := newAckTestQueue()
 		q.emptyAck = true
 		q.Enqueue(newJob("x", jobConfigs{Id: "e-1"}))
-		src := &ackSource[string, iJob[string]]{q: q}
+		src := &ackSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		j, err := src.Next()
 		assert.NoError(t, err)
@@ -168,14 +168,14 @@ func TestAckSource(t *testing.T) {
 	t.Run("wrong type reports ErrFailedToCastJob", func(t *testing.T) {
 		q := newAckTestQueue()
 		q.Enqueue(3.14)
-		src := &ackSource[string, iJob[string]]{q: q}
+		src := &ackSource[string, iJob[string]]{mk: plainMk, q: q}
 
 		_, err := src.Next()
 		assert.ErrorIs(t, err, ErrFailedToCastJob)
 	})
 
 	t.Run("empty queue reports ErrFailedToDequeue", func(t *testing.T) {
-		src := &ackSource[string, iJob[string]]{q: newAckTestQueue()}
+		src := &ackSource[string, iJob[string]]{mk: plainMk, q: newAckTestQueue()}
 
 		_, err := src.Next()
 		assert.ErrorIs(t, err, ErrFailedToDequeue)
@@ -444,7 +444,7 @@ func TestWorkerSources(t *testing.T) {
 	t.Run("removing an unknown source changes nothing", func(t *testing.T) {
 		w := newTestWorker()
 		a := w.bind(queues.NewQueue[any](), 1)
-		other := &queueSource[string, iJob[string]]{q: queues.NewQueue[any]()}
+		other := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any]()}
 
 		w.removeSource(other)
 
@@ -1572,3 +1572,6 @@ func TestPauseGateNeverMisreports(t *testing.T) {
 		require.ErrorIs(t, g.emptyErr(e), errNoReadySource, "refusal %d", refused)
 	}
 }
+
+// plainMk is the plain worker's job kind, for sources built by hand.
+func plainMk(d string, c jobConfigs) iJob[string] { return newJob(d, c) }

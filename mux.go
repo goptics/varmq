@@ -1,14 +1,17 @@
 package varmq
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"weak"
 )
 
 // WorkerRegistry safely stores reference to all active workers by Name
@@ -27,6 +30,63 @@ func registerQueue(q any) {
 		queueRegistry.Store(qi.QueueID(), qi)
 	}
 }
+
+// workflowStore is a registered store: it keeps workflows and lists them.
+type workflowStore interface {
+	WorkflowStore
+	WorkflowInspector
+}
+
+// workflowRegistry holds every known workflow store by ScopeID, for
+// /workflows. Filled by NewWorkflowStore and when a queue binds. An
+// in-memory store is held weakly, so dropping it frees it.
+// ponytail: durable entries are never removed, like queueRegistry's; a
+// closed storage stays: GET /workflows skips it, the ID routes answer 503
+// when no other store holds the ID.
+var workflowRegistry sync.Map
+
+// registerWorkflowStore lists s under /workflows if it can also list.
+func registerWorkflowStore(s WorkflowStore) {
+	if m, ok := s.(*memWorkflowStore); ok { // every in-memory store shares one scope
+		workflowRegistry.Store(fmt.Sprintf("%s#%p", m.ScopeID(), m), weak.Make(m))
+		return
+	}
+	if ws, ok := s.(workflowStore); ok {
+		workflowRegistry.Store(ws.ScopeID(), ws)
+	}
+}
+
+// workflowStores is every registered store still alive; the entry of a
+// collected in-memory store is removed.
+func workflowStores() []workflowStore {
+	var out []workflowStore
+	workflowRegistry.Range(func(k, v any) bool {
+		switch s := v.(type) {
+		case weak.Pointer[memWorkflowStore]:
+			if m := s.Value(); m != nil {
+				out = append(out, m)
+			} else {
+				workflowRegistry.CompareAndDelete(k, v)
+			}
+		case workflowStore:
+			out = append(out, s)
+		}
+		return true
+	})
+
+	return out
+}
+
+// registerWorkflowStorage lists the workflow store of a queue storage.
+func registerWorkflowStorage(q any) {
+	if wa, ok := q.(WorkflowAcknowledgeable); ok {
+		registerWorkflowStore(wa.WorkflowStore())
+	}
+}
+
+// maxWorkflowsOffset caps GET /workflows' offset: every store pages
+// offset+limit records, so an unbounded offset is unbounded work.
+const maxWorkflowsOffset = 10000
 
 // Default and largest page size of GET /queues/{id}/jobs.
 const (
@@ -102,6 +162,13 @@ func NewServerMux() *http.ServeMux {
 	mux.HandleFunc("GET /queues/{id}/jobs", handleListJobs)
 	// PATCH /queues/{id}/actions/{action}
 	mux.HandleFunc("PATCH /queues/{id}/actions/{action}", handleQueueAction)
+
+	// GET /workflows?state=...&offset=...&limit=...
+	mux.HandleFunc("GET /workflows", handleListWorkflows)
+	// GET /workflows/{id}
+	mux.HandleFunc("GET /workflows/{id}", handleGetWorkflow)
+	// PATCH /workflows/{id}/actions/{action}
+	mux.HandleFunc("PATCH /workflows/{id}/actions/{action}", handleWorkflowAction)
 
 	return mux
 }
@@ -334,6 +401,209 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, jobs)
+}
+
+// workflowStates are the states GET /workflows filters by.
+var workflowStates = []WorkflowState{WorkflowRunning, WorkflowCompleted, WorkflowFailed,
+	WorkflowCompensating, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled}
+
+// handleListWorkflows returns one page of workflows from every registered
+// store, newest first. A store whose listing fails is skipped; 503 only
+// when every one fails.
+func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	state := WorkflowState(query.Get("state"))
+	if state != "" && !slices.Contains(workflowStates, state) {
+		writeError(w, http.StatusBadRequest, "unknown state")
+		return
+	}
+
+	offset, err := queryInt(query.Get("offset"), 0)
+	if err != nil || offset < 0 || offset > maxWorkflowsOffset {
+		writeError(w, http.StatusBadRequest, "invalid offset")
+		return
+	}
+
+	limit, err := queryInt(query.Get("limit"), defaultJobsLimit)
+	if err != nil || limit < 1 || limit > maxJobsLimit {
+		writeError(w, http.StatusBadRequest, "invalid limit")
+		return
+	}
+
+	// each store may hold the whole page, so every one gives offset+limit
+	want := offset + limit
+	stores := workflowStores()
+	var (
+		all    []listed
+		failed error
+		nfail  int
+	)
+	for _, ws := range stores {
+		got, err := listWorkflows(r, ws, state, want)
+		if err != nil {
+			failed, nfail = err, nfail+1
+			continue
+		}
+		all = append(all, got...)
+	}
+
+	if nfail > 0 && nfail == len(stores) {
+		writeError(w, http.StatusServiceUnavailable, failed.Error())
+		return
+	}
+
+	// ponytail: O(stores x (offset+limit)) keys per call; a cursor if deep pages matter.
+	slices.SortStableFunc(all, func(a, b listed) int {
+		if c := cmp.Compare(b.key.CreatedAt, a.key.CreatedAt); c != 0 {
+			return c
+		}
+
+		return strings.Compare(a.key.ID, b.key.ID)
+	})
+
+	page := []WorkflowRecord{}
+	for _, l := range all[min(offset, len(all)):min(want, len(all))] {
+		if l.rec == nil {
+			rec, err := l.ws.Record(r.Context(), l.key.ID)
+			if err != nil { // swept since the listing, or the store failed since
+				continue
+			}
+			l.rec = &rec
+		}
+		page = append(page, *l.rec)
+	}
+
+	writeJSON(w, http.StatusOK, page)
+}
+
+// listed is one workflow of a store's listing: its sort key, and its record
+// when the store listed records.
+type listed struct {
+	key WorkflowKey
+	ws  workflowStore
+	rec *WorkflowRecord
+}
+
+// listWorkflows lists ws's first n workflows in state: keys only when ws is
+// a WorkflowKeyLister, else whole records.
+func listWorkflows(r *http.Request, ws workflowStore, state WorkflowState, n int) ([]listed, error) {
+	if kl, ok := ws.(WorkflowKeyLister); ok {
+		keys, err := kl.WorkflowKeys(r.Context(), state, 0, n)
+		out := make([]listed, len(keys))
+		for i, k := range keys {
+			out[i] = listed{key: k, ws: ws}
+		}
+		return out, err
+	}
+
+	recs, err := ws.Workflows(r.Context(), state, 0, n)
+	out := make([]listed, len(recs))
+	for i := range recs {
+		out[i] = listed{key: WorkflowKey{ID: recs[i].ID, CreatedAt: recs[i].CreatedAt}, ws: ws, rec: &recs[i]}
+	}
+	return out, err
+}
+
+// errWorkflowAmbiguous: two registered stores hold the same workflow ID.
+var errWorkflowAmbiguous = errors.New("workflow id in several stores")
+
+// findWorkflow returns the registered store that holds workflow id, and its
+// record. ErrWorkflowNotFound when none does or id is not a workflow ID (no
+// store is asked: it keeps "index" from reaching a store);
+// errWorkflowAmbiguous when several do; else the store error when some
+// store failed and none hit.
+func findWorkflow(r *http.Request, id string) (workflowStore, WorkflowRecord, error) {
+	if !validWorkflowID(id) {
+		return nil, WorkflowRecord{}, ErrWorkflowNotFound
+	}
+
+	var (
+		found workflowStore
+		rec   WorkflowRecord
+		miss  = ErrWorkflowNotFound
+	)
+	for _, ws := range workflowStores() {
+		got, err := ws.Record(r.Context(), id)
+		switch {
+		case err == nil && found != nil:
+			return nil, WorkflowRecord{}, errWorkflowAmbiguous
+		case err == nil:
+			found, rec = ws, got
+		case !errors.Is(err, ErrWorkflowNotFound):
+			miss = err
+		}
+	}
+
+	if found == nil {
+		return nil, rec, miss
+	}
+
+	return found, rec, nil
+}
+
+// writeWorkflowErr maps a store error: 404 for not found, 409 for an ID
+// in several stores, else 503.
+func writeWorkflowErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrWorkflowNotFound):
+		writeError(w, http.StatusNotFound, "workflow not found")
+	case errors.Is(err, errWorkflowAmbiguous):
+		writeError(w, http.StatusConflict, err.Error())
+	default:
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+	}
+}
+
+// handleGetWorkflow returns one workflow.
+func handleGetWorkflow(w http.ResponseWriter, r *http.Request) {
+	_, rec, err := findWorkflow(r, r.PathValue("id"))
+	if err != nil {
+		writeWorkflowErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, rec)
+}
+
+// handleWorkflowAction cancels a workflow and returns its fresh record.
+func handleWorkflowAction(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("action") != "cancel" {
+		writeError(w, http.StatusBadRequest, "unknown action")
+		return
+	}
+
+	// absent: the workflow's own WithUndoOnCancel. REST may only narrow:
+	// undo=true would run undos the producer turned off (the Go API may).
+	var undo *bool
+	switch r.URL.Query().Get("undo") {
+	case "":
+	case "false":
+		undo = new(false)
+	default:
+		writeError(w, http.StatusBadRequest, "invalid undo")
+		return
+	}
+
+	id := r.PathValue("id")
+	ws, _, err := findWorkflow(r, id)
+	if err != nil {
+		writeWorkflowErr(w, err)
+		return
+	}
+
+	if err := ws.Cancel(r.Context(), id, undo); err != nil {
+		writeWorkflowErr(w, err)
+		return
+	}
+
+	rec, err := ws.Record(r.Context(), id)
+	if err != nil {
+		writeWorkflowErr(w, err)
+		return
+	}
+	pokeLocal(undoQueueIDs(rec)) // as Workflow.Cancel: wake local undo consumers
+
+	writeJSON(w, http.StatusOK, rec)
 }
 
 // queryInt parses s, or returns def when s is empty.

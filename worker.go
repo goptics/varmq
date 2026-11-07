@@ -75,6 +75,12 @@ type worker[T any, JobType iJob[T]] struct {
 	// parkHeld is set while a parked batch may be held (its queue paused):
 	// by park, and by a queue's pause hook. pending scans only then.
 	parkHeld atomic.Bool
+	// pokers holds the queuePoker of each bound source with a Queue ID, by
+	// source; localPokers holds them weakly.
+	pokers sync.Map
+	// mk builds the job kind this worker runs from a stored envelope. Last,
+	// so the hot fields keep their offsets.
+	mk func(data T, c jobConfigs) JobType
 }
 
 // Worker represents a worker that processes Jobs.
@@ -333,6 +339,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w := &worker[T, iJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iJob[T] { return newJob(d, c) },
 		pool:            pool.New[iJob[T]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
@@ -358,6 +365,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w := &worker[T, iErrorJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iErrorJob[T] { return newErrorJob(d, c) },
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
@@ -383,6 +391,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w := &worker[T, iResultJob[T, R]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iResultJob[T, R] { return newResultJob[T, R](d, c) },
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),

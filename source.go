@@ -95,24 +95,14 @@ type ackQueue interface {
 
 // toJob accepts what any storage may hand back: a job of the right type, or
 // the JSON bytes a persistent or distributed adapter stored.
-func toJob[T any, JobType iJob[T]](v any) (JobType, error) {
+func toJob[T any, JobType iJob[T]](v any, mk func(T, jobConfigs) JobType) (JobType, error) {
 	var zero JobType
 
 	switch value := v.(type) {
 	case JobType:
 		return value, nil
 	case []byte:
-		parsed, err := parseToJob[T](value)
-		if err != nil {
-			return zero, err
-		}
-
-		j, ok := parsed.(JobType)
-		if !ok {
-			return zero, ErrFailedToCastJob
-		}
-
-		return j, nil
+		return parseToJob(value, mk)
 	default:
 		return zero, ErrFailedToCastJob
 	}
@@ -123,8 +113,9 @@ func toJob[T any, JobType iJob[T]](v any) (JobType, error) {
 // WithQueue / WithPriorityQueue implementations.
 type queueSource[T any, JobType iJob[T]] struct {
 	q     IBaseQueue
-	batch int         // decided once in bind: 1 for priority storage
-	purge *purgeState // shared by every worker bound to q when q supports it; nil if it never batches
+	batch int                         // decided once in bind: 1 for priority storage
+	purge *purgeState                 // shared by every worker bound to q when q supports it; nil if it never batches
+	mk    func(T, jobConfigs) JobType // the worker's job kind, for stored bytes
 	pauseGate
 }
 
@@ -171,13 +162,14 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 		return zero, s.emptyErr(e)
 	}
 
-	return toJob[T, JobType](v)
+	return toJob(v, s.mk)
 }
 
 // ackSource reads acknowledging storage: persistent and distributed queues.
 // Each job it returns carries its storage and ack id so job.Close can ack it.
 type ackSource[T any, JobType iJob[T]] struct {
-	q ackQueue
+	q  ackQueue
+	mk func(T, jobConfigs) JobType // the worker's job kind, for stored bytes
 	pauseGate
 }
 
@@ -207,7 +199,7 @@ func (s *ackSource[T, JobType]) Next() (JobType, error) {
 		return zero, s.emptyErr(e)
 	}
 
-	j, err := toJob[T, JobType](v)
+	j, err := toJob(v, s.mk)
 	if err != nil {
 		var zero JobType
 		return zero, err
@@ -272,7 +264,7 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 }
 
 func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
-	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pauseGate: gateOf(q)}, bq: bq, w: w}
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, mk: w.mk, pauseGate: gateOf(q)}, bq: bq, w: w}
 	s.dryAt.Store(neverDry)
 
 	return s
@@ -336,7 +328,7 @@ func (s *batchAckSource[T, JobType]) fetch(want int, emit func(JobType), report 
 	}
 
 	for i := range n {
-		j, err := toJob[T, JobType](items[i])
+		j, err := toJob(items[i], s.mk)
 		if err != nil {
 			report(err)
 			continue
@@ -453,22 +445,24 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		if bq, ok := q.(IBatchAcknowledgeable); ok {
 			src = newBatchAckSource(aq, bq, w)
 		} else {
-			src = &ackSource[T, JobType]{q: aq, pauseGate: g}
+			src = &ackSource[T, JobType]{q: aq, mk: w.mk, pauseGate: g}
 		}
 	} else if _, ok := q.(IPriorityQueue); ok {
-		src = &queueSource[T, JobType]{q: q, batch: 1, pauseGate: g}
+		src = &queueSource[T, JobType]{q: q, batch: 1, mk: w.mk, pauseGate: g}
 	} else {
 		purge := purgeStateFor(q)
 		purge.register(w.parkHook())
-		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge, pauseGate: g}
+		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge, mk: w.mk, pauseGate: g}
 	}
 
 	w.onResume(q, src)
 	w.addSource(src, priority)
 	registerQueue(q)
+	registerWorkflowStorage(q)
 	if qi, ok := q.(QueueInspector); ok {
 		if id := qi.QueueID(); id != "" {
 			w.queueIDs.Store(id, struct{}{})
+			w.addPoker(id, src)
 		}
 	}
 
@@ -549,6 +543,7 @@ func (w *worker[T, JobType]) removeSource(src source[JobType]) {
 	if h, ok := w.pauseHooks.LoadAndDelete(src); ok {
 		h.(*pauseHook).cancel()
 	}
+	w.dropPoker(src)
 
 	w.sourcesMx.Lock()
 	defer w.sourcesMx.Unlock()

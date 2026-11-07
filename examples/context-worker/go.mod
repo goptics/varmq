@@ -1,6 +1,6 @@
 module github.com/goptics/varmq/examples/context-worker
 
-go 1.25.6
+go 1.27
 
 // Replace the remote module with your local path
 // Assuming your project structure has examples/distributed at the same level as your main module

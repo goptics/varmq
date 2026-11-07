@@ -12,6 +12,7 @@ type queue[T any] struct {
 }
 
 type Queue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -97,6 +98,7 @@ type errorQueue[T any] struct {
 }
 
 type ErrQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -170,6 +172,7 @@ type resultQueue[T, R any] struct {
 }
 
 type ResultQueue[T, R any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
@@ -368,4 +371,17 @@ func (eq *externalBaseQueue) bumpPurges() {
 
 func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
+}
+
+// WorkflowItem makes the handles workflow task targets (workflow_target.go).
+func (q *queue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memFIFOItem(q.externalBaseQueue, q.internalQueue, taskJob(data))
+}
+
+func (q *errorQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memFIFOItem(q.externalBaseQueue, q.internalQueue, errTaskJob(data))
+}
+
+func (q *resultQueue[T, R]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memFIFOItem(q.externalBaseQueue, q.internalQueue, resultTaskJob[T, R](data))
 }

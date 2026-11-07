@@ -14,7 +14,7 @@ func newTestSource(items ...string) *queueSource[string, iJob[string]] {
 		q.Enqueue(newJob(item, jobConfigs{Id: item}))
 	}
 
-	return &queueSource[string, iJob[string]]{q: q}
+	return &queueSource[string, iJob[string]]{mk: plainMk, q: q}
 }
 
 func TestSourceManagerNext(t *testing.T) {
@@ -126,13 +126,13 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 	var m sourceManager[iJob[string]] = newSourceManager[iJob[string]]()
 	assert.Nil(t, m.purgeGen(), "empty")
 
-	fifo := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: maxBatch, purge: &purgeState{}}
+	fifo := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any](), batch: maxBatch, purge: &purgeState{}}
 	m = m.add(fifo, math.MaxInt, RoundRobin)
 	assert.Same(t, &fifo.purge.gen, m.purgeGen(), "direct forwards the source's counter")
 
 	m = m.add(newTestSource(), math.MaxInt, RoundRobin)
 	assert.Nil(t, m.purgeGen(), "strategy")
 
-	prio := &queueSource[string, iJob[string]]{q: queues.NewQueue[any](), batch: 1}
+	prio := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any](), batch: 1}
 	assert.Nil(t, prio.purgeGen(), "batch of one")
 }

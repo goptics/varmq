@@ -2,6 +2,7 @@ package varmq
 
 // DistributedPriorityQueue is a external queue wrapper of an any IDistributedPriorityQueue
 type DistributedPriorityQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Add data to the queue with priority
@@ -60,4 +61,9 @@ func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfig
 	}
 
 	return true
+}
+
+// WorkflowItem makes the handle a workflow task target (workflow_target.go).
+func (dpq *distributedPriorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return durableWorkflowItem(dpq.IDistributedPriorityQueue, true, data)
 }

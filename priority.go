@@ -6,6 +6,7 @@ type priorityQueue[T any] struct {
 }
 
 type PriorityQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
@@ -80,6 +81,7 @@ type resultPriorityQueue[T any, R any] struct {
 }
 
 type ResultPriorityQueue[T, R any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
@@ -153,6 +155,7 @@ type errorPriorityQueue[T any] struct {
 }
 
 type ErrPriorityQueue[T any] interface {
+	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 	// Worker returns the bound worker.
 	Worker() Worker
@@ -218,4 +221,17 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	}
 
 	return groupJob
+}
+
+// WorkflowItem makes the handles workflow task targets (workflow_target.go).
+func (q *priorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memPriorityItem(q.externalBaseQueue, q.internalQueue, taskJob(data))
+}
+
+func (q *resultPriorityQueue[T, R]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memPriorityItem(q.externalBaseQueue, q.internalQueue, resultTaskJob[T, R](data))
+}
+
+func (q *errorPriorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
+	return memPriorityItem(q.externalBaseQueue, q.internalQueue, errTaskJob(data))
 }
