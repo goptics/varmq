@@ -384,7 +384,8 @@ func TestWorkflowCrashRerun(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan := WorkflowPlan{ID: "cr", Tasks: []TaskPlan{{Name: "a"}, {Name: "b", Deps: []string{"a"}}}}
-			st := &crashState{s: newWFState(plan), bQueue: mocks.NewMockPersistentQueue(),
+			ws, _ := newWFState(plan)
+			st := &crashState{s: ws, bQueue: mocks.NewMockPersistentQueue(),
 				bItem: taskBytes(t, "cr", "b", 2)}
 			st.lose = func(call int) (bool, bool) {
 				if call == 1 {
@@ -444,7 +445,8 @@ func TestWorkflowPreRunError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan := WorkflowPlan{ID: "cr", Tasks: []TaskPlan{{Name: "a"}}}
-			st := &crashState{s: newWFState(plan), runErr: tc.err, lose: func(int) (bool, bool) { return true, false }}
+			ws, _ := newWFState(plan)
+			st := &crashState{s: ws, runErr: tc.err, lose: func(int) (bool, bool) { return true, false }}
 			storage := crashStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-a", "s"}, st}
 
 			var runs atomic.Int32

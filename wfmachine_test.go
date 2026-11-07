@@ -526,9 +526,9 @@ func TestMachine(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newWFState(tc.plan)
+			s, roots := newWFState(tc.plan)
 			assert.Equal(t, WorkflowRunning, s.State)
-			assert.Equal(t, tc.roots, fxStrings(s.roots()))
+			assert.Equal(t, tc.roots, fxStrings(roots))
 			for i, st := range tc.steps {
 				var got []wfEffect
 				if st.cancel {
@@ -556,7 +556,7 @@ func TestMachine(t *testing.T) {
 }
 
 func TestMachineNewState(t *testing.T) {
-	s := newWFState(mplan(false,
+	s, _ := newWFState(mplan(false,
 		mtask{name: "A"},
 		mtask{name: "B", deps: []string{"A"}},
 		mtask{name: "C", deps: []string{"A", "B"}},
@@ -569,7 +569,7 @@ func TestMachineNewState(t *testing.T) {
 }
 
 func TestMachineUnknownTask(t *testing.T) {
-	s := newWFState(mplan(false, mtask{name: "A"}))
+	s, _ := newWFState(mplan(false, mtask{name: "A"}))
 	fx, err := s.finish(TaskEnd{Workflow: "wf", Task: "nope", Outcome: OutcomeCompleted})
 	assert.Error(t, err)
 	assert.Empty(t, fx)
@@ -581,7 +581,7 @@ func TestMachineUnknownTask(t *testing.T) {
 }
 
 func TestMachineKeepsReasonAndResult(t *testing.T) {
-	s := newWFState(mplan(false, mtask{name: "A"}, mtask{name: "B"}))
+	s, _ := newWFState(mplan(false, mtask{name: "A"}, mtask{name: "B"}))
 	_, err := s.finish(TaskEnd{Task: "A", Outcome: OutcomeCompleted, Result: []byte(`1`)})
 	require.NoError(t, err)
 	_, err = s.finish(TaskEnd{Task: "B", Outcome: OutcomeFailed, Reason: "boom"})
@@ -592,7 +592,7 @@ func TestMachineKeepsReasonAndResult(t *testing.T) {
 
 func TestMachineProcessingFinishes(t *testing.T) {
 	// storage marks a popped task processing; finish still applies.
-	s := newWFState(mplan(false, mtask{name: "A"}))
+	s, _ := newWFState(mplan(false, mtask{name: "A"}))
 	s.Tasks["A"].State = JobProcessing
 	fx, err := s.finish(TaskEnd{Task: "A", Outcome: OutcomeCompleted})
 	require.NoError(t, err)
@@ -607,7 +607,7 @@ func mustFinish(t *testing.T, s *wfState, e TaskEnd) []string {
 }
 
 func TestMachineRunnable(t *testing.T) {
-	s := newWFState(mplan(false,
+	s, _ := newWFState(mplan(false,
 		mtask{name: "A", undo: true},
 		mtask{name: "B", deps: []string{"A"}},
 		mtask{name: "C", deps: []string{"B"}},
@@ -653,8 +653,8 @@ func TestMachineDeterministic(t *testing.T) {
 	)
 	var first []string
 	for range 50 {
-		s := newWFState(plan)
-		all := fxStrings(s.roots())
+		s, roots := newWFState(plan)
+		all := fxStrings(roots)
 		for _, n := range []string{"r", "q", "a", "e"} {
 			all = append(all, mustFinish(t, s, TaskEnd{Task: n, Outcome: OutcomeCompleted})...)
 		}
@@ -677,7 +677,7 @@ func TestMachineDeterministic(t *testing.T) {
 // TestMachineFailFastRunnable: after FailFast fires, a queued forward task
 // may not start; Always tasks (the failed task's kept dependents) still run.
 func TestMachineFailFastRunnable(t *testing.T) {
-	s := newWFState(mplan(true,
+	s, _ := newWFState(mplan(true,
 		mtask{name: "A"},
 		mtask{name: "D", deps: []string{"A"}, always: true},
 		mtask{name: "E", deps: []string{"A"}}, // so A's failure is unabsorbed
@@ -691,7 +691,7 @@ func TestMachineFailFastRunnable(t *testing.T) {
 	assert.True(t, s.runnable("D", false), "kept Always dependent runs")
 	assert.True(t, s.runnable("Y", false), "Always runs whatever failed")
 
-	s = newWFState(mplan(false, mtask{name: "A"}, mtask{name: "X"}))
+	s, _ = newWFState(mplan(false, mtask{name: "A"}, mtask{name: "X"}))
 	mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeFailed})
 	assert.True(t, s.runnable("X", false), "no FailFast: unrelated branches finish")
 }
@@ -710,7 +710,7 @@ func TestMachineUndoOnCancel(t *testing.T) {
 	} {
 		p := mplan(false, mtask{name: "A", undo: true}, mtask{name: "B", deps: []string{"A"}})
 		p.UndoOnCancel = tc.plan
-		s := newWFState(p)
+		s, _ := newWFState(p)
 		assert.Equal(t, tc.plan, s.UndoOnCancel)
 		mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeCompleted})
 		assert.Empty(t, s.cancel(tc.cancel), "B is queued")

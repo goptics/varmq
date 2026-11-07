@@ -116,10 +116,11 @@ func (m *memWorkflowStore) Submit(_ context.Context, p WorkflowPlan) error {
 			tp.Undo.Item.(memTaskItem).taskTag().store = m
 		}
 	}
-	w := &memWorkflow{id: p.ID, hash: p.Hash, s: newWFState(p), created: m.now().UnixMilli()}
+	st, roots := newWFState(p)
+	w := &memWorkflow{id: p.ID, hash: p.Hash, s: st, created: m.now().UnixMilli()}
 	m.wfs[p.ID] = w
 	m.order = append(m.order, w)
-	pushes := m.effects(w, w.s.roots())
+	pushes := m.effects(w, roots)
 	m.mu.Unlock()
 
 	m.push(pushes)

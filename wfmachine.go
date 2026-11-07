@@ -1,6 +1,9 @@
 package varmq
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // wfState is one workflow's state machine (adr/0005, Lifecycle). Pure: no
 // I/O, no locks; the caller holds the workflow's lock. It is the reference
@@ -38,8 +41,9 @@ type wfEffect struct {
 }
 
 // newWFState builds the start state: roots pending, others waiting on
-// every dependency.
-func newWFState(p WorkflowPlan) *wfState {
+// every dependency. It also returns the pushes Submit does: the roots.
+func newWFState(p WorkflowPlan) (*wfState, []wfEffect) {
+	var roots []wfEffect
 	s := &wfState{
 		State:        WorkflowRunning,
 		Tasks:        make(map[string]*wfTask, len(p.Tasks)),
@@ -52,6 +56,8 @@ func newWFState(p WorkflowPlan) *wfState {
 		t := &wfTask{Plan: tp, State: JobPending, Open: len(tp.Deps)}
 		if t.Open > 0 {
 			t.State = JobWaiting
+		} else {
+			roots = append(roots, wfEffect{Push: tp.Name})
 		}
 		s.Tasks[tp.Name] = t
 		s.Order = append(s.Order, tp.Name)
@@ -59,18 +65,7 @@ func newWFState(p WorkflowPlan) *wfState {
 			s.next[d] = append(s.next[d], tp.Name)
 		}
 	}
-	return s
-}
-
-// roots returns the pushes Submit does: tasks with no dependencies.
-func (s *wfState) roots() []wfEffect {
-	var fx []wfEffect
-	for _, name := range s.Order {
-		if len(s.Tasks[name].Plan.Deps) == 0 {
-			fx = append(fx, wfEffect{Push: name})
-		}
-	}
-	return fx
+	return s, roots
 }
 
 // finish applies a task's (or undo's) outcome. A finish for a task that is
@@ -217,15 +212,7 @@ func (s *wfState) drop(name string, push map[string]bool) {
 // absorbed: the task has dependents and every one is Always.
 func (s *wfState) absorbed(name string) bool {
 	next := s.next[name]
-	if len(next) == 0 {
-		return false
-	}
-	for _, d := range next {
-		if !s.Tasks[d].Plan.Always {
-			return false
-		}
-	}
-	return true
+	return len(next) > 0 && !slices.ContainsFunc(next, func(d string) bool { return !s.Tasks[d].Plan.Always })
 }
 
 // failFast cancels every waiting task on an unabsorbed failure, except the
