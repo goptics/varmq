@@ -85,9 +85,9 @@ func TestMemQueueCounts(t *testing.T) {
 	assert.NotNil(t, none, "an empty page, not null")
 
 	close(release)
-	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed+s.Totals.Failed == 3 }, time.Second, time.Millisecond)
+	// processing drops when a job's run ends, just after its outcome counts
+	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed+s.Totals.Failed == 3 && s.Counts == JobCounts{} }, time.Second, time.Millisecond)
 	s = stats(t, m)
-	assert.Equal(t, JobCounts{}, s.Counts)
 	assert.Equal(t, JobTotals{Submitted: 3, Completed: 2, Failed: 1}, s.Totals, "completed counts successful jobs, as redisq")
 }
 
@@ -193,8 +193,7 @@ func TestMemQueueCountsBatchedJobs(t *testing.T) {
 	assert.EqualValues(t, 101, s.Counts.Pending+s.Counts.Processing, "every job pending or processing")
 
 	close(release)
-	require.Eventually(t, func() bool { return stats(t, m).Totals.Completed == 101 }, time.Second, time.Millisecond)
-	assert.Equal(t, JobCounts{}, stats(t, m).Counts)
+	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed == 101 && s.Counts == JobCounts{} }, time.Second, time.Millisecond)
 }
 
 // A worker that takes over another's name unlists the other's memory queues.
