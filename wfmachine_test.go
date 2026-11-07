@@ -317,6 +317,24 @@ func TestMachine(t *testing.T) {
 			},
 		},
 		{
+			// A's unabsorbed failure fires FailFast (E cancelled, D kept).
+			// Q's later failure must not fire it again and cancel D.
+			name: "FailFast fires on the first unabsorbed failure only",
+			plan: mplan(true,
+				mtask{name: "A"},
+				mtask{name: "P"},
+				mtask{name: "Q"},
+				mtask{name: "D", deps: []string{"A", "P"}, always: true},
+				mtask{name: "E", deps: []string{"A"}},
+			),
+			roots: []string{"A", "P", "Q"},
+			steps: []mstep{fin("A", bad), fin("Q", bad), fin("P", ok, "D"), fin("D", ok, "end:failed")},
+			final: WorkflowFailed,
+			states: map[string]JobState{
+				"A": JobFailed, "P": JobCompleted, "Q": JobFailed, "D": JobCompleted, "E": JobCancelled,
+			},
+		},
+		{
 			name:  "FailFast ignores absorbed failure",
 			plan:  mplan(true, mtask{name: "A"}, mtask{name: "B", deps: []string{"A"}, always: true}, mtask{name: "X"}, mtask{name: "Y", deps: []string{"X"}}),
 			roots: []string{"A", "X"},
@@ -416,6 +434,55 @@ func TestMachine(t *testing.T) {
 			roots: []string{"A"},
 			steps: []mstep{cancelStep(false), cancelStep(true), fin("A", gone, "end:cancelled")},
 			final: WorkflowCancelled,
+		},
+		{
+			name: "cancel after a failure keeps its compensation",
+			plan: mplan(false,
+				mtask{name: "A", undo: true},
+				mtask{name: "B", deps: []string{"A"}},
+				mtask{name: "C", deps: []string{"A"}},
+				mtask{name: "D", deps: []string{"C"}},
+			),
+			roots: []string{"A"},
+			steps: []mstep{
+				fin("A", ok, "B", "C"), fin("B", bad),
+				cancelStep(false),
+				fin("C", gone, "A:undo"),
+				finUndo("A", ok, "end:compensated"),
+			},
+			final:  WorkflowCompensated,
+			states: map[string]JobState{"B": JobFailed, "C": JobCancelled, "D": JobCancelled},
+		},
+		{
+			name: "cancel after a failure, no undo: failed",
+			plan: mplan(false,
+				mtask{name: "A"},
+				mtask{name: "B", deps: []string{"A"}},
+				mtask{name: "C", deps: []string{"A"}},
+				mtask{name: "D", deps: []string{"C"}},
+			),
+			roots: []string{"A"},
+			steps: []mstep{fin("A", ok, "B", "C"), fin("B", bad), cancelStep(true), fin("C", gone, "end:failed")},
+			final: WorkflowFailed,
+		},
+		{
+			name:   "failure after cancel is not a failure",
+			plan:   mplan(false, mtask{name: "A"}, mtask{name: "B", deps: []string{"A"}}, mtask{name: "X"}),
+			roots:  []string{"A", "X"},
+			steps:  []mstep{cancelStep(false), fin("A", bad), fin("X", gone, "end:cancelled")},
+			final:  WorkflowCancelled,
+			states: map[string]JobState{"A": JobFailed, "B": JobCancelled, "X": JobCancelled},
+		},
+		{
+			name:  "cancel while compensating: no effects",
+			plan:  mplan(false, mtask{name: "A", undo: true}, mtask{name: "B", deps: []string{"A"}}),
+			roots: []string{"A"},
+			steps: []mstep{
+				fin("A", ok, "B"), fin("B", bad, "A:undo"),
+				cancelStep(true), cancelStep(false),
+				finUndo("A", ok, "end:compensated"),
+			},
+			final: WorkflowCompensated,
 		},
 		{
 			name:   "late finish of a cancelled task ignored",
@@ -532,6 +599,13 @@ func TestMachineProcessingFinishes(t *testing.T) {
 	assert.Equal(t, []string{"end:completed"}, fxStrings(fx))
 }
 
+func mustFinish(t *testing.T, s *wfState, e TaskEnd) []string {
+	t.Helper()
+	fx, err := s.finish(e)
+	require.NoError(t, err)
+	return fxStrings(fx)
+}
+
 func TestMachineRunnable(t *testing.T) {
 	s := newWFState(mplan(false,
 		mtask{name: "A", undo: true},
@@ -539,26 +613,33 @@ func TestMachineRunnable(t *testing.T) {
 		mtask{name: "C", deps: []string{"B"}},
 		mtask{name: "X"},
 	))
-	assert.True(t, s.runnable("A"))
-	assert.False(t, s.runnable("nope"))
+	assert.True(t, s.runnable("A", false))
+	assert.False(t, s.runnable("A", true), "no undo while running")
+	assert.False(t, s.runnable("B", false), "waiting task")
+	assert.False(t, s.runnable("nope", false))
 
-	_, _ = s.finish(TaskEnd{Task: "A", Outcome: OutcomeCompleted})
-	assert.True(t, s.runnable("B"))
+	assert.Equal(t, []string{"B"}, mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeCompleted}))
+	assert.False(t, s.runnable("A", false), "completed task")
+	assert.True(t, s.runnable("B", false))
 
-	s.cancel(true)
-	assert.False(t, s.runnable("B"), "pending task of a cancelled workflow")
-	assert.False(t, s.runnable("C"), "cancelled task")
+	s.Tasks["X"].State = JobProcessing
+	assert.False(t, s.runnable("X", false), "processing task")
+	s.Tasks["X"].State = JobPending
 
-	_, _ = s.finish(TaskEnd{Task: "B", Outcome: OutcomeCancelled})
-	assert.False(t, s.runnable("X"))
-	fx, _ := s.finish(TaskEnd{Task: "X", Outcome: OutcomeCancelled})
-	assert.Equal(t, []string{"A:undo"}, fxStrings(fx))
+	assert.Empty(t, s.cancel(true))
+	assert.False(t, s.runnable("B", false), "pending task of a cancelled workflow")
+	assert.False(t, s.runnable("C", false), "cancelled task")
+
+	assert.Empty(t, mustFinish(t, s, TaskEnd{Task: "B", Outcome: OutcomeCancelled}))
+	assert.False(t, s.runnable("X", false))
+	assert.Equal(t, []string{"A:undo"}, mustFinish(t, s, TaskEnd{Task: "X", Outcome: OutcomeCancelled}))
 	assert.Equal(t, WorkflowCompensating, s.State)
-	assert.True(t, s.runnable("A"), "undo runs while compensating")
+	assert.True(t, s.runnable("A", true), "pending undo while compensating")
+	assert.False(t, s.runnable("A", false), "forward task while compensating")
+	assert.False(t, s.runnable("B", true), "task with no undo")
 
-	_, _ = s.finish(TaskEnd{Task: "A", Outcome: OutcomeCompleted, Undo: true})
-	assert.Equal(t, WorkflowCompensated, s.State)
-	assert.False(t, s.runnable("A"), "ended workflow")
+	assert.Equal(t, []string{"end:compensated"}, mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeCompleted, Undo: true}))
+	assert.False(t, s.runnable("A", true), "ended undo, ended workflow")
 }
 
 func TestMachineDeterministic(t *testing.T) {
@@ -573,17 +654,20 @@ func TestMachineDeterministic(t *testing.T) {
 	var first []string
 	for range 50 {
 		s := newWFState(plan)
-		var all []string
-		all = append(all, fxStrings(s.roots())...)
+		all := fxStrings(s.roots())
 		for _, n := range []string{"r", "q", "a", "e"} {
-			fx, _ := s.finish(TaskEnd{Task: n, Outcome: OutcomeCompleted})
-			all = append(all, fxStrings(fx)...)
+			all = append(all, mustFinish(t, s, TaskEnd{Task: n, Outcome: OutcomeCompleted})...)
 		}
-		fx, _ := s.finish(TaskEnd{Task: "z", Outcome: OutcomeFailed})
-		all = append(all, fxStrings(fx)...)
+		all = append(all, mustFinish(t, s, TaskEnd{Task: "z", Outcome: OutcomeFailed})...)
+		for _, n := range []string{"q", "a", "e", "r"} {
+			all = append(all, mustFinish(t, s, TaskEnd{Task: n, Outcome: OutcomeCompleted, Undo: true})...)
+		}
 		if first == nil {
 			first = all
-			assert.Equal(t, []string{"r", "e", "a", "q", "z", "e:undo", "a:undo", "q:undo"}, all)
+			assert.Equal(t, []string{
+				"r", "e", "a", "q", "z", "e:undo", "a:undo", "q:undo",
+				"r:undo", "end:compensated",
+			}, all)
 			continue
 		}
 		require.True(t, slices.Equal(first, all), "run differs: %v vs %v", first, all)

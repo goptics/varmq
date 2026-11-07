@@ -6,13 +6,13 @@ import "fmt"
 // I/O, no locks; the caller holds the workflow's lock. It is the reference
 // the stores follow, so every walk goes in Order, never map order.
 type wfState struct {
-	State                  WorkflowState
-	Tasks                  map[string]*wfTask
-	Order                  []string // Add order = topological
-	FailFast, UndoOnCancel bool
+	State    WorkflowState
+	Tasks    map[string]*wfTask
+	Order    []string // Add order = topological
+	FailFast bool
 
 	next       map[string][]string // dependents per task, in Order
-	failed     bool                // an unabsorbed failure happened
+	failed     bool                // an unabsorbed failure happened before any cancel
 	cancelled  bool                // cancel was called
 	cancelUndo bool                // cancel asked for compensation
 }
@@ -39,12 +39,11 @@ type wfEffect struct {
 // every dependency.
 func newWFState(p WorkflowPlan) *wfState {
 	s := &wfState{
-		State:        WorkflowRunning,
-		Tasks:        make(map[string]*wfTask, len(p.Tasks)),
-		Order:        make([]string, 0, len(p.Tasks)),
-		FailFast:     p.FailFast,
-		UndoOnCancel: p.UndoOnCancel,
-		next:         make(map[string][]string, len(p.Tasks)),
+		State:    WorkflowRunning,
+		Tasks:    make(map[string]*wfTask, len(p.Tasks)),
+		Order:    make([]string, 0, len(p.Tasks)),
+		FailFast: p.FailFast,
+		next:     make(map[string][]string, len(p.Tasks)),
 	}
 	for _, tp := range p.Tasks {
 		t := &wfTask{Plan: tp, State: JobPending, Open: len(tp.Deps)}
@@ -105,11 +104,12 @@ func (s *wfState) finish(e TaskEnd) ([]wfEffect, error) {
 	if e.Outcome == OutcomeCancelled {
 		t.State = JobCancelled
 	}
-	if !s.absorbed(e.Task) {
-		s.failed = true
-		if s.FailFast {
+	// After cancel, ends (pre-run cancels included) are not failures.
+	if !s.cancelled && !s.absorbed(e.Task) {
+		if s.FailFast && !s.failed { // first unabsorbed failure only
 			s.failFast(e.Task, push)
 		}
+		s.failed = true
 	}
 	s.drop(e.Task, push)
 	return s.settle(push), nil
@@ -126,19 +126,17 @@ func (s *wfState) cancel(undo bool) []wfEffect {
 	return s.settle(nil)
 }
 
-// runnable is the pre-run check: may this task (or its undo) start now.
-func (s *wfState) runnable(task string) bool {
+// runnable is the pre-run check: may this task (undo: its undo) start now.
+// Only a pending one may, and only while its phase is on.
+func (s *wfState) runnable(task string, undo bool) bool {
 	t, ok := s.Tasks[task]
-	if !ok || t.State == JobCancelled {
+	if !ok {
 		return false
 	}
-	switch s.State {
-	case WorkflowRunning:
-		return !s.cancelled
-	case WorkflowCompensating:
-		return true
+	if undo {
+		return s.State == WorkflowCompensating && t.UndoState == JobPending
 	}
-	return false
+	return s.State == WorkflowRunning && !s.cancelled && t.State == JobPending
 }
 
 func (s *wfState) finishUndo(t *wfTask, e TaskEnd) []wfEffect {
@@ -282,10 +280,9 @@ func (s *wfState) settle(push map[string]bool) []wfEffect {
 			return fx
 		}
 	}
-	undo := s.failed
-	if s.cancelled {
-		undo = s.cancelUndo
-	}
+	// A failure before cancel keeps its compensation; cancel alone
+	// compensates only when asked.
+	undo := s.failed || s.cancelled && s.cancelUndo
 	if undo {
 		if undos := s.compensate(); len(undos) > 0 {
 			s.State = WorkflowCompensating
@@ -293,10 +290,10 @@ func (s *wfState) settle(push map[string]bool) []wfEffect {
 		}
 	}
 	switch {
-	case s.cancelled:
-		return s.end(fx, WorkflowCancelled)
 	case s.failed:
 		return s.end(fx, WorkflowFailed)
+	case s.cancelled:
+		return s.end(fx, WorkflowCancelled)
 	}
 	return s.end(fx, WorkflowCompleted)
 }
