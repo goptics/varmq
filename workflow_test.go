@@ -454,14 +454,12 @@ func TestWorkflowHandleOps(t *testing.T) {
 	<-started
 	h := OpenWorkflow(store, "h1")
 	require.NoError(t, h.Cancel(ctx))
-	close(release)
-	// ponytail: workers don't report task ends yet (later task); report A's by hand.
-	_, err := store.(*memWorkflowStore).finish(end("h1", "a", OutcomeCompleted))
-	require.NoError(t, err)
+	close(release) // a completes through its worker; waiting b was cancelled
 
 	r, err := wf.Wait(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, WorkflowCancelled, r.State)
+	assert.Equal(t, JobCompleted, r.Tasks[0].State, "a's worker reported it")
 	st, err := h.Status(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, WorkflowCancelled, st.State)

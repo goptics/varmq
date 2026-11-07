@@ -77,6 +77,9 @@ type worker[T any, JobType iJob[T]] struct {
 	// parkHeld is set while a parked batch may be held (its queue paused):
 	// by park, and by a queue's pause hook. pending scans only then.
 	parkHeld atomic.Bool
+	// pokers holds the queuePoker of each bound source with a Queue ID, by
+	// source; localPokers holds them weakly.
+	pokers sync.Map
 }
 
 // Worker represents a worker that processes Jobs.

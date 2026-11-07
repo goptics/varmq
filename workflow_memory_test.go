@@ -105,7 +105,7 @@ func TestMemStoreRecord(t *testing.T) {
 		Tasks: []TaskRecord{
 			{Name: "a", State: JobPending, QueueID: fifoID, JobID: "wf:rec:a"},
 			{Name: "b", State: JobWaiting, Deps: []string{"a"}, QueueID: prioID, JobID: "wf:rec:b",
-				Undo: &TaskRecord{Name: "b", QueueID: fifoID, JobID: "wf:rec:b:undo"}},
+				Undo: &TaskRecord{Name: "b", State: JobWaiting, QueueID: fifoID, JobID: "wf:rec:b:undo"}},
 			{Name: "c", State: JobWaiting, Deps: []string{"a", "b"}, QueueID: fifoID, JobID: "wf:rec:c", Always: true},
 		},
 	}, r)
@@ -294,7 +294,10 @@ func TestMemStoreCancel(t *testing.T) {
 	require.NoError(t, submit(t, wf))
 	_, err := s.finish(end("cx", "a", OutcomeCompleted))
 	require.NoError(t, err)
-	q.Purge()
+	// Empty q without closing: a Purge would cancel queued b.
+	for q.Len() > 0 {
+		q.(*queue[int]).internalQueue.Dequeue()
+	}
 
 	ok, err := s.Runnable(ctx, "cx", "b", false)
 	require.NoError(t, err)

@@ -225,12 +225,15 @@ func (m *memWorkflowStore) push(work []memPush) []string {
 }
 
 // finish records a task's (or undo's) outcome and pushes what it releases.
-// It returns the queue IDs pushed into. A result over the limit fails the
-// task with ErrResultTooLarge.
+// It returns the queue IDs pushed into. Only a completed task keeps a
+// result; one over the limit fails the task with ErrResultTooLarge.
 func (m *memWorkflowStore) finish(e TaskEnd) (pushed []string, err error) {
-	if len(e.Result) > m.cfg.resultLimit {
+	switch {
+	case e.Outcome != OutcomeCompleted || e.Undo:
+		e.Result = nil
+	case len(e.Result) > m.cfg.resultLimit:
 		e.Outcome, e.Reason, e.Result = OutcomeFailed, ErrResultTooLarge.Error(), nil
-	} else {
+	default:
 		e.Result = bytes.Clone(e.Result) // the caller's buffer may be reused
 	}
 
@@ -354,8 +357,8 @@ func (m *memWorkflowStore) Workflows(_ context.Context, state WorkflowState, off
 	return out, nil
 }
 
-// record builds w's WorkflowRecord: tasks in Add order. An undo's state is
-// "" until compensation reaches it. Callers hold mu.
+// record builds w's WorkflowRecord: tasks in Add order. An undo is waiting
+// until compensation reaches it. Callers hold mu.
 func (w *memWorkflow) record() WorkflowRecord {
 	r := WorkflowRecord{ID: w.id, State: w.s.State, CreatedAt: w.created, FinishedAt: w.finished,
 		Tasks: make([]TaskRecord, 0, len(w.s.Order))}
@@ -365,7 +368,11 @@ func (w *memWorkflow) record() WorkflowRecord {
 		tr := TaskRecord{Name: name, State: t.State, Deps: slices.Clone(t.Plan.Deps), QueueID: t.Plan.QueueID,
 			JobID: t.Plan.JobID, Always: t.Plan.Always, Reason: t.Reason, ResultSize: len(t.Result)}
 		if u := t.Plan.Undo; u != nil {
-			tr.Undo = &TaskRecord{Name: name, State: t.UndoState, QueueID: u.QueueID, JobID: u.JobID}
+			st := t.UndoState
+			if st == "" {
+				st = JobWaiting
+			}
+			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID}
 		}
 		r.Tasks = append(r.Tasks, tr)
 	}

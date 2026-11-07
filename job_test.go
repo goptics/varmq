@@ -855,7 +855,41 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 		j.setAck(mocks.NewMockPersistentQueue(), "ack1")
 		j.fail("boom")
 		require.NotNil(t, j.taskTag())
-		assert.Equal(t, "boom", *j.ackRef.Load().ext.reason)
+		ext := j.ackRef.Load().ext
+		assert.Nil(t, ext.reason, "a task's failure is its end, not a Reject")
+		assert.Equal(t, TaskEnd{Outcome: OutcomeFailed, Reason: "boom"}, *ext.end)
+	})
+
+	t.Run("setAck keeps the tag, not a stale reason", func(t *testing.T) {
+		pq := mocks.NewMockPersistentQueue()
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setAck(pq, "ack1")
+		j.fail("old run")
+		j.setTask(taskTag{wf: "w1", task: "a"})
+		j.setAck(pq, "ack2")
+		ref := j.ackRef.Load()
+		assert.Equal(t, "ack2", ref.id)
+		assert.Nil(t, ref.ext.reason)
+		assert.Nil(t, ref.ext.end)
+		assert.Equal(t, "a", ref.ext.task.task)
+	})
+
+	t.Run("failed task on storage that can't finish tasks is rejected", func(t *testing.T) {
+		pq := mocks.NewMockPersistentQueue()
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask(taskTag{wf: "w1", task: "a"})
+		j.setAck(pq, "ack1")
+		j.fail("boom")
+		require.NoError(t, j.Close())
+		assert.Equal(t, []string{"boom"}, pq.Rejected())
+		assert.Empty(t, pq.Acked())
+	})
+
+	t.Run("Close of a tag-only job", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask(taskTag{wf: "w1", task: "a"}) // no ack id, no store
+		assert.NotPanics(t, func() { assert.NoError(t, j.Close()) })
+		assert.True(t, j.IsClosed())
 	})
 }
 

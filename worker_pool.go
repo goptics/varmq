@@ -123,6 +123,16 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.park(jobs[i:], rest)
 				break
 			}
+			// A workflow task its workflow no longer wants (cancelled, ended)
+			// ends cancelled without running.
+			if !w.runnable(j) {
+				err := finishTask[T](j, OutcomeCancelled, "workflow cancelled")
+				if err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
+					w.sendError(err)
+				}
+				run.add(j.memTotals(), -1)
+				continue
+			}
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
 			if !j.startProcessing() {

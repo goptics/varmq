@@ -115,7 +115,8 @@ type WorkflowStore interface {
 type WorkflowAcknowledgeable interface {
 	Scoped
 	WorkflowStore() WorkflowStore
-	// FinishTask records the outcome and returns the ids of jobs it pushed.
+	// FinishTask records the outcome and returns the IDs of the queues it
+	// pushed into, so varmq pokes its local consumers of them.
 	FinishTask(ackID string, e TaskEnd) (pushed []string, ok bool)
 }
 

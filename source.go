@@ -461,6 +461,7 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	if qi, ok := q.(QueueInspector); ok {
 		if id := qi.QueueID(); id != "" {
 			w.queueIDs.Store(id, struct{}{})
+			w.addPoker(id, src)
 		}
 	}
 
@@ -541,6 +542,7 @@ func (w *worker[T, JobType]) removeSource(src source[JobType]) {
 	if h, ok := w.pauseHooks.LoadAndDelete(src); ok {
 		h.(*pauseHook).cancel()
 	}
+	w.dropPoker(src)
 
 	w.sourcesMx.Lock()
 	defer w.sourcesMx.Unlock()

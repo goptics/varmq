@@ -97,11 +97,14 @@ type jobAck struct {
 
 // ackExt is what only some jobs carry.
 type ackExt struct {
-	// reason is set when the run failed: Close then calls Reject with
-	// *reason instead of Acknowledge.
+	// reason is set when the run of a plain job failed: Close then calls
+	// Reject with *reason instead of Acknowledge.
 	reason *string
 	// task is set on a job that is a workflow task.
 	task *taskTag
+	// end is how the task's run ended; nil until it ran, and a task closed
+	// before it ran ends cancelled.
+	end *TaskEnd
 }
 
 // taskTag names the workflow task a job runs. store is nil until bound.
@@ -136,6 +139,8 @@ type iJob[T any] interface {
 	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
 	setTask(tag taskTag)
+	taskTag() *taskTag
+	endTask(o Outcome, reason string, result []byte)
 	fail(reason string)
 	succeed()
 	memTotals() *memQueue
@@ -171,7 +176,9 @@ func newJob[T any](data T, configs jobConfigs) *job[T] {
 }
 
 // setAck records the storage and ack id Close acknowledges with. An empty id
-// means there is nothing to acknowledge, so nothing is stored.
+// means there is nothing to acknowledge, so nothing is stored. A workflow
+// tag parseToJob set is kept, bound to q's workflow store; nothing else of
+// the old ack is (a stale reason would reject the job).
 // ponytail: one 32-byte allocation per acked job; that path already pays
 // json.Unmarshal, so this is not pooled.
 func (j *job[T]) setAck(q IAcknowledgeable, id string) {
@@ -180,8 +187,12 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 	}
 
 	ref := &jobAck{q: q, id: id}
-	if old := j.ackRef.Load(); old != nil {
-		ref.ext = old.ext // keep the workflow tag parseToJob set
+	if old := j.ackRef.Load(); old != nil && old.ext != nil && old.ext.task != nil {
+		tag := *old.ext.task
+		if wa, ok := q.(WorkflowAcknowledgeable); ok {
+			tag.store = wa.WorkflowStore()
+		}
+		ref.ext = &ackExt{task: &tag}
 	}
 
 	j.ackRef.Store(ref)
@@ -213,25 +224,47 @@ func (j *job[T]) setTask(tag taskTag) {
 	j.ackRef.Store(&ref)
 }
 
-// fail records that the run failed, so Close rejects the job with reason
-// instead of acknowledging it, and counts it failed for its in-memory queue.
-// The worker calls it before Close; a user Close fails while the job is
-// processing, so nothing else reads the ack meanwhile.
-func (j *job[T]) fail(reason string) {
-	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
-		ref.totals.failed.Add(1)
-	} else if ref != nil && ref.q != nil {
-		ext := ackExt{reason: &reason}
-		if ref.ext != nil {
-			ext.task = ref.ext.task
-		}
+// endTask records how a workflow task's run ended, for Close to report.
+// Nothing for a plain job. Copies the ack, as setTask does.
+func (j *job[T]) endTask(o Outcome, reason string, result []byte) {
+	old := j.ackRef.Load()
+	if old == nil || old.ext == nil || old.ext.task == nil {
+		return
+	}
 
-		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, ext: &ext})
+	ref, ext := *old, *old.ext
+	ext.end = &TaskEnd{Outcome: o, Reason: reason, Result: result}
+	ref.ext = &ext
+	j.ackRef.Store(&ref)
+}
+
+// fail records that the run failed, so Close rejects the job with reason
+// instead of acknowledging it (a workflow task: finishes it failed), and
+// counts it failed for its in-memory queue. The worker calls it before
+// Close; a user Close fails while the job is processing, so nothing else
+// reads the ack meanwhile.
+func (j *job[T]) fail(reason string) {
+	ref := j.ackRef.Load()
+	switch {
+	case ref == nil:
+	case ref.ext != nil && ref.ext.task != nil:
+		j.endTask(OutcomeFailed, reason, nil)
+	case ref.q != nil:
+		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, ext: &ackExt{reason: &reason}})
+	}
+
+	if ref != nil && ref.totals != nil {
+		ref.totals.failed.Add(1)
 	}
 }
 
-// succeed counts the job completed for its in-memory queue, if any.
-func (j *job[T]) succeed() {
+// succeed counts the job completed for its in-memory queue, if any, and
+// finishes a workflow task completed, with no result.
+func (j *job[T]) succeed() { j.succeedWith(nil) }
+
+// succeedWith is succeed with the task's Result.
+func (j *job[T]) succeedWith(result []byte) {
+	j.endTask(OutcomeCompleted, "", result)
 	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
 		ref.totals.completed.Add(1)
 	}
@@ -406,8 +439,13 @@ func (j *job[T]) startProcessing() bool {
 // other gets ErrJobAlreadyClosed. Acking before the claim means the job never
 // shows Closed while unacked, so a failed ack leaves it untouched: a worker
 // that took it still runs it, and a finished one stays Finished and unwaited.
+//
+// An in-memory workflow task reports to its store after the claim: the store
+// never refuses, the claim already makes it once, and the ack stays for
+// memTotals.
 func (j *job[T]) closeOnce() error {
-	if ref := j.ackRef.Load(); ref != nil && ref.q != nil {
+	ref := j.ackRef.Load()
+	if ref != nil && ref.q != nil {
 		if err := closeable(j.status.Load()); err != nil {
 			return err
 		}
@@ -417,7 +455,15 @@ func (j *job[T]) closeOnce() error {
 		}
 	}
 
-	return j.claimClose()
+	if err := j.claimClose(); err != nil {
+		return err
+	}
+
+	if ref != nil && ref.q == nil && ref.ext != nil && ref.ext.task != nil {
+		finishMemTask(ref.ext)
+	}
+
+	return nil
 }
 
 // Close closes the job, whatever its state except processing, and releases
@@ -444,8 +490,13 @@ func (j *job[T]) acknowledge() error {
 	}
 
 	var ok bool
-	if ref.ext != nil && ref.ext.reason != nil {
-		ok = ref.q.Reject(ref.id, *ref.ext.reason)
+	if wa, tagged := ref.q.(WorkflowAcknowledgeable); tagged && ref.ext != nil && ref.ext.task != nil {
+		var pushed []string
+		if pushed, ok = wa.FinishTask(ref.id, taskEnd(ref.ext)); ok {
+			pokeLocal(pushed)
+		}
+	} else if reason, failed := failReason(ref.ext); failed {
+		ok = ref.q.Reject(ref.id, reason)
 	} else {
 		ok = ref.q.Acknowledge(ref.id)
 	}
@@ -456,6 +507,21 @@ func (j *job[T]) acknowledge() error {
 	}
 
 	return nil
+}
+
+// failReason is why a run failed, for Reject: a plain job's reason, or a
+// task's failed end on storage that can't finish tasks (old storage).
+func failReason(ext *ackExt) (string, bool) {
+	switch {
+	case ext == nil:
+		return "", false
+	case ext.reason != nil:
+		return *ext.reason, true
+	case ext.end != nil && ext.end.Outcome == OutcomeFailed:
+		return ext.end.Reason, true
+	}
+
+	return "", false
 }
 
 type iErrorJob[T any] interface {
@@ -577,3 +643,21 @@ func (rj *resultJob[T, R]) sendError(err error) {
 // Drain is a no-op: a single job has no channel to drain. It exists so the job
 // satisfies the Drainer embedded in EnqueuedResultJob.
 func (rj *resultJob[T, R]) Drain() {}
+
+// succeed is job.succeed; a workflow task (not an undo) leaves R as JSON,
+// its Result. R that does not marshal fails the task.
+func (rj *resultJob[T, R]) succeed() {
+	t := rj.taskTag()
+	if t == nil || t.undo {
+		rj.succeedWith(nil)
+		return
+	}
+
+	b, err := json.Marshal(rj.data)
+	if err != nil {
+		rj.fail(fmt.Sprintf("varmq: task result: %v", err))
+		return
+	}
+
+	rj.succeedWith(b)
+}
