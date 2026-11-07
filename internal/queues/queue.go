@@ -124,7 +124,7 @@ func (q *Queue[T]) idSet() *idSet {
 // Dequeue removes and returns the front item, freeing its id if
 // EnqueueOnce stored it. It returns false while the queue is paused.
 func (q *Queue[T]) Dequeue() (any, bool) {
-	if q.Paused() {
+	if q.refuse() {
 		return nil, false
 	}
 	v, ok := q.cur.Dequeue()

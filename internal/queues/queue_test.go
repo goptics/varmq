@@ -505,7 +505,7 @@ func TestPause(t *testing.T) {
 		Resume() error
 		Paused() bool
 		PausedAt() int64
-		PauseEpoch() uint64
+		PauseRefusals() uint64
 		OnPauseChange(func(bool)) func()
 		Dequeue() (any, bool)
 		Len() int
@@ -514,9 +514,7 @@ func TestPause(t *testing.T) {
 			var seen []bool
 			cancel := q.OnPauseChange(func(p bool) { seen = append(seen, p) })
 
-			e := q.PauseEpoch()
 			require.NoError(t, q.Pause())
-			assert.Greater(t, q.PauseEpoch(), e, "a Pause moves the epoch")
 			at := q.PausedAt()
 			assert.NotZero(t, at)
 			require.NoError(t, q.Pause())
@@ -531,10 +529,9 @@ func TestPause(t *testing.T) {
 			assert.Equal(t, 1, q.Len())
 			_, ok := q.Dequeue()
 			assert.False(t, ok, "paused")
+			assert.EqualValues(t, 1, q.PauseRefusals(), "a refusal is counted")
 
-			e = q.PauseEpoch()
 			require.NoError(t, q.Resume())
-			assert.Greater(t, q.PauseEpoch(), e, "so does a Resume")
 			require.NoError(t, q.Resume())
 			assert.False(t, q.Paused())
 			assert.Zero(t, q.PausedAt())

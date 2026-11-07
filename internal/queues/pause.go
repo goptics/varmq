@@ -9,15 +9,14 @@ import (
 // pauseState is an in-memory storage's queue pause (varmq.QueuePauser and
 // varmq.PauseNotifier): Dequeue hands out nothing while at is set.
 type pauseState struct {
-	at    atomic.Int64  // Unix ms of the Pause; 0 while running
-	epoch atomic.Uint64 // +1 before each Pause or Resume changes at (PauseEpoch)
-	mu    sync.Mutex
-	hooks map[*func(bool)]struct{}
+	at       atomic.Int64  // Unix ms of the Pause; 0 while running
+	refusals atomic.Uint64 // Dequeues refused for a pause (PauseRefusals)
+	mu       sync.Mutex
+	hooks    map[*func(bool)]struct{}
 }
 
 // Pause stops Dequeue. Idempotent; the first pause time is kept.
 func (p *pauseState) Pause() error {
-	p.epoch.Add(1) // before at: a Dequeue refused for this Pause sees it moved
 	if p.at.CompareAndSwap(0, time.Now().UnixMilli()) {
 		p.notify()
 	}
@@ -26,7 +25,6 @@ func (p *pauseState) Pause() error {
 
 // Resume lets Dequeue hand out items again. Idempotent.
 func (p *pauseState) Resume() error {
-	p.epoch.Add(1) // before at: see Pause
 	if p.at.Swap(0) != 0 {
 		p.notify()
 	}
@@ -36,10 +34,19 @@ func (p *pauseState) Resume() error {
 // Paused reports whether the queue is paused.
 func (p *pauseState) Paused() bool { return p.at.Load() != 0 }
 
-// PauseEpoch moves on at each Pause and Resume, before the state changes:
-// a Dequeue that came back empty while the queue runs and the epoch did not
-// move was not refused for a pause.
-func (p *pauseState) PauseEpoch() uint64 { return p.epoch.Load() }
+// PauseRefusals counts the Dequeues refused for a pause. A Dequeue that
+// came back empty while it did not move was not refused, however a Pause
+// and Resume raced it.
+func (p *pauseState) PauseRefusals() uint64 { return p.refusals.Load() }
+
+// refuse is Dequeue's gate: true, and counted, while paused.
+func (p *pauseState) refuse() bool {
+	if p.Paused() {
+		p.refusals.Add(1)
+		return true
+	}
+	return false
+}
 
 // PausedAt is the Unix ms of the Pause, 0 while running.
 func (p *pauseState) PausedAt() int64 { return p.at.Load() }

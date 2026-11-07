@@ -53,36 +53,35 @@ func holderOf(q any) pool.Holder {
 	return nil
 }
 
-// pauseEpoch is optional for a QueuePauser (varmq's in-memory queues): a
-// count that moves on at each Pause and Resume, before the state changes.
-type pauseEpoch interface{ PauseEpoch() uint64 }
+// pauseRefusals is QueuePauser's optional PauseRefusals (see QueuePauser).
+type pauseRefusals interface{ PauseRefusals() uint64 }
 
 // pauseGate is a source's view of its queue's pause.
 type pauseGate struct {
-	pz pool.Holder // q's pause (QueuePauser), nil if it has none
-	ep pauseEpoch  // nil unless pz has one
+	pz pool.Holder   // q's pause (QueuePauser), nil if it has none
+	ep pauseRefusals // nil unless pz has one
 }
 
 func gateOf(q any) pauseGate {
 	g := pauseGate{pz: holderOf(q)}
-	g.ep, _ = q.(pauseEpoch)
+	g.ep, _ = q.(pauseRefusals)
 	return g
 }
 
-// epoch is read before a dequeue, for emptyErr.
+// epoch is the refusal count read before a dequeue, for emptyErr.
 func (g pauseGate) epoch() uint64 {
 	if g.ep == nil {
 		return 0
 	}
-	return g.ep.PauseEpoch()
+	return g.ep.PauseRefusals()
 }
 
-// emptyErr is why a dequeue that began at epoch e came back empty: a
-// pause, now or one that began and ended since (Pause and Resume both
-// between Len and Dequeue), is "nothing to do"; anything else is a failure
-// the user hears about.
+// emptyErr is why a dequeue that began at refusal count e came back empty:
+// a pause, now or counted since (a Pause and Resume both between Len and
+// the check), is "nothing to do"; anything else is a failure the user
+// hears about.
 func (g pauseGate) emptyErr(e uint64) error {
-	if queuePaused(g.pz) || g.ep != nil && g.ep.PauseEpoch() != e {
+	if queuePaused(g.pz) || g.ep != nil && g.ep.PauseRefusals() != e {
 		return errNoReadySource
 	}
 	return ErrFailedToDequeue

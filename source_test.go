@@ -1527,3 +1527,48 @@ func TestPauseHookOfCollectedWorker(t *testing.T) {
 		return s.cancels.Load() == 1
 	}, 5*time.Second, 10*time.Millisecond)
 }
+
+// A dequeue refused for a pause is never reported as a failure, however
+// Pauses and Resumes race it: the queue never empties, so every empty
+// dequeue here is a refusal.
+func TestPauseGateNeverMisreports(t *testing.T) {
+	q := queues.NewQueue[any]()
+	for i := range 1 << 12 {
+		q.Enqueue(i)
+	}
+	g := gateOf(q)
+	var stop atomic.Bool
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for !stop.Load() {
+				q.Pause()
+				runtime.Gosched()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for !stop.Load() {
+				q.Resume()
+				runtime.Gosched()
+			}
+		}()
+	}
+	defer func() { stop.Store(true); wg.Wait() }()
+
+	refused := 0
+	for i := 0; i < 200_000; i++ {
+		if q.Paused() { // the Len gate
+			continue
+		}
+		e := g.epoch()
+		if v, ok := q.Dequeue(); ok {
+			q.Enqueue(v)
+			continue
+		}
+		refused++
+		require.ErrorIs(t, g.emptyErr(e), errNoReadySource, "refusal %d", refused)
+	}
+}
