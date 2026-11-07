@@ -229,3 +229,13 @@ func TestStamp(t *testing.T) {
 	gen.Add(1)
 	assert.True(t, s.Stale(), "stale once the counter moves")
 }
+
+type pauseFlag bool
+
+func (p pauseFlag) Paused() bool { return bool(p) }
+
+func TestStampHeld(t *testing.T) {
+	assert.False(t, Stamp{}.Held(), "no pause: never held")
+	assert.False(t, Stamp{Hold: pauseFlag(false)}.Held())
+	assert.True(t, Stamp{Hold: pauseFlag(true)}.Held())
+}

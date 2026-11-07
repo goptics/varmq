@@ -48,11 +48,12 @@ func queuePaused(pz QueuePauser) bool {
 	return pz != nil && pz.Paused()
 }
 
-// emptyErr is why a dequeue came back empty: a pause (a Pause that landed
-// after Len, or one the storage just found) is "nothing to do", not a
-// failure the user hears about.
+// emptyErr is why a dequeue came back empty. Storage that can pause may
+// refuse for a pause that ended before this check (Pause and Resume both
+// between Len and Dequeue), so any refusal of a QueuePauser is "nothing to
+// do", not a failure the user hears about.
 func emptyErr(pz QueuePauser) error {
-	if queuePaused(pz) {
+	if pz != nil {
 		return errNoReadySource
 	}
 	return ErrFailedToDequeue

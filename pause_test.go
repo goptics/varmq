@@ -5,11 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/goptics/varmq/internal/pool"
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
@@ -194,6 +196,12 @@ func TestQueuePauseUnsupported(t *testing.T) {
 	pausable := NewDistributedQueue[int](mocks.NewMockDistributedQueue())
 	require.NoError(t, pausable.Pause(), "a distributed handle forwards to its storage")
 	assert.True(t, pausable.IsPaused())
+	require.NoError(t, pausable.Resume())
+	pprio := NewDistributedPriorityQueue[int](mocks.NewMockDistributedPriorityQueue())
+	require.NoError(t, pprio.Pause())
+	assert.True(t, pprio.IsPaused())
+	require.NoError(t, pprio.Resume())
+	assert.False(t, pprio.IsPaused())
 }
 
 // Unbinding a queue cancels its Resume hook.
@@ -292,4 +300,99 @@ func TestQueuePauseRace(t *testing.T) {
 	require.NoError(t, q.Resume())
 	require.Eventually(t, func() bool { return ran.Load() == 2000 }, 5*time.Second, time.Millisecond)
 	assert.Zero(t, errs.Load(), "a Pause between Len and Dequeue is not an error")
+}
+
+// unpark skips batches of a paused queue: it hands out a later unheld one,
+// and nothing while only held ones remain.
+func TestUnparkSkipsHeld(t *testing.T) {
+	w := newWorker(func(iJob[int]) {}, WithAutoRun(false))
+	gen := &atomic.Uint64{}
+	held := queues.NewQueue[any]()
+	require.NoError(t, held.Pause())
+	w.park([]iJob[int]{newJob(1, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: 1, Hold: held})
+	w.park([]iJob[int]{newJob(2, jobConfigs{})}, pool.Stamp{Gen: gen, Seq: 2})
+
+	buf := make([]iJob[int], 4)
+	n, _ := w.unpark(buf)
+	require.Equal(t, 1, n)
+	assert.Equal(t, 2, buf[0].Data(), "the unheld batch behind the held one")
+	assert.Equal(t, 0, w.unheld())
+	n, _ = w.unpark(buf)
+	assert.Zero(t, n, "only a held batch left")
+
+	require.NoError(t, held.Resume())
+	n, _ = w.unpark(buf)
+	require.Equal(t, 1, n)
+	assert.Equal(t, 1, buf[0].Data())
+}
+
+// pausableBatchQueue is batch-acknowledging storage with a pause: the credit
+// path (a worker's sole IBatchAcknowledgeable source).
+type pausableBatchQueue struct {
+	*batchTestQueue
+	p *queues.Queue[any] // only its pause
+}
+
+func (q *pausableBatchQueue) Pause() error  { return q.p.Pause() }
+func (q *pausableBatchQueue) Resume() error { return q.p.Resume() }
+func (q *pausableBatchQueue) Paused() bool  { return q.p.Paused() }
+func (q *pausableBatchQueue) OnPauseChange(fn func(bool)) func() {
+	return q.p.OnPauseChange(fn)
+}
+func (q *pausableBatchQueue) DequeueBatchWithAckIds(items []any, ackIDs []string) (int, int, error) {
+	if q.p.Paused() {
+		return 0, 0, nil
+	}
+	return q.batchTestQueue.DequeueBatchWithAckIds(items, ackIDs)
+}
+
+// On the credit path a paused queue is not popped, and a Resume pokes the
+// ready hint so every job runs.
+func TestQueuePauseCreditPath(t *testing.T) {
+	s := &pausableBatchQueue{batchTestQueue: &batchTestQueue{}, p: queues.NewQueue[any]()}
+	var ran atomic.Int64
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4)
+	defer w.Stop()
+	q := w.WithPersistentQueue(s)
+	_, credit := w.(*workerBinder[int]).manager().(*creditManager[iJob[int]])
+	require.True(t, credit, "sole batch source: credit path")
+
+	require.NoError(t, q.Pause())
+	pops := s.pops.Load()
+	for i := range 10 {
+		q.Add(i)
+	}
+	stays(t, func() bool { return s.pops.Load() > pops }, "no pop while paused")
+
+	require.NoError(t, q.Resume())
+	require.Eventually(t, func() bool { return ran.Load() == 10 }, time.Second, time.Millisecond)
+}
+
+// countingPause counts the cancels of its pause hooks.
+type countingPause struct {
+	*queues.Queue[any]
+	cancels atomic.Int64
+}
+
+func (q *countingPause) OnPauseChange(fn func(bool)) func() {
+	c := q.Queue.OnPauseChange(fn)
+	return func() { q.cancels.Add(1); c() }
+}
+
+// The hook of a worker collected without unbinding drops itself from the
+// storage at the next Pause or Resume.
+func TestPauseHookOfCollectedWorker(t *testing.T) {
+	s := &countingPause{Queue: queues.NewQueue[any]()}
+	func() {
+		w := NewWorker(func(Job[int]) {})
+		w.WithQueue(s)
+		require.NoError(t, w.Stop())
+	}()
+
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		require.NoError(t, s.Pause())
+		require.NoError(t, s.Resume())
+		return s.cancels.Load() == 1
+	}, 5*time.Second, 10*time.Millisecond)
 }

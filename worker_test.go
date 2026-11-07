@@ -441,7 +441,9 @@ func TestWorkers(t *testing.T) {
 				mockQueue.ShouldFailDequeue = true
 				mockQueue.Queue.Enqueue("trigger")
 
-				w.bind(newQueue(w, mockQueue).internalQueue, math.MaxInt)
+				// hide the mock's in-memory pause: a pausable storage's empty
+				// dequeue is never an error (emptyErr)
+				w.bind(newQueue(w, struct{ IPersistentQueue }{mockQueue}).internalQueue, math.MaxInt)
 
 				w.Start()
 				defer w.Stop()
