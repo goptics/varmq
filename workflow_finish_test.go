@@ -178,8 +178,8 @@ func TestWorkflowCancelSkipsQueued(t *testing.T) {
 }
 
 // TestWorkflowUndoOnCancelFrozen: WithUndoOnCancel is kept with the workflow,
-// so a cancel from any handle (or REST without undo) follows it; REST undo
-// overrides it.
+// so a cancel from any handle (or REST without undo) follows it; the store's
+// undo overrides it.
 func TestWorkflowUndoOnCancelFrozen(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -196,10 +196,8 @@ func TestWorkflowUndoOnCancelFrozen(t *testing.T) {
 			NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/workflows/"+id+"/actions/cancel", nil))
 			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 		}, WorkflowCancelled, 0},
-		{"REST undo=true overrides", "frozen-rest-undo", func(t *testing.T, _ WorkflowStore, id string) {
-			rr := httptest.NewRecorder()
-			NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/workflows/"+id+"/actions/cancel?undo=true", nil))
-			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		{"store undo=true overrides", "frozen-store-undo", func(t *testing.T, store WorkflowStore, id string) {
+			require.NoError(t, store.Cancel(context.Background(), id, new(true))) // REST refuses true
 		}, WorkflowCompensated, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

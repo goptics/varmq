@@ -516,13 +516,13 @@ func handleWorkflowAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// absent: the workflow's own WithUndoOnCancel
+	// absent: the workflow's own WithUndoOnCancel. REST may only narrow:
+	// undo=true would run undos the producer turned off (the Go API may).
 	var undo *bool
-	switch v := r.URL.Query().Get("undo"); v {
+	switch r.URL.Query().Get("undo") {
 	case "":
-	case "true", "false":
-		on := v == "true"
-		undo = &on
+	case "false":
+		undo = new(false)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid undo")
 		return

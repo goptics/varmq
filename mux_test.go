@@ -794,9 +794,12 @@ func TestMuxWorkflows(t *testing.T) {
 		assert.Equal(t, "f-mid", mustRecord(t, rr).ID)
 		assert.Equal(t, []string{"false"}, fake.cancelled)
 
-		do("PATCH", "/workflows/f-old/actions/cancel?undo=true")
+		// REST may only narrow: undo=true would force undos the producer turned off.
+		rr = do("PATCH", "/workflows/f-old/actions/cancel?undo=true")
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.JSONEq(t, `{"error":"invalid undo"}`, rr.Body.String())
 		do("PATCH", "/workflows/f-old/actions/cancel")
-		assert.Equal(t, []string{"false", "true", "nil"}, fake.cancelled, "absent: the workflow's own")
+		assert.Equal(t, []string{"false", "nil"}, fake.cancelled, "absent: the workflow's own")
 	})
 
 	t.Run("cancel 400 and 404", func(t *testing.T) {
