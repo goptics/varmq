@@ -64,6 +64,30 @@ func memTaken(m *memQueue, n int64) {
 	}
 }
 
+// memRun sums memTaken over a run of jobs of one memQueue and adds it once
+// the run ends, so a batch costs one contended add, not one per job. A
+// batch can mix handles (two WithQueue on one storage): each run goes to
+// its own.
+type memRun struct {
+	m *memQueue
+	n int64
+}
+
+func (r *memRun) add(m *memQueue, d int64) {
+	if m != r.m {
+		r.flush()
+		r.m = m
+	}
+	r.n += d
+}
+
+func (r *memRun) flush() {
+	if r.n != 0 {
+		memTaken(r.m, r.n)
+		r.n = 0
+	}
+}
+
 func (m *memQueue) QueueID() string { return m.id }
 
 // QueueStats reports the totals and the jobs pending (in the queue) and

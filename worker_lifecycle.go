@@ -29,7 +29,11 @@ func (w *worker[T, JobType]) Start() error {
 			}
 		}
 		w.memMx.Lock()
-		w.memQueues.Range(func(_, m any) bool { registerQueue(m); return true })
+		// listed only while still ours: a Start of another worker under the
+		// name may have dropped ours already
+		if v, _ := WorkerRegistry.Load(name); v == any(w) {
+			w.memQueues.Range(func(_, m any) bool { registerQueue(m); return true })
+		}
 		w.memMx.Unlock()
 	}
 

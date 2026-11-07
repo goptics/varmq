@@ -284,3 +284,34 @@ func TestMemQueueBatchedJobsClosedOrPurged(t *testing.T) {
 		w.Stop()
 	}
 }
+
+// Two handles on one storage (two WithQueue): a batch mixes both memQueues,
+// and each gets back exactly what it counted, through a park and an unpark.
+func TestMemQueueSharedStorageBatch(t *testing.T) {
+	shared := queues.NewQueue[any]()
+	release := make(chan struct{})
+	w1 := NewWorker(func(j Job[int]) {
+		if j.Data() == 0 {
+			<-release
+		}
+	}, 1)
+	w2 := NewWorker(func(Job[int]) {}, 1)
+	defer w1.Stop()
+	defer w2.Stop()
+	qa, qb := w1.WithQueue(shared), w2.WithQueue(shared)
+	require.NoError(t, w2.Pause())
+	ma, mb := memOf(t, qa), memOf(t, qb)
+
+	require.NoError(t, w1.Pause())
+	qa.Add(0)
+	for i := 1; i < 4; i++ {
+		qb.Add(i)
+	}
+	require.NoError(t, w1.Resume()) // w1 takes all 4 in one batch
+	require.Eventually(t, func() bool { return ma.processing.Load() == 1 && mb.processing.Load() == 3 }, time.Second, time.Millisecond)
+	require.NoError(t, w1.Pause()) // job 0 running: the rest parks
+	close(release)
+	require.Eventually(t, w1.IsPaused, time.Second, time.Millisecond)
+	require.NoError(t, w1.Resume())
+	require.Eventually(t, func() bool { return ma.processing.Load() == 0 && mb.processing.Load() == 0 }, time.Second, time.Millisecond)
+}
