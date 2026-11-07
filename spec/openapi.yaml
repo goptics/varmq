@@ -199,7 +199,7 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404": { $ref: "#/components/responses/QueueNotFound" }
         "501":
-          description: The queue's storage cannot pause (`varmq: storage does not support pause`).
+          description: "The queue's storage cannot pause (`varmq: storage does not support pause`)."
           headers:
             X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
           content:

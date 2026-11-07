@@ -107,11 +107,10 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 	s := QueueStats{
 		Counts: JobCounts{Pending: int64(m.q.Len()), Processing: max(0, m.processing.Load())},
 		Totals: JobTotals{Submitted: m.submitted.Load(), Completed: m.completed.Load(), Failed: m.failed.Load()},
-		Paused: m.Paused(),
+		Paused: m.Paused(), // the storage's word, not inferred from PausedAt
 	}
-	if p, ok := m.q.(interface{ PausedAt() int64 }); ok { // one read: a Resume in between can't leave Paused without a time
-		s.PausedAt = p.PausedAt()
-		s.Paused = s.PausedAt != 0
+	if p, ok := m.q.(interface{ PausedAt() int64 }); ok && s.Paused {
+		s.PausedAt = p.PausedAt() // 0, so left out, if a Resume came in between
 	}
 
 	return s, nil

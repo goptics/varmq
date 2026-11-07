@@ -264,7 +264,7 @@ Input: none. One script:
 2. Wake idle consumers as Enqueue does (section 6.1), up to one per waiting item.
 3. `PUBLISH <base>:control resumed`.
 
-A consumer SHOULD subscribe to `<base>:control` and update its own view of the pause on each message. Pub/sub can lose a message, so a consumer SHOULD also read `EXISTS <base>:paused` at least once a second, and before its first pop.
+A consumer SHOULD subscribe to `<base>:control` and update its own view of the pause on each message. Pub/sub can lose a message, so a consumer that keeps a view of the pause MUST also read `EXISTS <base>:paused` before its first pop and at least once a second after, and on a change wake itself as on a message.
 
 The key decides; messages are hints. A consumer MUST ignore a `<base>:control` message it does not know, and MUST NOT use the `<ms>` of a `paused:` message for anything but display. A pop checks the key itself (section 6.2), so a lost or forged message costs at most one empty pop or one second of waiting.
 

@@ -472,9 +472,9 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 		}
 	}
 
-	if _, ok := src.(creditSource[JobType]); ok {
-		w.notifyToPullNextJobs() // the storage may already hold items; no add will announce them
-	}
+	// The storage may already hold items no add will announce, and a Resume
+	// between onResume and addSource woke the loop before src was there.
+	w.notifyToPullNextJobs()
 
 	return src
 }

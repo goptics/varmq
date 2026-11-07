@@ -13,6 +13,7 @@ type pauseState struct {
 	refusals atomic.Uint64 // Dequeues refused for a pause (PauseRefusals)
 	mu       sync.Mutex
 	hooks    map[*func(bool)]struct{}
+	notifyMu sync.Mutex // one notify at a time, so calls arrive in order
 }
 
 // Pause stops Dequeue. Idempotent; the first pause time is kept.
@@ -72,19 +73,29 @@ func (p *pauseState) OnPauseChange(fn func(paused bool)) (cancel func()) {
 	}
 }
 
-// notify calls the hooks outside mu, so a hook may cancel or register. It
-// passes the state as of now, not the change that called it: with a Pause
-// and a Resume racing, the last call any hook gets is the final state.
+// notify calls the hooks with the state as of now, one notify at a time:
+// with a Pause and a Resume racing, the last call any hook gets is the
+// final state. It calls them outside mu, so a hook may cancel or register,
+// but under notifyMu, so a hook must not Pause or Resume. A hook cancelled
+// before its turn is skipped.
 func (p *pauseState) notify() {
+	p.notifyMu.Lock()
+	defer p.notifyMu.Unlock()
+
 	paused := p.Paused()
 	p.mu.Lock()
-	fns := make([]func(bool), 0, len(p.hooks))
+	hs := make([]*func(bool), 0, len(p.hooks))
 	for h := range p.hooks {
-		fns = append(fns, *h)
+		hs = append(hs, h)
 	}
 	p.mu.Unlock()
 
-	for _, fn := range fns {
-		fn(paused)
+	for _, h := range hs {
+		p.mu.Lock()
+		_, live := p.hooks[h]
+		p.mu.Unlock()
+		if live {
+			(*h)(paused)
+		}
 	}
 }

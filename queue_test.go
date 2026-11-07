@@ -1613,7 +1613,7 @@ func TestQueuePause(t *testing.T) {
 
 // A Resume wakes every worker bound to the storage, through any handle.
 func TestQueueResumeWakesEveryWorker(t *testing.T) {
-	storage := queues.NewQueue[any]()
+	storage := &resumeCounting{Queue: queues.NewQueue[any]()}
 	var ran atomic.Int64
 	var handles []Queue[int]
 	for range 3 {
@@ -1629,7 +1629,23 @@ func TestQueueResumeWakesEveryWorker(t *testing.T) {
 	stays(t, func() bool { return ran.Load() > 0 }, "paused for every worker")
 
 	require.NoError(t, handles[2].Resume())
+	assert.EqualValues(t, 3, storage.resumes.Load(), "each worker's hook heard the Resume")
 	require.Eventually(t, func() bool { return ran.Load() == 3 }, time.Second, time.Millisecond)
+}
+
+// resumeCounting counts the Resume calls its hooks get, one per bound worker.
+type resumeCounting struct {
+	*queues.Queue[any]
+	resumes atomic.Int64
+}
+
+func (q *resumeCounting) OnPauseChange(fn func(bool)) func() {
+	return q.Queue.OnPauseChange(func(p bool) {
+		if !p {
+			q.resumes.Add(1)
+		}
+		fn(p)
+	})
 }
 
 // The worker pause and the queue pause are separate: a job runs only when

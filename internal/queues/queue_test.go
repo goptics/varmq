@@ -546,3 +546,18 @@ func TestPause(t *testing.T) {
 		})
 	}
 }
+
+// A hook cancelled by an earlier hook of the same notify is not called.
+func TestPauseHookCancelledMidNotify(t *testing.T) {
+	q := NewQueue[int]()
+	calls := 0
+	var cancels [2]func()
+	for i := range cancels {
+		cancels[i] = q.OnPauseChange(func(bool) {
+			calls++
+			cancels[1-i]() // the other one
+		})
+	}
+	require.NoError(t, q.Pause())
+	assert.Equal(t, 1, calls, "the second hook was cancelled before its turn")
+}
