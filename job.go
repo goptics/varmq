@@ -222,36 +222,36 @@ func (j *job[T]) taskTag() *taskTag {
 	return nil
 }
 
-// setTask tags the job as the workflow task (or undo) tag names. Copies the
-// ack: an in-memory queue's jobAck is shared.
-func (j *job[T]) setTask(tag taskTag) {
-	ref := jobAck{}
-	if old := j.ackRef.Load(); old != nil {
+// ackCopy copies old and its ext (zero for nil), for a change stored as a
+// new ack: an in-memory queue's jobAck is shared.
+func ackCopy(old *jobAck) (ref jobAck, ext ackExt) {
+	if old != nil {
 		ref = *old
 	}
-
-	ext := ackExt{}
 	if ref.ext != nil {
 		ext = *ref.ext
 	}
+	return ref, ext
+}
 
-	ext.task = &tag
-	ref.ext = &ext
+// setTask tags the job as the workflow task (or undo) tag names.
+func (j *job[T]) setTask(tag taskTag) {
+	ref, ext := ackCopy(j.ackRef.Load())
+	ext.task, ref.ext = &tag, &ext
 	j.ackRef.Store(&ref)
 }
 
 // endTask records how a workflow task's run ended, for Close to report.
-// Nothing for a plain job. Copies the ack, as setTask does. Returns the ack
-// now held, so callers need not load it again.
+// Nothing for a plain job. Returns the ack now held, so callers need not
+// load it again.
 func (j *job[T]) endTask(o Outcome, reason string, result []byte) *jobAck {
 	old := j.ackRef.Load()
 	if old == nil || old.ext == nil || old.ext.task == nil {
 		return old
 	}
 
-	ref, ext := *old, *old.ext
-	ext.end = &TaskEnd{Outcome: o, Reason: reason, Result: result}
-	ref.ext = &ext
+	ref, ext := ackCopy(old)
+	ext.end, ref.ext = &TaskEnd{Outcome: o, Reason: reason, Result: result}, &ext
 	j.ackRef.Store(&ref)
 
 	return &ref
