@@ -83,11 +83,12 @@ type TaskRecord struct {
 
 // WorkflowRecord is a workflow as storage holds it. Times are Unix ms.
 type WorkflowRecord struct {
-	ID         string        `json:"id"`
-	State      WorkflowState `json:"state"`
-	CreatedAt  int64         `json:"created_at"`
-	FinishedAt int64         `json:"finished_at,omitempty"`
-	Tasks      []TaskRecord  `json:"tasks"`
+	ID           string        `json:"id"`
+	State        WorkflowState `json:"state"`
+	CreatedAt    int64         `json:"created_at"`
+	FinishedAt   int64         `json:"finished_at,omitempty"`
+	UndoOnCancel bool          `json:"undo_on_cancel"` // the plan's, or the override a Cancel gave
+	Tasks        []TaskRecord  `json:"tasks"`
 }
 
 // Scoped names the storage scope. Two objects with the same ScopeID share
@@ -101,8 +102,9 @@ type WorkflowStore interface {
 	Scoped
 	// Submit stores the plan and pushes its root tasks.
 	Submit(ctx context.Context, w WorkflowPlan) error
-	// Cancel cancels the workflow. undo also runs compensation.
-	Cancel(ctx context.Context, id string, undo bool) error
+	// Cancel cancels the workflow. undo nil: compensation runs as the
+	// workflow was submitted (WorkflowPlan.UndoOnCancel); non-nil overrides.
+	Cancel(ctx context.Context, id string, undo *bool) error
 	// Runnable reports whether the task (undo: its undo job) may run now:
 	// the pre-run check.
 	Runnable(ctx context.Context, workflowID, task string, undo bool) (bool, error)
@@ -118,8 +120,10 @@ type WorkflowAcknowledgeable interface {
 	// FinishTask records the outcome and returns the IDs of the queues it
 	// pushed into, so varmq pokes its local consumers of them. A re-finish
 	// of a task that already ended (a lost reply, a redelivery) changes
-	// nothing and returns its dependents' queue IDs, so a wake lost with
-	// the first reply is not lost for good.
+	// nothing and returns every push-target queue ID (all task and undo
+	// queues of the workflow), so a wake lost with the first reply is not
+	// lost for good. A workflow that is gone (expired) settles the item and
+	// returns ok with no IDs: false would redeliver it forever.
 	FinishTask(ackID string, e TaskEnd) (pushed []string, ok bool)
 }
 

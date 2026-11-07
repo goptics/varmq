@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -174,6 +176,63 @@ func TestWorkflowCancelSkipsQueued(t *testing.T) {
 	assert.Zero(t, q.Len())
 }
 
+// TestWorkflowUndoOnCancelFrozen: WithUndoOnCancel is kept with the workflow,
+// so a cancel from any handle (or REST without undo) follows it; REST undo
+// overrides it.
+func TestWorkflowUndoOnCancelFrozen(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		id     string
+		cancel func(t *testing.T, store WorkflowStore, id string)
+		want   WorkflowState
+		undos  int32
+	}{
+		{"OpenWorkflow", "frozen-open", func(t *testing.T, store WorkflowStore, id string) {
+			require.NoError(t, OpenWorkflow(store, id).Cancel(context.Background()))
+		}, WorkflowCancelled, 0},
+		{"REST without undo", "frozen-rest", func(t *testing.T, _ WorkflowStore, id string) {
+			rr := httptest.NewRecorder()
+			NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/workflows/"+id+"/actions/cancel", nil))
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		}, WorkflowCancelled, 0},
+		{"REST undo=true overrides", "frozen-rest-undo", func(t *testing.T, _ WorkflowStore, id string) {
+			rr := httptest.NewRecorder()
+			NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/workflows/"+id+"/actions/cancel?undo=true", nil))
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		}, WorkflowCompensated, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			started, release := make(chan struct{}), make(chan struct{})
+			var undos atomic.Int32
+			q := NewWorker(func(j Job[int]) {
+				switch j.Data() {
+				case 2:
+					close(started)
+					<-release
+				case 10:
+					undos.Add(1)
+				}
+			}, 2).BindQueue()
+
+			store := NewWorkflowStore()
+			wf := NewWorkflow(store, WithWorkflowID(tc.id), WithUndoOnCancel(false))
+			a := wf.Add("a", q, 1).Undo(q, 10)
+			wf.Add("b", q, 2).After(a)
+			require.NoError(t, wf.Submit(ctx))
+
+			<-started // a completed, b runs
+			tc.cancel(t, store, tc.id)
+			close(release)
+
+			r := waitWF(t, wf)
+			assert.Equal(t, tc.want, r.State)
+			assert.Equal(t, tc.undos, undos.Load())
+			assert.Equal(t, tc.undos == 1, r.UndoOnCancel, "the record shows the cancel's choice")
+		})
+	}
+}
+
 func TestWorkflowPurgeCancels(t *testing.T) {
 	ctx := context.Background()
 	var ran atomic.Int32
@@ -275,13 +334,13 @@ func (c crashStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) {
 		return nil, false
 	}
 	if t := st.s.Tasks[e.Task]; t != nil && !e.Undo && (t.State == JobCompleted || t.State == JobFailed || t.State == JobCancelled) {
-		// Already ended: nothing changes; the contract returns its
-		// dependents' queues, so a lost wake is made up.
-		var deps []string
-		for _, d := range st.s.next[e.Task] {
-			deps = append(deps, "q-"+d)
+		// Already ended: nothing changes; the contract returns every
+		// push-target queue, so a lost wake is made up.
+		var all []string
+		for _, name := range st.s.Order {
+			all = append(all, "q-"+name)
 		}
-		return deps, true
+		return all, true
 	}
 
 	return st.finish(e), true

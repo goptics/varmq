@@ -191,6 +191,9 @@ func (t *Task) Priority(p int) *Task {
 	return t
 }
 
+// validWorkflowID: `[A-Za-z0-9_.-]{1,128}`, not "index" (the index key).
+func validWorkflowID(id string) bool { return workflowIDRe.MatchString(id) && id != "index" }
+
 // taskJobID is a task's job ID; its undo's adds ":undo".
 func taskJobID(wf, task string) string { return "wf:" + wf + ":" + task }
 
@@ -200,7 +203,7 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 	errs := slices.Clone(wf.errs)
 	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
 
-	if !workflowIDRe.MatchString(wf.id) || wf.id == "index" {
+	if !validWorkflowID(wf.id) {
 		add("varmq: invalid workflow id %q", wf.id)
 	}
 	if len(wf.tasks) == 0 {
@@ -220,6 +223,8 @@ func (wf *Workflow) plan() (WorkflowPlan, error) {
 		switch {
 		case err != nil:
 			errs = append(errs, fmt.Errorf("task %q: %w", task, err))
+		case it.build == nil: // a zero WorkflowItem from a user TaskQueue
+			add("varmq: task %q: queue gave no workflow item", task)
 		case wf.store != nil && tt.scope != scope:
 			add("%w: task %q queue %s is in %s, the store in %s", ErrScopeMismatch, task, tt.queueID, tt.scope, scope)
 		default:
@@ -336,10 +341,25 @@ func planHash(p WorkflowPlan, data, undoData [][]byte) string {
 }
 
 // OpenWorkflow returns a handle to the submitted workflow id: Cancel,
-// Status and Wait work; Add and Submit fail with ErrWorkflowSubmitted.
+// Status and Wait work; Add and Submit fail with ErrWorkflowSubmitted. An
+// invalid id gives a handle whose ops fail with ErrWorkflowNotFound.
 func OpenWorkflow(store WorkflowStore, id string) *Workflow {
-	return &Workflow{id: id, store: store, submitted: true, opened: true,
-		opts: workflowConfig{undoOnCancel: true}}
+	return &Workflow{id: id, store: store, submitted: true, opened: true}
+}
+
+var errNoWorkflowStore = errors.New("varmq: workflow has no store")
+
+// handleErr is why Cancel, Status and Wait can't ask the store: none, or
+// an ID no store can hold.
+func (wf *Workflow) handleErr() error {
+	switch {
+	case wf.store == nil:
+		return errNoWorkflowStore
+	case !validWorkflowID(wf.id):
+		return fmt.Errorf("%w: invalid workflow id %q", ErrWorkflowNotFound, wf.id)
+	}
+
+	return nil
 }
 
 // Submit validates and stores the workflow, then queues its roots. Safe to
@@ -360,17 +380,74 @@ func (wf *Workflow) Submit(ctx context.Context) error {
 	}
 	wf.submitted = true
 
+	// Durable storage wakes only its distributed consumers.
+	var roots []string
+	for _, tp := range p.Tasks {
+		if len(tp.Deps) == 0 {
+			roots = appendNew(roots, tp.QueueID)
+		}
+	}
+	pokeLocal(roots)
+
 	return nil
 }
 
-// Cancel cancels the workflow; undos run if the workflow was set to
-// (default true).
+// Cancel cancels the workflow; undos run if it was submitted with
+// WithUndoOnCancel(true), the default. The store reads that from the
+// workflow, so a handle from OpenWorkflow cancels it the same way.
 func (wf *Workflow) Cancel(ctx context.Context) error {
-	return wf.store.Cancel(ctx, wf.id, wf.opts.undoOnCancel)
+	if err := wf.handleErr(); err != nil {
+		return err
+	}
+	if err := wf.store.Cancel(ctx, wf.id, nil); err != nil {
+		return err
+	}
+
+	// Wake local consumers of the undos the cancel may have pushed.
+	var ids []string
+	if !wf.opened {
+		for _, t := range wf.tasks {
+			if t.undo != nil && t.undo.err == nil {
+				ids = appendNew(ids, t.undo.item.target.queueID)
+			}
+		}
+	} else if r, err := wf.store.Record(ctx, wf.id); err == nil {
+		// ponytail: a failed read skips the wake; consumers see the undos
+		// at their next resync.
+		ids = undoQueueIDs(r)
+	}
+	pokeLocal(ids)
+
+	return nil
+}
+
+// undoQueueIDs is the queue ID of every undo of r, each once.
+func undoQueueIDs(r WorkflowRecord) []string {
+	var ids []string
+	for _, t := range r.Tasks {
+		if t.Undo != nil {
+			ids = appendNew(ids, t.Undo.QueueID)
+		}
+	}
+
+	return ids
+}
+
+// appendNew appends id unless ids has it. Workflows span few queues.
+func appendNew(ids []string, id string) []string {
+	if slices.Contains(ids, id) {
+		return ids
+	}
+
+	return append(ids, id)
 }
 
 // Status returns the workflow's current record.
 func (wf *Workflow) Status(ctx context.Context) (WorkflowRecord, error) {
+	if err := wf.handleErr(); err != nil {
+		return WorkflowRecord{}, err
+	}
+
 	return wf.store.Record(ctx, wf.id)
 }
 
@@ -385,6 +462,10 @@ func isFinal(s WorkflowState) bool {
 
 // Wait blocks until the workflow reaches a final state or ctx is done.
 func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
+	if err := wf.handleErr(); err != nil {
+		return WorkflowRecord{}, err
+	}
+
 	// ponytail: polling; a store push later
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()

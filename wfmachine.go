@@ -10,11 +10,13 @@ type wfState struct {
 	Tasks    map[string]*wfTask
 	Order    []string // Add order = topological
 	FailFast bool
+	// UndoOnCancel: a cancel compensates. The plan's, until cancel sets
+	// the value its caller resolved.
+	UndoOnCancel bool
 
-	next       map[string][]string // dependents per task, in Order
-	failed     bool                // an unabsorbed failure happened before any cancel
-	cancelled  bool                // cancel was called
-	cancelUndo bool                // cancel asked for compensation
+	next      map[string][]string // dependents per task, in Order
+	failed    bool                // an unabsorbed failure happened before any cancel
+	cancelled bool                // cancel was called
 }
 
 type wfTask struct {
@@ -39,11 +41,12 @@ type wfEffect struct {
 // every dependency.
 func newWFState(p WorkflowPlan) *wfState {
 	s := &wfState{
-		State:    WorkflowRunning,
-		Tasks:    make(map[string]*wfTask, len(p.Tasks)),
-		Order:    make([]string, 0, len(p.Tasks)),
-		FailFast: p.FailFast,
-		next:     make(map[string][]string, len(p.Tasks)),
+		State:        WorkflowRunning,
+		Tasks:        make(map[string]*wfTask, len(p.Tasks)),
+		Order:        make([]string, 0, len(p.Tasks)),
+		FailFast:     p.FailFast,
+		UndoOnCancel: p.UndoOnCancel,
+		next:         make(map[string][]string, len(p.Tasks)),
 	}
 	for _, tp := range p.Tasks {
 		t := &wfTask{Plan: tp, State: JobPending, Open: len(tp.Deps)}
@@ -117,17 +120,21 @@ func (s *wfState) finish(e TaskEnd) ([]wfEffect, error) {
 
 // cancel cancels waiting tasks now. Pending ones stay: the pre-run check
 // finishes them as cancelled. The workflow ends once nothing is pending.
+// undo is the effective value: the store resolves a nil override to
+// UndoOnCancel.
 func (s *wfState) cancel(undo bool) []wfEffect {
 	if s.State != WorkflowRunning || s.cancelled {
 		return nil
 	}
-	s.cancelled, s.cancelUndo = true, undo
+	s.cancelled, s.UndoOnCancel = true, undo
 	s.cancelWaiting()
 	return s.settle(nil)
 }
 
 // runnable is the pre-run check: may this task (undo: its undo) start now.
-// Only a pending one may, and only while its phase is on.
+// Only a pending one may, and only while its phase is on. Once FailFast
+// fired, only Always tasks start: queued others are stopped, and the failed
+// task's kept Always dependents still run.
 func (s *wfState) runnable(task string, undo bool) bool {
 	t, ok := s.Tasks[task]
 	if !ok {
@@ -136,7 +143,8 @@ func (s *wfState) runnable(task string, undo bool) bool {
 	if undo {
 		return s.State == WorkflowCompensating && t.UndoState == JobPending
 	}
-	return s.State == WorkflowRunning && !s.cancelled && t.State == JobPending
+	stopped := s.FailFast && s.failed && !t.Plan.Always
+	return s.State == WorkflowRunning && !s.cancelled && !stopped && t.State == JobPending
 }
 
 func (s *wfState) finishUndo(t *wfTask, e TaskEnd) []wfEffect {
@@ -282,7 +290,7 @@ func (s *wfState) settle(push map[string]bool) []wfEffect {
 	}
 	// A failure before cancel keeps its compensation; cancel alone
 	// compensates only when asked.
-	undo := s.failed || s.cancelled && s.cancelUndo
+	undo := s.failed || s.cancelled && s.UndoOnCancel
 	if undo {
 		if undos := s.compensate(); len(undos) > 0 {
 			s.State = WorkflowCompensating

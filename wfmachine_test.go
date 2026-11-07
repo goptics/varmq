@@ -673,3 +673,48 @@ func TestMachineDeterministic(t *testing.T) {
 		require.True(t, slices.Equal(first, all), "run differs: %v vs %v", first, all)
 	}
 }
+
+// TestMachineFailFastRunnable: after FailFast fires, a queued forward task
+// may not start; Always tasks (the failed task's kept dependents) still run.
+func TestMachineFailFastRunnable(t *testing.T) {
+	s := newWFState(mplan(true,
+		mtask{name: "A"},
+		mtask{name: "D", deps: []string{"A"}, always: true},
+		mtask{name: "E", deps: []string{"A"}}, // so A's failure is unabsorbed
+		mtask{name: "X"},
+		mtask{name: "Y", always: true},
+	))
+	assert.True(t, s.runnable("X", false))
+
+	assert.Equal(t, []string{"D"}, mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeFailed}))
+	assert.False(t, s.runnable("X", false), "queued, not started: FailFast stops it")
+	assert.True(t, s.runnable("D", false), "kept Always dependent runs")
+	assert.True(t, s.runnable("Y", false), "Always runs whatever failed")
+
+	s = newWFState(mplan(false, mtask{name: "A"}, mtask{name: "X"}))
+	mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeFailed})
+	assert.True(t, s.runnable("X", false), "no FailFast: unrelated branches finish")
+}
+
+// TestMachineUndoOnCancel: the plan's UndoOnCancel holds until a cancel
+// gives its own.
+func TestMachineUndoOnCancel(t *testing.T) {
+	for _, tc := range []struct {
+		plan, cancel bool
+		want         []string
+	}{
+		{true, true, []string{"A:undo"}},
+		{true, false, []string{"end:cancelled"}},
+		{false, true, []string{"A:undo"}},
+		{false, false, []string{"end:cancelled"}},
+	} {
+		p := mplan(false, mtask{name: "A", undo: true}, mtask{name: "B", deps: []string{"A"}})
+		p.UndoOnCancel = tc.plan
+		s := newWFState(p)
+		assert.Equal(t, tc.plan, s.UndoOnCancel)
+		mustFinish(t, s, TaskEnd{Task: "A", Outcome: OutcomeCompleted})
+		assert.Empty(t, s.cancel(tc.cancel), "B is queued")
+		assert.Equal(t, tc.cancel, s.UndoOnCancel, "the cancel's value is kept")
+		assert.Equal(t, tc.want, mustFinish(t, s, TaskEnd{Task: "B", Outcome: OutcomeCancelled}), "%+v", tc)
+	}
+}

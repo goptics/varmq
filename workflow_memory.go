@@ -268,16 +268,21 @@ func (m *memWorkflowStore) get(id string) (*memWorkflow, error) {
 }
 
 // Cancel cancels waiting tasks now; queued ones are cancelled by the
-// pre-run check. undo runs compensation once nothing is pending. Cancel of
-// an ended workflow does nothing.
-func (m *memWorkflowStore) Cancel(_ context.Context, id string, undo bool) error {
+// pre-run check. Compensation runs once nothing is pending if undo says so,
+// or (undo nil) if the workflow was submitted to. Cancel of an ended
+// workflow does nothing.
+func (m *memWorkflowStore) Cancel(_ context.Context, id string, undo *bool) error {
 	m.mu.Lock()
 	w, err := m.get(id)
 	if err != nil {
 		m.mu.Unlock()
 		return err
 	}
-	pushes := m.effects(w, w.s.cancel(undo))
+	on := w.s.UndoOnCancel
+	if undo != nil {
+		on = *undo
+	}
+	pushes := m.effects(w, w.s.cancel(on))
 	m.mu.Unlock()
 
 	m.push(pushes)
@@ -364,7 +369,7 @@ func (m *memWorkflowStore) Workflows(_ context.Context, state WorkflowState, off
 // until compensation reaches it. Callers hold mu.
 func (w *memWorkflow) record() WorkflowRecord {
 	r := WorkflowRecord{ID: w.id, State: w.s.State, CreatedAt: w.created, FinishedAt: w.finished,
-		Tasks: make([]TaskRecord, 0, len(w.s.Order))}
+		UndoOnCancel: w.s.UndoOnCancel, Tasks: make([]TaskRecord, 0, len(w.s.Order))}
 
 	for _, name := range w.s.Order {
 		t := w.s.Tasks[name]

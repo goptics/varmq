@@ -452,14 +452,17 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 }
 
 // findWorkflow returns the registered store that holds workflow id, and its
-// record. ErrWorkflowNotFound when none does; else the store error when some
-// store failed and none hit.
+// record. ErrWorkflowNotFound when none does or id is not a workflow ID (no
+// store is asked); else the store error when some store failed and none hit.
 func findWorkflow(r *http.Request, id string) (workflowStore, WorkflowRecord, error) {
 	var (
 		found  workflowStore
 		rec    WorkflowRecord
 		failed error
 	)
+	if !validWorkflowID(id) {
+		return nil, rec, ErrWorkflowNotFound
+	}
 
 	workflowRegistry.Range(func(_, v any) bool {
 		ws := v.(workflowStore)
@@ -513,11 +516,13 @@ func handleWorkflowAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	undo := true
-	switch r.URL.Query().Get("undo") {
-	case "", "true":
-	case "false":
-		undo = false
+	// absent: the workflow's own WithUndoOnCancel
+	var undo *bool
+	switch v := r.URL.Query().Get("undo"); v {
+	case "":
+	case "true", "false":
+		on := v == "true"
+		undo = &on
 	default:
 		writeError(w, http.StatusBadRequest, "invalid undo")
 		return
@@ -540,6 +545,7 @@ func handleWorkflowAction(w http.ResponseWriter, r *http.Request) {
 		writeWorkflowErr(w, err)
 		return
 	}
+	pokeLocal(undoQueueIDs(rec)) // as Workflow.Cancel: wake local undo consumers
 
 	writeJSON(w, http.StatusOK, rec)
 }

@@ -101,7 +101,7 @@ func TestMemStoreRecord(t *testing.T) {
 	r, err := s.Record(ctx, "rec")
 	require.NoError(t, err)
 	assert.Equal(t, WorkflowRecord{
-		ID: "rec", State: WorkflowRunning, CreatedAt: clock.UnixMilli(),
+		ID: "rec", State: WorkflowRunning, CreatedAt: clock.UnixMilli(), UndoOnCancel: true,
 		Tasks: []TaskRecord{
 			{Name: "a", State: JobPending, QueueID: fifoID, JobID: "wf:rec:a"},
 			{Name: "b", State: JobWaiting, Deps: []string{"a"}, QueueID: prioID, JobID: "wf:rec:b",
@@ -303,7 +303,7 @@ func TestMemStoreCancel(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	require.NoError(t, s.Cancel(ctx, "cx", true))
+	require.NoError(t, s.Cancel(ctx, "cx", nil))
 	ok, _ = s.Runnable(ctx, "cx", "b", false)
 	assert.False(t, ok, "pending b is cancelled by the pre-run check")
 	r, _ := s.Record(ctx, "cx")
@@ -327,8 +327,8 @@ func TestMemStoreCancel(t *testing.T) {
 	assert.Equal(t, WorkflowCompensated, r.State)
 	assert.NotZero(t, r.FinishedAt)
 
-	require.NoError(t, s.Cancel(ctx, "cx", true), "cancel of an ended workflow: no-op")
-	assert.ErrorIs(t, s.Cancel(ctx, "nope", true), ErrWorkflowNotFound)
+	require.NoError(t, s.Cancel(ctx, "cx", nil), "cancel of an ended workflow: no-op")
+	assert.ErrorIs(t, s.Cancel(ctx, "nope", nil), ErrWorkflowNotFound)
 	_, err = s.Runnable(ctx, "nope", "a", false)
 	assert.ErrorIs(t, err, ErrWorkflowNotFound)
 }

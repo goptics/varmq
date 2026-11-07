@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,9 +17,9 @@ import (
 // fakeWFStore is a WorkflowStore that only names its scope.
 type fakeWFStore struct{ scope string }
 
-func (s fakeWFStore) ScopeID() string                          { return s.scope }
-func (fakeWFStore) Submit(context.Context, WorkflowPlan) error { return nil }
-func (fakeWFStore) Cancel(context.Context, string, bool) error { return nil }
+func (s fakeWFStore) ScopeID() string                           { return s.scope }
+func (fakeWFStore) Submit(context.Context, WorkflowPlan) error  { return nil }
+func (fakeWFStore) Cancel(context.Context, string, *bool) error { return nil }
 func (fakeWFStore) Runnable(context.Context, string, string, bool) (bool, error) {
 	return true, nil
 }
@@ -474,4 +476,144 @@ func TestWorkflowHandleOps(t *testing.T) {
 
 	_, err = OpenWorkflow(store, "nope").Status(ctx)
 	assert.ErrorIs(t, err, ErrWorkflowNotFound)
+}
+
+// pokeStorage is durable storage that finishes tasks and wakes nobody on a
+// push, as a non-distributed redisq queue.
+type pokeStorage struct {
+	*mocks.MockPersistentQueue
+	wfStorage
+}
+
+func (pokeStorage) FinishTask(string, TaskEnd) ([]string, bool) { return nil, true }
+
+// pushStore pushes roots at Submit and every undo at Cancel straight into
+// their storage, as a store's script does, leaving the wake to varmq.
+type pushStore struct {
+	fakeWFStore
+	plan WorkflowPlan
+}
+
+func (s *pushStore) Submit(_ context.Context, p WorkflowPlan) error {
+	s.plan = p
+	for _, tp := range p.Tasks {
+		if len(tp.Deps) == 0 {
+			tp.Queue.(pokeStorage).Enqueue(tp.Item)
+		}
+	}
+	return nil
+}
+
+func (s *pushStore) Cancel(context.Context, string, *bool) error {
+	for _, tp := range s.plan.Tasks {
+		if tp.Undo != nil {
+			tp.Undo.Queue.(pokeStorage).Enqueue(tp.Undo.Item)
+		}
+	}
+	return nil
+}
+
+func (s *pushStore) Record(context.Context, string) (WorkflowRecord, error) {
+	r := WorkflowRecord{ID: s.plan.ID, State: WorkflowRunning}
+	for _, tp := range s.plan.Tasks {
+		tr := TaskRecord{Name: tp.Name, QueueID: tp.QueueID}
+		if tp.Undo != nil {
+			tr.Undo = &TaskRecord{Name: tp.Name, QueueID: tp.Undo.QueueID}
+		}
+		r.Tasks = append(r.Tasks, tr)
+	}
+	return r, nil
+}
+
+// TestWorkflowPokesLocal: Submit wakes local consumers of the roots' queues,
+// Cancel those of the undo queues (from the plan, or the record for an
+// opened handle): durable storage wakes only distributed ones.
+func TestWorkflowPokesLocal(t *testing.T) {
+	for _, opened := range []bool{false, true} {
+		t.Run(fmt.Sprint("opened=", opened), func(t *testing.T) {
+			ctx := context.Background()
+			ran := make(chan int, 4)
+			run := func(j Job[int]) { ran <- j.Data() }
+			tq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-t", "s"}}
+			uq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-u", "s"}}
+			tw := NewWorker(run)
+			th := tw.WithPersistentQueue(tq)
+			uw := NewWorker(run)
+			uh := uw.WithPersistentQueue(uq)
+			tw.WaitUntilIdle()
+			uw.WaitUntilIdle()
+
+			store := &pushStore{fakeWFStore: fakeWFStore{scope: "s"}}
+			wf := NewWorkflow(store, WithWorkflowID("pk"))
+			wf.Add("a", th, 1).Undo(uh, 10)
+			require.NoError(t, wf.Submit(ctx))
+			select {
+			case v := <-ran:
+				assert.Equal(t, 1, v)
+			case <-time.After(2 * time.Second):
+				t.Fatal("root never ran: no local poke after Submit")
+			}
+
+			h := wf
+			if opened {
+				h = OpenWorkflow(store, "pk")
+			}
+			require.NoError(t, h.Cancel(ctx))
+			select {
+			case v := <-ran:
+				assert.Equal(t, 10, v)
+			case <-time.After(2 * time.Second):
+				t.Fatal("undo never ran: no local poke after Cancel")
+			}
+		})
+	}
+}
+
+// zeroQueue is a user TaskQueue that returns a zero WorkflowItem.
+type zeroQueue struct{}
+
+func (zeroQueue) WorkflowItem(int) (WorkflowItem, error) { return WorkflowItem{}, nil }
+
+// TestWorkflowGuards: misuse returns errors, never panics.
+func TestWorkflowGuards(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("zero WorkflowItem", func(t *testing.T) {
+		for _, store := range []WorkflowStore{nil, memStore()} {
+			wf := NewWorkflow(store, WithWorkflowID("z"))
+			wf.Add("a", zeroQueue{}, 1).Undo(zeroQueue{}, 2)
+			err := wf.Submit(ctx)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "no workflow item")
+		}
+	})
+
+	t.Run("nil store", func(t *testing.T) {
+		for _, wf := range []*Workflow{NewWorkflow(nil), OpenWorkflow(nil, "x")} {
+			assert.ErrorIs(t, wf.Cancel(ctx), errNoWorkflowStore)
+			_, err := wf.Status(ctx)
+			assert.ErrorIs(t, err, errNoWorkflowStore)
+			_, err = wf.Wait(ctx)
+			assert.ErrorIs(t, err, errNoWorkflowStore)
+		}
+	})
+
+	t.Run("invalid OpenWorkflow id", func(t *testing.T) {
+		for _, id := range []string{"", "index", "a b", "a:b", strings.Repeat("x", 129)} {
+			h := OpenWorkflow(panicStore{}, id)
+			assert.ErrorIs(t, h.Cancel(ctx), ErrWorkflowNotFound, id)
+			_, err := h.Status(ctx)
+			assert.ErrorIs(t, err, ErrWorkflowNotFound, id)
+			_, err = h.Wait(ctx)
+			assert.ErrorIs(t, err, ErrWorkflowNotFound, id)
+		}
+	})
+}
+
+// panicStore fails the test if any op reaches it.
+type panicStore struct{ fakeWFStore }
+
+func (panicStore) Cancel(context.Context, string, *bool) error { panic("store asked") }
+func (panicStore) Record(context.Context, string) (WorkflowRecord, error) {
+	panic("store asked")
 }

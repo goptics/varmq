@@ -15,7 +15,7 @@ func TestWorkflowRecordJSON(t *testing.T) {
 		WorkflowCompensating, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled}
 	for _, s := range states {
 		want := WorkflowRecord{
-			ID: "w1", State: s, CreatedAt: 1, FinishedAt: 2,
+			ID: "w1", State: s, CreatedAt: 1, FinishedAt: 2, UndoOnCancel: true,
 			Tasks: []TaskRecord{{
 				Name: "a", State: JobWaiting, Deps: []string{"b"}, QueueID: "q", JobID: "j",
 				Always: true, Reason: "r", ResultSize: 3,

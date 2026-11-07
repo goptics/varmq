@@ -498,8 +498,9 @@ func (j *job[T]) acknowledge() error {
 
 	var ok bool
 	if wa != nil {
-		// Poke even when !ok: a re-finish of an ended task returns its
-		// dependents' queues, and the reply that pushed them may be lost.
+		// Poke even when !ok. A re-finish of an ended task returns every
+		// push-target queue of the workflow: the reply that pushed may be
+		// lost.
 		var pushed []string
 		pushed, ok = wa.FinishTask(ref.id, taskEnd(ref.ext))
 		pokeLocal(pushed)

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -647,7 +649,7 @@ type fakeWorkflowStore struct {
 	recs      []WorkflowRecord // newest first
 	err       error
 	cancelErr error
-	cancelled []bool
+	cancelled []string // per Cancel: "nil", "true" or "false"
 }
 
 func (f *fakeWorkflowStore) ScopeID() string { return f.scope }
@@ -671,8 +673,12 @@ func (f *fakeWorkflowStore) Record(_ context.Context, id string) (WorkflowRecord
 	}
 	return WorkflowRecord{}, ErrWorkflowNotFound
 }
-func (f *fakeWorkflowStore) Cancel(_ context.Context, id string, undo bool) error {
-	f.cancelled = append(f.cancelled, undo)
+func (f *fakeWorkflowStore) Cancel(_ context.Context, id string, undo *bool) error {
+	s := "nil"
+	if undo != nil {
+		s = strconv.FormatBool(*undo)
+	}
+	f.cancelled = append(f.cancelled, s)
 	return f.cancelErr
 }
 func (f *fakeWorkflowStore) Workflows(_ context.Context, state WorkflowState, offset, limit int) ([]WorkflowRecord, error) {
@@ -786,11 +792,11 @@ func TestMuxWorkflows(t *testing.T) {
 	t.Run("cancel undo=false", func(t *testing.T) {
 		rr := do("PATCH", "/workflows/f-mid/actions/cancel?undo=false")
 		assert.Equal(t, "f-mid", mustRecord(t, rr).ID)
-		assert.Equal(t, []bool{false}, fake.cancelled)
+		assert.Equal(t, []string{"false"}, fake.cancelled)
 
 		do("PATCH", "/workflows/f-old/actions/cancel?undo=true")
 		do("PATCH", "/workflows/f-old/actions/cancel")
-		assert.Equal(t, []bool{false, true, true}, fake.cancelled)
+		assert.Equal(t, []string{"false", "true", "nil"}, fake.cancelled, "absent: the workflow's own")
 	})
 
 	t.Run("cancel 400 and 404", func(t *testing.T) {
@@ -817,6 +823,14 @@ func TestMuxWorkflows(t *testing.T) {
 		assert.Equal(t, http.StatusServiceUnavailable, do("GET", "/workflows/nope").Code)
 		assert.Equal(t, http.StatusServiceUnavailable, do("PATCH", "/workflows/nope/actions/cancel").Code)
 		assert.Equal(t, http.StatusOK, do("GET", "/workflows/m-new").Code, "a hit wins over a failing store")
+
+		// Not a workflow ID: 404 before any store is asked (fake would 503).
+		n := len(fake.cancelled)
+		for _, id := range []string{"index", "a%20b", "a:b", strings.Repeat("x", 129)} {
+			assert.Equal(t, http.StatusNotFound, do("GET", "/workflows/"+id).Code, id)
+			assert.Equal(t, http.StatusNotFound, do("PATCH", "/workflows/"+id+"/actions/cancel").Code, id)
+		}
+		assert.Len(t, fake.cancelled, n, "no store cancelled")
 	})
 }
 
