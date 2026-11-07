@@ -53,12 +53,36 @@ func holderOf(q any) pool.Holder {
 	return nil
 }
 
-// emptyErr is why a dequeue came back empty. Storage that can pause may
-// refuse for a pause that ended before this check (Pause and Resume both
-// between Len and Dequeue), so any refusal of a QueuePauser is "nothing to
-// do", not a failure the user hears about.
-func emptyErr(pz pool.Holder) error {
-	if pz != nil {
+// pauseEpoch is optional for a QueuePauser (varmq's in-memory queues): a
+// count that moves on at each Pause and Resume, before the state changes.
+type pauseEpoch interface{ PauseEpoch() uint64 }
+
+// pauseGate is a source's view of its queue's pause.
+type pauseGate struct {
+	pz pool.Holder // q's pause (QueuePauser), nil if it has none
+	ep pauseEpoch  // nil unless pz has one
+}
+
+func gateOf(q any) pauseGate {
+	g := pauseGate{pz: holderOf(q)}
+	g.ep, _ = q.(pauseEpoch)
+	return g
+}
+
+// epoch is read before a dequeue, for emptyErr.
+func (g pauseGate) epoch() uint64 {
+	if g.ep == nil {
+		return 0
+	}
+	return g.ep.PauseEpoch()
+}
+
+// emptyErr is why a dequeue that began at epoch e came back empty: a
+// pause, now or one that began and ended since (Pause and Resume both
+// between Len and Dequeue), is "nothing to do"; anything else is a failure
+// the user hears about.
+func (g pauseGate) emptyErr(e uint64) error {
+	if queuePaused(g.pz) || g.ep != nil && g.ep.PauseEpoch() != e {
 		return errNoReadySource
 	}
 	return ErrFailedToDequeue
@@ -102,7 +126,7 @@ type queueSource[T any, JobType iJob[T]] struct {
 	q     IBaseQueue
 	batch int         // decided once in bind: 1 for priority storage
 	purge *purgeState // shared by every worker bound to q when q supports it; nil if it never batches
-	pz    pool.Holder // q's pause (QueuePauser), nil if it has none
+	pauseGate
 }
 
 // Len is 0 while the queue is paused: nothing to hand out.
@@ -141,10 +165,11 @@ func (s *queueSource[T, JobType]) purgeStateOf() *purgeState {
 }
 
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
+	e := s.epoch()
 	v, ok := s.q.Dequeue()
 	if !ok {
 		var zero JobType
-		return zero, emptyErr(s.pz)
+		return zero, s.emptyErr(e)
 	}
 
 	return toJob[T, JobType](v)
@@ -153,8 +178,8 @@ func (s *queueSource[T, JobType]) Next() (JobType, error) {
 // ackSource reads acknowledging storage: persistent and distributed queues.
 // Each job it returns carries its storage and ack id so job.Close can ack it.
 type ackSource[T any, JobType iJob[T]] struct {
-	q  ackQueue
-	pz pool.Holder // q's pause (QueuePauser), nil if it has none
+	q ackQueue
+	pauseGate
 }
 
 // Len is 0 while the queue is paused: nothing to hand out.
@@ -176,10 +201,11 @@ func (s *ackSource[T, JobType]) purgeGen() *atomic.Uint64 {
 }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
+	e := s.epoch()
 	v, ok, ackID := s.q.DequeueWithAckId()
 	if !ok {
 		var zero JobType
-		return zero, emptyErr(s.pz)
+		return zero, s.emptyErr(e)
 	}
 
 	j, err := toJob[T, JobType](v)
@@ -247,7 +273,7 @@ type batchAckSource[T any, JobType iJob[T]] struct {
 }
 
 func newBatchAckSource[T any, JobType iJob[T]](q ackQueue, bq IBatchAcknowledgeable, w *worker[T, JobType]) *batchAckSource[T, JobType] {
-	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pz: holderOf(q)}, bq: bq, w: w}
+	s := &batchAckSource[T, JobType]{ackSource: ackSource[T, JobType]{q: q, pauseGate: gateOf(q)}, bq: bq, w: w}
 	s.dryAt.Store(neverDry)
 
 	return s
@@ -422,20 +448,20 @@ var (
 // callers must pass to removeSource later.
 func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	var src source[JobType]
-	pz := holderOf(q)
+	g := gateOf(q)
 
 	if aq, ok := q.(ackQueue); ok {
 		if bq, ok := q.(IBatchAcknowledgeable); ok {
 			src = newBatchAckSource(aq, bq, w)
 		} else {
-			src = &ackSource[T, JobType]{q: aq, pz: pz}
+			src = &ackSource[T, JobType]{q: aq, pauseGate: g}
 		}
 	} else if _, ok := q.(IPriorityQueue); ok {
-		src = &queueSource[T, JobType]{q: q, batch: 1, pz: pz}
+		src = &queueSource[T, JobType]{q: q, batch: 1, pauseGate: g}
 	} else {
 		purge := purgeStateFor(q)
 		purge.register(w.parkHook())
-		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge, pz: pz}
+		src = &queueSource[T, JobType]{q: q, batch: maxBatch, purge: purge, pauseGate: g}
 	}
 
 	w.onResume(q, src)

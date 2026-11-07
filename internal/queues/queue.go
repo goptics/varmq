@@ -28,7 +28,7 @@ type Queue[T any] struct {
 	// Every Enqueue reads log. Padded to 128 bytes, so that read never shares
 	// a line with the cursor, allocated just before and written on every
 	// Dequeue.
-	_ [128 - 8 - 8 - 16 - 16 - 24]byte
+	_ [128 - 8 - 8 - 16 - 16 - 32]byte
 
 	ids   atomic.Pointer[idSet] // ids of stored items EnqueueOnce added; nil until the first
 	idsOn atomic.Bool           // set by the first EnqueueOnce, before its Append

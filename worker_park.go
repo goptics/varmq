@@ -30,6 +30,15 @@ func (w *worker[T, JobType]) pending(m sourceManager[JobType]) int {
 	return m.Len() + n
 }
 
+// mayHold reports whether a batch can become held with no hook to set
+// parkHeld: its queue can pause but tells no one.
+// ponytail: a source unbound while its batches stay parked has its hook
+// cancelled too; only topics unbind, and they never hold.
+func mayHold(s pool.Stamp) bool {
+	_, hooked := s.Hold.(PauseNotifier)
+	return s.Hold != nil && !hooked
+}
+
 // unheld counts the parked jobs whose queue is not paused, and clears
 // parkHeld when none is. It clears first, so a pause hook that sets it
 // meanwhile is not lost: the scan then sees that queue paused.
@@ -44,6 +53,9 @@ func (w *worker[T, JobType]) unheld() int {
 			held = true
 		} else {
 			n += len(b.jobs)
+			if mayHold(b.stamp) {
+				held = true // no hook would set parkHeld again on its pause
+			}
 		}
 	}
 	if held {
@@ -74,8 +86,7 @@ func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 	}
 
 	w.parked = append(w.parked, parkedBatch[JobType]{jobs: slices.Clone(jobs), stamp: stamp})
-	// held now, or may be held later with no hook to say so
-	if _, hooked := stamp.Hold.(PauseNotifier); stamp.Held() || stamp.Hold != nil && !hooked {
+	if stamp.Held() || mayHold(stamp) {
 		w.parkHeld.Store(true)
 	}
 	w.parkUnsorted = true

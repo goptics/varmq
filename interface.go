@@ -141,10 +141,7 @@ type IPurgeValuesQueue interface {
 // a batch pop, report remaining 0, so a stale Paused costs one empty pop,
 // never a spin. While Paused is true the worker does not dequeue, so the
 // storage must itself turn Paused false after a Resume from any process
-// it serves (redisq: control channel and a 1 s check). varmq takes any
-// empty dequeue of a QueuePauser for "nothing to do", as it cannot tell a
-// refusal for a pause that just ended from an empty queue: such storage
-// reports its own dequeue failures (redisq logs them). See
+// it serves (redisq: control channel and a 1 s check). See
 // spec/redis-storage.md and adr 0004.
 type QueuePauser interface {
 	Pause() error

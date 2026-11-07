@@ -25,10 +25,11 @@ type PriorityQueue[T any] struct {
 }
 
 // The queue pause lives in heapQueue, so PriorityQueue stays in class 64.
-func (q *PriorityQueue[T]) Pause() error    { return q.internal.Pause() }
-func (q *PriorityQueue[T]) Resume() error   { return q.internal.Resume() }
-func (q *PriorityQueue[T]) Paused() bool    { return q.internal.Paused() }
-func (q *PriorityQueue[T]) PausedAt() int64 { return q.internal.PausedAt() }
+func (q *PriorityQueue[T]) Pause() error       { return q.internal.Pause() }
+func (q *PriorityQueue[T]) Resume() error      { return q.internal.Resume() }
+func (q *PriorityQueue[T]) Paused() bool       { return q.internal.Paused() }
+func (q *PriorityQueue[T]) PausedAt() int64    { return q.internal.PausedAt() }
+func (q *PriorityQueue[T]) PauseEpoch() uint64 { return q.internal.PauseEpoch() }
 func (q *PriorityQueue[T]) OnPauseChange(fn func(paused bool)) (cancel func()) {
 	return q.internal.OnPauseChange(fn)
 }
