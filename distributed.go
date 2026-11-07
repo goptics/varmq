@@ -54,3 +54,11 @@ func (dq *distributedQueue[T]) Add(data T, c ...JobConfigFunc) bool {
 
 	return true
 }
+
+// taskTarget and taskItem make the handle a workflow task target (workflow_target.go).
+func (dq *distributedQueue[T]) taskTarget() taskTarget {
+	return durableTaskTarget(dq.IDistributedQueue, false)
+}
+func (dq *distributedQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	return durableTaskItem(data, jobID, tag)
+}

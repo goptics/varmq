@@ -369,3 +369,31 @@ func (eq *externalBaseQueue) bumpPurges() {
 func (eq *externalBaseQueue) Close() error {
 	return eq.q.Close()
 }
+
+// taskTarget and taskItem make the handles workflow task targets (workflow_target.go).
+func (q *queue[T]) taskTarget() taskTarget {
+	return memFIFOTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *queue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newJob(data, jobConfigs{Id: jobID})
+	tagMemJob(j, q.totals, tag)
+	return j, nil
+}
+
+func (q *errorQueue[T]) taskTarget() taskTarget {
+	return memFIFOTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *errorQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newErrorJob(data, jobConfigs{Id: jobID})
+	tagMemJob(&j.job, q.totals, tag)
+	return j, nil
+}
+
+func (q *resultQueue[T, R]) taskTarget() taskTarget {
+	return memFIFOTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *resultQueue[T, R]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newResultJob[T, R](data, jobConfigs{Id: jobID})
+	tagMemJob(&j.job, q.totals, tag)
+	return j, nil
+}

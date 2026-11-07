@@ -50,3 +50,12 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 
 	return true
 }
+
+// taskTarget and taskItem override the embedded in-memory queue's: the
+// storage finishes and promotes tasks (workflow_target.go).
+func (q *persistentQueue[T]) taskTarget() taskTarget {
+	return durableTaskTarget(q.internalQueue, false)
+}
+func (q *persistentQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	return durableTaskItem(data, jobID, tag)
+}

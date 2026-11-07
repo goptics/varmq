@@ -44,3 +44,12 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 
 	return true
 }
+
+// taskTarget and taskItem override the embedded in-memory queue's: the
+// storage finishes and promotes tasks (workflow_target.go).
+func (q *persistentPriorityQueue[T]) taskTarget() taskTarget {
+	return durableTaskTarget(q.internalQueue, true)
+}
+func (q *persistentPriorityQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	return durableTaskItem(data, jobID, tag)
+}

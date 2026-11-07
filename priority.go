@@ -219,3 +219,31 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 
 	return groupJob
 }
+
+// taskTarget and taskItem make the handles workflow task targets (workflow_target.go).
+func (q *priorityQueue[T]) taskTarget() taskTarget {
+	return memPriorityTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *priorityQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newJob(data, jobConfigs{Id: jobID})
+	tagMemJob(j, q.totals, tag)
+	return j, nil
+}
+
+func (q *resultPriorityQueue[T, R]) taskTarget() taskTarget {
+	return memPriorityTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *resultPriorityQueue[T, R]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newResultJob[T, R](data, jobConfigs{Id: jobID})
+	tagMemJob(&j.job, q.totals, tag)
+	return j, nil
+}
+
+func (q *errorPriorityQueue[T]) taskTarget() taskTarget {
+	return memPriorityTarget(q.externalBaseQueue, q.internalQueue)
+}
+func (q *errorPriorityQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	j := newErrorJob(data, jobConfigs{Id: jobID})
+	tagMemJob(&j.job, q.totals, tag)
+	return j, nil
+}

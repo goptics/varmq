@@ -61,3 +61,11 @@ func (dpq *distributedPriorityQueue[T]) Add(data T, priority int, c ...JobConfig
 
 	return true
 }
+
+// taskTarget and taskItem make the handle a workflow task target (workflow_target.go).
+func (dpq *distributedPriorityQueue[T]) taskTarget() taskTarget {
+	return durableTaskTarget(dpq.IDistributedPriorityQueue, true)
+}
+func (dpq *distributedPriorityQueue[T]) taskItem(data T, jobID string, tag taskTag) (any, error) {
+	return durableTaskItem(data, jobID, tag)
+}
