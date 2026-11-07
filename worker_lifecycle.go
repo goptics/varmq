@@ -28,7 +28,9 @@ func (w *worker[T, JobType]) Start() error {
 				d.dropMemQueues() // replaced under its name: unlisted
 			}
 		}
+		w.memMx.Lock()
 		w.memQueues.Range(func(_, m any) bool { registerQueue(m); return true })
+		w.memMx.Unlock()
 	}
 
 	w.goEventLoop()
@@ -132,18 +134,19 @@ func (w *worker[T, JobType]) Restart() error {
 // lists it under GET /queues if the worker is listed under GET /workers;
 // Start lists the rest.
 func (w *worker[T, JobType]) addMemQueue(m *memQueue) {
+	w.memMx.Lock() // a drop waits until m is listed, so it unlists m too
+	defer w.memMx.Unlock()
+
 	w.memQueues.Store(m.id, m)
-	listed := func() bool { v, ok := WorkerRegistry.Load(w.Name()); return ok && v == any(w) }
-	if listed() {
+	if v, ok := WorkerRegistry.Load(w.Name()); ok && v == any(w) {
 		registerQueue(m)
-		// a drop that ran between the check and the store missed m
-		if !listed() {
-			queueRegistry.CompareAndDelete(m.id, m)
-		}
 	}
 }
 
 // dropMemQueues unlists the worker's in-memory queues from GET /queues.
 func (w *worker[T, JobType]) dropMemQueues() {
+	w.memMx.Lock()
+	defer w.memMx.Unlock()
+
 	w.memQueues.Range(func(id, m any) bool { queueRegistry.CompareAndDelete(id, m); return true })
 }

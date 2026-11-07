@@ -68,6 +68,7 @@ type worker[T any, JobType iJob[T]] struct {
 	// They are listed under GET /queues while the worker is in
 	// WorkerRegistry: named, and not past its stopped retention.
 	memQueues sync.Map
+	memMx     sync.Mutex // orders listing memQueues against unlisting them
 }
 
 // Worker represents a worker that processes Jobs.

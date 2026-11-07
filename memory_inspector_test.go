@@ -236,3 +236,51 @@ func TestMemQueueForeignRegistryEntry(t *testing.T) {
 	_, listed := queueRegistry.Load(memOf(t, w.BindQueue()).QueueID())
 	assert.True(t, listed)
 }
+
+// shrinking reports more items than Values returns, as a queue a worker
+// drains between the two calls.
+type shrinking struct{ *queues.Queue[any] }
+
+func (shrinking) Len() int { return 5 }
+
+// A page past what Values returned is empty, even when Len said more.
+func TestMemQueueJobsQueueShrank(t *testing.T) {
+	m := &memQueue{q: shrinking{queues.NewQueue[any]()}}
+	jobs, err := m.Jobs(context.Background(), JobPending, 2, 10)
+	require.NoError(t, err)
+	assert.Empty(t, jobs)
+}
+
+// Jobs taken in a batch and then closed by the user, or purged, before they
+// start leave processing: the count returns to 0.
+func TestMemQueueBatchedJobsClosedOrPurged(t *testing.T) {
+	for _, purge := range []bool{false, true} {
+		release := make(chan struct{})
+		w := NewWorker(func(j Job[int]) {
+			if j.Data() == 0 {
+				<-release
+			}
+		}, 1)
+		q := w.BindQueue()
+		m := memOf(t, q)
+
+		require.NoError(t, w.Pause())
+		var jobs []EnqueuedJob
+		for i := range 4 {
+			j, ok := q.Add(i)
+			require.True(t, ok)
+			jobs = append(jobs, j)
+		}
+		require.NoError(t, w.Resume()) // concurrency 1: one batch of all 4
+		require.Eventually(t, func() bool { return stats(t, m).Counts.Processing == 4 }, time.Second, time.Millisecond)
+
+		if purge {
+			q.Purge() // the rest of the batch goes stale
+		} else {
+			require.NoError(t, jobs[2].Close()) // skipped when its turn comes
+		}
+		close(release)
+		require.Eventually(t, func() bool { return stats(t, m).Counts.Processing == 0 }, time.Second, time.Millisecond, "purge=%v", purge)
+		w.Stop()
+	}
+}
