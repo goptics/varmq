@@ -431,7 +431,6 @@ func TestAddWithIdFailsWhenEnqueueOnceFails(t *testing.T) {
 	assert.False(t, pp.Add("x", 1, WithJobId("a")), "persistent priority")
 	assert.False(t, d.Add("x", WithJobId("a")), "distributed")
 	assert.False(t, dp.Add("x", 1, WithJobId("a")), "distributed priority")
-	assert.Zero(t, p.Worker().Metrics().Submitted(), "nothing was submitted")
 }
 
 // Persistent and distributed Adds check generated ids too: they guard the

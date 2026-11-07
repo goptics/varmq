@@ -35,6 +35,7 @@ func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 			w.metrics.incFailed()
 			w.sendError(panicErr)
 		} else {
+			ij.succeed()
 			w.metrics.incSuccessful()
 		}
 	}, config...)
@@ -76,6 +77,7 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 			w.sendError(err)
 			w.metrics.incFailed()
 		} else {
+			ij.succeed()
 			w.metrics.incSuccessful()
 		}
 	}, config...)
@@ -120,6 +122,7 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 			w.sendError(err)
 			w.metrics.incFailed()
 		} else {
+			ij.succeed()
 			w.metrics.incSuccessful()
 		}
 	}, config...)

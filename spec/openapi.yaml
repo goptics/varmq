@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.0.1
+  version: 1.1.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -138,8 +138,12 @@ paths:
       description: |
         A queue is listed when its storage can report shared counts (in Go,
         it implements `varmq.QueueInspector`), once per Queue ID however many
-        workers bind it. Queues whose storage cannot are left out. Entries
-        are sorted by `id`.
+        workers bind it. Since 1.1.0 in-memory queues of listed (named)
+        workers are listed too, under `memory:<instance>:<n>`: this
+        process's counts only; they keep no
+        finished jobs, so `counts.completed` and `counts.failed` are 0 and
+        their `completed` and `failed` pages are empty. Other queues whose
+        storage cannot report are left out. Entries are sorted by `id`.
       responses:
         "200":
           description: The queues; an empty array when there are none.
@@ -289,10 +293,12 @@ components:
           properties:
             metrics:
               type: object
-              description: Counters of this process only, since start or the last reset.
-              required: [submitted, completed, successful, failed]
+              description: |
+                Jobs this worker processed in this process, since start or the
+                last reset. Since 1.1.0 there is no `submitted`: how many jobs a
+                queue received is its `totals.submitted` under `GET /queues`.
+              required: [completed, successful, failed]
               properties:
-                submitted: { type: integer, minimum: 0, description: Jobs this process added. }
                 completed: { type: integer, minimum: 0, description: Jobs this worker finished, successful or failed. }
                 successful: { type: integer, minimum: 0 }
                 failed: { type: integer, minimum: 0, description: Jobs that returned an error or panicked. }
@@ -323,7 +329,7 @@ components:
       properties:
         id:
           type: string
-          description: The Queue ID, the same on every instance; for redisq, the queue's full Redis key.
+          description: The Queue ID, the same on every instance for shared storage; for redisq, the queue's full Redis key; `memory:<instance>:<n>` for an in-memory queue, unique to its process.
         counts:
           type: object
           description: |

@@ -16,8 +16,9 @@ var WorkerRegistry sync.Map
 
 // queueRegistry holds every bound QueueInspector by its QueueID, so a queue
 // bound to several workers is listed once.
-// ponytail: entries are never removed, as queues are never unbound; a closed
-// queue stays listed with the error its QueueStats returns.
+// ponytail: storage entries are never removed, as queues are never unbound; a
+// closed queue stays listed with the error its QueueStats returns. In-memory
+// queues leave with their worker (addMemQueue).
 var queueRegistry sync.Map
 
 // registerQueue lists q under GET /queues if it is a QueueInspector.
@@ -151,7 +152,6 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 	details := struct {
 		workerSummary
 		Metrics struct {
-			Submitted  uint64 `json:"submitted"`
 			Completed  uint64 `json:"completed"`
 			Successful uint64 `json:"successful"`
 			Failed     uint64 `json:"failed"`
@@ -167,7 +167,6 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	details.Metrics.Submitted = metrics.Submitted()
 	details.Metrics.Completed = metrics.Completed()
 	details.Metrics.Successful = metrics.Successful()
 	details.Metrics.Failed = metrics.Failed()

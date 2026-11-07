@@ -4,6 +4,8 @@
 
 ### ⚠️ Breaking Changes
 
+- **Worker `Metrics().Submitted()` removed**: a worker processes jobs, it does not receive them; on a distributed consumer it was always 0. `Metrics` keeps `Completed`, `Successful`, `Failed`. `GET /workers/{name}` drops `metrics.submitted` (`openapi.yaml` 1.1.0). A queue's submitted count is its `totals.submitted` under `GET /queues`, now for in-memory queues too (below). The `submitted_total` gauge leaves `examples/prometheus`.
+
 - **`IQueue` and `IPriorityQueue` require `EnqueueOnce`** (#172): `Add` with a job id calls it directly, with no type assertion per `Add`. Custom storage passed to `WithQueue`, `WithPriorityQueue`, `WithPersistent*` or `WithDistributed*` must add it; storage that does not dedupe can call its `Enqueue`. Needs redisq v1.5.0+ and sqliteq v0.3.0+. `IDedupQueue` and `IDedupPriorityQueue` are removed.
 
 ### ⚡ Performance
@@ -12,6 +14,7 @@
 
 ### ✨ New Features
 
+- **In-memory queues under `GET /queues`**: `BindQueue`, `BindPriorityQueue` and `WithQueue`/`WithPriorityQueue` storage without its own `QueueInspector` get one, Queue ID `memory:<InstanceID>:<n>`. Counts pending (in the queue) and processing (handed to the worker, as redisq counts a popped, unacked job); totals submitted, completed (successful), failed. Topic subscriptions, and custom persistent or distributed storage without `QueueInspector`, have no submitted count and are not listed. `GET /queues/{id}/jobs` pages pending jobs in hand-out order; finished jobs are not kept, so other states are empty. Listed while the worker is under `GET /workers`: named workers only, until their stopped retention ends. Not in Instance Records `queue_ids` (no other process can read it). Pending payloads of in-memory queues are now served over the REST API, as redisq's already were: protect `Handler`. In-memory priority queue `Values()` now returns hand-out order.
 - **`Reject` on `IAcknowledgeable`**: `Reject(ackID, reason string) bool`. Worker now reports job outcome to ack storage: `Acknowledge` on success, `Reject` with error text when job function returns error or panics. varmq has no retries, so every failure is final. Failed `Reject` → `ErrAcknowledgeJob`, same as failed `Acknowledge`.
   - **Breaking** for custom `IAcknowledgeable` implementations and mocks: add `Reject`. Ships in v1, no v2 module path.
   - **Behavioral change**: failed or panicking job on persistent/distributed queue no longer calls `Acknowledge`.

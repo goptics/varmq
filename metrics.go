@@ -2,9 +2,9 @@ package varmq
 
 import "sync/atomic"
 
+// Metrics counts the jobs a worker processed. How many jobs a queue received
+// is the queue's own count (QueueStats.Totals.Submitted), not a worker's.
 type Metrics interface {
-	// Submitted returns the total number of tasks submitted to the worker.
-	Submitted() uint64
 	// Completed returns the total number of tasks that have completed processing
 	// (both successful and failed).
 	Completed() uint64
@@ -15,14 +15,12 @@ type Metrics interface {
 	// Reset resets all counters to zero.
 	Reset()
 
-	incSubmitted()
 	incCompleted()
 	incSuccessful()
 	incFailed()
 }
 
 type metrics struct {
-	submitted  atomic.Uint64
 	completed  atomic.Uint64
 	successful atomic.Uint64
 	failed     atomic.Uint64
@@ -31,10 +29,6 @@ type metrics struct {
 // newMetrics creates a new Metrics instance with all counters initialized to zero.
 func newMetrics() Metrics {
 	return &metrics{}
-}
-
-func (m *metrics) Submitted() uint64 {
-	return m.submitted.Load()
 }
 
 func (m *metrics) Completed() uint64 {
@@ -47,10 +41,6 @@ func (m *metrics) Successful() uint64 {
 
 func (m *metrics) Failed() uint64 {
 	return m.failed.Load()
-}
-
-func (m *metrics) incSubmitted() {
-	m.submitted.Add(1)
 }
 
 func (m *metrics) incCompleted() {
@@ -66,7 +56,6 @@ func (m *metrics) incFailed() {
 }
 
 func (m *metrics) Reset() {
-	m.submitted.Store(0)
 	m.completed.Store(0)
 	m.successful.Store(0)
 	m.failed.Store(0)

@@ -38,6 +38,7 @@ func (w *worker[T, JobType]) park(jobs []JobType, stamp pool.Stamp) {
 	if stamp.Stale() {
 		for _, j := range jobs {
 			_ = j.Close()
+			memTaken(j.memTotals(), -1)
 		}
 		return
 	}
@@ -96,6 +97,7 @@ func (w *worker[T, JobType]) dropParked(gen *atomic.Uint64) {
 		}
 		for _, j := range b.jobs {
 			_ = j.Close()
+			memTaken(j.memTotals(), -1)
 		}
 		dropped += len(b.jobs)
 		return true

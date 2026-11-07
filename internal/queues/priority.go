@@ -1,6 +1,8 @@
 package queues
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -38,11 +40,43 @@ func (q *PriorityQueue[T]) Len() int {
 	return q.internal.Len()
 }
 
-// Values returns a slice of all values in the priority queue.
+// Values returns a copy of the values in the order Dequeue hands them out:
+// lower priority first, then insertion order. O(n log n).
 func (q *PriorityQueue[T]) Values() []any {
 	q.mx.RLock()
-	defer q.mx.RUnlock()
-	return q.values()
+	items := slices.Clone(q.internal.items)
+	q.mx.RUnlock()
+
+	slices.SortFunc(items, func(a, b enqItem[T]) int {
+		return cmp.Or(cmp.Compare(a.Priority, b.Priority), cmp.Compare(a.Index, b.Index))
+	})
+	values := make([]any, len(items))
+	for i := range items {
+		values[i] = items[i].Value
+	}
+	return values
+}
+
+// Page returns up to limit values from offset, in the order Dequeue hands
+// them out, without sorting the whole queue: a copy of the heap is popped
+// offset+limit times. O(n + (offset+limit) log n), and O(n) memory for the
+// copy.
+func (q *PriorityQueue[T]) Page(offset, limit int) []any {
+	q.mx.RLock()
+	h := heapQueue[T]{items: slices.Clone(q.internal.items)}
+	q.mx.RUnlock()
+
+	if offset < 0 || limit < 1 || offset >= len(h.items) {
+		return []any{}
+	}
+	end := offset + min(limit, len(h.items)-offset) // no offset+limit: offset may be near MaxInt
+	out := make([]any, 0, end-offset)
+	for i := range end {
+		if v := h.pop().Value; i >= offset {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // values copies the stored values. Callers hold mx.

@@ -87,7 +87,6 @@ func (t *topic[T]) Publish(data T) bool {
 	}
 
 	for _, s := range t.subs {
-		s.worker.Metrics().incSubmitted()
 		s.worker.notifyToPullNextJobs()
 	}
 

@@ -393,7 +393,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 | Resize pool at runtime                   |  ✅   |  ✅  |   ✅    |  ❌  |     ❌     |    ❌    |   ✅   |
 | Cancel work via context                  |  ✅   |  ❌  |   ✅    |  ✅  |     ❌     |    ✅    |   ❌   |
 | Panic recovery                           |  ✅   |  ✅  |   ✅    | ❌¹  |     ❌     |    ❌    |   ✅   |
-| Task counters (submitted, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
+| Task counters (completed, failed, ...)   |  ✅   |  ❌  |   ✅    |  ❌  |     ❌     |    ❌    |   ❌   |
 | Built-in REST API                        |  ✅   |  ❌  |   ❌    |  ❌  |     ❌     |    ❌    |   ❌   |
 
 <sub>Checked against each package's source, October 2026. ¹ conc re-raises a task's panic from `Wait` by design. ² errgroup returns the first error, no results. ³ errgroup has no queue; `TryGo` only refuses a task while every slot is busy. ⁴ pond subpools: each has its own queue and runs on the parent pool's workers.</sub>

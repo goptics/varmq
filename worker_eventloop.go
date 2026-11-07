@@ -199,6 +199,8 @@ func (w *worker[T, JobType]) planBatch(m sourceManager[JobType]) (*pool.Elem[Job
 // stored, whether to keep dispatching, and any storage error.
 func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) (n int, cont bool, err error) {
 	cont = true
+	var run memRun // processing, counted per run of one handle's jobs
+	defer run.flush()
 	for n < len(buf) {
 		j, nextErr := m.Next()
 		if nextErr != nil {
@@ -214,6 +216,7 @@ func (w *worker[T, JobType]) fillBatch(m sourceManager[JobType], buf []JobType) 
 		}
 		buf[n] = j
 		n++
+		run.add(j.memTotals(), 1)
 	}
 
 	return
@@ -278,6 +281,7 @@ func (w *worker[T, JobType]) scheduleRetentionCleanup() {
 		if w.IsStopped() {
 			// Delete only if the name still maps to w; a newer worker may have re-registered it.
 			if WorkerRegistry.CompareAndDelete(w.Name(), w) {
+				w.dropMemQueues()
 				w.lifecycleChanged()
 			}
 		}

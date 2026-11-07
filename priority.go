@@ -27,7 +27,7 @@ func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs .
 	w.bind(pq, c.priority)
 
 	return &priorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
+		externalBaseQueue: withMemInspector(newExternalQueue(pq, w, c, nil)), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }
@@ -35,13 +35,15 @@ func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs .
 func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newJob(data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -56,13 +58,15 @@ func (q *priorityQueue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -96,7 +100,7 @@ func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriori
 	w.bind(pq, c.priority)
 
 	return &resultPriorityQueue[T, R]{
-		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
+		externalBaseQueue: withMemInspector(newExternalQueue(pq, w, c, nil)), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }
@@ -104,13 +108,15 @@ func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriori
 func (q *resultPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newResultJob[T, R](data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -125,13 +131,15 @@ func (q *resultPriorityQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJ
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -165,7 +173,7 @@ func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue,
 	w.bind(pq, c.priority)
 
 	return &errorPriorityQueue[T]{
-		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
+		externalBaseQueue: withMemInspector(newExternalQueue(pq, w, c, nil)), // never batches: nothing waits in a buffer
 		internalQueue:     pq,
 	}
 }
@@ -173,13 +181,15 @@ func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue,
 func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newErrorJob(data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueuePriority(q.internalQueue, j, priority, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -194,13 +204,15 @@ func (q *errorPriorityQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 
 		if ok := enqueuePriority(q.internalQueue, j, item.Priority, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}

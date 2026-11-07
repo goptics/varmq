@@ -45,7 +45,7 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 	src := w.bind(q, c.priority)
 
 	return &queue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
+		externalBaseQueue: withMemInspector(newExternalQueue(q, w, c, purgeStateOf(src))),
 		internalQueue:     q,
 	}
 }
@@ -53,13 +53,15 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newJob(data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -74,12 +76,14 @@ func (q *queue[T]) AddAll(items []Item[T]) EnqueuedGroupJob {
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -114,7 +118,7 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 	src := w.bind(q, c.priority)
 
 	return &errorQueue[T]{
-		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
+		externalBaseQueue: withMemInspector(newExternalQueue(q, w, c, purgeStateOf(src))),
 		internalQueue:     q,
 	}
 }
@@ -122,13 +126,15 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newErrorJob(data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -143,12 +149,14 @@ func (q *errorQueue[T]) AddAll(items []Item[T]) EnqueuedErrGroupJob {
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -182,7 +190,7 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 	src := w.bind(q, c.priority)
 
 	return &resultQueue[T, R]{
-		externalBaseQueue: newExternalQueue(q, w, c, purgeStateOf(src)),
+		externalBaseQueue: withMemInspector(newExternalQueue(q, w, c, purgeStateOf(src))),
 		internalQueue:     q,
 	}
 }
@@ -190,13 +198,15 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
 	j := newResultJob[T, R](data, c)
+	j.countedBy(q.totals)
+	q.totals.added(1)
 
 	if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 		j.Close()
+		q.totals.added(-1)
 		return nil, false
 	}
 
-	q.w.Metrics().incSubmitted()
 	j.markQueued()
 	q.w.notifyToPullNextJobs()
 
@@ -211,12 +221,14 @@ func (q *resultQueue[T, R]) AddAll(items []Item[T]) EnqueuedResultGroupJob[R] {
 	for _, item := range items {
 		c := cfg.jobConfigsFor(item.ID)
 		j := groupJob.newJob(item.Data, c)
+		j.countedBy(q.totals)
+		q.totals.added(1)
 		if ok := enqueue(q.internalQueue, j, c.onceId(j.id)); !ok {
 			j.Close()
+			q.totals.added(-1)
 			continue
 		}
 
-		q.w.Metrics().incSubmitted()
 		j.markQueued()
 		q.w.notifyToPullNextJobs()
 	}
@@ -229,6 +241,7 @@ type externalBaseQueue struct {
 	q      IBaseQueue
 	config queueConfig
 	purge  *purgeState // what Purge drives for the bound source; nil if it never batches
+	totals *memQueue   // in-memory queues only: their QueueInspector (withMemInspector)
 }
 
 type IExternalBaseQueue interface {

@@ -43,7 +43,6 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 		return false
 	}
 
-	q.w.Metrics().incSubmitted()
 	if q.poke != nil {
 		q.poke() // after the storage confirmed: a pop must not mark it empty before the item lands
 	}

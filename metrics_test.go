@@ -11,7 +11,6 @@ func TestMetrics(t *testing.T) {
 	t.Run("NewMetrics", func(t *testing.T) {
 		m := newMetrics()
 		assert.NotNil(t, m)
-		assert.Equal(t, uint64(0), m.Submitted())
 		assert.Equal(t, uint64(0), m.Completed())
 		assert.Equal(t, uint64(0), m.Successful())
 		assert.Equal(t, uint64(0), m.Failed())
@@ -19,9 +18,6 @@ func TestMetrics(t *testing.T) {
 
 	t.Run("IncrementMethods", func(t *testing.T) {
 		m := newMetrics()
-
-		m.incSubmitted()
-		assert.Equal(t, uint64(1), m.Submitted())
 
 		m.incCompleted()
 		assert.Equal(t, uint64(1), m.Completed())
@@ -45,7 +41,6 @@ func TestMetrics(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for range iterations {
-					m.incSubmitted()
 					m.incCompleted()
 					m.incSuccessful()
 					m.incFailed()
@@ -56,7 +51,6 @@ func TestMetrics(t *testing.T) {
 		wg.Wait()
 
 		expected := uint64(concurrency * iterations)
-		assert.Equal(t, expected, m.Submitted())
 		assert.Equal(t, expected, m.Completed())
 		assert.Equal(t, expected, m.Successful())
 		assert.Equal(t, expected, m.Failed())
@@ -64,14 +58,12 @@ func TestMetrics(t *testing.T) {
 
 	t.Run("Reset", func(t *testing.T) {
 		m := newMetrics()
-		m.incSubmitted()
 		m.incCompleted()
 		m.incSuccessful()
 		m.incFailed()
 
 		m.Reset()
 
-		assert.Equal(t, uint64(0), m.Submitted())
 		assert.Equal(t, uint64(0), m.Completed())
 		assert.Equal(t, uint64(0), m.Successful())
 		assert.Equal(t, uint64(0), m.Failed())

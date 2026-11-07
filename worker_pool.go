@@ -101,11 +101,13 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 
 	go node.Value.Serve(func(jobs []JobType, stamp pool.Stamp) {
 		start, ran := time.Now(), 0
+		var run memRun // what leaves processing, per run of one handle's jobs
 		for i, j := range jobs {
 			// Purged after it was taken: close it as Purge would have. Close
 			// fails only if the user closed it meanwhile; Purge ignores that too.
 			if stamp.Stale() {
 				_ = j.Close()
+				run.add(j.memTotals(), -1)
 				continue
 			}
 			// Stopping or pausing: park the unstarted rest (see park). Parked
@@ -123,6 +125,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
 			if !j.startProcessing() {
+				run.add(j.memTotals(), -1)
 				continue
 			}
 
@@ -134,8 +137,11 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				w.sendError(err)
 			}
 			w.metrics.incCompleted()
+			run.add(j.memTotals(), -1)
 			ran++
 		}
+
+		run.flush()
 
 		// Averaged over the jobs that ran, so a mostly parked batch does not
 		// make jobs look cheap. At least 1: 0 means "not measured yet".
