@@ -136,5 +136,4 @@ var (
 	ErrDepFailed        = errors.New("varmq: dependency failed")
 	ErrResultTooLarge   = errors.New("varmq: task result too large")
 	ErrScopeMismatch    = errors.New("varmq: queues are in different storage scopes")
-	ErrTaskJobID        = errors.New("varmq: task job id conflicts")
 )

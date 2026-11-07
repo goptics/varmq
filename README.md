@@ -45,6 +45,7 @@
 - **Concurrency control**: resize the pool at runtime, pause, resume, restart.
 - **Multi queue binding**: one worker, many queues, a pluggable selection strategy.
 - **Topic fan-out**: publish once, every subscribed worker gets its own job.
+- **Workflows**: a DAG of jobs over queues with typed results, `Always` and saga `Undo`.
 - **REST API**: inspect and control workers over HTTP.
 - **Extensible**: plug in your own storage by implementing [`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) or [`IDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedQueue).
 
@@ -259,6 +260,30 @@ if job, ok := queue.Add("error"); ok {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/nKnAyQfkxou)**
 
+### Workflows
+
+A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails. Needs Go 1.27.
+
+```go
+wf := varmq.NewWorkflow(varmq.NewWorkflowStore(), varmq.WithWorkflowID("upload-1"))
+up := wf.Add("upload", uploadQ, "photo.png")
+s := wf.Add("thumb-s", thumbQ, 64).After(up)
+l := wf.Add("thumb-l", thumbQ, 512).After(up)
+wf.Add("email", mailQ, "ann@example.com").
+	After(s, l).
+	Always().
+	Undo(unsendQ, "ann@example.com")
+
+wf.Submit(ctx)            // idempotent per ID
+rec, _ := wf.Wait(ctx)    // rec.State: completed, failed, compensated, ...
+
+// in a worker: read a dependency's result
+var src string
+varmq.TaskOf(j).Result("upload", &src)
+```
+
+Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store. Runnable example: [`examples/workflow`](./examples/workflow). Spec: [`adr/0005-workflows.md`](./adr/0005-workflows.md).
+
 ### Function Helpers
 
 Submit functions directly, like `Submit()` in [pond](https://github.com/alitto/pond) or [ants](https://github.com/panjf2000/ants). Use `Func()` with `NewWorker`, `ErrFunc()` with `NewErrWorker` and `ResultFunc[R]()` with `NewResultWorker`.
@@ -322,6 +347,8 @@ http.ListenAndServe(":8080", mux)
 | `GET`    | `/workers/{name}`                         | Get worker details + metrics |
 | `PATCH`  | `/workers/{name}/actions/{action}`        | Pause, resume, stop, restart |
 | `PATCH`  | `/workers/{name}/config/concurrency/{n}`  | Adjust concurrency           |
+| `GET`    | `/workflows`, `/workflows/{id}`           | List and read workflows      |
+| `PATCH`  | `/workflows/{id}/actions/cancel`          | Cancel a workflow            |
 
 > [!Warning]
 > The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.

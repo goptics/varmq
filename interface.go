@@ -226,5 +226,4 @@ var (
 	ErrDepFailed        = contract.ErrDepFailed
 	ErrResultTooLarge   = contract.ErrResultTooLarge
 	ErrScopeMismatch    = contract.ErrScopeMismatch
-	ErrTaskJobID        = contract.ErrTaskJobID
 )
