@@ -278,8 +278,8 @@ paths:
           schema: { $ref: "#/components/schemas/WorkflowState" }
         - name: offset
           in: query
-          description: Workflows to skip.
-          schema: { type: integer, minimum: 0, default: 0 }
+          description: Workflows to skip. At most 10000, as every storage pages `offset + limit` records.
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
         - name: limit
           in: query
           description: Most workflows to return.

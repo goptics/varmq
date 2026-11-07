@@ -738,7 +738,7 @@ func TestMuxWorkflows(t *testing.T) {
 		rr := do("GET", "/workflows?offset=99")
 		assert.Equal(t, []string{}, ids(rr))
 		assert.Equal(t, "[]\n", rr.Body.String())
-		assert.Equal(t, []string{}, ids(do("GET", "/workflows?offset=9223372036854775807&limit=1000")), "no overflow")
+		assert.Equal(t, []string{}, ids(do("GET", "/workflows?offset=10000&limit=1000")), "cap is inclusive")
 	})
 
 	t.Run("list filters by state", func(t *testing.T) {
@@ -749,7 +749,8 @@ func TestMuxWorkflows(t *testing.T) {
 
 	t.Run("list 400", func(t *testing.T) {
 		for _, target := range []string{
-			"/workflows?state=bogus", "/workflows?offset=-1", "/workflows?offset=x",
+			"/workflows?state=bogus", "/workflows?offset=-1", "/workflows?offset=x", "/workflows?offset=10001",
+			"/workflows?offset=9223372036854775807",
 			"/workflows?limit=0", "/workflows?limit=1001", "/workflows?limit=x",
 		} {
 			assert.Equal(t, http.StatusBadRequest, do("GET", target).Code, target)
@@ -831,9 +832,15 @@ func TestWorkflowRegistryFills(t *testing.T) {
 	workflowRegistry.Clear()
 	defer workflowRegistry.Clear()
 
-	NewWorkflowStore()
-	_, ok := workflowRegistry.Load("memory:" + InstanceID)
-	assert.True(t, ok)
+	a, b := NewWorkflowStore(), NewWorkflowStore()
+	n := 0
+	workflowRegistry.Range(func(k, v any) bool {
+		n++
+		assert.Contains(t, []any{a, b}, v)
+		return true
+	})
+	assert.Equal(t, 2, n, "two in-memory stores, one scope: both listed")
+	var ok bool
 
 	registerWorkflowStore(plainWorkflowStore{})
 	_, ok = workflowRegistry.Load("plain")

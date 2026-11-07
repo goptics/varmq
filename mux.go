@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"os"
@@ -44,9 +45,17 @@ var workflowRegistry sync.Map
 
 // registerWorkflowStore lists s under /workflows if it can also list.
 func registerWorkflowStore(s WorkflowStore) {
-	if ws, ok := s.(workflowStore); ok {
-		workflowRegistry.Store(ws.ScopeID(), ws)
+	ws, ok := s.(workflowStore)
+	if !ok {
+		return
 	}
+
+	key := ws.ScopeID()
+	if _, mem := s.(*memWorkflowStore); mem {
+		key += fmt.Sprintf("#%p", s) // every in-memory store shares one scope
+	}
+
+	workflowRegistry.Store(key, ws)
 }
 
 // registerWorkflowStorage lists the workflow store of a queue storage.
@@ -55,6 +64,10 @@ func registerWorkflowStorage(q any) {
 		registerWorkflowStore(wa.WorkflowStore())
 	}
 }
+
+// maxWorkflowsOffset caps GET /workflows' offset: every store pages
+// offset+limit records, so an unbounded offset is unbounded work.
+const maxWorkflowsOffset = 10000
 
 // Default and largest page size of GET /queues/{id}/jobs.
 const (
@@ -385,7 +398,7 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset, err := queryInt(query.Get("offset"), 0)
-	if err != nil || offset < 0 {
+	if err != nil || offset < 0 || offset > maxWorkflowsOffset {
 		writeError(w, http.StatusBadRequest, "invalid offset")
 		return
 	}
