@@ -152,5 +152,9 @@ func (w *worker[T, JobType]) dropMemQueues() {
 	w.memMx.Lock()
 	defer w.memMx.Unlock()
 
+	if v, _ := WorkerRegistry.Load(w.Name()); v == any(w) {
+		return // a late drop: w took its name back and listed them again
+	}
+
 	w.memQueues.Range(func(id, m any) bool { queueRegistry.CompareAndDelete(id, m); return true })
 }

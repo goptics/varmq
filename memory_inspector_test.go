@@ -315,3 +315,14 @@ func TestMemQueueSharedStorageBatch(t *testing.T) {
 	require.NoError(t, w1.Resume())
 	require.Eventually(t, func() bool { return ma.processing.Load() == 0 && mb.processing.Load() == 0 }, time.Second, time.Millisecond)
 }
+
+// A drop that comes late, after the worker took its name back, keeps its
+// queues listed.
+func TestMemQueueLateDrop(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithName("memq-late-drop"))
+	defer w.Stop()
+	id := memOf(t, w.BindQueue()).QueueID()
+	w.(*workerBinder[int]).dropMemQueues()
+	_, listed := queueRegistry.Load(id)
+	assert.True(t, listed)
+}
