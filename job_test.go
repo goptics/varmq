@@ -806,3 +806,43 @@ func TestJobOutcome(t *testing.T) {
 		assert.NoError(t, j.Close())
 	})
 }
+
+func TestEnvelopeWorkflowTag(t *testing.T) {
+	t.Run("tagged job round-trips", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask("w1", "a")
+
+		b, err := j.Json()
+		require.NoError(t, err)
+		assert.Contains(t, string(b), `"wf":"w1","task":"a"`)
+
+		p, err := parseToJob[int](b)
+		require.NoError(t, err)
+
+		tag := p.(*job[int]).taskTag()
+		require.NotNil(t, tag)
+		assert.Equal(t, "w1", tag.wf)
+		assert.Equal(t, "a", tag.task)
+		assert.Nil(t, tag.store)
+	})
+
+	t.Run("untagged job has no wf key", func(t *testing.T) {
+		b, err := newJob(1, jobConfigs{Id: "j1"}).Json()
+		require.NoError(t, err)
+		assert.NotContains(t, string(b), `"wf"`)
+		assert.NotContains(t, string(b), `"task"`)
+	})
+
+	t.Run("tag survives setAck and fail", func(t *testing.T) {
+		j := newJob(1, jobConfigs{Id: "j1"})
+		j.setTask("w1", "a")
+		j.setAck(mocks.NewMockPersistentQueue(), "ack1")
+		j.fail("boom")
+		require.NotNil(t, j.taskTag())
+		assert.Equal(t, "boom", *j.ackRef.Load().ext.reason)
+	})
+}
+
+func TestJobAckSizeClass(t *testing.T) {
+	assert.LessOrEqual(t, unsafe.Sizeof(jobAck{}), uintptr(48))
+}

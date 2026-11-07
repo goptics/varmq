@@ -88,12 +88,26 @@ type job[T any] struct {
 type jobAck struct {
 	q  IAcknowledgeable
 	id string
-	// reason is set when the run failed: Close then calls Reject with
-	// *reason instead of Acknowledge. A pointer, not a string, keeps jobAck
-	// in the 48-byte size class.
-	reason *string
+	// ext is rare per-job state (failure reason, workflow tag). One pointer
+	// keeps jobAck in the 48-byte size class; nil for plain jobs.
+	ext *ackExt
 	// totals is set, and q nil, on an in-memory queue's shared jobAck.
 	totals *memQueue
+}
+
+// ackExt is what only some jobs carry.
+type ackExt struct {
+	// reason is set when the run failed: Close then calls Reject with
+	// *reason instead of Acknowledge.
+	reason *string
+	// task is set on a job that is a workflow task.
+	task *taskTag
+}
+
+// taskTag names the workflow task a job runs. store is nil until bound.
+type taskTag struct {
+	wf, task string
+	store    WorkflowStore
 }
 
 // jobView is the job envelope persistent and distributed storage holds
@@ -103,6 +117,8 @@ type jobView[T any] struct {
 	Status     string `json:"status"`
 	Payload    T      `json:"data"`
 	EnqueuedAt int64  `json:"enqueued_at,omitempty"` // Unix ms, producer clock
+	Wf         string `json:"wf,omitempty"`          // workflow id, workflow task only
+	Task       string `json:"task,omitempty"`        // task name within Wf
 }
 
 type Job[T any] interface {
@@ -160,7 +176,38 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 		return
 	}
 
-	j.ackRef.Store(&jobAck{q: q, id: id})
+	ref := &jobAck{q: q, id: id}
+	if old := j.ackRef.Load(); old != nil {
+		ref.ext = old.ext // keep the workflow tag parseToJob set
+	}
+
+	j.ackRef.Store(ref)
+}
+
+// taskTag is the workflow task this job runs, nil for a plain job.
+func (j *job[T]) taskTag() *taskTag {
+	if ref := j.ackRef.Load(); ref != nil && ref.ext != nil {
+		return ref.ext.task
+	}
+	return nil
+}
+
+// setTask tags the job as workflow task `task` of wf. Copies the ack: an
+// in-memory queue's jobAck is shared.
+func (j *job[T]) setTask(wf, task string) {
+	ref := jobAck{}
+	if old := j.ackRef.Load(); old != nil {
+		ref = *old
+	}
+
+	ext := ackExt{}
+	if ref.ext != nil {
+		ext = *ref.ext
+	}
+
+	ext.task = &taskTag{wf: wf, task: task}
+	ref.ext = &ext
+	j.ackRef.Store(&ref)
 }
 
 // fail records that the run failed, so Close rejects the job with reason
@@ -168,16 +215,21 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 // The worker calls it before Close; a user Close fails while the job is
 // processing, so nothing else reads the ack meanwhile.
 func (j *job[T]) fail(reason string) {
-	if ref := j.ackRef.Load(); ref != nil && ref.q == nil {
+	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
 		ref.totals.failed.Add(1)
-	} else if ref != nil {
-		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, reason: &reason})
+	} else if ref != nil && ref.q != nil {
+		ext := ackExt{reason: &reason}
+		if ref.ext != nil {
+			ext.task = ref.ext.task
+		}
+
+		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, ext: &ext})
 	}
 }
 
 // succeed counts the job completed for its in-memory queue, if any.
 func (j *job[T]) succeed() {
-	if ref := j.ackRef.Load(); ref != nil && ref.q == nil {
+	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
 		ref.totals.completed.Add(1)
 	}
 }
@@ -248,6 +300,9 @@ func (j *job[T]) Json() ([]byte, error) {
 		Payload:    j.data,
 		EnqueuedAt: time.Now().UnixMilli(),
 	}
+	if t := j.taskTag(); t != nil {
+		view.Wf, view.Task = t.wf, t.task
+	}
 
 	return json.Marshal(view)
 }
@@ -261,6 +316,10 @@ func parseToJob[T any](data []byte) (any, error) {
 	j := newJob(view.Payload, jobConfigs{
 		Id: view.Id,
 	})
+
+	if view.Wf != "" {
+		j.setTask(view.Wf, view.Task) // store bound later
+	}
 
 	// Set the status
 	switch view.Status {
@@ -380,8 +439,8 @@ func (j *job[T]) acknowledge() error {
 	}
 
 	var ok bool
-	if ref.reason != nil {
-		ok = ref.q.Reject(ref.id, *ref.reason)
+	if ref.ext != nil && ref.ext.reason != nil {
+		ok = ref.q.Reject(ref.id, *ref.ext.reason)
 	} else {
 		ok = ref.q.Acknowledge(ref.id)
 	}
