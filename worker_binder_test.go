@@ -1,8 +1,11 @@
 package varmq
 
 import (
+	"errors"
+	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -503,4 +506,82 @@ func TestWorkerBinders(t *testing.T) {
 		// Clean up
 		w.Stop()
 	})
+}
+
+func TestResultWorkerPersistent(t *testing.T) {
+	w := NewResultWorker(func(j Job[string]) (int, error) {
+		if j.Data() == "bad" {
+			return 0, errors.New("bad data")
+		}
+		return len(j.Data()), nil
+	})
+	defer w.Stop()
+
+	store := mocks.NewMockPersistentQueue()
+	q := w.WithPersistentQueue(store)
+	for _, d := range []string{"a", "bad", "c"} {
+		assert.True(t, q.Add(d))
+	}
+
+	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)
+	assert.Len(t, store.Acked(), 2)
+	assert.Equal(t, []string{"bad data"}, store.Rejected())
+}
+
+func TestErrWorkerPersistent(t *testing.T) {
+	w := NewErrWorker(func(j Job[string]) error {
+		if j.Data() == "bad" {
+			return errors.New("bad data")
+		}
+		return nil
+	})
+	defer w.Stop()
+
+	store := mocks.NewMockPersistentPriorityQueue()
+	q := w.WithPersistentPriorityQueue(store)
+	for i, d := range []string{"a", "bad", "c"} {
+		assert.True(t, q.Add(d, i))
+	}
+
+	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)
+	assert.Len(t, store.Acked(), 2)
+	assert.Equal(t, []string{"bad data"}, store.Rejected())
+}
+
+func TestResultWorkerDistributed(t *testing.T) {
+	w := NewResultWorker(func(j Job[string]) (int, error) {
+		if j.Data() == "bad" {
+			return 0, errors.New("bad data")
+		}
+		return len(j.Data()), nil
+	})
+	defer w.Stop()
+
+	store := mocks.NewMockDistributedQueue()
+	q := w.WithDistributedQueue(store)
+	for _, d := range []string{"a", "bad", "c"} {
+		assert.True(t, q.Add(d))
+	}
+
+	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)
+	assert.Len(t, store.Acked(), 2)
+	assert.Equal(t, []string{"bad data"}, store.Rejected())
+}
+
+func TestParseToJobKeepsWorkflowTagInResultJob(t *testing.T) {
+	src := newJob("x", jobConfigs{Id: "j1:undo"})
+	src.setTask(taskTag{wf: "w1", task: "a", undo: true})
+	b, err := src.Json()
+	require.NoError(t, err)
+
+	j, err := parseToJob(b, newResultJob[string, int])
+	require.NoError(t, err)
+
+	tag := j.taskTag()
+	require.NotNil(t, tag)
+	assert.Equal(t, "w1", tag.wf)
+	assert.Equal(t, "a", tag.task)
+	assert.True(t, tag.undo)
+	assert.Equal(t, "x", j.Data())
+	assert.Equal(t, "j1:undo", j.ID())
 }

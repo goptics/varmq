@@ -224,28 +224,36 @@ func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQue
 }
 
 func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
-	c := loadQueueConfigs(configs...)
-	h := NewDistributedQueue[T](dq, configs...)
-	wb.subscribe(dq, wb.bind(dq, c.priority))
-
-	return h
+	return bindDistributed(wb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
 }
 
 func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	return bindDistributed(wb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
+}
+
+// bindDistributed binds w to dq, wakes w on dq's notifications, and returns
+// the producer handle h. Shared by every worker kind.
+func bindDistributed[T any, JobType iJob[T], H any](w *worker[T, JobType], dq interface {
+	IBaseQueue
+	ISubscribable
+}, h H, configs []QueueConfigFunc) H {
 	c := loadQueueConfigs(configs...)
-	h := NewDistributedPriorityQueue[T](dpq, configs...)
-	wb.subscribe(dpq, wb.bind(dpq, c.priority))
+	subscribeQueue(w, dq, w.bind(dq, c.priority))
 
 	return h
 }
 
-// subscribe forwards q's notifications to the worker. For a batch source,
+// subscribeQueue forwards q's notifications to w. For a batch source,
 // an "enqueued" also pokes its ready hint, and wake-ups replace the persistent
 // resync.
-func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
-	bs, ok := src.(*batchAckSource[T, iJob[T]])
+func subscribeQueue[T any, JobType iJob[T]](w *worker[T, JobType], q ISubscribable, src source[JobType]) {
+	bs, ok := src.(*batchAckSource[T, JobType])
 	if !ok {
-		q.Subscribe(wb.handleQueueSubscription)
+		q.Subscribe(func(action string) {
+			if action == "enqueued" {
+				w.notifyToPullNextJobs()
+			}
+		})
 		return
 	}
 
@@ -253,8 +261,8 @@ func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
 	q.Subscribe(func(action string) {
 		if action == "enqueued" {
 			bs.poke()
+			w.notifyToPullNextJobs()
 		}
-		wb.handleQueueSubscription(action)
 	})
 }
 
@@ -336,6 +344,24 @@ type IErrWorkerBinder[T any] interface {
 	//   errPriorityQueue := errWorker.WithPriorityQueue(customPriorityQueue)
 	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
 	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T]
+
+	// WithPersistentQueue binds the worker to a PersistentQueue. Jobs survive
+	// restarts; a failed job is rejected with its error text, a done one acknowledged.
+	// The handle only adds: nobody holds the job handle, so the error is dropped after Close;
+	// it still reaches the worker error channel (Errs) and Reject.
+	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
+
+	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
+	// Ack and error rules as WithPersistentQueue.
+	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
+
+	// WithDistributedQueue binds the worker to a DistributedQueue shared across
+	// processes. Ack and error rules as WithPersistentQueue.
+	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
+
+	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
+	// Ack and error rules as WithPersistentQueue.
+	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 }
 
 func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
@@ -358,6 +384,22 @@ func (ewb *errWorkerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) Err
 
 func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T] {
 	return newErrorPriorityQueue(ewb.worker, pq, configs...)
+}
+
+func (ewb *errWorkerBinder[T]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+	return newPersistentQueue(ewb.worker, pq, configs...)
+}
+
+func (ewb *errWorkerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+	return newPersistentPriorityQueue(ewb.worker, pq, configs...)
+}
+
+func (ewb *errWorkerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	return bindDistributed(ewb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
+}
+
+func (ewb *errWorkerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	return bindDistributed(ewb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
 }
 
 type resultWorkerBinder[T, R any] struct {
@@ -434,6 +476,25 @@ type IResultWorkerBinder[T, R any] interface {
 	//   customPriorityQueue := NewCustomPriorityQueue()
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
 	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R]
+
+	// WithPersistentQueue binds the worker to a PersistentQueue. Jobs survive
+	// restarts; a failed job is rejected with its error text, a done one acknowledged.
+	// The handle only adds: nobody holds the job handle, so the result R is dropped after Close
+	// (use it inside a workflow, which stores it). An error still reaches
+	// the worker error channel (Errs) and Reject.
+	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
+
+	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
+	// Ack and error rules as WithPersistentQueue.
+	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
+
+	// WithDistributedQueue binds the worker to a DistributedQueue shared across
+	// processes. Ack and error rules as WithPersistentQueue.
+	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
+
+	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
+	// Ack and error rules as WithPersistentQueue.
+	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 }
 
 func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
@@ -456,4 +517,20 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue(configs ...QueueConfigFun
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R] {
 	return newResultPriorityQueue(rwb.worker, pq, configs...)
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+	return newPersistentQueue(rwb.worker, pq, configs...)
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+	return newPersistentPriorityQueue(rwb.worker, pq, configs...)
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	return bindDistributed(rwb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
+}
+
+func (rwb *resultWorkerBinder[T, R]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	return bindDistributed(rwb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
 }

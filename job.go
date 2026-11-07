@@ -135,6 +135,7 @@ type iJob[T any] interface {
 	changeStatus(s status)
 	startProcessing() bool
 	setAck(q IAcknowledgeable, id string)
+	setTask(tag taskTag)
 	fail(reason string)
 	succeed()
 	memTotals() *memQueue
@@ -309,35 +310,37 @@ func (j *job[T]) Json() ([]byte, error) {
 	return json.Marshal(view)
 }
 
-func parseToJob[T any](data []byte) (any, error) {
+// parseToJob decodes a stored envelope into the job kind mk builds, so an
+// error or result worker gets its own kind. Workflow tags are kept.
+func parseToJob[T any, J iJob[T]](data []byte, mk func(T, jobConfigs) J) (J, error) {
+	var zero J
+
 	var view jobView[T]
 	if err := json.Unmarshal(data, &view); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrParseJob, err)
+		return zero, fmt.Errorf("%w: %w", ErrParseJob, err)
 	}
 
-	j := newJob(view.Payload, jobConfigs{
-		Id: view.Id,
-	})
+	var st status
+	switch view.Status {
+	case "Created":
+		st = created
+	case "Queued":
+		st = queued
+	case "Processing":
+		st = processing
+	case "Finished":
+		st = finished
+	case "Closed":
+		st = closed
+	default:
+		return zero, fmt.Errorf("invalid status: %s", view.Status)
+	}
 
+	j := mk(view.Payload, jobConfigs{Id: view.Id})
 	if view.Wf != "" {
 		j.setTask(taskTag{wf: view.Wf, task: view.Task, undo: view.Undo}) // store bound later
 	}
-
-	// Set the status
-	switch view.Status {
-	case "Created":
-		j.status.Store(created)
-	case "Queued":
-		j.status.Store(queued)
-	case "Processing":
-		j.status.Store(processing)
-	case "Finished":
-		j.status.Store(finished)
-	case "Closed":
-		j.status.Store(closed)
-	default:
-		return nil, fmt.Errorf("invalid status: %s", view.Status)
-	}
+	j.changeStatus(st)
 
 	return j, nil
 }

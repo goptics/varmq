@@ -16,7 +16,7 @@ type persistentPriorityQueue[T any] struct {
 	poke func() // the source's ready hint; nil unless the storage pops in batches
 }
 
-func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+func newPersistentPriorityQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
 

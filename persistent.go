@@ -20,7 +20,7 @@ type persistentQueue[T any] struct {
 
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
-func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+func newPersistentQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
 

@@ -112,12 +112,11 @@ func TestJob(t *testing.T) {
 
 		// Test valid JSON parsing
 		validJSON := []byte(`{"id":"test-id","status":"Created","data":"test data"}`)
-		result, err := parseToJob[string](validJSON)
+		result, err := parseToJob(validJSON, newJob[string])
 		assert.NoError(err, "parseToJob should not error with valid JSON")
 		assert.NotNil(result, "parseToJob result should not be nil")
 
-		j, ok := result.(*job[string])
-		assert.True(ok, "result should be a *job[string]")
+		j := result
 		assert.Equal("test-id", j.ID(), "job ID should match")
 		assert.Equal("test data", j.Data(), "job data should match")
 		assert.Equal("Created", j.Status(), "job status should match")
@@ -126,21 +125,21 @@ func TestJob(t *testing.T) {
 		statuses := []string{"Queued", "Processing", "Finished", "Closed"}
 		for _, status := range statuses {
 			jsonWithStatus := []byte(`{"id":"test-id","status":"` + status + `","data":"test data"}`)
-			result, err := parseToJob[string](jsonWithStatus)
+			result, err := parseToJob(jsonWithStatus, newJob[string])
 			assert.NoError(err, "parseToJob should not error with status "+status)
-			j, _ := result.(*job[string])
+			j := result
 			assert.Equal(status, j.Status(), "job status should match "+status)
 		}
 
 		// Test invalid status
 		invalidStatus := []byte(`{"id":"test-id","status":"Invalid","data":"test data"}`)
-		_, err = parseToJob[string](invalidStatus)
+		_, err = parseToJob(invalidStatus, newJob[string])
 		assert.Error(err, "parseToJob should error with invalid status")
 		assert.Contains(err.Error(), "invalid status", "error should mention invalid status")
 
 		// Test invalid JSON
 		invalidJSON := []byte(`{invalid json}`)
-		_, err = parseToJob[string](invalidJSON)
+		_, err = parseToJob(invalidJSON, newJob[string])
 		assert.Error(err, "parseToJob should error with invalid JSON")
 		assert.Contains(err.Error(), "failed to parse job", "error should mention parsing failure")
 	})
@@ -817,10 +816,10 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 		assert.Contains(t, string(b), `"wf":"w1","task":"a"`)
 		assert.NotContains(t, string(b), `"undo"`)
 
-		p, err := parseToJob[int](b)
+		p, err := parseToJob(b, newJob[int])
 		require.NoError(t, err)
 
-		tag := p.(*job[int]).taskTag()
+		tag := p.taskTag()
 		require.NotNil(t, tag)
 		assert.Equal(t, "w1", tag.wf)
 		assert.Equal(t, "a", tag.task)
@@ -836,9 +835,9 @@ func TestEnvelopeWorkflowTag(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(b), `"wf":"w1","task":"a","undo":true`)
 
-		p, err := parseToJob[int](b)
+		p, err := parseToJob(b, newJob[int])
 		require.NoError(t, err)
-		tag := p.(*job[int]).taskTag()
+		tag := p.taskTag()
 		require.NotNil(t, tag)
 		assert.True(t, tag.undo)
 	})
