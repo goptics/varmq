@@ -157,7 +157,9 @@ type QueuePauser interface {
 // PauseNotifier is optional for a QueuePauser: fn runs on every change of
 // Paused, from this process or another, with the value Paused has then. A
 // bound worker uses it to start at once on a Resume; without it the worker
-// sees the Resume at its next add or wake-up. cancel stops the calls.
+// sees the Resume at its next add or wake-up. cancel stops the calls. fn
+// must not block, Pause or Resume: storage may call it while it holds a
+// lock (varmq's in-memory queues do).
 type PauseNotifier interface {
 	OnPauseChange(fn func(paused bool)) (cancel func())
 }
