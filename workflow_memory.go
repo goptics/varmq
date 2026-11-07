@@ -124,8 +124,8 @@ func (m *memWorkflowStore) Submit(_ context.Context, p WorkflowPlan) error {
 	return nil
 }
 
-// memPlanCheck refuses a plan with a task (or undo) that is not an
-// in-memory queue's.
+// memPlanCheck refuses an empty plan and one with a task (or undo) that is
+// not an in-memory queue's.
 func memPlanCheck(p WorkflowPlan) error {
 	check := func(name, queueID string, q, item any) error {
 		_, mem := q.(memTarget)
@@ -136,6 +136,9 @@ func memPlanCheck(p WorkflowPlan) error {
 		return nil
 	}
 
+	if len(p.Tasks) == 0 { // would run forever: no root, no end
+		return fmt.Errorf("varmq: workflow %s has no tasks", p.ID)
+	}
 	for _, tp := range p.Tasks {
 		if err := check(tp.Name, tp.QueueID, tp.Queue, tp.Item); err != nil {
 			return err

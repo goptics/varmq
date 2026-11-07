@@ -79,6 +79,7 @@ func TestMemStoreSubmitIdempotent(t *testing.T) {
 		assert.ErrorIs(t, err, ErrScopeMismatch)
 		_, err = s.Record(ctx, "dur")
 		assert.ErrorIs(t, err, ErrWorkflowNotFound, "nothing kept")
+		assert.Error(t, s.Submit(ctx, WorkflowPlan{ID: "empty", Hash: "h"}), "no tasks")
 	})
 }
 
