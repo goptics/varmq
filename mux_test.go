@@ -640,3 +640,212 @@ func TestMuxQueueActions(t *testing.T) {
 	assert.Equal(t, http.StatusNotImplemented, patch("custom:plain", "pause").Code)
 	assert.Equal(t, http.StatusServiceUnavailable, patch("custom:failing", "resume").Code)
 }
+
+// fakeWorkflowStore is a second registered store with fixed records.
+type fakeWorkflowStore struct {
+	scope     string
+	recs      []WorkflowRecord // newest first
+	err       error
+	cancelErr error
+	cancelled []bool
+}
+
+func (f *fakeWorkflowStore) ScopeID() string { return f.scope }
+func (f *fakeWorkflowStore) Submit(context.Context, WorkflowPlan) error {
+	return nil
+}
+func (f *fakeWorkflowStore) Runnable(context.Context, string, string, bool) (bool, error) {
+	return true, nil
+}
+func (f *fakeWorkflowStore) DepResult(context.Context, string, string) ([]byte, error) {
+	return nil, nil
+}
+func (f *fakeWorkflowStore) Record(_ context.Context, id string) (WorkflowRecord, error) {
+	if f.err != nil {
+		return WorkflowRecord{}, f.err
+	}
+	for _, r := range f.recs {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return WorkflowRecord{}, ErrWorkflowNotFound
+}
+func (f *fakeWorkflowStore) Cancel(_ context.Context, id string, undo bool) error {
+	f.cancelled = append(f.cancelled, undo)
+	return f.cancelErr
+}
+func (f *fakeWorkflowStore) Workflows(_ context.Context, state WorkflowState, offset, limit int) ([]WorkflowRecord, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := []WorkflowRecord{}
+	for _, r := range f.recs {
+		if state == "" || r.State == state {
+			out = append(out, r)
+		}
+	}
+	return out[:min(len(out), limit)], nil
+}
+
+func TestMuxWorkflows(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	mem, clock := newMemStore(t)
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	for _, id := range []string{"m-old", "m-new"} {
+		wf := NewWorkflow(mem, WithWorkflowID(id))
+		a := wf.Add("a", q, 1)
+		wf.Add("b", q, 2).After(a)
+		require.NoError(t, submit(t, wf))
+		*clock = clock.Add(2 * time.Second) // m-old 1_000_000, m-new 1_002_000
+	}
+
+	fake := &fakeWorkflowStore{scope: "fake:1", recs: []WorkflowRecord{
+		{ID: "f-new", State: WorkflowFailed, CreatedAt: 1_003_000},
+		{ID: "f-mid", State: WorkflowRunning, CreatedAt: 1_001_000},
+		{ID: "f-old", State: WorkflowRunning, CreatedAt: 999_000},
+	}}
+	registerWorkflowStore(fake)
+
+	server := NewServerMux()
+	do := func(method, target string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(method, target, nil))
+		return rr
+	}
+	ids := func(rr *httptest.ResponseRecorder) []string {
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var recs []WorkflowRecord
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+		out := []string{}
+		for _, r := range recs {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+
+	t.Run("list merges newest first", func(t *testing.T) {
+		assert.Equal(t, []string{"f-new", "m-new", "f-mid", "m-old", "f-old"}, ids(do("GET", "/workflows")))
+		assert.Equal(t, "application/json", do("GET", "/workflows").Header().Get("Content-Type"))
+	})
+
+	t.Run("list pages", func(t *testing.T) {
+		assert.Equal(t, []string{"m-new", "f-mid"}, ids(do("GET", "/workflows?offset=1&limit=2")))
+		assert.Equal(t, []string{"f-old"}, ids(do("GET", "/workflows?offset=4")))
+		rr := do("GET", "/workflows?offset=99")
+		assert.Equal(t, []string{}, ids(rr))
+		assert.Equal(t, "[]\n", rr.Body.String())
+		assert.Equal(t, []string{}, ids(do("GET", "/workflows?offset=9223372036854775807&limit=1000")), "no overflow")
+	})
+
+	t.Run("list filters by state", func(t *testing.T) {
+		assert.Equal(t, []string{"m-new", "f-mid", "m-old", "f-old"}, ids(do("GET", "/workflows?state=running")))
+		assert.Equal(t, []string{"f-new"}, ids(do("GET", "/workflows?state=failed")))
+		assert.Equal(t, []string{}, ids(do("GET", "/workflows?state=cancelled")))
+	})
+
+	t.Run("list 400", func(t *testing.T) {
+		for _, target := range []string{
+			"/workflows?state=bogus", "/workflows?offset=-1", "/workflows?offset=x",
+			"/workflows?limit=0", "/workflows?limit=1001", "/workflows?limit=x",
+		} {
+			assert.Equal(t, http.StatusBadRequest, do("GET", target).Code, target)
+		}
+	})
+
+	t.Run("get", func(t *testing.T) {
+		rr := do("GET", "/workflows/m-new")
+		require.Equal(t, http.StatusOK, rr.Code)
+		var rec WorkflowRecord
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &rec))
+		assert.Equal(t, "m-new", rec.ID)
+		assert.Len(t, rec.Tasks, 2)
+		assert.Contains(t, rr.Body.String(), `"created_at":1002000`)
+
+		assert.Equal(t, "f-mid", mustRecord(t, do("GET", "/workflows/f-mid")).ID, "second store")
+	})
+
+	t.Run("get 404", func(t *testing.T) {
+		rr := do("GET", "/workflows/nope")
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+		assert.JSONEq(t, `{"error":"workflow not found"}`, rr.Body.String())
+	})
+
+	t.Run("cancel with undo", func(t *testing.T) {
+		rr := do("PATCH", "/workflows/m-old/actions/cancel")
+		// task a is pending in the queue and stays; waiting b is cancelled
+		rec := mustRecord(t, rr)
+		assert.Equal(t, JobCancelled, rec.Tasks[1].State)
+		assert.Equal(t, JobCancelled, mustRecord(t, do("GET", "/workflows/m-old")).Tasks[1].State)
+	})
+
+	t.Run("cancel undo=false", func(t *testing.T) {
+		rr := do("PATCH", "/workflows/f-mid/actions/cancel?undo=false")
+		assert.Equal(t, "f-mid", mustRecord(t, rr).ID)
+		assert.Equal(t, []bool{false}, fake.cancelled)
+
+		do("PATCH", "/workflows/f-old/actions/cancel?undo=true")
+		do("PATCH", "/workflows/f-old/actions/cancel")
+		assert.Equal(t, []bool{false, true, true}, fake.cancelled)
+	})
+
+	t.Run("cancel 400 and 404", func(t *testing.T) {
+		assert.Equal(t, http.StatusBadRequest, do("PATCH", "/workflows/m-new/actions/pause").Code)
+		assert.Equal(t, http.StatusBadRequest, do("PATCH", "/workflows/m-new/actions/cancel?undo=maybe").Code)
+		assert.Equal(t, http.StatusNotFound, do("PATCH", "/workflows/nope/actions/cancel").Code)
+	})
+
+	t.Run("cancel 503", func(t *testing.T) {
+		fake.cancelErr = errors.New("redis down")
+		defer func() { fake.cancelErr = nil }()
+		rr := do("PATCH", "/workflows/f-new/actions/cancel")
+		assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+		assert.Contains(t, rr.Body.String(), "redis down")
+
+		fake.cancelErr = ErrWorkflowNotFound // lost the race with a purge
+		assert.Equal(t, http.StatusNotFound, do("PATCH", "/workflows/f-new/actions/cancel").Code)
+	})
+
+	t.Run("503 when a store fails", func(t *testing.T) {
+		fake.err = errors.New("redis down")
+		defer func() { fake.err = nil }()
+		assert.Equal(t, http.StatusServiceUnavailable, do("GET", "/workflows").Code)
+		assert.Equal(t, http.StatusServiceUnavailable, do("GET", "/workflows/nope").Code)
+		assert.Equal(t, http.StatusServiceUnavailable, do("PATCH", "/workflows/nope/actions/cancel").Code)
+		assert.Equal(t, http.StatusOK, do("GET", "/workflows/m-new").Code, "a hit wins over a failing store")
+	})
+}
+
+func mustRecord(t *testing.T, rr *httptest.ResponseRecorder) WorkflowRecord {
+	t.Helper()
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var rec WorkflowRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &rec))
+	return rec
+}
+
+func TestWorkflowRegistryFills(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	NewWorkflowStore()
+	_, ok := workflowRegistry.Load("memory:" + InstanceID)
+	assert.True(t, ok)
+
+	registerWorkflowStore(plainWorkflowStore{})
+	_, ok = workflowRegistry.Load("plain")
+	assert.False(t, ok, "a store that cannot list is not registered")
+
+	assert.Equal(t, http.StatusOK, func() int {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
+		return rr.Code
+	}())
+}
+
+type plainWorkflowStore struct{ WorkflowStore }
+
+func (plainWorkflowStore) ScopeID() string { return "plain" }

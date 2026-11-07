@@ -82,7 +82,10 @@ func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 		o(&c)
 	}
 
-	return &memWorkflowStore{cfg: c, now: time.Now, wfs: map[string]*memWorkflow{}}
+	m := &memWorkflowStore{cfg: c, now: time.Now, wfs: map[string]*memWorkflow{}}
+	registerWorkflowStore(m)
+
+	return m
 }
 
 var _ WorkflowInspector = (*memWorkflowStore)(nil)

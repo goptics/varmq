@@ -458,6 +458,7 @@ func (w *worker[T, JobType]) bind(q IBaseQueue, priority int) source[JobType] {
 	w.onResume(q, src)
 	w.addSource(src, priority)
 	registerQueue(q)
+	registerWorkflowStorage(q)
 	if qi, ok := q.(QueueInspector); ok {
 		if id := qi.QueueID(); id != "" {
 			w.queueIDs.Store(id, struct{}{})

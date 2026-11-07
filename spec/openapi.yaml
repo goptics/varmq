@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,9 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.3.0: `GET /workflows`, `GET /workflows/{id}` and
+      `PATCH /workflows/{id}/actions/cancel` read and cancel workflows
+      (task DAGs over queues). Additive.
     - 1.2.0: `PATCH /queues/{id}/actions/{action}` pauses and resumes a queue;
       `QueueSummary` gains `paused` and `paused_at`. Additive.
     - 1.1.0: `GET /workers/{name}` drops `metrics.submitted`; in-memory
@@ -257,6 +260,108 @@ paths:
         "404": { $ref: "#/components/responses/QueueNotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /workflows:
+    get:
+      operationId: listWorkflows
+      summary: One page of the workflows of every storage this process knows.
+      description: |
+        Since 1.3.0. Newest `created_at` first, merged across the process's
+        in-memory workflows and the workflows of every durable queue storage
+        bound here. A workflow in a shared storage shows on every instance
+        that binds it; the same ID can repeat across instances, never within
+        one reply. Pages are read separately, so workflows created between
+        two requests can shift a page.
+      parameters:
+        - name: state
+          in: query
+          description: Only workflows in this state; all when absent.
+          schema: { $ref: "#/components/schemas/WorkflowState" }
+        - name: offset
+          in: query
+          description: Workflows to skip.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          description: Most workflows to return.
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+      responses:
+        "200":
+          description: The workflows; an empty array past the end.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkflowRecord" }
+        "400":
+          description: Unknown `state`, or invalid `offset` or `limit`.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/WorkflowStoreError" }
+
+  /workflows/{id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkflowID"
+    get:
+      operationId: getWorkflow
+      summary: One workflow.
+      responses:
+        "200":
+          description: The workflow.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkflowRecord" }
+        "404": { $ref: "#/components/responses/WorkflowNotFound" }
+        "503": { $ref: "#/components/responses/WorkflowStoreError" }
+
+  /workflows/{id}/actions/{action}:
+    parameters:
+      - $ref: "#/components/parameters/WorkflowID"
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [cancel]
+      - name: undo
+        in: query
+        description: |
+          Whether the cancel also runs the undo jobs of the tasks that
+          completed. `true` by default; `false` skips compensation.
+        schema: { type: boolean, default: true }
+    patch:
+      operationId: workflowAction
+      summary: Cancel a workflow.
+      description: |
+        Since 1.3.0. Waiting tasks are cancelled at once; tasks already
+        queued are cancelled by the pre-run check when a worker reaches
+        them, so the returned record can still be `running`. Cancelling a
+        workflow that has ended changes nothing. Like the queue actions,
+        this reaches every process that works on the workflow: protect it.
+      responses:
+        "200":
+          description: Done. The workflow as it is after the cancel.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkflowRecord" }
+        "400":
+          description: Unknown action (`unknown action`) or invalid `undo` (`invalid undo`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/WorkflowNotFound" }
+        "503": { $ref: "#/components/responses/WorkflowStoreError" }
+
 components:
   headers:
     Instance:
@@ -281,7 +386,28 @@ components:
         `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
       schema: { type: string }
 
+    WorkflowID:
+      name: id
+      in: path
+      required: true
+      description: The workflow ID, percent-encoded as one path segment.
+      schema: { type: string }
+
   responses:
+    WorkflowNotFound:
+      description: No workflow with this ID in any storage bound here (`workflow not found`).
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    WorkflowStoreError:
+      description: A workflow storage could not be read or written; `error` holds why.
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     Done:
       description: Done. The body is empty.
       headers:
@@ -481,3 +607,56 @@ components:
         error:
           type: string
           description: The error text.
+
+    WorkflowState:
+      type: string
+      description: |
+        Where a workflow is in its life. `running`: tasks still run or wait.
+        `completed`: all tasks ended well. `failed`: a task failed and no
+        compensation ran. `compensating`: undo jobs run. `compensated`: the
+        undo jobs finished. `compensation_failed`: an undo job failed.
+        `cancelled`: cancelled, with no compensation.
+
+        A client MUST accept a value it does not know and show it as it is.
+        Later versions can add states; `WorkflowRecord.state` is an open
+        string, the `state` query parameter the closed enum.
+      enum: [running, completed, failed, compensating, compensated, compensation_failed, cancelled]
+
+    WorkflowRecord:
+      type: object
+      required: [id, state, created_at, tasks]
+      properties:
+        id: { type: string }
+        state:
+          type: string
+          description: A `WorkflowState` value. Open, so a client accepts a state a later version adds.
+        created_at: { type: integer, description: Unix milliseconds the workflow was submitted. }
+        finished_at: { type: integer, description: Unix milliseconds the workflow ended. Absent while it runs. }
+        tasks:
+          type: array
+          description: The tasks, in the order the producer added them.
+          items: { $ref: "#/components/schemas/TaskRecord" }
+
+    TaskRecord:
+      type: object
+      required: [name, state, queue_id, job_id]
+      properties:
+        name: { type: string }
+        state:
+          type: string
+          description: |
+            A `JobState` value, or `waiting` (its dependencies have not
+            ended) or `cancelled`. Open: a client accepts a value it does
+            not know.
+        deps:
+          type: array
+          description: Names of the tasks this one waits for. Absent for a root.
+          items: { type: string }
+        queue_id: { type: string, description: The Queue ID the task's job goes to. }
+        job_id: { type: string, description: The Job ID of the task's job. }
+        always: { type: boolean, description: True when the task runs even after a dependency failed. }
+        reason: { type: string, description: Why the task failed or was cancelled. Absent otherwise. }
+        result_size: { type: integer, description: Bytes of the stored result; absent when none. }
+        undo:
+          description: The task's compensation job, when it has one.
+          allOf: [{ $ref: "#/components/schemas/TaskRecord" }]
