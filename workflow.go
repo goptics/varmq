@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -10,7 +11,12 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"time"
 )
+
+// ErrWorkflowSubmitted: the workflow is submitted (or opened by ID), so its
+// DAG can't change.
+var ErrWorkflowSubmitted = errors.New("varmq: workflow already submitted")
 
 var (
 	taskNameRe   = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
@@ -27,6 +33,7 @@ type Workflow struct {
 	tasks     []*Task
 	errs      []error
 	submitted bool
+	opened    bool // from OpenWorkflow: a handle, not a builder
 }
 
 // Task is one named job of a Workflow. Its methods return the same *Task.
@@ -99,7 +106,7 @@ func (wf *Workflow) ID() string { return wf.id }
 func (wf *Workflow) Add[T any](name string, q TaskQueue[T], data T) *Task {
 	t := &Task{name: name, wf: wf, index: -1, data: data}
 	if wf.submitted {
-		wf.errs = append(wf.errs, fmt.Errorf("varmq: workflow %s: Add %q after Submit", wf.id, name))
+		wf.errs = append(wf.errs, fmt.Errorf("%w: workflow %s: Add %q", ErrWorkflowSubmitted, wf.id, name))
 		return t
 	}
 
@@ -113,7 +120,7 @@ func (wf *Workflow) Add[T any](name string, q TaskQueue[T], data T) *Task {
 // usable records an error and reports false when t can't change anymore.
 func (t *Task) usable(op string) bool {
 	if t.wf.submitted {
-		t.wf.errs = append(t.wf.errs, fmt.Errorf("varmq: task %q: %s after Submit", t.name, op))
+		t.wf.errs = append(t.wf.errs, fmt.Errorf("%w: task %q: %s", ErrWorkflowSubmitted, t.name, op))
 		return false
 	}
 
@@ -326,4 +333,74 @@ func planHash(p WorkflowPlan, data, undoData [][]byte) string {
 	flag(p.UndoOnCancel)
 
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// OpenWorkflow returns a handle to the submitted workflow id: Cancel,
+// Status and Wait work; Add and Submit fail with ErrWorkflowSubmitted.
+func OpenWorkflow(store WorkflowStore, id string) *Workflow {
+	return &Workflow{id: id, store: store, submitted: true, opened: true,
+		opts: workflowConfig{undoOnCancel: true}}
+}
+
+// Submit validates and stores the workflow, then queues its roots. Safe to
+// repeat: the same ID and shape succeed again. A failed Submit leaves wf
+// unsubmitted, so the caller can retry.
+func (wf *Workflow) Submit(ctx context.Context) error {
+	if wf.opened {
+		return ErrWorkflowSubmitted
+	}
+
+	// plan each time: it stamps enqueued_at, so never reuse one.
+	p, err := wf.plan()
+	if err != nil {
+		return err
+	}
+	if err := wf.store.Submit(ctx, p); err != nil {
+		return err
+	}
+	wf.submitted = true
+
+	return nil
+}
+
+// Cancel cancels the workflow; undos run if the workflow was set to
+// (default true).
+func (wf *Workflow) Cancel(ctx context.Context) error {
+	return wf.store.Cancel(ctx, wf.id, wf.opts.undoOnCancel)
+}
+
+// Status returns the workflow's current record.
+func (wf *Workflow) Status(ctx context.Context) (WorkflowRecord, error) {
+	return wf.store.Record(ctx, wf.id)
+}
+
+func isFinal(s WorkflowState) bool {
+	switch s {
+	case WorkflowCompleted, WorkflowFailed, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled:
+		return true
+	}
+
+	return false
+}
+
+// Wait blocks until the workflow reaches a final state or ctx is done.
+func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
+	// ponytail: polling; a store push later
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return WorkflowRecord{}, err
+		}
+		r, err := wf.store.Record(ctx, wf.id)
+		if err != nil || isFinal(r.State) {
+			return r, err
+		}
+		select {
+		case <-ctx.Done():
+			return WorkflowRecord{}, ctx.Err()
+		case <-tick.C:
+		}
+	}
 }

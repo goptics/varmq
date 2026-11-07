@@ -351,7 +351,7 @@ func TestWorkflowBuilder(t *testing.T) {
 
 				wf.submitted = true
 				call(wf, a, b)
-				assert.ErrorContains(t, planErr(t, wf), "after Submit")
+				assert.ErrorIs(t, planErr(t, wf), ErrWorkflowSubmitted)
 			})
 		}
 	})
@@ -424,4 +424,56 @@ func TestPlanHash(t *testing.T) {
 	p4, err := wf.plan()
 	require.NoError(t, err)
 	assert.NotEqual(t, p1.Hash, p4.Hash, "Always")
+}
+
+func TestWorkflowHandleOps(t *testing.T) {
+	ctx := context.Background()
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	w := NewWorker(func(j Job[int]) {
+		if j.Data() == 1 {
+			started <- struct{}{}
+			<-release
+		}
+	})
+	q := w.BindQueue()
+	store := NewWorkflowStore()
+
+	build := func(bData int) *Workflow {
+		wf := NewWorkflow(store, WithWorkflowID("h1"))
+		a := wf.Add("a", q, 1)
+		wf.Add("b", q, bData).After(a)
+		return wf
+	}
+
+	wf := build(2)
+	require.NoError(t, wf.Submit(ctx))
+	require.NoError(t, wf.Submit(ctx), "same shape: idempotent")
+	assert.ErrorIs(t, build(3).Submit(ctx), ErrWorkflowExists)
+
+	<-started
+	h := OpenWorkflow(store, "h1")
+	require.NoError(t, h.Cancel(ctx))
+	close(release)
+	// ponytail: workers don't report task ends yet (later task); report A's by hand.
+	_, err := store.(*memWorkflowStore).finish(end("h1", "a", OutcomeCompleted))
+	require.NoError(t, err)
+
+	r, err := wf.Wait(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, WorkflowCancelled, r.State)
+	st, err := h.Status(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, WorkflowCancelled, st.State)
+
+	h.Add("c", q, 1)
+	assert.ErrorIs(t, h.Submit(ctx), ErrWorkflowSubmitted)
+
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = wf.Wait(cctx)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	_, err = OpenWorkflow(store, "nope").Status(ctx)
+	assert.ErrorIs(t, err, ErrWorkflowNotFound)
 }
