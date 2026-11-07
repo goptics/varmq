@@ -41,7 +41,8 @@ type workflowStore interface {
 // /workflows. Filled by NewWorkflowStore and when a queue binds. An
 // in-memory store is held weakly, so dropping it frees it.
 // ponytail: durable entries are never removed, like queueRegistry's; a
-// closed storage stays and its errors answer 503.
+// closed storage stays: GET /workflows skips it, the ID routes answer 503
+// when no other store holds the ID.
 var workflowRegistry sync.Map
 
 // registerWorkflowStore lists s under /workflows if it can also list.
