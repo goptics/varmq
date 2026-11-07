@@ -50,7 +50,7 @@ func main() {
 	wf.Add("email", email, "ann@example.com").
 		After(small, large).
 		Always().                       // send even if a thumbnail failed
-		Undo(unsend, "ann@example.com") // runs only if the workflow fails later
+		Undo(unsend, "ann@example.com") // queued only if email completed and the workflow fails or is cancelled
 
 	if err := wf.Submit(ctx); err != nil {
 		panic(err)

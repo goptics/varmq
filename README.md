@@ -262,7 +262,7 @@ if job, ok := queue.Add("error"); ok {
 
 ### Workflows
 
-A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails. Needs Go 1.27.
+A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails or is cancelled (`WithUndoOnCancel(false)` opts out). Needs Go 1.27.
 
 ```go
 wf := varmq.NewWorkflow(varmq.NewWorkflowStore(), varmq.WithWorkflowID("upload-1"))
@@ -282,7 +282,7 @@ var src string
 varmq.TaskOf(j).Result("upload", &src)
 ```
 
-Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store. Runnable example: [`examples/workflow`](./examples/workflow). Spec: [`adr/0005-workflows.md`](./adr/0005-workflows.md).
+Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store. Runnable example: [`examples/workflow`](./examples/workflow). Design: [ADR 0005](./adr/0005-workflows.md).
 
 ### Function Helpers
 

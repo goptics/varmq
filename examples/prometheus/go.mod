@@ -1,6 +1,6 @@
 module github.com/goptics/varmq/examples/prometheus
 
-go 1.24.0
+go 1.27
 
 require (
 	github.com/goptics/varmq v0.0.0-00010101000000-000000000000
