@@ -270,7 +270,10 @@ paths:
         bound here. A workflow in a shared storage shows on every instance
         that binds it; the same ID can repeat across instances, never within
         one reply. Pages are read separately, so workflows created between
-        two requests can shift a page.
+        two requests can shift a page. A storage whose listing fails is left
+        out of the reply; the reply is 503 only when every storage fails. A
+        workflow that ends between the listing and the read of its record
+        can show its new state, or be left out once it expired.
       parameters:
         - name: state
           in: query
@@ -301,7 +304,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-        "503": { $ref: "#/components/responses/WorkflowStoreError" }
+        "503":
+          description: Every workflow storage failed; `error` holds the last reason.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /workflows/{id}:
     parameters:
@@ -318,6 +327,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WorkflowRecord" }
         "404": { $ref: "#/components/responses/WorkflowNotFound" }
+        "409": { $ref: "#/components/responses/WorkflowAmbiguous" }
         "503": { $ref: "#/components/responses/WorkflowStoreError" }
 
   /workflows/{id}/actions/{action}:
@@ -334,9 +344,11 @@ paths:
         description: |
           Whether the cancel also runs the undo jobs of the tasks that
           completed. Absent: the workflow's own setting, chosen when it was
-          submitted (`WorkflowRecord.undo_on_cancel`). `true` or `false`
-          overrides it, and the record then shows the override.
-        schema: { type: boolean }
+          submitted (`WorkflowRecord.undo_on_cancel`). `false` turns the
+          undo jobs off, and the record then shows `false`. `true` is
+          refused (400 `invalid undo`): this route may only narrow what the
+          producer chose, never run undo jobs it turned off.
+        schema: { type: boolean, enum: [false] }
     patch:
       operationId: workflowAction
       summary: Cancel a workflow.
@@ -344,8 +356,7 @@ paths:
         Since 1.3.0. Waiting tasks are cancelled at once; tasks already
         queued are cancelled by the pre-run check when a worker reaches
         them, so the returned record can still be `running`. Compensation
-        runs as `undo` says, or as the workflow was submitted when `undo` is
-        absent. Cancelling a workflow that has ended or was cancelled
+        runs as the workflow was submitted, or not at all with `undo=false`. Cancelling a workflow that has ended or was cancelled
         changes nothing. Like the queue actions,
         this reaches every process that works on the workflow: protect it.
       responses:
@@ -357,13 +368,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WorkflowRecord" }
         "400":
-          description: Unknown action (`unknown action`) or invalid `undo` (`invalid undo`).
+          description: Unknown action (`unknown action`) or an `undo` other than `false` (`invalid undo`).
           headers:
             X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "404": { $ref: "#/components/responses/WorkflowNotFound" }
+        "409": { $ref: "#/components/responses/WorkflowAmbiguous" }
         "503": { $ref: "#/components/responses/WorkflowStoreError" }
 
 components:
@@ -403,6 +415,15 @@ components:
   responses:
     WorkflowNotFound:
       description: No workflow with this ID in any storage bound here (`workflow not found`).
+      headers:
+        X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    WorkflowAmbiguous:
+      description: |
+        More than one storage bound here holds a workflow with this ID
+        (`workflow id in several stores`). Nothing is read or cancelled.
       headers:
         X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
       content:

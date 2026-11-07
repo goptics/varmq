@@ -134,6 +134,8 @@ An item is a UTF-8 JSON object, the job envelope:
 
 A consumer MUST ignore fields it does not know.
 
+Since 1.5.0, a consumer MUST treat an item as unparsable when its workflow fields could not come from a Submit (section 6.9): `wf` that is not a workflow ID of section 1.2, `task` that is not a task name, `wf` without `task`, `task` or `undo` without `wf`, or an `id` other than `wf:<wf>:<task>` (with `:undo` appended when `undo` is true). It MUST NOT build a `wf:` key from such an item, and MUST NOT run it.
+
 **An implementation MUST NOT decode and re-encode an item.** It stores, moves and records the bytes as the producer wrote them. Redis's Lua `cjson.encode` writes numbers with 14 significant digits, so a re-encoded payload can lose precision. A script MAY decode an item with `cjson.decode` to read `id`. It builds any JSON that contains an item by concatenating strings around the raw item bytes.
 
 An item that is not a JSON object (redisq can also hold plain bytes that no varmq producer wrote) has Job ID `""` and no `data`. Section 6 says how a reader shows it.
@@ -274,7 +276,7 @@ Purge deletes all of a queue's jobs and job data in one `DEL`. Since 1.5.0 the s
 
 Purge keeps the consumer state that live consumers rely on (`<base>:idle`, `<base>:heartbeats`, `<base>:heartbeats:clock`, `<base>:presence`) and the `<base>:dedup:<id>` keys, which expire on their own. A consumer that later acknowledges or rejects a purged job finds no `:nacked` entry, so the operation does nothing (section 6.3, step 1).
 
-Since 1.5.0, a purged item that names a workflow (`wf` and `task`) would leave the workflow waiting for a task that is gone. So Purge reads the queued items (`LRANGE` or `ZRANGE`) and `HVALS <base>:nacked` first and collects the distinct `wf` IDs. It runs its script with, in `KEYS`: the keys the `DEL` removes, then for each such workflow its hash `wf:<id>` and the push-target queues of section 6.10 (every queue the workflow can push into). The script runs the `DEL` first. Then, for each tagged item read, in the order read, it applies a `cancelled` end to the task (or to its undo, for `undo` true) with steps 4 to 6 of section 6.10, with no `:nacked` check and no settle (the `DEL` removed the item and its records), so a dependent or undo that the end releases is pushed after the `DEL` and is not lost with it. Dependents follow their policy, and a purged task is never recorded as completed. A queue with no workflow item pays one extra scan only. The script MUST re-read the queued items and `:nacked` before the `DEL` and, if it finds a `wf` ID whose hash is not in `KEYS` (an item arrived since the caller read), do nothing and tell the caller to read again.
+Since 1.5.0, a purged item that names a workflow (`wf` and `task`) would leave the workflow waiting for a task that is gone. So Purge reads the queued items (`LRANGE` or `ZRANGE`) and `HVALS <base>:nacked` first and collects the distinct `wf` IDs. It MUST ignore an item whose workflow fields are invalid (section 3): such an item is purged like a plain job, and no `wf:` key is built from it. It runs its script with, in `KEYS`: the keys the `DEL` removes, then for each such workflow its hash `wf:<id>` and the push-target queues of section 6.10 (every queue the workflow can push into). The script runs the `DEL` first. Then, for each tagged item read, in the order read, it applies a `cancelled` end to the task (or to its undo, for `undo` true) with steps 4 to 6 of section 6.10, with no `:nacked` check and no settle (the `DEL` removed the item and its records), so a dependent or undo that the end releases is pushed after the `DEL` and is not lost with it. Dependents follow their policy, and a purged task is never recorded as completed. A queue with no workflow item pays one extra scan only. The script MUST re-read the queued items and `:nacked` before the `DEL` and, if it finds a `wf` ID whose hash is not in `KEYS` (an item arrived since the caller read), do nothing and tell the caller to read again. The caller MUST read again at most 3 times, then fail the Purge, so a queue that keeps receiving workflow items cannot hold it in a loop.
 
 ### 6.7 Pause (since 1.3.0)
 
@@ -324,6 +326,8 @@ The caller reads the static `t:` fields of the workflow before the script (`t:` 
 2. the workflow hash `wf:<id>`;
 3. the **push-target queues**: every queue the workflow can push into, which is the queue of every task and of every undo, each once, including the finishing task's own queue. Per queue: its base key, `:stats`, `:idle`, and `:seq` for prio only.
 
+The caller MUST also check, from those `t:` fields, that `t:<task>` exists and that its queue (for an undo, the queue of `t:<task>.undo`) has this queue's base key. If not (an item written into a queue its workflow does not use), it settles the item (step 3), applies no workflow step, and returns success (ok=true) with no queue IDs. An item that fails section 3's workflow rules is unparsable and never reaches FinishTask.
+
 Every queue is passed, not only the dependents' queues, because one end can push into any of them: compensation can start in this script and push the undo of a task on a sibling branch. A script MUST NOT build a key name (section 1.1); a script that needs a key that is not in `KEYS` fails and changes nothing.
 
 Steps:
@@ -358,9 +362,11 @@ Input: the workflow ID and, optionally, `undo` (whether compensation also runs).
 
 A cancel does not remove queued items.
 
+The HTTP route (`PATCH /workflows/{id}/actions/cancel`) MUST only narrow: it passes `undo` false for `undo=false`, no `undo` when the parameter is absent, and MUST refuse `undo=true` (HTTP 400), so a REST caller never runs undos the producer turned off. The Go API (`WorkflowStore.Cancel`) takes either value.
+
 ### 6.12 Runnable (since 1.5.0)
 
-The pre-run check. A consumer MUST call it for an item whose envelope has `wf`, after popping it and before running it. Input: workflow ID, task, `undo`. One `HMGET wf:<id> meta t:<task> s:<task> u:<task>`:
+The pre-run check. A consumer MUST call it for an item whose envelope has `wf`, after popping it and before running it, and only for an item whose workflow fields pass section 3's rules (one that fails them is unparsable: it is neither checked nor run). Input: workflow ID, task, `undo`. One `HMGET wf:<id> meta t:<task> s:<task> u:<task>`:
 
 - Not found (the hash is gone: the workflow ended and expired): not runnable.
 - `undo` false: runnable only when `meta.state` is `running`, `meta.cancelled` is not true, `s:<task>` is `pending`, and not (`meta.fail_fast` and `meta.failed` are true and `t:<task>.always` is false): once FailFast fired (section 6.10), only `always` tasks start.
@@ -402,6 +408,8 @@ Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is 
 Since 1.5.0. A reader answers the HTTP routes `GET /workflows`, `GET /workflows/{id}` and `PATCH /workflows/{id}/actions/cancel` (the last is section 6.11).
 
 - **List**: a scan of `wf:index` from the newest entry (`ZREVRANGE`). For each ID, `HGET wf:<id> meta`; skip an ID whose hash is gone (it expired before a trim). `offset` and `limit` count matches: the reader skips the first `offset` workflows that match (every one without a `state` filter, else those in that state) and returns up to `limit` more, reading further entries as needed. Without a `state` filter and with no gone hash, this is `ZREVRANGE wf:index offset offset+limit-1`. An `offset` above 10000 is rejected (HTTP 400), not clamped. `GET /workflows` returns the records mapped below.
+- The list MUST NOT run as one script: the reader pages `wf:index` from the client in chunks (a `ZREVRANGE` of a bounded range, then the `meta` reads of that chunk), so one listing never blocks Redis for long. With a `state` filter it reads at most 10000 + `limit` index entries per call (`limit` being the call's; matched or not) and returns what it matched by then. varmq asks every storage for `offset + limit` workflows from offset 0 and merges them, so one HTTP request reads at most that bound per storage.
+- **Keys** (optional; Go `WorkflowKeyLister`): the same scan, returning per match only the ID and `created_at` (the `wf:index` score), without the records. varmq merges the keys of every storage first and then reads (as **One**) only the workflows of the final page.
 - **One**: `HGETALL wf:<id>`; not found when the hash is absent.
 - **Trim**: an implementation SHOULD, in its sweep, remove from `wf:index` the members whose score is at or below `now - retention`, since the hash expires by itself (section 6.10 step 6).
 
