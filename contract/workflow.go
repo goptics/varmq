@@ -116,6 +116,9 @@ type WorkflowStore interface {
 // WorkflowAcknowledgeable is a queue storage that can finish workflow tasks.
 type WorkflowAcknowledgeable interface {
 	Scoped
+	// WorkflowStore is the store of this storage's scope. With none it MUST
+	// return a nil interface, never a typed nil (a nil *T in the interface):
+	// varmq registers any non-nil value and calls its methods.
 	WorkflowStore() WorkflowStore
 	// FinishTask records the outcome and returns the IDs of the queues it
 	// pushed into, so varmq pokes its local consumers of them. A re-finish
@@ -131,6 +134,20 @@ type WorkflowAcknowledgeable interface {
 type WorkflowInspector interface {
 	Scoped
 	Workflows(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowRecord, error)
+}
+
+// WorkflowKey is what a workflow listing sorts on: CreatedAt (Unix ms)
+// newest first, then ID.
+type WorkflowKey struct {
+	ID        string
+	CreatedAt int64
+}
+
+// WorkflowKeyLister is optional for a WorkflowInspector: Workflows without
+// the records (same filter, order and paging), so a reader that merges
+// several stores reads (Record) only the workflows of its final page.
+type WorkflowKeyLister interface {
+	WorkflowKeys(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error)
 }
 
 var (

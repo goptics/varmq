@@ -195,6 +195,8 @@ type (
 	WorkflowStore           = contract.WorkflowStore
 	WorkflowAcknowledgeable = contract.WorkflowAcknowledgeable
 	WorkflowInspector       = contract.WorkflowInspector
+	WorkflowKey             = contract.WorkflowKey
+	WorkflowKeyLister       = contract.WorkflowKeyLister
 )
 
 const (

@@ -341,16 +341,46 @@ func (m *memWorkflowStore) Record(_ context.Context, id string) (WorkflowRecord,
 }
 
 // Workflows lists up to limit workflows in state ("" for every state),
-// newest first, skipping the first offset.
-// ponytail: walks every kept workflow per call; an index per state if
-// listing big stores shows up.
+// newest first, skipping the first offset. Records are built after the
+// listing, under a short lock each, so a big page never holds mu long.
 func (m *memWorkflowStore) Workflows(_ context.Context, state WorkflowState, offset, limit int) ([]WorkflowRecord, error) {
-	out := []WorkflowRecord{}
+	ws := m.list(state, offset, limit)
+	out := make([]WorkflowRecord, 0, len(ws))
+	for _, w := range ws {
+		m.mu.Lock()
+		out = append(out, w.record())
+		m.mu.Unlock()
+	}
+
+	return out, nil
+}
+
+// WorkflowKeys is Workflows without the records.
+func (m *memWorkflowStore) WorkflowKeys(_ context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error) {
+	ws := m.list(state, offset, limit)
+	out := make([]WorkflowKey, len(ws))
+	for i, w := range ws {
+		out[i] = WorkflowKey{ID: w.id, CreatedAt: w.created} // fixed at Submit: no lock
+	}
+
+	return out, nil
+}
+
+// list collects the listed workflows under mu. A state filter scans at most
+// maxWorkflowsOffset+limit workflows, matched or not, so a rare state never
+// walks the whole store.
+// ponytail: walks the kept workflows; an index per state if listing big
+// stores shows up.
+func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWorkflow {
+	var out []*memWorkflow
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for i := len(m.order) - 1; i >= 0 && len(out) < limit; i-- {
+		if scanned := len(m.order) - 1 - i; state != "" && scanned-limit >= maxWorkflowsOffset {
+			break
+		}
 		w := m.order[i]
 		if w.gone || state != "" && w.s.State != state {
 			continue
@@ -359,10 +389,10 @@ func (m *memWorkflowStore) Workflows(_ context.Context, state WorkflowState, off
 			offset--
 			continue
 		}
-		out = append(out, w.record())
+		out = append(out, w)
 	}
 
-	return out, nil
+	return out
 }
 
 // record builds w's WorkflowRecord: tasks in Add order. An undo is waiting

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -819,10 +820,34 @@ func TestMuxWorkflows(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, do("PATCH", "/workflows/f-new/actions/cancel").Code)
 	})
 
+	t.Run("409 when two stores hold the id", func(t *testing.T) {
+		twin := &fakeWorkflowStore{scope: "fake:2", recs: []WorkflowRecord{{ID: "f-mid", CreatedAt: 1}}}
+		registerWorkflowStore(twin)
+		defer workflowRegistry.Delete("fake:2")
+
+		n := len(fake.cancelled)
+		for _, method := range []string{"GET", "PATCH"} {
+			target := "/workflows/f-mid"
+			if method == "PATCH" {
+				target += "/actions/cancel"
+			}
+			rr := do(method, target)
+			assert.Equal(t, http.StatusConflict, rr.Code, method)
+			assert.JSONEq(t, `{"error":"workflow id in several stores"}`, rr.Body.String(), method)
+		}
+		assert.Len(t, fake.cancelled, n, "no store cancelled")
+		assert.Empty(t, twin.cancelled)
+	})
+
+	t.Run("list skips a failing store", func(t *testing.T) {
+		fake.err = errors.New("redis down")
+		defer func() { fake.err = nil }()
+		assert.Equal(t, []string{"m-new", "m-old"}, ids(do("GET", "/workflows")))
+	})
+
 	t.Run("503 when a store fails", func(t *testing.T) {
 		fake.err = errors.New("redis down")
 		defer func() { fake.err = nil }()
-		assert.Equal(t, http.StatusServiceUnavailable, do("GET", "/workflows").Code)
 		assert.Equal(t, http.StatusServiceUnavailable, do("GET", "/workflows/nope").Code)
 		assert.Equal(t, http.StatusServiceUnavailable, do("PATCH", "/workflows/nope/actions/cancel").Code)
 		assert.Equal(t, http.StatusOK, do("GET", "/workflows/m-new").Code, "a hit wins over a failing store")
@@ -835,6 +860,83 @@ func TestMuxWorkflows(t *testing.T) {
 		}
 		assert.Len(t, fake.cancelled, n, "no store cancelled")
 	})
+}
+
+// TestMuxWorkflowsAllStoresFail: 503 only when every store's listing fails.
+func TestMuxWorkflowsAllStoresFail(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	rr := httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
+	assert.Equal(t, "[]\n", rr.Body.String(), "no store: an empty list")
+
+	registerWorkflowStore(&fakeWorkflowStore{scope: "fake:a", err: errors.New("redis down")})
+	registerWorkflowStore(&fakeWorkflowStore{scope: "fake:b", err: errors.New("redis down")})
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	assert.Contains(t, rr.Body.String(), "redis down")
+}
+
+// keyedWorkflowStore lists keys only; its records are read one by one.
+type keyedWorkflowStore struct {
+	*fakeWorkflowStore
+	reads []string
+	gone  string // listed, but its Record is not found
+}
+
+func (k *keyedWorkflowStore) WorkflowKeys(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error) {
+	recs, err := k.fakeWorkflowStore.Workflows(ctx, state, offset, limit)
+	keys := make([]WorkflowKey, len(recs))
+	for i, r := range recs {
+		keys[i] = WorkflowKey{ID: r.ID, CreatedAt: r.CreatedAt}
+	}
+	return keys, err
+}
+
+func (k *keyedWorkflowStore) Record(ctx context.Context, id string) (WorkflowRecord, error) {
+	k.reads = append(k.reads, id)
+	if id == k.gone {
+		return WorkflowRecord{}, ErrWorkflowNotFound
+	}
+	return k.fakeWorkflowStore.Record(ctx, id)
+}
+
+func (k *keyedWorkflowStore) Workflows(context.Context, WorkflowState, int, int) ([]WorkflowRecord, error) {
+	panic("a key lister's records are not listed")
+}
+
+// TestMuxWorkflowsReadsPageOnly: keys are merged first; only the final page's
+// records are read.
+func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	k := &keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{scope: "keyed", recs: []WorkflowRecord{
+		{ID: "k5", CreatedAt: 5}, {ID: "k4", CreatedAt: 4}, {ID: "k3", CreatedAt: 3},
+		{ID: "k2", CreatedAt: 2}, {ID: "k1", CreatedAt: 1},
+	}}}
+	registerWorkflowStore(k)
+	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 4}}})
+
+	rr := httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?offset=1&limit=2", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var recs []WorkflowRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	got := []string{}
+	for _, r := range recs {
+		got = append(got, r.ID)
+	}
+	assert.Equal(t, []string{"k4", "p"}, got, "CreatedAt desc, then ID")
+	assert.Equal(t, []string{"k4"}, k.reads, "only the page's records are read")
+
+	// A workflow gone between the listing and the read is skipped.
+	k.gone = "k5"
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=1", nil))
+	assert.Equal(t, "[]\n", rr.Body.String())
 }
 
 func mustRecord(t *testing.T, rr *httptest.ResponseRecorder) WorkflowRecord {
@@ -850,13 +952,8 @@ func TestWorkflowRegistryFills(t *testing.T) {
 	defer workflowRegistry.Clear()
 
 	a, b := NewWorkflowStore(), NewWorkflowStore()
-	n := 0
-	workflowRegistry.Range(func(k, v any) bool {
-		n++
-		assert.Contains(t, []any{a, b}, v)
-		return true
-	})
-	assert.Equal(t, 2, n, "two in-memory stores, one scope: both listed")
+	assert.ElementsMatch(t, []workflowStore{a.(workflowStore), b.(workflowStore)}, workflowStores(),
+		"two in-memory stores, one scope: both listed")
 	var ok bool
 
 	registerWorkflowStore(plainWorkflowStore{})
@@ -868,6 +965,26 @@ func TestWorkflowRegistryFills(t *testing.T) {
 		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
 		return rr.Code
 	}())
+}
+
+// TestWorkflowRegistryWeak: the registry does not keep a dropped in-memory
+// store alive.
+func TestWorkflowRegistryWeak(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	func() { NewWorkflowStore() }()
+	runtime.GC()
+	runtime.GC()
+	assert.Empty(t, workflowStores())
+	n := 0
+	workflowRegistry.Range(func(any, any) bool { n++; return true })
+	assert.Zero(t, n, "the dead entry is removed")
+
+	kept := NewWorkflowStore()
+	runtime.GC()
+	assert.Len(t, workflowStores(), 1)
+	runtime.KeepAlive(kept)
 }
 
 type plainWorkflowStore struct{ WorkflowStore }

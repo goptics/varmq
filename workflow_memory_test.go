@@ -225,6 +225,36 @@ func TestMemStoreWorkflows(t *testing.T) {
 	assert.NotNil(t, list, "an empty page is [], not null")
 }
 
+// TestMemStoreListBounded: a state-filtered listing scans at most
+// maxWorkflowsOffset+limit workflows, matched or not; keys list the same.
+func TestMemStoreListBounded(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newMemStore(t)
+
+	// Built directly: 10k Submits are slow under -race.
+	n := maxWorkflowsOffset + 2
+	for i := range n {
+		st := WorkflowRunning
+		if i == 0 {
+			st = WorkflowCompleted // the oldest, past the bound
+		}
+		s.order = append(s.order, &memWorkflow{id: fmt.Sprint("b", i), created: int64(i), s: &wfState{State: st}})
+	}
+
+	list, err := s.Workflows(ctx, WorkflowCompleted, 0, 1)
+	require.NoError(t, err)
+	assert.Empty(t, list, "scan stops at maxWorkflowsOffset+limit")
+	list, _ = s.Workflows(ctx, WorkflowCompleted, 0, 2)
+	assert.Equal(t, []string{"b0"}, ids(list), "a bigger limit reaches it")
+	list, _ = s.Workflows(ctx, "", n-1, 1)
+	assert.Equal(t, []string{"b0"}, ids(list), "no filter: no bound")
+
+	keys, err := s.WorkflowKeys(ctx, WorkflowRunning, 1, 2)
+	require.NoError(t, err)
+	want := []WorkflowKey{{ID: fmt.Sprint("b", n-2), CreatedAt: int64(n - 2)}, {ID: fmt.Sprint("b", n-3), CreatedAt: int64(n - 3)}}
+	assert.Equal(t, want, keys)
+}
+
 func TestMemStoreResults(t *testing.T) {
 	ctx := context.Background()
 	s, _ := newMemStore(t, WithResultLimit(4))
