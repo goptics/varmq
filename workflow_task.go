@@ -16,8 +16,8 @@ type TaskContext struct {
 
 	store WorkflowStore
 
-	mu  sync.Mutex
-	rec *WorkflowRecord // fetched once on first use
+	mu    sync.Mutex
+	tasks map[string]TaskRecord // fetched once on first use
 }
 
 // TaskOf is j's workflow task, nil when j is not one. An undo job gets a
@@ -36,44 +36,35 @@ func TaskOf[T any](j Job[T]) *TaskContext {
 	return &TaskContext{WorkflowID: tag.wf, Name: tag.task, Undo: tag.undo, store: tag.store}
 }
 
-// record is the workflow's record, fetched once and cached. A failed fetch
-// is not cached, so the next call retries.
+// deps is this task's dependency names and the workflow's tasks by name,
+// fetched once and cached (never changed after). A failed fetch is not
+// cached, so the next call retries.
 // ponytail: context.Background, as runnable: no ctx on the accessor. The
 // snapshot is of when it was first read; deps are final by then (task ran).
-func (t *TaskContext) record() (*WorkflowRecord, error) {
+func (t *TaskContext) deps() ([]string, map[string]TaskRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.rec != nil {
-		return t.rec, nil
-	}
-	if t.store == nil {
-		return nil, ErrNoResult
-	}
-
-	r, err := t.store.Record(context.Background(), t.WorkflowID)
-	if err != nil {
-		return nil, err
-	}
-	t.rec = &r
-
-	return t.rec, nil
-}
-
-// deps is the dependency names of this task, from the cached record.
-func (t *TaskContext) deps() ([]string, *WorkflowRecord, error) {
-	r, err := t.record()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, tr := range r.Tasks {
-		if tr.Name == t.Name {
-			return tr.Deps, r, nil
+	if t.tasks == nil {
+		if t.store == nil {
+			return nil, nil, ErrNoResult
+		}
+		r, err := t.store.Record(context.Background(), t.WorkflowID)
+		if err != nil {
+			return nil, nil, err
+		}
+		t.tasks = make(map[string]TaskRecord, len(r.Tasks))
+		for _, tr := range r.Tasks {
+			t.tasks[tr.Name] = tr
 		}
 	}
 
-	return nil, r, ErrNoResult
+	self, ok := t.tasks[t.Name]
+	if !ok {
+		return nil, nil, ErrNoResult
+	}
+
+	return self.Deps, t.tasks, nil
 }
 
 // Result unmarshals dep's result into v. ErrNoResult when dep is not one of
@@ -100,16 +91,11 @@ func (t *TaskContext) Result(dep string, v any) error {
 // Failed reports whether dep, one of this task's dependencies, failed or was
 // cancelled. False for a non-dependency or when the record is unreadable.
 func (t *TaskContext) Failed(dep string) bool {
-	deps, r, err := t.deps()
+	deps, tasks, err := t.deps()
 	if err != nil || !slices.Contains(deps, dep) {
 		return false
 	}
 
-	for _, d := range r.Tasks {
-		if d.Name == dep {
-			return d.State == JobFailed || d.State == JobCancelled
-		}
-	}
-
-	return false
+	st := tasks[dep].State
+	return st == JobFailed || st == JobCancelled
 }

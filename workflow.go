@@ -454,14 +454,7 @@ func (wf *Workflow) Status(ctx context.Context) (WorkflowRecord, error) {
 	return wf.store.Record(ctx, wf.id)
 }
 
-func isFinal(s WorkflowState) bool {
-	switch s {
-	case WorkflowCompleted, WorkflowFailed, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled:
-		return true
-	}
-
-	return false
-}
+func isFinal(s WorkflowState) bool { return s != WorkflowRunning && s != WorkflowCompensating }
 
 // Wait blocks until the workflow reaches a final state or ctx is done.
 func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
@@ -470,9 +463,6 @@ func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
 	}
 
 	// ponytail: polling; a store push later
-	tick := time.NewTicker(50 * time.Millisecond)
-	defer tick.Stop()
-
 	for {
 		if err := ctx.Err(); err != nil {
 			return WorkflowRecord{}, err
@@ -483,8 +473,7 @@ func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
 		}
 		select {
 		case <-ctx.Done():
-			return WorkflowRecord{}, ctx.Err()
-		case <-tick.C:
+		case <-time.After(50 * time.Millisecond):
 		}
 	}
 }
