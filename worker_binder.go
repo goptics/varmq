@@ -2,8 +2,30 @@ package varmq
 
 import "github.com/goptics/varmq/internal/queues"
 
+// durableBinder is the four durable binders, the same for every worker
+// kind; each binder embeds it.
+type durableBinder[T any, J iJob[T]] struct {
+	*worker[T, J]
+}
+
+func (d durableBinder[T, J]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+	return newPersistentQueue(d.worker, pq, configs...)
+}
+
+func (d durableBinder[T, J]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+	return newPersistentPriorityQueue(d.worker, pq, configs...)
+}
+
+func (d durableBinder[T, J]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	return bindDistributed(d.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
+}
+
+func (d durableBinder[T, J]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	return bindDistributed(d.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
+}
+
 type workerBinder[T any] struct {
-	*worker[T, iJob[T]]
+	durableBinder[T, iJob[T]]
 }
 
 // IWorkerBinder is the base interface for binding standard workers to different queue types.
@@ -180,9 +202,7 @@ type IWorkerBinder[T any] interface {
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
 	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
 	// This works because workerBinder implements all methods of IVoidWorkerBinder
-	return &workerBinder[T]{
-		worker: worker,
-	}
+	return &workerBinder[T]{durableBinder[T, iJob[T]]{worker}}
 }
 
 // handleQueueSubscription processes notifications from distributed queues
@@ -213,22 +233,6 @@ func (wb *workerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) Priorit
 
 func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) PriorityQueue[T] {
 	return newPriorityQueue(wb.worker, pq, configs...)
-}
-
-func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
-	return newPersistentQueue(wb.worker, pq, configs...)
-}
-
-func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
-	return newPersistentPriorityQueue(wb.worker, pq, configs...)
-}
-
-func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
-	return bindDistributed(wb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
-}
-
-func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
-	return bindDistributed(wb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
 }
 
 // bindDistributed binds w to dq, wakes w on dq's notifications, and returns
@@ -275,7 +279,7 @@ func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Sub
 }
 
 type errWorkerBinder[T any] struct {
-	*worker[T, iErrorJob[T]]
+	durableBinder[T, iErrorJob[T]]
 }
 
 // IErrWorkerBinder is the interface for binding error workers to different queue types.
@@ -345,29 +349,19 @@ type IErrWorkerBinder[T any] interface {
 	//   errJob, ok := errPriorityQueue.Add(data, 5)  // Enqueues a job with priority 5 that will be processed by the error worker
 	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T]
 
-	// WithPersistentQueue binds the worker to a PersistentQueue. Jobs survive
-	// restarts; a failed job is rejected with its error text, a done one acknowledged.
-	// The handle only adds: nobody holds the job handle, so the error is dropped after Close;
-	// it still reaches the worker error channel (Errs) and Reject.
+	// WithPersistentQueue, WithPersistentPriorityQueue, WithDistributedQueue
+	// and WithDistributedPriorityQueue bind durable storage as IWorkerBinder's
+	// do. A done job is acknowledged; a failed one is rejected with its error
+	// text, which also reaches Errs. The handle only adds: nobody holds the
+	// job handle, so the error is dropped after Close.
 	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
-
-	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
-	// Ack and error rules as WithPersistentQueue.
 	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
-
-	// WithDistributedQueue binds the worker to a DistributedQueue shared across
-	// processes. Ack and error rules as WithPersistentQueue.
 	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
-
-	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
-	// Ack and error rules as WithPersistentQueue.
 	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 }
 
 func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
-	return &errWorkerBinder[T]{
-		worker: worker,
-	}
+	return &errWorkerBinder[T]{durableBinder[T, iErrorJob[T]]{worker}}
 }
 
 func (ewb *errWorkerBinder[T]) BindQueue(configs ...QueueConfigFunc) ErrQueue[T] {
@@ -386,24 +380,8 @@ func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...Q
 	return newErrorPriorityQueue(ewb.worker, pq, configs...)
 }
 
-func (ewb *errWorkerBinder[T]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
-	return newPersistentQueue(ewb.worker, pq, configs...)
-}
-
-func (ewb *errWorkerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
-	return newPersistentPriorityQueue(ewb.worker, pq, configs...)
-}
-
-func (ewb *errWorkerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
-	return bindDistributed(ewb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
-}
-
-func (ewb *errWorkerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
-	return bindDistributed(ewb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
-}
-
 type resultWorkerBinder[T, R any] struct {
-	*worker[T, iResultJob[T, R]]
+	durableBinder[T, iResultJob[T, R]]
 }
 
 // IResultWorkerBinder is the base interface for binding workers to different queue types.
@@ -477,30 +455,16 @@ type IResultWorkerBinder[T, R any] interface {
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
 	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R]
 
-	// WithPersistentQueue binds the worker to a PersistentQueue. Jobs survive
-	// restarts; a failed job is rejected with its error text, a done one acknowledged.
-	// The handle only adds: nobody holds the job handle, so the result R is dropped after Close
-	// (use it inside a workflow, which stores it). An error still reaches
-	// the worker error channel (Errs) and Reject.
+	// The durable binders follow IErrWorkerBinder's rules; the result R is
+	// dropped after Close too (inside a workflow, the store keeps it).
 	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
-
-	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
-	// Ack and error rules as WithPersistentQueue.
 	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
-
-	// WithDistributedQueue binds the worker to a DistributedQueue shared across
-	// processes. Ack and error rules as WithPersistentQueue.
 	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
-
-	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue.
-	// Ack and error rules as WithPersistentQueue.
 	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 }
 
 func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
-	return &resultWorkerBinder[T, R]{
-		worker: worker,
-	}
+	return &resultWorkerBinder[T, R]{durableBinder[T, iResultJob[T, R]]{worker}}
 }
 
 func (rwb *resultWorkerBinder[T, R]) BindQueue(configs ...QueueConfigFunc) ResultQueue[T, R] {
@@ -517,20 +481,4 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue(configs ...QueueConfigFun
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R] {
 	return newResultPriorityQueue(rwb.worker, pq, configs...)
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
-	return newPersistentQueue(rwb.worker, pq, configs...)
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
-	return newPersistentPriorityQueue(rwb.worker, pq, configs...)
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
-	return bindDistributed(rwb.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
-}
-
-func (rwb *resultWorkerBinder[T, R]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
-	return bindDistributed(rwb.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
 }
