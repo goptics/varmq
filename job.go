@@ -459,7 +459,9 @@ func (j *job[T]) closeOnce() error {
 		return err
 	}
 
-	if ref != nil && ref.q == nil && ref.ext != nil && ref.ext.task != nil {
+	// Loaded again: a Close that loaded before the run's end was recorded
+	// may win the claim, and must report that end, not cancelled.
+	if ref := j.ackRef.Load(); ref != nil && ref.q == nil && ref.ext != nil && ref.ext.task != nil {
 		finishMemTask(ref.ext)
 	}
 
@@ -489,12 +491,18 @@ func (j *job[T]) acknowledge() error {
 		return nil
 	}
 
+	var wa WorkflowAcknowledgeable
+	if ref.ext != nil && ref.ext.task != nil {
+		wa, _ = ref.q.(WorkflowAcknowledgeable)
+	}
+
 	var ok bool
-	if wa, tagged := ref.q.(WorkflowAcknowledgeable); tagged && ref.ext != nil && ref.ext.task != nil {
+	if wa != nil {
+		// Poke even when !ok: a re-finish of an ended task returns its
+		// dependents' queues, and the reply that pushed them may be lost.
 		var pushed []string
-		if pushed, ok = wa.FinishTask(ref.id, taskEnd(ref.ext)); ok {
-			pokeLocal(pushed)
-		}
+		pushed, ok = wa.FinishTask(ref.id, taskEnd(ref.ext))
+		pokeLocal(pushed)
 	} else if reason, failed := failReason(ref.ext); failed {
 		ok = ref.q.Reject(ref.id, reason)
 	} else {

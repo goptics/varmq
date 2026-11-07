@@ -233,6 +233,8 @@ type crashState struct {
 	pushedB int
 	bQueue  *mocks.MockPersistentQueue
 	bItem   []byte
+	runErr  error     // Runnable's error, if set
+	ends    []TaskEnd // every FinishTask's end
 }
 
 // crashStorage is a durable, workflow-acknowledging mock queue.
@@ -250,6 +252,9 @@ type crashStore struct {
 func (c crashStore) Runnable(_ context.Context, _, task string, undo bool) (bool, error) {
 	c.st.mu.Lock()
 	defer c.st.mu.Unlock()
+	if c.st.runErr != nil {
+		return false, c.st.runErr
+	}
 	return c.st.s.runnable(task, undo), nil
 }
 
@@ -261,23 +266,40 @@ func (c crashStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) {
 	defer st.mu.Unlock()
 
 	st.finishs++
+	st.ends = append(st.ends, e)
 	applied, lost := st.lose(st.finishs)
-	var pushed []string
-	if applied {
-		fx, err := st.s.finish(e)
-		if err != nil {
-			return nil, false
+	if lost { // the reply never reaches the caller, whatever was applied
+		if applied {
+			st.finish(e)
 		}
-		for _, f := range fx {
-			if f.Push == "b" {
-				st.pushedB++
-				st.bQueue.Queue.Enqueue(st.bItem) // no wake: FinishTask's caller pokes
-				pushed = append(pushed, "q-b")
-			}
+		return nil, false
+	}
+	if t := st.s.Tasks[e.Task]; t != nil && !e.Undo && (t.State == JobCompleted || t.State == JobFailed || t.State == JobCancelled) {
+		// Already ended: nothing changes; the contract returns its
+		// dependents' queues, so a lost wake is made up.
+		var deps []string
+		for _, d := range st.s.next[e.Task] {
+			deps = append(deps, "q-"+d)
+		}
+		return deps, true
+	}
+
+	return st.finish(e), true
+}
+
+// finish applies e and pushes b when released. Callers hold mu.
+func (st *crashState) finish(e TaskEnd) []string {
+	var pushed []string
+	fx, _ := st.s.finish(e) // plan tasks and known outcomes only
+	for _, f := range fx {
+		if f.Push == "b" {
+			st.pushedB++
+			st.bQueue.Queue.Enqueue(st.bItem) // no wake: FinishTask's caller pokes
+			pushed = append(pushed, "q-b")
 		}
 	}
 
-	return pushed, !lost
+	return pushed
 }
 
 func taskBytes(t *testing.T, wf, task string, data int) []byte {
@@ -299,7 +321,7 @@ func TestWorkflowCrashRerun(t *testing.T) {
 		aRuns   int32
 		finishs int // b's own finish included once it runs
 	}{
-		{"reply lost", true, 1, 2},
+		{"reply lost", true, 1, 3},
 		{"crash before finish", false, 2, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -334,10 +356,10 @@ func TestWorkflowCrashRerun(t *testing.T) {
 			aStorage.Queue.Enqueue(aItem) // redelivered, as a visibility timeout would
 			aw.notifyToPullNextJobs()
 			aw.Wait()
-			if !tc.applied { // the reply that pushed b came back: its consumer is poked
-				require.Eventually(t, func() bool { return bRuns.Load() == 1 }, 5*time.Second, time.Millisecond)
-				bw.Wait()
-			}
+			// Either way b's local consumer is poked: by the reply that pushed
+			// b, or by the re-finish of ended a.
+			require.Eventually(t, func() bool { return bRuns.Load() == 1 }, 5*time.Second, time.Millisecond)
+			bw.Wait()
 
 			st.mu.Lock()
 			defer st.mu.Unlock()
@@ -345,6 +367,53 @@ func TestWorkflowCrashRerun(t *testing.T) {
 			assert.Equal(t, tc.finishs, st.finishs)
 			assert.Equal(t, tc.aRuns, aRuns.Load())
 			assert.Equal(t, JobCompleted, st.s.Tasks["a"].State)
+			assert.Equal(t, int32(1), bRuns.Load(), "b runs once")
+		})
+	}
+}
+
+// TestWorkflowPreRunError: a workflow the store no longer holds cancels the
+// task unrun; any other Runnable error is reported and the task runs.
+func TestWorkflowPreRunError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		runs int32
+		end  Outcome
+	}{
+		{"not found", fmt.Errorf("%w: cr", ErrWorkflowNotFound), 0, OutcomeCancelled},
+		{"other error", errors.New("store down"), 1, OutcomeCompleted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := WorkflowPlan{ID: "cr", Tasks: []TaskPlan{{Name: "a"}}}
+			st := &crashState{s: newWFState(plan), runErr: tc.err, lose: func(int) (bool, bool) { return true, false }}
+			storage := crashStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-a", "s"}, st}
+
+			var runs atomic.Int32
+			w := NewWorker(func(Job[int]) { runs.Add(1) })
+			w.WithPersistentQueue(storage)
+			storage.Queue.Enqueue(taskBytes(t, "cr", "a", 1))
+			w.notifyToPullNextJobs()
+			require.Eventually(t, func() bool {
+				st.mu.Lock()
+				defer st.mu.Unlock()
+				return len(st.ends) == 1
+			}, 5*time.Second, time.Millisecond)
+
+			assert.Equal(t, tc.runs, runs.Load())
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			assert.Equal(t, tc.end, st.ends[0].Outcome)
+			if tc.runs == 0 {
+				assert.Equal(t, "workflow cancelled", st.ends[0].Reason)
+				return
+			}
+			select {
+			case err := <-w.Errs():
+				assert.ErrorIs(t, err, tc.err)
+			default:
+				t.Fatal("the Runnable error was not reported")
+			}
 		})
 	}
 }

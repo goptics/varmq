@@ -2,6 +2,7 @@ package varmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"weak"
@@ -37,9 +38,10 @@ func finishTask[T any](j iJob[T], o Outcome, reason string) error {
 }
 
 // runnable is the pre-run check: false when j's workflow says its task may
-// not start (cancelled, ended). A plain job, or a tag with no store, runs
-// with no I/O. A store error runs the task: it is at-least-once anyway, and
-// a store that can't answer could not finish it either.
+// not start (cancelled, ended, or gone: ErrWorkflowNotFound). A plain job,
+// or a tag with no store, runs with no I/O. Any other store error runs the
+// task: it is at-least-once anyway, and a store that can't answer could not
+// finish it either.
 // ponytail: context.Background, not the worker's: Stop cancels that while
 // the first job of a batch still runs; a hung store hangs the ack too.
 func (w *worker[T, JobType]) runnable(j JobType) bool {
@@ -49,6 +51,9 @@ func (w *worker[T, JobType]) runnable(j JobType) bool {
 	}
 
 	ok, err := t.store.Runnable(context.Background(), t.wf, t.task, t.undo)
+	if errors.Is(err, ErrWorkflowNotFound) {
+		return false
+	}
 	if err != nil {
 		w.sendError(fmt.Errorf("varmq: workflow %s task %s: pre-run check: %w", t.wf, t.task, err))
 		return true

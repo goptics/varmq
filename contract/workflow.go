@@ -116,7 +116,10 @@ type WorkflowAcknowledgeable interface {
 	Scoped
 	WorkflowStore() WorkflowStore
 	// FinishTask records the outcome and returns the IDs of the queues it
-	// pushed into, so varmq pokes its local consumers of them.
+	// pushed into, so varmq pokes its local consumers of them. A re-finish
+	// of a task that already ended (a lost reply, a redelivery) changes
+	// nothing and returns its dependents' queue IDs, so a wake lost with
+	// the first reply is not lost for good.
 	FinishTask(ackID string, e TaskEnd) (pushed []string, ok bool)
 }
 
