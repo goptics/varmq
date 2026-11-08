@@ -422,7 +422,7 @@ func (w *memWorkflow) record() WorkflowRecord {
 			if st == "" {
 				st = JobWaiting
 			}
-			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID}
+			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID, Reason: t.UndoReason}
 		}
 		r.Tasks = append(r.Tasks, tr)
 	}

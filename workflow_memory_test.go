@@ -394,6 +394,35 @@ func TestMemStoreCancel(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWorkflowNotFound)
 }
 
+// TestMemStoreUndoReason: a failed undo keeps its reason in the record.
+func TestMemStoreUndoReason(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newMemStore(t)
+
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	wf := NewWorkflow(s, WithWorkflowID("ur"))
+	a := wf.Add("a", q, 1).Undo(q, 10)
+	wf.Add("b", q, 2).After(a)
+	require.NoError(t, submit(t, wf))
+	_, err := s.finish(end("ur", "a", OutcomeCompleted))
+	require.NoError(t, err)
+	_, err = s.finish(end("ur", "b", OutcomeFailed))
+	require.NoError(t, err)
+
+	r, _ := s.Record(ctx, "ur")
+	require.Equal(t, WorkflowCompensating, r.State)
+	assert.Empty(t, r.Tasks[0].Undo.Reason)
+
+	_, err = s.finish(TaskEnd{Workflow: "ur", Task: "a", Outcome: OutcomeFailed, Reason: "undo boom", Undo: true})
+	require.NoError(t, err)
+	r, _ = s.Record(ctx, "ur")
+	assert.Equal(t, WorkflowCompensationFailed, r.State)
+	assert.Equal(t, JobFailed, r.Tasks[0].Undo.State)
+	assert.Equal(t, "undo boom", r.Tasks[0].Undo.Reason)
+	assert.Empty(t, r.Tasks[0].Reason, "the task's own reason is apart")
+}
+
 // refusingQueue is custom storage with no force path that refuses adds on
 // demand.
 type refusingQueue struct {
