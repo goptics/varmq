@@ -7,6 +7,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"errors"
 )
 
 // JobState is where a job is in its life (spec/openapi.yaml, JobState).
@@ -18,7 +19,9 @@ const (
 	JobCompleted  JobState = "completed"  // acknowledged
 	JobFailed     JobState = "failed"     // rejected
 	JobWaiting    JobState = "waiting"    // workflow task, a dependency is unfinished
-	JobCancelled  JobState = "cancelled"  // workflow task, cancelled before it ran
+	// JobCancelled: a workflow task cancelled before it ran, or a job
+	// cancelled by ID (JobCanceller) before or while it ran.
+	JobCancelled JobState = "cancelled"
 )
 
 // JobCounts is how many jobs a queue holds in each Job State right now.
@@ -61,6 +64,9 @@ type JobRecord struct {
 	FinishedAt int64           `json:"finished_at,omitempty"`
 	Attempts   int             `json:"attempts"`
 	Errors     []JobError      `json:"errors,omitempty"`
+	// Result is the JSON a result worker left on a completed job
+	// (ResultAcknowledgeable), verbatim; absent otherwise.
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
 // JobError is one failed attempt of a job. A JobRecord keeps at most the last
@@ -82,9 +88,22 @@ type QueueInspector interface {
 	// QueueStats returns the queue's counts and totals.
 	QueueStats(ctx context.Context) (QueueStats, error)
 	// Jobs returns up to limit jobs in state, skipping the first offset.
-	// Pending jobs come in the order the queue hands them out; completed
-	// and failed jobs newest first.
+	// Pending jobs come in the order the queue hands them out; completed,
+	// failed and cancelled jobs newest first. Storage that keeps cancelled
+	// records in its failed list returns those with state cancelled for
+	// JobCancelled; storage that keeps none returns an empty page.
 	Jobs(ctx context.Context, state JobState, offset, limit int) ([]JobRecord, error)
+}
+
+// ErrJobNotFound is JobReader's answer for an ID it holds no job under.
+var ErrJobNotFound = errors.New("varmq: job not found")
+
+// JobReader is optional for a QueueInspector: read one job by ID, for
+// GET /queues/{id}/jobs/{jobId}.
+type JobReader interface {
+	// Job returns the job with ID id: waiting, running, or ended while
+	// storage keeps its record. ErrJobNotFound when it holds none.
+	Job(ctx context.Context, id string) (JobRecord, error)
 }
 
 // InstanceRecord is what one varmq process reports about itself to shared
