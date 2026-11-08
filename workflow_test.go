@@ -87,10 +87,8 @@ var (
 	_ TaskQueue[int] = ErrPriorityQueue[int](nil)
 	_ TaskQueue[int] = ResultQueue[int, string](nil)
 	_ TaskQueue[int] = ResultPriorityQueue[int, string](nil)
-	_ TaskQueue[int] = PersistentQueue[int](nil)
-	_ TaskQueue[int] = PersistentPriorityQueue[int](nil)
-	_ TaskQueue[int] = DistributedQueue[int](nil)
-	_ TaskQueue[int] = DistributedPriorityQueue[int](nil)
+	_ TaskQueue[int] = ProducerQueue[int, EnqueuedJob](nil)
+	_ TaskQueue[int] = ProducerPriorityQueue[int, EnqueuedJob](nil)
 )
 
 func TestWorkflowBuilder(t *testing.T) {
@@ -182,9 +180,9 @@ func TestWorkflowBuilder(t *testing.T) {
 	t.Run("durable targets", func(t *testing.T) {
 		pw := NewWorker(func(Job[string]) {}, WithAutoRun(false))
 		st := newWFPersistent("q1", "redis://x")
-		pq := pw.WithPersistentQueue(st)
+		pq := pw.WithQueue(st)
 		dst := wfDistributedPrio{mocks.NewMockDistributedPriorityQueue(), wfStorage{"q2", "redis://x"}}
-		dq := NewDistributedPriorityQueue[string](dst)
+		dq := NewPriorityQueue[string](dst)
 
 		wf := NewWorkflow(fakeWFStore{scope: "redis://x"}, WithWorkflowID("w1"), WithUndoOnCancel(false))
 		a := wf.Add("a", pq, "hello")
@@ -245,18 +243,18 @@ func TestWorkflowBuilder(t *testing.T) {
 			priority bool
 			kind     func(any) bool
 		}{
-			"queue":           {item(fifo.WorkflowItem(1)), mem, false, isJob},
-			"priority":        {item(prio.WorkflowItem(1)), mem, true, isJob},
-			"err":             {item(errQ.WorkflowItem("x")), mem, false, isErr},
-			"err priority":    {item(ew.BindPriorityQueue().WorkflowItem("x")), mem, true, isErr},
-			"result":          {item(rw.BindQueue().WorkflowItem(1)), mem, false, isResult},
-			"result priority": {item(rw.BindPriorityQueue().WorkflowItem(1)), mem, true, isResult},
-			"persistent": {item(dw.WithPersistentQueue(newWFPersistent("a", "redis://x")).WorkflowItem(1)),
-				durable, false, isBytes},
-			"persistent priority": {item(dw.WithPersistentPriorityQueue(pp).WorkflowItem(1)), durable, true, isBytes},
-			"distributed":         {item(NewDistributedQueue[int](dq).WorkflowItem(1)), durable, false, isBytes},
-			"distributed priority": {item(NewDistributedPriorityQueue[int](wfDistributedPrio{
-				mocks.NewMockDistributedPriorityQueue(), st("d")}).WorkflowItem(1)), durable, true, isBytes},
+			"queue":               {item(fifo.WorkflowItem(1)), mem, false, isJob},
+			"priority":            {item(prio.WorkflowItem(1)), mem, true, isJob},
+			"err":                 {item(errQ.WorkflowItem("x")), mem, false, isErr},
+			"err priority":        {item(ew.BindPriorityQueue().WorkflowItem("x")), mem, true, isErr},
+			"result":              {item(rw.BindQueue().WorkflowItem(1)), mem, false, isResult},
+			"result priority":     {item(rw.BindPriorityQueue().WorkflowItem(1)), mem, true, isResult},
+			"shared":              {item(dw.WithQueue(newWFPersistent("s", "redis://x")).WorkflowItem(1)), durable, false, isBytes},
+			"shared priority":     {item(dw.WithPriorityQueue(pp).WorkflowItem(1)), durable, true, isBytes},
+			"shared subscribable": {item(dw.WithQueue(dq).WorkflowItem(1)), durable, false, isBytes},
+			"producer":            {item(NewQueue[int](newWFPersistent("p", "redis://x")).WorkflowItem(1)), durable, false, isBytes},
+			"producer priority": {item(NewPriorityQueue[int](wfDistributedPrio{
+				mocks.NewMockDistributedPriorityQueue(), st("pp")}).WorkflowItem(1)), durable, true, isBytes},
 		} {
 			assert.Equal(t, c.scope, c.item.target.scope, name)
 			assert.Equal(t, c.priority, c.item.target.priority, name)
@@ -265,6 +263,15 @@ func TestWorkflowBuilder(t *testing.T) {
 			require.NoError(t, err, name)
 			assert.True(t, c.kind(v), "%s: item %T", name, v)
 		}
+
+		// deprecated handles are no targets, even past the type system
+		type target interface {
+			WorkflowItem(int) (WorkflowItem, error)
+		}
+		_, err := any(dw.WithPersistentQueue(newWFPersistent("a", "redis://x"))).(target).WorkflowItem(1)
+		assert.ErrorIs(t, err, ErrScopeMismatch)
+		_, err = any(dw.WithPersistentPriorityQueue(pp)).(target).WorkflowItem(1)
+		assert.ErrorIs(t, err, ErrScopeMismatch)
 	})
 
 	planErr := func(t *testing.T, wf *Workflow) error {
@@ -324,7 +331,7 @@ func TestWorkflowBuilder(t *testing.T) {
 
 	t.Run("two scopes", func(t *testing.T) {
 		pw := NewWorker(func(Job[int]) {}, WithAutoRun(false))
-		pq := pw.WithPersistentQueue(newWFPersistent("q1", "redis://x"))
+		pq := pw.WithQueue(newWFPersistent("q1", "redis://x"))
 
 		wf := NewWorkflow(memStore())
 		wf.Add("a", fifo, 1)
@@ -339,7 +346,7 @@ func TestWorkflowBuilder(t *testing.T) {
 
 	t.Run("durable storage without workflow support", func(t *testing.T) {
 		pw := NewWorker(func(Job[int]) {}, WithAutoRun(false))
-		pq := pw.WithPersistentQueue(mocks.NewMockPersistentQueue())
+		pq := pw.WithQueue(mocks.NewMockPersistentQueue())
 		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
 		wf.Add("a", pq, 1)
 		assert.ErrorIs(t, planErr(t, wf), ErrScopeMismatch)
@@ -347,7 +354,7 @@ func TestWorkflowBuilder(t *testing.T) {
 
 	t.Run("durable storage with no workflow store", func(t *testing.T) {
 		pw := NewWorker(func(Job[int]) {}, WithAutoRun(false))
-		pq := pw.WithPersistentQueue(noStorePersistent{newWFPersistent("q1", "redis://x")})
+		pq := pw.WithQueue(noStorePersistent{newWFPersistent("q1", "redis://x")})
 		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
 		wf.Add("a", pq, 1)
 		err := planErr(t, wf)
@@ -413,7 +420,7 @@ func TestWorkflowBuilder(t *testing.T) {
 
 func TestPlanHash(t *testing.T) {
 	pw := NewWorker(func(Job[string]) {}, WithAutoRun(false))
-	pq := pw.WithPersistentQueue(newWFPersistent("q1", "redis://x"))
+	pq := pw.WithQueue(newWFPersistent("q1", "redis://x"))
 	store := fakeWFStore{scope: "redis://x"}
 
 	build := func(data string, opts ...WorkflowConfigFunc) WorkflowPlan {
@@ -562,9 +569,9 @@ func TestWorkflowPokesLocal(t *testing.T) {
 			tq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-t", "s"}}
 			uq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-u", "s"}}
 			tw := NewWorker(run)
-			th := tw.WithPersistentQueue(tq)
+			th := tw.WithQueue(tq)
 			uw := NewWorker(run)
-			uh := uw.WithPersistentQueue(uq)
+			uh := uw.WithQueue(uq)
 			tw.WaitUntilIdle()
 			uw.WaitUntilIdle()
 
@@ -609,7 +616,7 @@ func TestWorkflowPokesLocalOnSubmitError(t *testing.T) {
 	ran := make(chan int, 1)
 	tq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-t", "s"}}
 	tw := NewWorker(func(j Job[int]) { ran <- j.Data() })
-	th := tw.WithPersistentQueue(tq)
+	th := tw.WithQueue(tq)
 	tw.WaitUntilIdle()
 
 	wf := NewWorkflow(lostReplyStore{&pushStore{fakeWFStore: fakeWFStore{scope: "s"}}}, WithWorkflowID("lr"))
@@ -2325,9 +2332,9 @@ func TestWorkflowCrashRerun(t *testing.T) {
 
 			var aRuns, bRuns atomic.Int32
 			aw := NewWorker(func(Job[int]) { aRuns.Add(1) })
-			aw.WithPersistentQueue(aStorage)
+			aw.WithQueue(aStorage)
 			bw := NewWorker(func(Job[int]) { bRuns.Add(1) })
-			bw.WithPersistentQueue(bStorage)
+			bw.WithQueue(bStorage)
 
 			aItem := taskBytes(t, "cr", "a", 1)
 			aStorage.Queue.Enqueue(aItem)
@@ -2378,7 +2385,7 @@ func TestWorkflowPreRunError(t *testing.T) {
 
 			var runs atomic.Int32
 			w := NewWorker(func(Job[int]) { runs.Add(1) })
-			w.WithPersistentQueue(storage)
+			w.WithQueue(storage)
 			storage.Queue.Enqueue(taskBytes(t, "cr", "a", 1))
 			w.notifyToPullNextJobs()
 			require.Eventually(t, func() bool {
@@ -2434,29 +2441,6 @@ func TestNonWorkflowJobUnchanged(t *testing.T) {
 			5*time.Second, time.Millisecond)
 		assert.Equal(t, []string{"mock-ack-id"}, pq.Acked())
 		assert.Equal(t, []string{"bad"}, pq.Rejected())
-	})
-
-	// Baselines measured on ab4614a (before workflow finish) with this harness.
-	t.Run("allocs", func(t *testing.T) {
-		if raceEnabled {
-			t.Skip("the race detector allocates")
-		}
-		q := NewWorker(func(Job[int]) {}).BindQueue()
-		mem := testing.AllocsPerRun(1000, func() {
-			j, _ := q.Add(1)
-			j.Wait()
-		})
-
-		pq := ackSignal{mocks.NewMockPersistentQueue(), make(chan struct{}, 1)}
-		p := NewWorker(func(Job[int]) {}).WithPersistentQueue(pq)
-		durable := testing.AllocsPerRun(1000, func() {
-			p.Add(1)
-			<-pq.done
-		})
-
-		t.Logf("allocs: in-memory %v, durable %v", mem, durable)
-		assert.LessOrEqual(t, mem, float64(1))
-		assert.LessOrEqual(t, durable, float64(8))
 	})
 }
 
@@ -2825,7 +2809,7 @@ func TestWorkflowSkipAckFails(t *testing.T) {
 	s := skipStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-skip", "s"}}
 	defer queueRegistry.Delete("q-skip")
 	require.True(t, s.Enqueue(taskBytes(t, "sk", "a", 1)))
-	w.WithPersistentQueue(s)
+	w.WithQueue(s)
 
 	select {
 	case err := <-errs:

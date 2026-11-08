@@ -6,8 +6,9 @@ import (
 )
 
 // TaskQueue is a queue handle a workflow task targets: every handle varmq
-// returns (Queue, PriorityQueue, their Err and Result kinds, persistent and
-// distributed ones). T is the job data type, so Add checks q and data
+// returns (Queue, PriorityQueue, their Err and Result kinds, in memory or
+// on shared storage via WithQueue / WithPriorityQueue and the producer
+// NewQueue / NewPriorityQueue kinds). T is the job data type, so Add checks q and data
 // together at compile time:
 //
 //	wf.Add("thumb", thumbQ, Thumb{Size: 64}) // thumbQ: Queue[Thumb]
@@ -146,7 +147,7 @@ func resultTaskJob[T, R any](data T) func(string) (any, *job[T]) {
 	}
 }
 
-// durableWorkflowItem is a WorkflowItem of persistent or distributed
+// durableWorkflowItem is a WorkflowItem of shared (acknowledgeable)
 // storage, which must finish workflow tasks itself.
 func durableWorkflowItem[T any](storage any, priority bool, data T) (WorkflowItem, error) {
 	qi, inspectable := storage.(QueueInspector)

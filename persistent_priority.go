@@ -1,7 +1,6 @@
 package varmq
 
 type PersistentPriorityQueue[T any] interface {
-	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -47,8 +46,9 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 	return true
 }
 
-// WorkflowItem overrides the embedded in-memory queue's: the
-// storage finishes and promotes tasks (workflow_target.go).
-func (q *persistentPriorityQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
-	return durableWorkflowItem(q.internalQueue, true, data)
+// WorkflowItem refuses: a deprecated handle is no workflow target (it
+// would otherwise promote the embedded in-memory queue's). Bind the storage
+// with WithQueue / WithPriorityQueue.
+func (q *persistentPriorityQueue[T]) WorkflowItem(T) (WorkflowItem, error) {
+	return WorkflowItem{}, errDeprecatedTarget
 }

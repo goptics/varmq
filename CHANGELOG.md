@@ -6,7 +6,7 @@
 
 - **`go` directive 1.27** (workflows): `wf.Add` and `Task.Undo` are generic methods, new in Go 1.27. Users build with Go 1.27+.
 
-- **Queue handles gain `WorkflowItem(data) (WorkflowItem, error)`**: every exported queue handle interface (`Queue`, `PriorityQueue`, `PersistentQueue`, `DistributedQueue`, result and err variants) has it, so `wf.Add` type-checks queue and data together. Breaks only code that implements these interfaces itself (mocks).
+- **Queue handles gain `WorkflowItem(data) (WorkflowItem, error)`**: every exported queue handle interface (`Queue`, `PriorityQueue`, result and err variants, `ProducerQueue`, `ProducerPriorityQueue`) has it, so `wf.Add` type-checks queue and data together. Breaks only code that implements these interfaces itself (mocks). Deprecated `PersistentQueue` / `DistributedQueue` handles are no workflow targets: bind the storage with `WithQueue`.
 
 - **`EnqueuedJob` gains `WaitContext(ctx) error`** (so `EnqueuedErrJob`, `EnqueuedResultJob` too): every job handle, in-memory or remote, can wait with a deadline. Breaks only code that implements these interfaces itself (mocks).
 

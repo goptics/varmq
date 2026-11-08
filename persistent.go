@@ -1,8 +1,12 @@
 package varmq
 
+import "fmt"
+
 // PersistentQueue is an interface that extends Queue to support persistent job operations
+// errDeprecatedTarget: deprecated handles are no workflow targets.
+var errDeprecatedTarget = fmt.Errorf("%w: deprecated queue handle; bind with WithQueue", ErrScopeMismatch)
+
 type PersistentQueue[T any] interface {
-	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
 
 	// Worker returns the bound worker.
@@ -53,8 +57,9 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 	return true
 }
 
-// WorkflowItem overrides the embedded in-memory queue's: the
-// storage finishes and promotes tasks (workflow_target.go).
-func (q *persistentQueue[T]) WorkflowItem(data T) (WorkflowItem, error) {
-	return durableWorkflowItem(q.internalQueue, false, data)
+// WorkflowItem refuses: a deprecated handle is no workflow target (it
+// would otherwise promote the embedded in-memory queue's). Bind the storage
+// with WithQueue / WithPriorityQueue.
+func (q *persistentQueue[T]) WorkflowItem(T) (WorkflowItem, error) {
+	return WorkflowItem{}, errDeprecatedTarget
 }

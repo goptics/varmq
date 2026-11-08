@@ -65,7 +65,7 @@ type queuePoker struct {
 
 // localPokers holds, per Queue ID, the weak pokers of this process's
 // workers bound to that queue: FinishTask names the queues it pushed into,
-// and only distributed ones wake their consumers themselves. The worker
+// and only subscribable storage wakes its consumers itself. The worker
 // holds each poker (pokers), so binding never keeps a worker alive.
 // ponytail: an emptied per-ID set stays, as queueIDs does.
 var localPokers sync.Map // queueID → *sync.Map[weak.Pointer[queuePoker]]struct{}

@@ -379,7 +379,7 @@ func (wf *Workflow) Submit(ctx context.Context) error {
 		return err
 	}
 
-	// Durable storage wakes only its distributed consumers. Woken on error
+	// Shared storage wakes only its subscribed consumers. Woken on error
 	// too: the store may have committed before the reply was lost.
 	var roots []string
 	for _, tp := range p.Tasks {
