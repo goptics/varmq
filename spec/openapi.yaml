@@ -299,9 +299,10 @@ paths:
         started during the read is answered `processing`, one closed or
         ended then is 404. A job a worker took into a batch behind a running job is in
         neither place until it starts, however long the job ahead runs:
-        404 for both routes, and it still runs. Running jobs are tracked
-        from when the process builds its REST handler; one already running
-        then is 404 until it ends.
+        404 for both routes, and it still runs; so is one parked by a worker
+        Pause or Stop. Running jobs are tracked from when the process builds
+        its REST handler and the queue's worker is listed (started under its
+        name); one already running then is 404 until it ends.
       responses:
         "200":
           description: The job.
@@ -353,8 +354,10 @@ paths:
         and tells every process that consumes the queue (spec
         redis-storage.md 6.14). It cannot tell a waiting job from an unknown
         ID, so an unknown ID is 202 there; only an in-memory queue answers
-        404. Protect it at least as well as the worker routes, and
-        rate-limit untrusted callers.
+        404. A waiting workflow task on shared storage answers 202 but still
+        runs: stop it with `PATCH /workflows/{id}/actions/cancel`. Protect
+        it at least as well as the worker routes, and rate-limit untrusted
+        callers.
       responses:
         "202":
           description: Cancel requested. The body is empty.
