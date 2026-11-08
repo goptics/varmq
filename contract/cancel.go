@@ -15,10 +15,12 @@ type JobCanceller interface {
 	// stops it if it watches its context. ErrJobEnded when its record shows
 	// it ended. Each mark expires 24 h after its request. Storage can't tell
 	// a waiting job from an unknown ID: authorize and rate-limit untrusted
-	// callers. A workflow item (envelope with wf) is never dropped at pop:
-	// pop alone can't end its workflow, so it is handed out and its mark
-	// stays. Cancel a waiting workflow task with Workflow.Cancel; CancelJob
-	// still reaches a running one through CancelNotifier.
+	// callers. On storage with workflows, a valid workflow item (spec
+	// section 3, id wf:<wf>:<task>[:undo]) is never dropped at pop: pop
+	// alone can't end its workflow, so it is handed out, its mark stays and
+	// the pre-run check ends it. Any other item is checked as a plain job.
+	// Cancel a waiting workflow task with Workflow.Cancel; CancelJob still
+	// reaches a running one through CancelNotifier.
 	CancelJob(id string) error
 }
 

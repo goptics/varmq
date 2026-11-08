@@ -997,7 +997,7 @@ func TestContextOutsideRun(t *testing.T) {
 }
 
 // cancelStore is sharedStore with cancel by ID, as redisq does it: a mark
-// that drops the job at pop (not a workflow item), a notice to consumers, a
+// that drops the job at pop (no workflow store: wf gets no exception), a notice to consumers, a
 // cancelled finish; a re-add clears the id's mark and outcome (spec 6.13,
 // 6.14 Re-add).
 type cancelStore struct {
@@ -1067,12 +1067,8 @@ func (c *cancelStore) DequeueWithAckId() (any, bool, string) {
 		}
 		var env struct {
 			ID string `json:"id"`
-			WF string `json:"wf"`
 		}
 		_ = json.Unmarshal(v.([]byte), &env)
-		if env.WF != "" { // a workflow item is handed out: Workflow.Cancel stops it
-			return v, ok, ack
-		}
 		c.cmu.Lock()
 		drop := c.marked[env.ID]
 		delete(c.marked, env.ID)
