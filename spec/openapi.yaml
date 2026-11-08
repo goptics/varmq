@@ -246,11 +246,12 @@ paths:
         separately, so jobs that change state between two requests can be
         skipped or repeated.
 
-        An in-memory queue leaves out a pending job that was closed, or
-        started, by the end of its read, so a page can be short. A job that
-        starts while its data is being read can be read while its worker
-        writes `Data()`: don't mutate `Data()` in place if you use the job
-        routes.
+        An in-memory queue lists only waiting jobs: one closed while it
+        waits, or started by the end of its read, is left out, `offset`
+        counts waiting jobs only, and a page fills up to `limit`, so a
+        short page means the end. A job that starts while its data is being
+        read can be read while its worker writes `Data()`: don't mutate
+        `Data()` in place if you use the job routes.
 
         `cancelled` since 1.4.0. Storage that keeps cancelled records with
         its failed ones (redisq, spec redis-storage.md 6.14) lists them under
