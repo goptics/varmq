@@ -1521,3 +1521,88 @@ func within[T any](t *testing.T, ch <-chan T) T {
 		return zero
 	}
 }
+
+// A job that starts during its read (its MarshalJSON resumes the worker,
+// and the start does not wait on the read) is answered running with no
+// payload, and left off the pending page: FIFO (Values) and priority (Page).
+func TestMuxJobStartDuringRead(t *testing.T) {
+	for _, mode := range []string{"job", "fifo", "priority"} {
+		started := make(chan struct{})
+		w := NewWorker(func(j Job[hookData]) {
+			close(started)
+			<-j.Context().Done()
+		}, WithName("job-rest-start-read"))
+		t.Cleanup(func() { w.Stop() })
+		require.NoError(t, w.Pause())
+		var once sync.Once
+		data := hookData{M: map[string]int{"a": 1}}
+		data.onMarshal = func() {
+			once.Do(func() {
+				require.NoError(t, w.Resume())
+				within(t, started) // the start does not wait on the read
+			})
+		}
+
+		var m *memQueue
+		var j EnqueuedJob
+		var ok bool
+		if mode == "priority" {
+			pq := w.BindPriorityQueue()
+			m = pq.(*priorityQueue[hookData]).totals
+			j, ok = pq.Add(data, 0, WithJobId("s"))
+		} else {
+			q := w.BindQueue()
+			m = q.(*queue[hookData]).totals
+			j, ok = q.Add(data, WithJobId("s"))
+		}
+		require.True(t, ok)
+
+		path, want := "/jobs/s", `{"id":"s","state":"processing","payload":null,"attempts":1}`
+		if mode != "job" {
+			path, want = "/jobs?state=pending", `[]`
+		}
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+path, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.JSONEq(t, want, rr.Body.String(), mode)
+
+		require.NoError(t, j.Cancel())
+		ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+		require.NoError(t, j.WaitContext(ctx))
+		stop()
+		w.Stop()
+	}
+}
+
+// Two jobs under one ID: the waiting one closed mid-read is passed over,
+// and the running one answers.
+func TestMuxJobCloseDuringReadFindsRun(t *testing.T) {
+	started := make(chan struct{}, 1)
+	w := NewWorker(func(j Job[hookData]) {
+		started <- struct{}{}
+		<-j.Context().Done()
+	}, WithName("job-rest-two-runs"), 1)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := q.(*queue[hookData]).totals
+	get, cancel := jobRoutes(t)
+
+	run, _ := q.Add(hookData{M: map[string]int{"r": 1}}, WithJobId("d"))
+	within(t, started)
+	var second EnqueuedJob
+	var once sync.Once
+	data := hookData{M: map[string]int{"w": 1}}
+	data.onMarshal = func() { once.Do(func() { require.NoError(t, second.Close()) }) }
+	second, ok := q.Add(data, WithJobId("d")) // the first left the queue: allowed
+	require.True(t, ok)
+
+	rr := get(m.QueueID(), "d")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"d","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
+	assert.True(t, second.IsClosed())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "d").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, run.WaitContext(ctx))
+}
