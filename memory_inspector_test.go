@@ -214,6 +214,12 @@ func TestMemQueueNameTakeover(t *testing.T) {
 	assert.False(t, listed, "a's queue left with a's name")
 	_, listed = queueRegistry.Load(idB)
 	assert.True(t, listed)
+
+	// a binds while b holds the name: not listed until a takes it back
+	ma := memOf(t, a.BindQueue())
+	assert.False(t, ma.listed.Load())
+	require.NoError(t, a.Restart())
+	assert.True(t, ma.listed.Load(), "Start re-lists with run tracking")
 }
 
 // Acknowledging storage is shared storage: WithQueue binds it durable (JSON

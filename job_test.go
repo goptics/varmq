@@ -1351,6 +1351,7 @@ func TestCancelWatchSkipsUnlistedInMemoryJobs(t *testing.T) {
 }
 
 func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
+	NewServerMux() // tracking needs a REST mux
 	started := make(chan string, 1)
 	unnamed := NewWorker(blockOnCancel(started))
 	defer unnamed.Stop()
@@ -1387,6 +1388,68 @@ func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
 	assert.ErrorIs(t, m.CancelJob("r"), ErrJobNotFound, "ended jobs are not kept")
 	_, err = m.Job(ctx, "r")
 	assert.ErrorIs(t, err, ErrJobNotFound)
+}
+
+// A job closed while it waits in a batch is tracked, skipped, and untracked.
+func TestInMemorySkippedBatchJobUntracked(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-skip"), 1)
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	require.NoError(t, w.Pause())
+	q.Add(1, WithJobId("a"))
+	jb, _ := q.Add(2, WithJobId("b"))
+	require.NoError(t, w.Resume()) // one batch: b waits behind a
+	require.Equal(t, "a", <-started)
+	require.NoError(t, jb.Close())
+	require.NoError(t, m.CancelJob("a"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, w.WaitContext(ctx))
+
+	m.runMu.Lock()
+	assert.Empty(t, m.running)
+	assert.Empty(t, m.extra)
+	m.runMu.Unlock()
+	assert.ErrorIs(t, m.CancelJob("b"), ErrJobNotFound)
+}
+
+// Two live runs under one ID are tracked apart: the first ending leaves
+// the second readable and cancellable.
+func TestInMemoryDuplicateIDRunsTrackedApart(t *testing.T) {
+	NewServerMux()
+	started := make(chan int, 2)
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		started <- j.Data()
+		if j.Data() == 1 {
+			<-release
+			return
+		}
+		<-j.Context().Done()
+	}, WithName("tracked-dup"), 2)
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	q.Add(1, WithJobId("d"))
+	require.Equal(t, 1, <-started)
+	run2, ok := q.Add(2, WithJobId("d")) // the first left the queue: allowed
+	require.True(t, ok)
+	require.Equal(t, 2, <-started)
+	close(release)
+	require.Eventually(t, func() bool { return len(m.runsOf("d")) == 1 }, time.Second, time.Millisecond)
+
+	rec, err := m.Job(context.Background(), "d")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	require.NoError(t, m.CancelJob("d"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	assert.NoError(t, run2.WaitContext(ctx))
 }
 
 // cancelOnly can cancel by ID but reports no outcomes.

@@ -1206,7 +1206,7 @@ func TestMuxJobInMemory(t *testing.T) {
 
 	rr := get(m.QueueID(), "run")
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.JSONEq(t, `{"id":"run","state":"processing","payload":7,"attempts":1}`, rr.Body.String())
+	assert.JSONEq(t, `{"id":"run","state":"processing","payload":null,"attempts":1}`, rr.Body.String(), "a running job's data is not read")
 	rr = get(m.QueueID(), "wait")
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	assert.JSONEq(t, `{"id":"wait","state":"pending","payload":8,"attempts":0}`, rr.Body.String())
@@ -1327,11 +1327,121 @@ func TestMuxJobRunByAnotherWorker(t *testing.T) {
 	}
 	rr := get(m.QueueID(), "x")
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.JSONEq(t, `{"id":"x","state":"processing","payload":5,"attempts":1}`, rr.Body.String())
+	assert.JSONEq(t, `{"id":"x","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
 
 	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "x").Code)
 	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
 	defer stop()
 	require.NoError(t, j.WaitContext(ctx), "the runner's job saw the cancel")
 	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "x").Code)
+}
+
+// A running job's data is never read: its worker writes a map while GETs
+// come in (-race, and a fatal concurrent map access if it were read).
+func TestMuxJobRunningPayloadNotRead(t *testing.T) {
+	started := make(chan struct{})
+	w := NewWorker(func(j Job[map[string]int]) {
+		close(started)
+		d := j.Data()
+		for i := 0; j.Context().Err() == nil; i++ {
+			d[strconv.Itoa(i%64)] = i
+		}
+	}, WithName("job-rest-map"))
+	defer w.Stop()
+	q := w.BindQueue()
+	m := q.(*queue[map[string]int]).totals
+	get, cancel := jobRoutes(t)
+
+	j, _ := q.Add(map[string]int{"a": 1}, WithJobId("m"))
+	<-started
+	for range 200 {
+		rr := get(m.QueueID(), "m")
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		require.JSONEq(t, `{"id":"m","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
+	}
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "m").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, j.WaitContext(ctx))
+}
+
+// A job held in a batch behind a running one is in neither the queue nor
+// the run index: 404 for both routes until it starts, and it still runs.
+func TestMuxJobInBatch(t *testing.T) {
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("job-rest-batch"), 1)
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+	get, cancel := jobRoutes(t)
+
+	require.NoError(t, w.Pause())
+	a, _ := q.Add(1, WithJobId("a"))
+	b, _ := q.Add(2, WithJobId("b"))
+	require.NoError(t, w.Resume()) // one batch: a runs, b waits behind it
+	require.Equal(t, "a", <-started)
+
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "b").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "b").Code)
+	assert.Equal(t, "Queued", b.Status())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "a").Code)
+	a.Wait()
+	require.Equal(t, "b", <-started, "b still runs")
+	assert.Equal(t, http.StatusOK, get(m.QueueID(), "b").Code)
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "b").Code)
+	b.Wait()
+}
+
+// A job added through another handle on the same storage is not this
+// queue's: 404 through it, found through its own.
+func TestMuxJobOtherHandleNotFound(t *testing.T) {
+	shared := queues.NewQueue[any]()
+	w1 := NewWorker(func(Job[int]) {}, WithName("job-rest-h1"))
+	w2 := NewWorker(func(Job[int]) {}, WithName("job-rest-h2"))
+	defer w1.Stop()
+	defer w2.Stop()
+	m1, q2 := memOf(t, w1.WithQueue(shared)), w2.WithQueue(shared)
+	m2 := memOf(t, q2)
+	require.NoError(t, w1.Pause())
+	require.NoError(t, w2.Pause())
+	get, cancel := jobRoutes(t)
+
+	j2, _ := q2.Add(1, WithJobId("only2"))
+	assert.Equal(t, http.StatusNotFound, get(m1.QueueID(), "only2").Code)
+	assert.Equal(t, http.StatusOK, get(m2.QueueID(), "only2").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(m1.QueueID(), "only2").Code)
+	assert.Equal(t, "Queued", j2.Status())
+}
+
+// Storage that rejects state=cancelled (older than openapi 1.4.0) gets an
+// empty page while it still serves failed; a storage that is down is 500.
+type noCancelledState struct{ plainInspector }
+
+func (noCancelledState) QueueID() string { return "custom:no-cancelled" }
+func (noCancelledState) Jobs(_ context.Context, s JobState, _, _ int) ([]JobRecord, error) {
+	if s == JobCancelled {
+		return nil, errors.New(`unknown job state "cancelled"`)
+	}
+	return nil, nil
+}
+
+func TestMuxJobsCancelledRejected(t *testing.T) {
+	queueRegistry.Store("custom:no-cancelled", noCancelledState{})
+	queueRegistry.Store("custom:down", &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "custom:down", err: errors.New("down")})
+	defer queueRegistry.Delete("custom:no-cancelled")
+	defer queueRegistry.Delete("custom:down")
+	server := NewServerMux()
+	list := func(id string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+id+"/jobs?state=cancelled", nil))
+		return rr
+	}
+
+	rr := list("custom:no-cancelled")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "[]\n", rr.Body.String())
+	rr = list("custom:down")
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.JSONEq(t, `{"error":"down"}`, rr.Body.String())
 }
