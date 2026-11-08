@@ -538,7 +538,12 @@ func (j *job[T]) acknowledge() error {
 	} else if reason, failed := failReason(ref.ext); failed {
 		ok = ref.q.Reject(ref.id, reason)
 	} else if ra, has := ref.q.(ResultAcknowledgeable); has && ref.ext != nil && ref.ext.result != nil {
-		ok = ra.AcknowledgeResult(ref.id, ref.ext.result)
+		// A result storage refuses (e.g. JSON its decoder can't take) must
+		// not keep the job unacked, redelivered forever: complete it
+		// without (ErrNoResult).
+		if ok = ra.AcknowledgeResult(ref.id, ref.ext.result); !ok {
+			ok = ref.q.Acknowledge(ref.id)
+		}
 	} else {
 		ok = ref.q.Acknowledge(ref.id)
 	}

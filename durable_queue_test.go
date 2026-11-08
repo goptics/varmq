@@ -216,8 +216,7 @@ func TestWithPriorityQueueSharedGroup(t *testing.T) {
 
 	got := map[int]bool{}
 	fails := 0
-	for range 3 {
-		r := <-g.Results()
+	for r := range g.Results() { // closes when the group ended
 		if r.Err != nil {
 			fails++
 			continue
@@ -296,4 +295,56 @@ func TestRemoteJobCloseAndContext(t *testing.T) {
 	require.NoError(t, j.Close())
 	assert.ErrorIs(t, j.Err(), ErrDetached)
 	assert.True(t, j.IsClosed())
+}
+
+func TestPurgeDetachesHandles(t *testing.T) {
+	s := newSharedStore()
+	w := NewErrWorker(func(Job[int]) error { return nil })
+	q := w.WithQueue(s)
+	w.Pause() // nothing runs: the job stays queued
+	defer w.Stop()
+
+	j, ok := q.Add(1)
+	require.True(t, ok)
+	q.Purge()
+	assert.ErrorIs(t, j.Err(), ErrDetached)
+}
+
+// refusing refuses every AcknowledgeResult, as Redis's cjson refuses JSON
+// nested past 1000 levels.
+type refusing struct{ *sharedStore }
+
+func (refusing) AcknowledgeResult(string, []byte) bool { return false }
+
+func TestRefusedResultStillCompletes(t *testing.T) {
+	s := refusing{newSharedStore()}
+	w := NewResultWorker(func(Job[int]) (int, error) { return 1, nil })
+	defer w.Stop()
+
+	j, _ := w.WithQueue(s).Add(1)
+	_, err := j.Result()
+	assert.ErrorIs(t, err, ErrNoResult)
+}
+
+func TestGivenIDWatchesAfterPush(t *testing.T) {
+	s := newSharedStore()
+	s.outcomes["x"] = JobOutcome{ID: "x", State: JobFailed, Error: "old run"}
+	clearing := &clearOnPush{s}
+	p := NewQueue[int](clearing)
+	j, _ := p.Add(1, WithJobId("x"))
+
+	w := NewErrWorker(func(Job[int]) error { return nil })
+	defer w.Stop()
+	w.WithQueue(clearing)
+	assert.NoError(t, j.Err(), "not the old run's failure")
+}
+
+// clearOnPush drops an id's old outcome on a push with it, as spec 6.13 asks.
+type clearOnPush struct{ *sharedStore }
+
+func (c *clearOnPush) EnqueueOnce(item any, id string) bool {
+	c.mu.Lock()
+	delete(c.outcomes, id)
+	c.mu.Unlock()
+	return c.push(item, 0)
 }

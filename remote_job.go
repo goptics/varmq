@@ -42,12 +42,13 @@ type remoteJob[R any] struct {
 	out    JobOutcome
 	err    error // ErrDetached: no outcome will come
 	cancel func()
+	onEnd  func(*remoteJob[R]) // set before the watch; runs once, at the end
 }
 
 // watchRemote is the handle of job id on storage s: watched when s reports
-// outcomes, detached otherwise.
-func watchRemote[R any](s any, id string) *remoteJob[R] {
-	j := &remoteJob[R]{id: id, done: make(chan struct{})}
+// outcomes, detached otherwise. onEnd, if any, runs once at its end.
+func watchRemote[R any](s any, id string, onEnd func(*remoteJob[R])) *remoteJob[R] {
+	j := &remoteJob[R]{id: id, done: make(chan struct{}), onEnd: onEnd}
 
 	ow, ok := s.(OutcomeWatcher)
 	if !ok || id == "" {
@@ -63,6 +64,9 @@ func (j *remoteJob[R]) end(o JobOutcome, err error) {
 	j.once.Do(func() {
 		j.out, j.err = o, err
 		close(j.done)
+		if j.onEnd != nil {
+			j.onEnd(j)
+		}
 	})
 }
 
@@ -159,7 +163,7 @@ func DecodeResult[R any](o JobOutcome) (R, error) { return decodeOutcome[R](o, n
 // producer, another service. A job that ended earlier is found while s
 // keeps its record.
 func WaitJob(ctx context.Context, s OutcomeWatcher, id string) (JobOutcome, error) {
-	j := watchRemote[struct{}](s, id)
+	j := watchRemote[struct{}](s, id, nil)
 	defer j.Close()
 	return j.Outcome(ctx)
 }
@@ -206,23 +210,35 @@ func (g *remoteGroup[R]) track(j *remoteJob[R]) {
 	}()
 }
 
+// seal closes both channels once every tracked job ended, as an in-memory
+// group's channel closes, so a range over them ends. Called after the last
+// track.
+func (g *remoteGroup[R]) seal() {
+	go func() {
+		g.wg.Wait()
+		close(g.errs)
+		close(g.results)
+	}()
+}
+
 func (g *remoteGroup[R]) NumPending() int { return int(g.n.Load()) }
 func (g *remoteGroup[R]) Wait()           { g.wg.Wait() }
 
-// Errs gets each failed item's error (*RemoteError or ErrDetached).
+// Errs gets each failed item's error (*RemoteError or ErrDetached); closed
+// when the group ended.
 func (g *remoteGroup[R]) Errs() <-chan error { return g.errs }
 
-// Results gets every item's Result.
+// Results gets every item's Result; closed when the group ended.
 func (g *remoteGroup[R]) Results() <-chan Result[R] { return g.results }
 
-// Drain empties both channels.
+// Drain discards what both channels get, until they close.
 func (g *remoteGroup[R]) Drain() {
-	for {
-		select {
-		case <-g.errs:
-		case <-g.results:
-		default:
-			return
+	go func() {
+		for range g.errs {
 		}
-	}
+	}()
+	go func() {
+		for range g.results {
+		}
+	}()
 }

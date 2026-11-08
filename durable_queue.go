@@ -1,5 +1,7 @@
 package varmq
 
+import "sync"
+
 // Durable handles: what WithQueue and WithPriorityQueue return for
 // acknowledgeable storage (redisq, sqliteq, custom), and what NewQueue and
 // NewPriorityQueue return for producers. Jobs go out as JSON; Add returns a
@@ -16,6 +18,7 @@ type durableBase[T, R any] struct {
 	s    IBaseQueue // IPersistentQueue or IPersistentPriorityQueue
 	poke func()     // a batch source's ready hint; nil otherwise
 	cfg  func() configs
+	live *sync.Map // *remoteJob -> struct{}: handles not ended yet, for Purge
 }
 
 // bindDurable binds w to s: woken by notifications when s is ISubscribable,
@@ -32,6 +35,7 @@ func bindDurable[T, R any, J iJob[T]](w *worker[T, J], s IBaseQueue, configs []Q
 		s:                 s,
 		poke:              pokeOf(src),
 		cfg:               w.configs,
+		live:              &sync.Map{},
 	}
 }
 
@@ -41,6 +45,7 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 		externalBaseQueue: newExternalQueue(s, nil, loadQueueConfigs(configs...), nil),
 		s:                 s,
 		cfg:               newConfig,
+		live:              &sync.Map{},
 	}
 }
 
@@ -58,10 +63,29 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 		return nil, false
 	}
 
-	rj := watchRemote[R](d.s, j.id) // before the push: never miss a fast outcome
+	// A generated ID is new: watch before the push, so a fast outcome is
+	// never missed. A given ID may name an earlier run whose record the
+	// push clears (spec 6.13): watch after it, or the catch-up read could
+	// report that run.
+	var rj *remoteJob[R]
+	watch := func() {
+		rj = watchRemote(d.s, j.id, func(e *remoteJob[R]) { d.live.Delete(e) })
+		d.live.Store(rj, struct{}{})
+		if rj.IsClosed() { // ended before the Store: its Delete already ran
+			d.live.Delete(rj)
+		}
+	}
+	if !c.given {
+		watch()
+	}
 	if !push(val, c.onceId(j.id)) {
-		rj.Close()
+		if rj != nil {
+			rj.Close()
+		}
 		return nil, false
+	}
+	if c.given {
+		watch()
 	}
 
 	if d.poke != nil {
@@ -72,6 +96,19 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 	}
 
 	return rj, true
+}
+
+// Purge drops the waiting jobs and detaches this handle's live job
+// handles (ErrDetached): a purged job never ends on its storage, so its Wait
+// would block for good. WaitJob still sees jobs that do end.
+// ponytail: storage does not say which jobs it dropped, so running jobs'
+// handles detach too; per-ID purge if that matters.
+func (d durableBase[T, R]) Purge() {
+	d.externalBaseQueue.Purge()
+	d.live.Range(func(k, _ any) bool {
+		_ = k.(*remoteJob[R]).Close()
+		return true
+	})
 }
 
 func (d durableBase[T, R]) addAll(items []Item[T], push func(it Item[T], val []byte, onceID string) bool) *remoteGroup[R] {
@@ -85,6 +122,7 @@ func (d durableBase[T, R]) addAll(items []Item[T], push func(it Item[T], val []b
 			g.track(j)
 		}
 	}
+	g.seal()
 	return g
 }
 
