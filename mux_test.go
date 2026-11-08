@@ -1416,7 +1416,9 @@ func TestMuxJobIDEscaping(t *testing.T) {
 			require.True(t, ok)
 			rr := do("GET", id, "")
 			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-			assert.Equal(t, id, mustJob(t, rr).ID)
+			var r JobRecord
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &r))
+			assert.Equal(t, id, r.ID)
 			assert.Equal(t, http.StatusAccepted, do("PATCH", id, "/actions/cancel").Code)
 			assert.True(t, j.IsClosed())
 		})
@@ -1435,13 +1437,6 @@ func TestMuxJobIDEscaping(t *testing.T) {
 		assert.Equal(t, http.StatusTemporaryRedirect, rr.Code, c.id)
 		assert.Equal(t, c.cancel, rr.Header().Get("Location"), c.id)
 	}
-}
-
-func mustJob(t *testing.T, rr *httptest.ResponseRecorder) JobRecord {
-	t.Helper()
-	var r JobRecord
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &r))
-	return r
 }
 
 // Two workers on one storage: a job added through the named worker's
