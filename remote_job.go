@@ -22,17 +22,9 @@ type RemoteError struct{ Reason string }
 
 func (e *RemoteError) Error() string { return e.Reason }
 
-// RemoteJob is a job added to shared storage: any process may run it, and
-// the handle learns the outcome from the storage (OutcomeWatcher). The
-// handles of WithQueue on shared storage implement it too.
-type RemoteJob interface {
-	EnqueuedErrJob
-	// WaitContext is Wait that gives up when ctx ends.
-	WaitContext(ctx context.Context) error
-}
-
-// remoteJob is the handle of a job on shared storage. R decodes a result
-// worker's result.
+// remoteJob is the handle of a job on shared storage: any process may run
+// it, and the handle learns the outcome from the storage (OutcomeWatcher).
+// It is every Enqueued*Job kind; R decodes a result worker's result.
 type remoteJob[R any] struct {
 	id     string
 	done   chan struct{}
@@ -147,11 +139,12 @@ func decodeOutcome[R any](o JobOutcome, err error) (R, error) {
 }
 
 // OpenJob is the handle of job id on s from any process (a restarted
-// producer, another service), the same handle Add returns: WaitContext,
-// Err, and Result decoding a ResultWorker's R (use any for other workers).
+// producer, another service): WaitContext, and Result, which decodes a
+// ResultWorker's R and returns the job's error (*RemoteError) for any
+// worker kind (use any as R for Worker / ErrWorker jobs).
 // A job that ended earlier is found while s keeps its record. Close it to
 // stop waiting on a job that may never end.
-func OpenJob[R any](s OutcomeWatcher, id string) RemoteResultJob[R] {
+func OpenJob[R any](s OutcomeWatcher, id string) EnqueuedResultJob[R] {
 	return watchRemote[R](s, id, nil)
 }
 

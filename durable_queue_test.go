@@ -142,8 +142,8 @@ var (
 	_ ISubscribable               = (*sharedStore)(nil)
 	_ OutcomeWatcher              = (*sharedStore)(nil)
 	_ ResultAcknowledgeable       = (*sharedStore)(nil)
-	_ RemoteJob                   = (*remoteJob[int])(nil)
 	_ EnqueuedResultJob[int]      = (*remoteJob[int])(nil)
+	_ EnqueuedJob                 = (*job[int])(nil) // WaitContext in memory too
 	_ EnqueuedResultGroupJob[int] = (*remoteGroup[int])(nil)
 	_ EnqueuedErrGroupJob         = (*remoteGroup[int])(nil)
 )
@@ -161,7 +161,7 @@ func TestWithQueueSharedWorker(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	require.NoError(t, j.(RemoteJob).WaitContext(ctx))
+	require.NoError(t, j.WaitContext(ctx))
 	assert.Equal(t, 7, <-ran)
 	assert.Equal(t, "Closed", j.Status())
 }
@@ -235,7 +235,7 @@ func TestResultTooLargeHasNoResult(t *testing.T) {
 	j, _ := w.WithQueue(s).Add(1)
 	_, err := j.Result()
 	assert.ErrorIs(t, err, ErrNoResult)
-	assert.NoError(t, j.(RemoteJob).Err(), "the job still completed")
+	assert.NoError(t, j.(EnqueuedErrJob).Err(), "the job still completed")
 }
 
 func TestStorageWithoutResultAck(t *testing.T) {
@@ -250,7 +250,7 @@ func TestStorageWithoutResultAck(t *testing.T) {
 
 func TestProducerAndOpenJob(t *testing.T) {
 	s := newSharedStore()
-	p := NewQueue[int](s)
+	p := NewResultQueue[int, int](s)
 	j, ok := p.Add(4, WithJobId("job-4"))
 	require.True(t, ok)
 	assert.Equal(t, "job-4", j.ID())
@@ -263,7 +263,9 @@ func TestProducerAndOpenJob(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	require.NoError(t, j.WaitContext(ctx))
-	require.NoError(t, j.Err())
+	got, err := j.Result()
+	require.NoError(t, err)
+	assert.Equal(t, 40, got)
 
 	// another waiter, by ID, after the end: typed result
 	r, err := OpenJob[int](s, "job-4").Result()
@@ -281,7 +283,7 @@ func TestProducerAndOpenJob(t *testing.T) {
 func TestDetachedWithoutWatcher(t *testing.T) {
 	s := newSharedStore()
 	type plain struct{ IPersistentQueue } // no OutcomeWatcher
-	p := NewQueue[int](plain{s})
+	p := NewErrQueue[int](plain{s})
 	j, ok := p.Add(1)
 	require.True(t, ok)
 	assert.Empty(t, j.ID(), "no watcher: no generated ID")
@@ -290,7 +292,7 @@ func TestDetachedWithoutWatcher(t *testing.T) {
 
 func TestRemoteJobCloseAndContext(t *testing.T) {
 	s := newSharedStore()
-	j, _ := NewQueue[int](s).Add(1) // no consumer
+	j, _ := NewErrQueue[int](s).Add(1) // no consumer
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -334,7 +336,7 @@ func TestGivenIDWatchesAfterPush(t *testing.T) {
 	s := newSharedStore()
 	s.outcomes["x"] = JobOutcome{ID: "x", State: JobFailed, Error: "old run"}
 	clearing := &clearOnPush{s}
-	p := NewQueue[int](clearing)
+	p := NewErrQueue[int](clearing)
 	j, _ := p.Add(1, WithJobId("x"))
 
 	w := NewErrWorker(func(Job[int]) error { return nil })
@@ -370,4 +372,36 @@ func TestResultProducer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	assert.ErrorIs(t, pj.WaitContext(ctx), context.DeadlineExceeded, "no consumer: still waiting")
+}
+
+func TestPlainProducerWaits(t *testing.T) {
+	s := newSharedStore()
+	w := NewWorker(func(Job[int]) {})
+	defer w.Stop()
+	w.WithQueue(s)
+
+	j, ok := NewQueue[int](s).Add(1) // EnqueuedJob: Wait only, as NewWorker's
+	require.True(t, ok)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.NoError(t, j.WaitContext(ctx))
+
+	_, ok = NewErrPriorityQueue[int](sharedPrio{s}).Add(2, 0)
+	assert.True(t, ok)
+}
+
+func TestInMemoryWaitContext(t *testing.T) {
+	release := make(chan struct{})
+	w := NewWorker(func(Job[int]) { <-release })
+	defer w.Stop()
+	j, _ := w.BindQueue().Add(1)
+
+	short, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stop()
+	assert.ErrorIs(t, j.WaitContext(short), context.DeadlineExceeded)
+
+	close(release)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	assert.NoError(t, j.WaitContext(ctx))
 }

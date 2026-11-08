@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,6 +184,8 @@ type EnqueuedJob interface {
 	// When a closed job is dequeued, the worker will skip processing it.
 	// This operation takes constant time as it only updates the job's state.
 	Close() error
+	// WaitContext is Wait that gives up when ctx ends.
+	WaitContext(ctx context.Context) error
 }
 
 // New creates a new job with the provided data.
@@ -353,6 +356,24 @@ func (j *job[T]) changeStatus(s status) {
 
 func (j *job[T]) Wait() {
 	j.wg.Wait()
+}
+
+// WaitContext is Wait that gives up when ctx ends.
+// ponytail: one goroutine per call, gone when the job closes (every job
+// closes: run, purged or closed); a done channel on job if calls pile up.
+func (j *job[T]) WaitContext(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		j.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (j *job[T]) Json() ([]byte, error) {

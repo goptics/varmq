@@ -141,7 +141,7 @@ w := varmq.NewResultWorker(func(j varmq.Job[int]) (string, error) { ... })
 w.WithQueue(rq.NewQueue("thumbs"))
 
 // producer process: no worker
-q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs")) // NewQueue[T] for Worker / ErrWorker jobs
+q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs")) // NewQueue / NewErrQueue for Worker / ErrWorker jobs
 job, _ := q.Add(64)
 s, err := job.Result() // waits, whichever process ran it
 

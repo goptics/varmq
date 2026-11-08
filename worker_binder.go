@@ -68,7 +68,7 @@ type IWorkerBinder[T any] interface {
 	//
 	// Shared storage (redisq, sqliteq: IAcknowledgeable) is detected: jobs go
 	// out as JSON, an ISubscribable one wakes the worker on enqueue, and Add's
-	// job learns its outcome from whichever process runs it (RemoteJob).
+	// job learns its outcome from whichever process runs it.
 	WithQueue(q IQueue, configs ...QueueConfigFunc) Queue[T]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.

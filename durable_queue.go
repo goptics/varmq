@@ -181,63 +181,52 @@ func (q *durablePriorityQueue[T, R, H, G]) WorkflowItem(data T) (WorkflowItem, e
 }
 
 // ProducerQueue is a FIFO handle on shared storage with no worker: a
-// producer process. NewQueue makes it.
-type ProducerQueue[T any] interface {
+// producer process. J is the job handle of the worker kind that runs its
+// jobs: NewQueue (EnqueuedJob), NewErrQueue (EnqueuedErrJob), NewResultQueue
+// (EnqueuedResultJob[R]). The job learns its outcome from whichever process
+// runs it.
+type ProducerQueue[T, J any] interface {
 	TaskQueue[T] // a workflow task can target it
 	IExternalBaseQueue
-	// Add adds a job. The handle waits on its outcome, from whichever
-	// process runs it.
-	Add(data T, configs ...JobConfigFunc) (RemoteJob, bool)
+	Add(data T, configs ...JobConfigFunc) (J, bool)
 }
 
 // ProducerPriorityQueue is ProducerQueue for priority storage.
-type ProducerPriorityQueue[T any] interface {
+type ProducerPriorityQueue[T, J any] interface {
 	TaskQueue[T]
 	IExternalBaseQueue
-	Add(data T, priority int, configs ...JobConfigFunc) (RemoteJob, bool)
-}
-
-// RemoteResultJob is a RemoteJob whose worker is a ResultWorker: Result
-// decodes its R.
-type RemoteResultJob[R any] interface {
-	RemoteJob
-	Result() (R, error)
-}
-
-// ProducerResultQueue is ProducerQueue for jobs a ResultWorker runs.
-type ProducerResultQueue[T, R any] interface {
-	TaskQueue[T]
-	IExternalBaseQueue
-	Add(data T, configs ...JobConfigFunc) (RemoteResultJob[R], bool)
-}
-
-// ProducerResultPriorityQueue is ProducerResultQueue for priority storage.
-type ProducerResultPriorityQueue[T, R any] interface {
-	TaskQueue[T]
-	IExternalBaseQueue
-	Add(data T, priority int, configs ...JobConfigFunc) (RemoteResultJob[R], bool)
-}
-
-// NewResultQueue is NewQueue for jobs a ResultWorker[T, R] runs: Add's job
-// has Result, as a bound ResultQueue's does.
-func NewResultQueue[T, R any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerResultQueue[T, R] {
-	return &durableQueue[T, R, RemoteResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
-}
-
-// NewResultPriorityQueue is NewResultQueue for priority storage.
-func NewResultPriorityQueue[T, R any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerResultPriorityQueue[T, R] {
-	return &durablePriorityQueue[T, R, RemoteResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
+	Add(data T, priority int, configs ...JobConfigFunc) (J, bool)
 }
 
 // NewQueue is a producer handle on shared FIFO storage (rq.NewQueue("x"),
-// sqliteq, custom): it adds jobs that workers in any process bound with
-// WithQueue run. Its job has Wait and Err; for a ResultWorker's R use
-// NewResultQueue.
-func NewQueue[T any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerQueue[T] {
-	return &durableQueue[T, struct{}, RemoteJob, EnqueuedErrGroupJob]{producerBase[T, struct{}](s, configs)}
+// sqliteq, custom) for jobs a Worker bound with WithQueue runs, in any
+// process.
+func NewQueue[T any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerQueue[T, EnqueuedJob] {
+	return &durableQueue[T, struct{}, EnqueuedJob, EnqueuedGroupJob]{producerBase[T, struct{}](s, configs)}
 }
 
 // NewPriorityQueue is NewQueue for priority storage.
-func NewPriorityQueue[T any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerPriorityQueue[T] {
-	return &durablePriorityQueue[T, struct{}, RemoteJob, EnqueuedErrGroupJob]{producerBase[T, struct{}](s, configs)}
+func NewPriorityQueue[T any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerPriorityQueue[T, EnqueuedJob] {
+	return &durablePriorityQueue[T, struct{}, EnqueuedJob, EnqueuedGroupJob]{producerBase[T, struct{}](s, configs)}
+}
+
+// NewErrQueue is NewQueue for jobs an ErrWorker runs: the job has Err.
+func NewErrQueue[T any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerQueue[T, EnqueuedErrJob] {
+	return &durableQueue[T, struct{}, EnqueuedErrJob, EnqueuedErrGroupJob]{producerBase[T, struct{}](s, configs)}
+}
+
+// NewErrPriorityQueue is NewErrQueue for priority storage.
+func NewErrPriorityQueue[T any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerPriorityQueue[T, EnqueuedErrJob] {
+	return &durablePriorityQueue[T, struct{}, EnqueuedErrJob, EnqueuedErrGroupJob]{producerBase[T, struct{}](s, configs)}
+}
+
+// NewResultQueue is NewQueue for jobs a ResultWorker[T, R] runs: the job
+// has Result.
+func NewResultQueue[T, R any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerQueue[T, EnqueuedResultJob[R]] {
+	return &durableQueue[T, R, EnqueuedResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
+}
+
+// NewResultPriorityQueue is NewResultQueue for priority storage.
+func NewResultPriorityQueue[T, R any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerPriorityQueue[T, EnqueuedResultJob[R]] {
+	return &durablePriorityQueue[T, R, EnqueuedResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
 }
