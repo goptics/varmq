@@ -939,6 +939,66 @@ func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
 	assert.Equal(t, "[]\n", rr.Body.String())
 }
 
+// failReadStore lists keys, then fails every Record.
+type failReadStore struct{ *keyedWorkflowStore }
+
+func (failReadStore) Record(context.Context, string) (WorkflowRecord, error) {
+	return WorkflowRecord{}, errors.New("redis down")
+}
+
+// TestMuxWorkflowsReadFails: a read that fails after the listing (not
+// ErrWorkflowNotFound) counts as its store failing: skipped, 503 only when
+// every store failed.
+func TestMuxWorkflowsReadFails(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	get := func() *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
+		return rr
+	}
+
+	registerWorkflowStore(failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
+		scope: "keyed", recs: []WorkflowRecord{{ID: "k2", CreatedAt: 2}, {ID: "k1", CreatedAt: 1}}}}})
+	rr := get()
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	assert.Contains(t, rr.Body.String(), "redis down")
+
+	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 3}}})
+	assert.Equal(t, []string{"p"}, func() []string {
+		rr := get()
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var recs []WorkflowRecord
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+		out := []string{}
+		for _, r := range recs {
+			out = append(out, r.ID)
+		}
+		return out
+	}())
+}
+
+// TestMuxWorkflowNoInspector: a store that cannot list still serves GET
+// /workflows/{id} and cancel; GET /workflows skips it.
+func TestMuxWorkflowNoInspector(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	fake := &fakeWorkflowStore{scope: "nolist", recs: []WorkflowRecord{{ID: "n1", CreatedAt: 1}}}
+	registerWorkflowStore(plainWorkflowStore{fake}) // hides Workflows
+
+	do := func(method, target string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest(method, target, nil))
+		return rr
+	}
+	assert.Equal(t, "n1", mustRecord(t, do("GET", "/workflows/n1")).ID)
+	assert.Equal(t, "n1", mustRecord(t, do("PATCH", "/workflows/n1/actions/cancel")).ID)
+	assert.Equal(t, []string{"nil"}, fake.cancelled)
+	assert.Equal(t, "[]\n", do("GET", "/workflows").Body.String())
+}
+
 func mustRecord(t *testing.T, rr *httptest.ResponseRecorder) WorkflowRecord {
 	t.Helper()
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -952,13 +1012,14 @@ func TestWorkflowRegistryFills(t *testing.T) {
 	defer workflowRegistry.Clear()
 
 	a, b := NewWorkflowStore(), NewWorkflowStore()
-	assert.ElementsMatch(t, []workflowStore{a.(workflowStore), b.(workflowStore)}, workflowStores(),
+	assert.ElementsMatch(t, []WorkflowStore{a, b}, workflowStores(),
 		"two in-memory stores, one scope: both listed")
-	var ok bool
 
+	registerWorkflowStore(nil)
 	registerWorkflowStore(plainWorkflowStore{})
-	_, ok = workflowRegistry.Load("plain")
-	assert.False(t, ok, "a store that cannot list is not registered")
+	_, ok := workflowRegistry.Load("plain")
+	assert.True(t, ok, "a store that cannot list is registered too")
+	assert.Len(t, workflowStores(), 3, "nil is not")
 
 	assert.Equal(t, http.StatusOK, func() int {
 		rr := httptest.NewRecorder()
@@ -987,6 +1048,7 @@ func TestWorkflowRegistryWeak(t *testing.T) {
 	runtime.KeepAlive(kept)
 }
 
+// plainWorkflowStore is a WorkflowStore that is no WorkflowInspector.
 type plainWorkflowStore struct{ WorkflowStore }
 
 func (plainWorkflowStore) ScopeID() string { return "plain" }
