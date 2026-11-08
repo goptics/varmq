@@ -1515,6 +1515,38 @@ func TestMuxJobInBatch(t *testing.T) {
 	b.Wait()
 }
 
+// A job parked by a worker Pause mid-batch is in neither the queue nor
+// the run index: 404 for both routes until Resume, and it still runs.
+func TestMuxJobParkedByPause(t *testing.T) {
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("job-rest-parked"), 1)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	get, cancel := jobRoutes(t)
+
+	require.NoError(t, w.Pause())
+	a, _ := q.Add(1, WithJobId("a"))
+	b, _ := q.Add(2, WithJobId("b"))
+	require.NoError(t, w.Resume()) // one batch: a runs, b waits behind it
+	require.Equal(t, "a", within(t, started))
+	require.NoError(t, w.Pause())
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "a").Code)
+	a.Wait()
+	wk := w.(*workerBinder[int])
+	require.Eventually(t, func() bool { return wk.nParked.Load() == 1 && w.Status() == "Paused" }, 2*time.Second, time.Millisecond)
+
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "b").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "b").Code)
+	assert.Equal(t, "Queued", b.Status())
+
+	require.NoError(t, w.Resume())
+	require.Equal(t, "b", within(t, started), "b still runs")
+	assert.Equal(t, http.StatusOK, get(m.QueueID(), "b").Code)
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "b").Code)
+	b.Wait()
+}
+
 // A job added through another handle on the same storage is not this
 // queue's: 404 through it, found through its own.
 func TestMuxJobOtherHandleNotFound(t *testing.T) {

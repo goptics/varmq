@@ -373,7 +373,9 @@ paths:
         "404":
           description: |
             No queue with this ID (`queue not found`), or, for an in-memory
-            queue, no waiting or running job with this ID (`job not found`).
+            queue, no waiting or running job with this ID (`job not found`):
+            as for `GET`, a job taken into a batch behind a running job, or
+            parked by a worker Pause or Stop, is 404 and still runs.
           headers:
             X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
           content:
