@@ -350,3 +350,27 @@ func TestMemQueueJobsBadPage(t *testing.T) {
 		assert.Empty(t, jobs, "%v", p)
 	}
 }
+
+// A job closed while it waits in the queue is left off the pending page,
+// FIFO and priority.
+func TestMemQueueJobsSkipsClosedQueuedJob(t *testing.T) {
+	w := NewWorker(func(Job[int]) {})
+	t.Cleanup(func() { w.Stop() })
+	require.NoError(t, w.Pause())
+	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
+
+	a, _ := fifo.Add(1, WithJobId("a"))
+	fifo.Add(2, WithJobId("b"))
+	pa, _ := prio.Add(1, 0, WithJobId("pa"))
+	prio.Add(2, 1, WithJobId("pb"))
+	require.NoError(t, a.Close())
+	require.NoError(t, pa.Close())
+
+	for m, want := range map[*memQueue]string{memOf(t, fifo): "b", memOf(t, prio): "pb"} {
+		jobs, err := m.Jobs(context.Background(), JobPending, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, jobs, 1)
+		assert.Equal(t, want, jobs[0].ID)
+		assert.Equal(t, int64(2), stats(t, m).Counts.Pending, "the closed one still waits in the queue")
+	}
+}

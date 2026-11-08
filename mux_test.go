@@ -1196,13 +1196,13 @@ func jobRoutes(t *testing.T) (get, cancel func(q, job string) *httptest.Response
 func TestMuxJobInMemory(t *testing.T) {
 	started := make(chan string, 1)
 	w := NewWorker(blockOnCancel(started), WithName("job-rest"))
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 	get, cancel := jobRoutes(t)
 
 	run, _ := q.Add(7, WithJobId("run"))
-	require.Equal(t, "run", <-started)
+	require.Equal(t, "run", within(t, started))
 	wait, _ := q.Add(8, WithJobId("wait")) // concurrency 1: stays in the queue
 
 	rr := get(m.QueueID(), "run")
@@ -1254,7 +1254,7 @@ func TestMuxJobSharedStorage(t *testing.T) {
 		}
 		return j.Data() * 2, nil
 	})
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.WithQueue(s) // lists s under GET /queues
 	defer queueRegistry.Delete(s.QueueID())
 	get, cancel := jobRoutes(t)
@@ -1273,7 +1273,7 @@ func TestMuxJobSharedStorage(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "nope").Code, "storage can't tell waiting from unknown")
 
 	long, _ := q.Add(0, WithJobId("long"))
-	<-started
+	within(t, started)
 	require.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "long").Code)
 	_, err = long.Result()
 	require.ErrorIs(t, err, ErrJobCancelled)
@@ -1308,10 +1308,10 @@ func TestMuxJobRunByAnotherWorker(t *testing.T) {
 	shared := queues.NewQueue[any]()
 	started := make(chan string, 1)
 	runner := NewWorker(blockOnCancel(started)) // unnamed: lists nothing
-	defer runner.Stop()
+	t.Cleanup(func() { runner.Stop() })
 	runner.WithQueue(shared)
 	owner := NewWorker(func(Job[int]) {}, WithName("job-rest-owner"))
-	defer owner.Stop()
+	t.Cleanup(func() { owner.Stop() })
 	q := owner.WithQueue(shared)
 	m := memOf(t, q)
 	require.NoError(t, owner.Pause()) // only runner takes jobs
@@ -1348,13 +1348,13 @@ func TestMuxJobRunningPayloadNotRead(t *testing.T) {
 			d[strconv.Itoa(i%64)] = i
 		}
 	}, WithName("job-rest-map"))
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := q.(*queue[map[string]int]).totals
 	get, cancel := jobRoutes(t)
 
 	j, _ := q.Add(map[string]int{"a": 1}, WithJobId("m"))
-	<-started
+	within(t, started)
 	for range 200 {
 		rr := get(m.QueueID(), "m")
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -1371,7 +1371,7 @@ func TestMuxJobRunningPayloadNotRead(t *testing.T) {
 func TestMuxJobInBatch(t *testing.T) {
 	started := make(chan string, 1)
 	w := NewWorker(blockOnCancel(started), WithName("job-rest-batch"), 1)
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 	get, cancel := jobRoutes(t)
@@ -1380,7 +1380,7 @@ func TestMuxJobInBatch(t *testing.T) {
 	a, _ := q.Add(1, WithJobId("a"))
 	b, _ := q.Add(2, WithJobId("b"))
 	require.NoError(t, w.Resume()) // one batch: a runs, b waits behind it
-	require.Equal(t, "a", <-started)
+	require.Equal(t, "a", within(t, started))
 
 	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "b").Code)
 	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "b").Code)
@@ -1388,7 +1388,7 @@ func TestMuxJobInBatch(t *testing.T) {
 
 	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "a").Code)
 	a.Wait()
-	require.Equal(t, "b", <-started, "b still runs")
+	require.Equal(t, "b", within(t, started), "b still runs")
 	assert.Equal(t, http.StatusOK, get(m.QueueID(), "b").Code)
 	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "b").Code)
 	b.Wait()
@@ -1400,8 +1400,8 @@ func TestMuxJobOtherHandleNotFound(t *testing.T) {
 	shared := queues.NewQueue[any]()
 	w1 := NewWorker(func(Job[int]) {}, WithName("job-rest-h1"))
 	w2 := NewWorker(func(Job[int]) {}, WithName("job-rest-h2"))
-	defer w1.Stop()
-	defer w2.Stop()
+	t.Cleanup(func() { w1.Stop() })
+	t.Cleanup(func() { w2.Stop() })
 	m1, q2 := memOf(t, w1.WithQueue(shared)), w2.WithQueue(shared)
 	m2 := memOf(t, q2)
 	require.NoError(t, w1.Pause())
@@ -1478,85 +1478,46 @@ func (d hookData) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.M)
 }
 
-// A REST read holds a waiting job: a worker resumed mid-read starts it,
-// and writes its data, only after the read. Both the one-job and the list
-// route.
-func TestMuxJobReadHoldsJobWaiting(t *testing.T) {
-	for _, list := range []bool{false, true} {
-		started := make(chan struct{})
-		w := NewWorker(func(j Job[hookData]) {
-			j.Data().M["w"] = 1 // a write racing a read of M, if it ran mid-read
-			close(started)
-		}, WithName("job-rest-hold"))
-		q := w.BindQueue()
-		m := q.(*queue[hookData]).totals
-		require.NoError(t, w.Pause())
-		var once sync.Once
-		during := false
-		data := hookData{M: map[string]int{"a": 1}}
-		data.onMarshal = func() {
-			once.Do(func() {
-				require.NoError(t, w.Resume()) // the worker would take the job now
-				select {
-				case <-started:
-					during = true
-				case <-time.After(100 * time.Millisecond):
-				}
-			})
-		}
-		q.Add(data, WithJobId("h"))
-
-		rr := httptest.NewRecorder()
-		path := "/queues/" + url.PathEscape(m.QueueID()) + "/jobs/h"
-		want := `{"id":"h","state":"pending","payload":{"a":1},"attempts":0}`
-		if list {
-			path = "/queues/" + url.PathEscape(m.QueueID()) + "/jobs?state=pending"
-			want = "[" + want + "]"
-		}
-		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
-		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-		assert.JSONEq(t, want, rr.Body.String())
-		assert.False(t, during, "the job started mid-read (list=%v)", list)
-		select {
-		case <-started:
-		case <-time.After(2 * time.Second):
-			t.Fatal("the job never started after the read")
-		}
-		w.Stop()
-	}
-}
-
-// A Close during a read waits for it: the read answers pending, then the
-// closed job is 404.
+// A job closed during its read (its MarshalJSON closes it) is 404 on the
+// one-job route and left off the pending page: the read never waits on,
+// nor holds, the job's state.
 func TestMuxJobCloseDuringRead(t *testing.T) {
 	w := NewWorker(func(Job[hookData]) {}, WithName("job-rest-close-read"))
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := q.(*queue[hookData]).totals
 	require.NoError(t, w.Pause())
-	get, _ := jobRoutes(t)
+	server := NewServerMux()
 
-	var j EnqueuedJob
-	closed := make(chan struct{})
-	early := false
-	var once sync.Once
-	data := hookData{M: map[string]int{"a": 1}}
-	data.onMarshal = func() {
-		once.Do(func() {
-			go func() { _ = j.Close(); close(closed) }()
-			select {
-			case <-closed:
-				early = true
-			case <-time.After(50 * time.Millisecond):
-			}
-		})
+	for _, path := range []string{"/jobs/c", "/jobs?state=pending"} {
+		var j EnqueuedJob
+		var once sync.Once
+		data := hookData{M: map[string]int{"a": 1}}
+		data.onMarshal = func() { once.Do(func() { require.NoError(t, j.Close()) }) }
+		j, _ = q.Add(data, WithJobId("c"))
+
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+path, nil))
+		if path == "/jobs/c" {
+			assert.Equal(t, http.StatusNotFound, rr.Code, rr.Body.String())
+		} else {
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Equal(t, "[]\n", rr.Body.String(), "closed during the read: not pending")
+		}
+		assert.True(t, j.IsClosed())
+		q.Purge() // drop the closed item: the ID is free for the next round
 	}
-	j, _ = q.Add(data, WithJobId("c"))
+}
 
-	rr := get(m.QueueID(), "c")
-	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Contains(t, rr.Body.String(), `"state":"pending"`)
-	assert.False(t, early, "Close went through mid-read")
-	<-closed
-	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "c").Code, "closed during the read: gone")
+// within receives from ch, failing the test after 2 s instead of hanging.
+func within[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting on a channel")
+		var zero T
+		return zero
+	}
 }

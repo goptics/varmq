@@ -1354,13 +1354,13 @@ func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
 	NewServerMux() // tracking needs a REST mux
 	started := make(chan string, 1)
 	unnamed := NewWorker(blockOnCancel(started))
-	defer unnamed.Stop()
+	t.Cleanup(func() { unnamed.Stop() })
 	um := memOf(t, unnamed.BindQueue())
 	assert.False(t, um.listed.Load(), "not listed for REST: the run loop tracks nothing")
 	assert.False(t, unnamed.(*workerBinder[int]).cancelWatch.Load())
 
 	named := NewWorker(blockOnCancel(started), WithName("tracked-runs"))
-	defer named.Stop()
+	t.Cleanup(func() { named.Stop() })
 	q := named.BindPriorityQueue()
 	m := memOf(t, q)
 	assert.True(t, m.listed.Load(), "listed: runs with an ID are tracked")
@@ -1368,7 +1368,7 @@ func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
 
 	ctx := context.Background()
 	run, _ := q.Add(1, 0, WithJobId("r"))
-	require.Equal(t, "r", <-started)
+	require.Equal(t, "r", within(t, started))
 	wait, _ := q.Add(2, 0, WithJobId("w"))
 
 	rec, err := m.Job(ctx, "r")
@@ -1395,7 +1395,7 @@ func TestInMemorySkippedBatchJobUntracked(t *testing.T) {
 	NewServerMux()
 	started := make(chan string, 1)
 	w := NewWorker(blockOnCancel(started), WithName("tracked-skip"), 1)
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 
@@ -1403,7 +1403,7 @@ func TestInMemorySkippedBatchJobUntracked(t *testing.T) {
 	q.Add(1, WithJobId("a"))
 	jb, _ := q.Add(2, WithJobId("b"))
 	require.NoError(t, w.Resume()) // one batch: b waits behind a
-	require.Equal(t, "a", <-started)
+	require.Equal(t, "a", within(t, started))
 	require.NoError(t, jb.Close())
 	require.NoError(t, m.CancelJob("a"))
 	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
@@ -1431,15 +1431,15 @@ func TestInMemoryDuplicateIDRunsTrackedApart(t *testing.T) {
 		}
 		<-j.Context().Done()
 	}, WithName("tracked-dup"), 2)
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 
 	q.Add(1, WithJobId("d"))
-	require.Equal(t, 1, <-started)
+	require.Equal(t, 1, within(t, started))
 	run2, ok := q.Add(2, WithJobId("d")) // the first left the queue: allowed
 	require.True(t, ok)
-	require.Equal(t, 2, <-started)
+	require.Equal(t, 2, within(t, started))
 	close(release)
 	require.Eventually(t, func() bool { return len(m.runsOf("d")) == 1 }, time.Second, time.Millisecond)
 
@@ -1459,13 +1459,13 @@ func TestInMemoryUntrackedWithoutMux(t *testing.T) {
 	t.Cleanup(func() { served.Store(old) })
 	started := make(chan string, 1)
 	w := NewWorker(blockOnCancel(started), WithName("untracked-nomux"))
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 	require.True(t, m.listed.Load())
 
 	j, _ := q.Add(1, WithJobId("n"))
-	<-started
+	within(t, started)
 	assert.Nil(t, m.runsOf("n"))
 	_, err := m.Job(context.Background(), "n")
 	assert.ErrorIs(t, err, ErrJobNotFound)
@@ -1499,15 +1499,15 @@ func TestInMemoryCancelReachesDuplicateRuns(t *testing.T) {
 	NewServerMux()
 	started := make(chan string, 2)
 	w := NewWorker(blockOnCancel(started), WithName("tracked-dup-cancel"), 2)
-	defer w.Stop()
+	t.Cleanup(func() { w.Stop() })
 	q := w.BindQueue()
 	m := memOf(t, q)
 
 	r1, _ := q.Add(1, WithJobId("d"))
-	<-started
+	within(t, started)
 	r2, ok := q.Add(2, WithJobId("d"))
 	require.True(t, ok)
-	<-started
+	within(t, started)
 	require.NoError(t, m.CancelJob("d"))
 	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
 	defer stop()
