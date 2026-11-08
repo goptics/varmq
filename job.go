@@ -178,8 +178,7 @@ type iJob[T any] interface {
 	endTask(o Outcome, reason string, result []byte) *jobAck
 	fail(reason string)
 	succeed()
-	memTotals() *memQueue
-	Cancel() error
+	memJob // so find reads every run kind
 	ackStorage() any
 	endRun()
 	endFailed(err error) error

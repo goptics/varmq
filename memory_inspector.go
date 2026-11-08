@@ -273,12 +273,6 @@ type memJob interface {
 	Cancel() error
 }
 
-var (
-	_ memJob = (*job[int])(nil)
-	_ memJob = (*errorJob[int])(nil)
-	_ memJob = (*resultJob[int, int])(nil)
-)
-
 // find returns m's jobs with ID id: waiting in the queue (added through
 // m: another handle on the same storage counts its own), then running in
 // any worker (tracked while m is listed: listMem). Ended ones too. A job
