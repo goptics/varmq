@@ -28,8 +28,8 @@ type memQueue struct {
 	// so Job and CancelJob find it. ponytail: never cleared on unlisting.
 	listed atomic.Bool
 	// ponytail: one lock for every run of m: ~300 ns/job of contention
-	// with a mux and many no-op jobs (BenchmarkAddWithId/ParallelTracked).
-	// Shard running/extra by job-ID hash if that ceiling shows.
+	// with a mux and many no-op jobs. Shard running/extra by job-ID hash
+	// if that ceiling shows; BenchmarkAddWithId/ParallelTracked guards it.
 	runMu   sync.Mutex
 	running map[string]any   // job ID -> its first live run (memJob): no slice per run
 	extra   map[string][]any // job ID -> its other live runs, rare (a reused ID)
