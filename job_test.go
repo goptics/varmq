@@ -1551,7 +1551,43 @@ func TestMemQueueCancelJobOddRuns(t *testing.T) {
 
 	m.track("x", failingMemJob{m})
 	require.EqualError(t, m.CancelJob("x"), "boom")
+
+	// mixed runs under one ID: a cancelled run wins, then a real error,
+	// then ErrJobEnded
+	for _, c := range []struct {
+		runs []error
+		want error
+	}{
+		{[]error{nil, errors.New("boom")}, nil},
+		{[]error{ErrJobAlreadyClosed, errors.New("boom")}, errors.New("boom")},
+		{[]error{ErrJobAlreadyClosed}, contract.ErrJobEnded},
+	} {
+		m := &memQueue{q: queues.NewQueue[any]()}
+		for _, e := range c.runs {
+			m.track("x", &cancelRun{m, e})
+		}
+		err := m.CancelJob("x")
+		switch c.want {
+		case nil:
+			assert.NoError(t, err, c.runs)
+		case contract.ErrJobEnded:
+			assert.ErrorIs(t, err, contract.ErrJobEnded, c.runs)
+		default:
+			assert.EqualError(t, err, c.want.Error(), c.runs)
+		}
+	}
 }
+
+// cancelRun is a live run whose Cancel returns err.
+type cancelRun struct {
+	m   *memQueue
+	err error
+}
+
+func (r *cancelRun) recordOf() (string, any) { return "x", nil }
+func (*cancelRun) phase() status             { return processing }
+func (r *cancelRun) memTotals() *memQueue    { return r.m }
+func (r *cancelRun) Cancel() error           { return r.err }
 
 // CancelJob reaches every live run of an ID.
 func TestInMemoryCancelReachesDuplicateRuns(t *testing.T) {
