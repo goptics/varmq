@@ -231,6 +231,13 @@ func (m *memWorkflowStore) push(work []memPush) []string {
 	return pushed
 }
 
+// tooLarge reports whether t's in-memory store fails it for result: over
+// the limit, and not an undo (an undo's result is dropped).
+func (t *taskTag) tooLarge(result []byte) bool {
+	m, ok := t.store.(*memWorkflowStore)
+	return ok && !t.undo && len(result) > m.cfg.resultLimit
+}
+
 // finish records a task's (or undo's) outcome and pushes what it releases.
 // It returns the queue IDs pushed into. Only a completed task keeps a
 // result; one over the limit fails the task with ErrResultTooLarge.
