@@ -176,6 +176,7 @@ type iJob[T any] interface {
 	succeed()
 	memTotals() *memQueue
 	Cancel() error
+	ackStorage() any
 	endRun()
 	endFailed(err error) error
 	io.Closer

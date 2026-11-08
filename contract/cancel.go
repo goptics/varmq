@@ -13,7 +13,9 @@ type JobCanceller interface {
 	// a consumer would pop it (outcome cancelled); a job running is
 	// announced to the queue's consumers (CancelNotifier), and its worker
 	// stops it if it watches its context. ErrJobEnded when its record shows
-	// it ended. The mark lasts 24 h.
+	// it ended. Each mark expires 24 h after its request. Storage can't tell
+	// a waiting job from an unknown ID: authorize and rate-limit untrusted
+	// callers.
 	CancelJob(id string) error
 }
 

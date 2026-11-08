@@ -8,7 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
-- **1.7.0**: job cancel (section 6.14): set `<base>:cancelled`, control message `cancel:<job id>`, record and outcome state `cancelled`. Nothing from 1.6.0 changes while the set is absent.
+- **1.7.0**: job cancel (section 6.14): sorted set `<base>:cancelled`, control message `cancel:<job id>`, record and outcome state `cancelled`. Nothing from 1.6.0 changes while the set is absent.
 - **1.6.0**: job outcome (section 6.13): channel `<base>:done:<job id>`, Acknowledge with a result, Job Record field `result`. Nothing from 1.5.0 changes for a reader that ignores them. redisq offers only distributed queues (every enqueue wakes idle consumers); the plain behaviour stays valid for other implementations.
 - **1.5.0**: workflows (sections 6.9 to 6.12, 7.3): keys `wf:<id>` and `wf:index`, envelope fields `wf`, `task` and `undo`, Purge cancels the workflow tasks it removes. 1.4.0 is reserved for retries (separate change). Nothing from 1.3.0 changes for a job without `wf`.
 - **1.3.0**: queue pause (sections 6.7, 6.8): key `<base>:paused` and channel `<base>:control`; every pop checks the key. Nothing from 1.2.0 changes while the key is absent.
@@ -391,11 +391,12 @@ A producer waits for a job's end from any process. Only a job with a non-empty J
 
 Cancel is cooperative: storage drops a waiting job, and tells consumers about a running one; a running job stops only if its worker watches for it.
 
-- **Key.** `<base>:cancelled`, SET of Job IDs with a cancel request. Each SADD sets `PEXPIRE <base>:cancelled 86400000`. Purge deletes it.
-- **CancelJob.** Input: Job ID. One script: if `HGET <base>:jobs <id>` is a record with `state` `completed`, `failed` or `cancelled`, report "ended" and change nothing. Else `SADD <base>:cancelled <id>`, the PEXPIRE, `PUBLISH <base>:control cancel:<id>`; report "requested".
-- **Pop.** Every pop (one item or a batch, FIFO or priority), after the pause gate: when `EXISTS <base>:cancelled` is 1, for each item it would hand out, read the envelope `id` (`pcall(cjson.decode)`; an unparsable item is handed out). If `SISMEMBER <base>:cancelled <id>`: do not hand it out; `SREM` it; write a record with `state` `cancelled` (fields as section 4, no `started_at`, `errors` absent), indexed in `<base>:failed` under failed retention; `PUBLISH <base>:done:<id>` with outcome `{"id":<id>,"state":"cancelled","error":"cancelled"}`; count it neither completed nor failed; go on with the next item. When the set is absent a pop does no more than before.
-- **Running job.** A consumer that gets `cancel:<id>` on `<base>:control` and runs job `<id>` SHOULD stop it (in Go: cancel its context). A job that then ends because of it is finished with **Acknowledge cancelled**: as Reject (6.4), but the record `state` is `cancelled`, the outcome `state` is `cancelled` with `error` the reason, never requeued, and `SREM <base>:cancelled <id>`. A job that ends in another way is finished as usual and also `SREM`s the id.
-- **Re-add.** An Enqueue with a Job ID that pushes (6.13 Re-add) also does `SREM <base>:cancelled <id>`.
+- **Key.** `<base>:cancelled`, ZSET: member a Job ID with a cancel request, score the time the request expires (ms), 24 h after it was made. A member whose score is past is absent. Purge deletes the key.
+- **CancelJob.** Input: Job ID. One script: if `HGET <base>:jobs <id>` is a record with `state` `completed`, `failed` or `cancelled`, report "ended" and change nothing. Else `ZREMRANGEBYSCORE <base>:cancelled -inf <now>`, `ZADD <base>:cancelled <now + 86400000> <id>`, `PEXPIRE <base>:cancelled 86400000` (a backstop only), `PUBLISH <base>:control cancel:<id>`; report "requested". Storage cannot tell a waiting job from an unknown ID, so an application that lets untrusted callers cancel by ID MUST authorize and rate-limit them.
+- **Pop.** Every pop (one item or a batch, FIFO or priority), after the pause gate: when `EXISTS <base>:cancelled` is 1, for each item it would hand out, read the envelope `id` (`pcall(cjson.decode)`; an unparsable item is handed out). If `ZSCORE <base>:cancelled <id>` is above now: do not hand it out; `ZREM` it; write a record with `state` `cancelled` (fields as section 4, no `started_at`, `errors` absent), indexed in `<base>:failed` under failed retention; `PUBLISH <base>:done:<id>` with outcome `{"id":<id>,"state":"cancelled","error":"cancelled"}`; count it neither completed nor failed; go on with the next item. When the set is absent a pop does no more than before.
+- **Running job.** A consumer that gets `cancel:<id>` on `<base>:control` and runs job `<id>` SHOULD stop it (in Go: cancel its context). A job that then ends because of it is finished with **Acknowledge cancelled**: as Reject (6.4), but the record `state` is `cancelled`, the outcome `state` is `cancelled` with `error` the reason, never requeued, and `ZREM <base>:cancelled <id>`. A job that ends in another way is finished as usual and also `ZREM`s the id.
+- **Re-add.** An Enqueue with a Job ID that pushes (6.13 Re-add) also does `ZREM <base>:cancelled <id>`.
+- **Prune.** The once-a-second sweep SHOULD `ZREMRANGEBYSCORE <base>:cancelled -inf <now>`.
 - **Outcome.** `cancelled` is a final outcome state (6.13 Watch): a record or message with it ends a watch.
 
 ## 7. Reading

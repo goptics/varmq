@@ -198,3 +198,27 @@ func TestCancelWaitingDurableJobFinishesInStorage(t *testing.T) {
 	assert.ErrorIs(t, j.Err(), ErrJobCancelled)
 	assert.ErrorIs(t, h.Err(), ErrJobCancelled, "storage finished it cancelled: no redelivery")
 }
+
+func TestRemoteCancelScopedToItsStorage(t *testing.T) {
+	a, b := newCancelStore(), newCancelStore()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	w := NewErrWorker(func(j Job[int]) error {
+		close(started)
+		select {
+		case <-j.Context().Done():
+			return j.Context().Err()
+		case <-release:
+			return nil
+		}
+	})
+	defer w.Stop()
+	w.WithQueue(a)
+	w.WithQueue(b)
+
+	jb, _ := NewErrQueue[int](b).Add(1, WithJobId("same"))
+	<-started
+	require.NoError(t, OpenErrJob(a, "same").Cancel(), "a request on queue a")
+	close(release)
+	assert.NoError(t, jb.Err(), "queue b's job with the same ID is not cancelled")
+}

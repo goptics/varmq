@@ -3,6 +3,7 @@ package varmq
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"sync/atomic"
 )
@@ -26,6 +27,15 @@ type jobRun struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	cancelled atomic.Bool
+}
+
+// ackStorage is the shared storage that handed j out, nil for an
+// in-memory job.
+func (j *job[T]) ackStorage() any {
+	if ref := j.ackRef.Load(); ref != nil && ref.q != nil {
+		return ref.q
+	}
+	return nil
 }
 
 // runs maps a *job[T] (as any) to its *jobRun while it runs. liveRuns
@@ -230,25 +240,35 @@ func (gj *resultGroupJob[T, R]) Cancel() error {
 	})
 }
 
-// trackRun lists j by ID while it runs, when this worker watches a
-// storage's cancel requests, so a request from any process finds it. It
-// returns the ID to untrack, "" when j is not tracked.
-func (w *worker[T, JobType]) trackRun(j JobType) string {
-	if !w.cancelWatch.Load() {
-		return ""
-	}
-	id := j.ID()
-	if id != "" {
-		w.running.Store(id, j)
-	}
-	return id
+// runKey names a running job of shared storage: the storage that handed
+// it out and its ID, so a cancel request reaches only that storage's job.
+type runKey struct {
+	q  any
+	id string
 }
 
-// untrackRun drops j's entry, not another job's under the same ID (a
+// trackRun lists j while it runs, when this worker watches a storage's
+// cancel requests and j came from shared storage with an ID. It returns
+// the key to untrack; zero when j is not tracked.
+func (w *worker[T, JobType]) trackRun(j JobType) runKey {
+	if !w.cancelWatch.Load() {
+		return runKey{}
+	}
+	q := j.ackStorage()
+	id := j.ID()
+	if q == nil || id == "" || !reflect.TypeOf(q).Comparable() { // a map key must be comparable
+		return runKey{}
+	}
+	k := runKey{q, id}
+	w.running.Store(k, j)
+	return k
+}
+
+// untrackRun drops j's entry, not another job's under the same key (a
 // redelivered item, a reused ID).
-func (w *worker[T, JobType]) untrackRun(id string, j JobType) {
-	if id != "" {
-		w.running.CompareAndDelete(id, j)
+func (w *worker[T, JobType]) untrackRun(k runKey, j JobType) {
+	if k.id != "" {
+		w.running.CompareAndDelete(k, j)
 	}
 }
 
@@ -257,12 +277,12 @@ func (w *worker[T, JobType]) untrackRun(id string, j JobType) {
 // has not started is not tracked: it runs, as one already handed out.
 func (w *worker[T, JobType]) watchCancels(s any) {
 	cn, ok := s.(CancelNotifier)
-	if !ok {
+	if !ok || !reflect.TypeOf(s).Comparable() {
 		return
 	}
 	w.cancelWatch.Store(true)
 	cn.OnCancel(func(id string) {
-		if j, ok := w.running.Load(id); ok {
+		if j, ok := w.running.Load(runKey{s, id}); ok {
 			_ = j.(JobType).Cancel()
 		}
 	})
