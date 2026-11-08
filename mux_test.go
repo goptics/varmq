@@ -1524,15 +1524,19 @@ func within[T any](t *testing.T, ch <-chan T) T {
 
 // A job that starts during its read (its MarshalJSON resumes the worker,
 // and the start does not wait on the read) is answered running with no
-// payload, and left off the pending page: FIFO (Values) and priority (Page).
+// payload, and left off the pending page, the next waiting job taking its
+// slot: FIFO and priority (sorted Values).
 func TestMuxJobStartDuringRead(t *testing.T) {
 	for _, mode := range []string{"job", "fifo", "priority"} {
 		started := make(chan struct{})
 		w := NewWorker(func(j Job[hookData]) {
-			close(started)
+			if j.ID() == "s" {
+				close(started)
+			}
 			<-j.Context().Done()
-		}, WithName("job-rest-start-read"))
+		}, WithName("job-rest-start-read"), 1)
 		t.Cleanup(func() { w.Stop() })
+		w.BindQueue() // two sources: no batch, so only s starts and t waits in the queue
 		require.NoError(t, w.Pause())
 		var once sync.Once
 		data := hookData{M: map[string]int{"a": 1}}
@@ -1544,22 +1548,27 @@ func TestMuxJobStartDuringRead(t *testing.T) {
 		}
 
 		var m *memQueue
-		var j EnqueuedJob
+		var j, jt EnqueuedJob
 		var ok bool
+		next := hookData{M: map[string]int{"b": 2}}
 		if mode == "priority" {
 			pq := w.BindPriorityQueue()
 			m = pq.(*priorityQueue[hookData]).totals
 			j, ok = pq.Add(data, 0, WithJobId("s"))
+			jt, _ = pq.Add(next, 1, WithJobId("t"))
 		} else {
 			q := w.BindQueue()
 			m = q.(*queue[hookData]).totals
 			j, ok = q.Add(data, WithJobId("s"))
+			jt, _ = q.Add(next, WithJobId("t"))
 		}
 		require.True(t, ok)
+		require.NotNil(t, jt)
 
+		// list: s starts mid-read and is dropped; t fills its slot
 		path, want := "/jobs/s", `{"id":"s","state":"processing","payload":null,"attempts":1}`
 		if mode != "job" {
-			path, want = "/jobs?state=pending", `[]`
+			path, want = "/jobs?state=pending&limit=1", `[{"id":"t","state":"pending","payload":{"b":2},"attempts":0}]`
 		}
 		rr := httptest.NewRecorder()
 		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+path, nil))
@@ -1569,6 +1578,8 @@ func TestMuxJobStartDuringRead(t *testing.T) {
 		require.NoError(t, j.Cancel())
 		ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
 		require.NoError(t, j.WaitContext(ctx))
+		require.NoError(t, jt.Cancel())
+		require.NoError(t, jt.WaitContext(ctx))
 		stop()
 		w.Stop()
 	}

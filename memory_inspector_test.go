@@ -350,6 +350,19 @@ func TestMemQueueJobsBadPage(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, jobs, "%v", p)
 	}
+
+	// limit near MaxInt: one pass, no offset+limit wrap
+	pq := w.BindPriorityQueue()
+	pq.Add(1, 0)
+	pm := memOf(t, pq)
+	for p, n := range map[[2]int]int{{1, math.MaxInt}: 0, {0, math.MaxInt}: 1} {
+		done := make(chan []JobRecord, 1)
+		go func() {
+			jobs, _ := pm.Jobs(context.Background(), JobPending, p[0], p[1])
+			done <- jobs
+		}()
+		assert.Len(t, within(t, done), n, "%v", p)
+	}
 }
 
 // A job closed while it waits in the queue is left off the pending page,
@@ -361,10 +374,11 @@ func TestMemQueueJobsSkipsClosedQueuedJob(t *testing.T) {
 	require.NoError(t, w.Pause())
 	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
 
+	fifo.Add(0, WithJobId("c"))
 	a, _ := fifo.Add(1, WithJobId("a"))
 	fifo.Add(2, WithJobId("b"))
 	require.NoError(t, a.Close())
-	// two closed first: the priority page must look past its first window
+	// two closed first
 	for _, id := range []string{"pa", "pc"} {
 		j, _ := prio.Add(1, 0, WithJobId(id))
 		require.NoError(t, j.Close())
@@ -382,14 +396,17 @@ func TestMemQueueJobsSkipsClosedQueuedJob(t *testing.T) {
 		return out
 	}
 	mf, mp := memOf(t, fifo), memOf(t, prio)
-	assert.Equal(t, []string{"b"}, ids(mf, 0, 1))
-	assert.Equal(t, []string{}, ids(mf, 1, 1))
-	assert.Equal(t, []string{"b"}, ids(mf, 0, 10))
+	assert.Equal(t, []string{"c", "b"}, ids(mf, 0, 2))
+	assert.Equal(t, []string{"b"}, ids(mf, 1, 1))
+	assert.Equal(t, []string{}, ids(mf, 2, 1))
+	assert.Equal(t, []string{"c", "b"}, ids(mf, 0, 10))
 	assert.Equal(t, []string{"pb"}, ids(mp, 0, 1))
 	assert.Equal(t, []string{"pd"}, ids(mp, 1, 1))
 	assert.Equal(t, []string{}, ids(mp, 2, 1))
+	assert.Equal(t, []string{}, ids(mp, 3, 1))
 	assert.Equal(t, []string{"pb", "pd"}, ids(mp, 0, 10))
-	assert.Equal(t, int64(2), stats(t, mf).Counts.Pending, "the closed one still waits in the queue")
+	assert.Equal(t, int64(3), stats(t, mf).Counts.Pending, "the closed one still waits in the queue")
+	assert.Equal(t, int64(4), stats(t, mp).Counts.Pending, "closed ones still wait in the queue")
 }
 
 // countData counts its reads: a REST read of a job's data marshals it.
@@ -409,26 +426,32 @@ func phaseJob(m *memQueue, s status) (*job[countData], *atomic.Int32) {
 	return j, reads
 }
 
-// memQueue.Job by phase: waiting -> pending (data read); processing ->
-// processing, data never read; finished or closed -> not found, unread.
+// memQueue.Job and Jobs by phase: waiting -> pending (data read once);
+// processing -> processing on Job, left off the page, data never read;
+// finished or closed -> not found and left off, unread. Other stored
+// items are listed as they are.
 func TestMemQueueJobPhases(t *testing.T) {
+	ctx := context.Background()
 	for _, tc := range []struct {
 		s     status
-		state JobState // "" = not found
-		reads int32
+		state JobState // Job's answer; "" = not found
 	}{
-		{created, JobPending, 1},
-		{queued, JobPending, 1},
-		{processing, JobProcessing, 0},
-		{finished, "", 0},
-		{closed, "", 0},
+		{created, JobPending},
+		{queued, JobPending},
+		{processing, JobProcessing},
+		{finished, ""},
+		{closed, ""},
 	} {
 		m := &memQueue{q: queues.NewQueue[any]()}
 		m.ref.totals = m // as withMemInspector: its jobs point back to it
 		j, reads := phaseJob(m, tc.s)
 		m.q.(*queues.Queue[any]).Enqueue(j)
+		read := int32(0)
+		if tc.state == JobPending {
+			read = 1
+		}
 
-		rec, err := m.Job(context.Background(), "x")
+		rec, err := m.Job(ctx, "x")
 		if tc.state == "" {
 			assert.ErrorIs(t, err, ErrJobNotFound, "phase %d", tc.s)
 		} else {
@@ -439,26 +462,17 @@ func TestMemQueueJobPhases(t *testing.T) {
 			assert.JSONEq(t, `null`, string(rec.Payload))
 			assert.Equal(t, 1, rec.Attempts)
 		}
-		assert.Equal(t, tc.reads, reads.Load(), "phase %d: data reads", tc.s)
-	}
-}
+		assert.Equal(t, read, reads.Swap(0), "phase %d: Job data reads", tc.s)
 
-// appendPending by phase: only a waiting job is listed, and only its data
-// is read; other stored items are listed as they are.
-func TestAppendPendingPhases(t *testing.T) {
-	m := &memQueue{}
-	for _, tc := range []struct {
-		s      status
-		listed bool
-	}{{created, true}, {queued, true}, {processing, false}, {finished, false}, {closed, false}} {
-		j, reads := phaseJob(m, tc.s)
-		out := appendPending(nil, j)
-		assert.Equal(t, tc.listed, len(out) == 1, "phase %d", tc.s)
-		want := int32(0)
-		if tc.listed {
-			want = 1
-		}
-		assert.Equal(t, want, reads.Load(), "phase %d: data reads", tc.s)
+		jobs, err := m.Jobs(ctx, JobPending, 0, 10)
+		require.NoError(t, err)
+		assert.Equal(t, tc.state == JobPending, len(jobs) == 1, "phase %d: listed", tc.s)
+		assert.Equal(t, read, reads.Load(), "phase %d: Jobs data reads", tc.s)
 	}
-	assert.Len(t, appendPending(nil, "raw item"), 1, "custom storage items always listed")
+
+	m := &memQueue{q: queues.NewQueue[any]()}
+	m.q.(*queues.Queue[any]).Enqueue("raw item")
+	jobs, err := m.Jobs(ctx, JobPending, 0, 10)
+	require.NoError(t, err)
+	assert.Equal(t, []JobRecord{{State: JobPending, Payload: json.RawMessage(`"raw item"`)}}, jobs, "custom storage items always listed")
 }
