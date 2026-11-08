@@ -139,20 +139,20 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 // O(n log n): fine for the admin route; a paged cursor read if in-memory
 // queues of millions get inspected often.
 func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
-	out := []JobRecord{}
 	if state != JobPending || offset < 0 || limit < 1 || offset >= m.q.Len() { // before copying the queue
-		return out, nil
+		return []JobRecord{}, nil
 	}
 
-	return pageWaiting(out, m.q.Values(), offset, limit), nil
+	return pageWaiting(m.q.Values(), offset, limit), nil
 }
 
-// pageWaiting appends the records of items' waiting entries, skipping the
-// first offset of them, until out holds limit. A varmq job is kept only if
+// pageWaiting is the records of items' waiting entries, skipping the
+// first offset of them, up to limit. A varmq job is kept only if
 // it waits both before and after its data is read (once): one closed,
 // started or ended is not pending. The read can still meet a job that
 // starts mid-read (see Job). Other stored items are kept as they are.
-func pageWaiting(out []JobRecord, items []any, offset, limit int) []JobRecord {
+func pageWaiting(items []any, offset, limit int) []JobRecord {
+	out := []JobRecord{}
 	for _, v := range items {
 		if len(out) == limit {
 			break
@@ -262,6 +262,12 @@ type memJob interface {
 	memTotals() *memQueue
 	Cancel() error
 }
+
+var (
+	_ memJob = (*job[int])(nil)
+	_ memJob = (*errorJob[int])(nil)
+	_ memJob = (*resultJob[int, int])(nil)
+)
 
 // find returns m's jobs with ID id: waiting in the queue (added through
 // m: another handle on the same storage counts its own), then running in
