@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,10 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.4.0: `GET /queues/{id}/jobs/{jobId}` reads one job and
+      `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` cancels one; `Job`
+      gains `result`; `cancelled` joins `JobState` and is listable.
+      Additive.
     - 1.3.0: `GET /workflows`, `GET /workflows/{id}` and
       `PATCH /workflows/{id}/actions/cancel` read and cancel workflows
       (task DAGs over queues). Additive.
@@ -236,10 +240,15 @@ paths:
       summary: One page of a queue's jobs in one Job State.
       description: |
         Order: `pending` in the order the queue hands jobs out (priority
-        first for a priority queue); `completed` and `failed` newest
-        `finished_at` first; `processing` unspecified. Pages are read
+        first for a priority queue); `completed`, `failed` and `cancelled`
+        newest `finished_at` first; `processing` unspecified. Pages are read
         separately, so jobs that change state between two requests can be
         skipped or repeated.
+
+        `cancelled` since 1.4.0. Storage that keeps cancelled records with
+        its failed ones (redisq, spec redis-storage.md 6.14) lists them under
+        `failed` too, with `state` `cancelled`; storage that keeps none, such
+        as an in-memory queue, returns an empty page.
       responses:
         "200":
           description: The jobs; an empty array past the end.
@@ -259,6 +268,120 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404": { $ref: "#/components/responses/QueueNotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
+
+  /queues/{id}/jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/QueueID"
+      - $ref: "#/components/parameters/JobID"
+    get:
+      operationId: getJob
+      summary: One job of a queue, by Job ID.
+      description: |
+        Since 1.4.0. Served when the queue's storage reads one job (in Go,
+        its `QueueInspector` is also a `varmq.JobReader`); else 501. An
+        in-memory queue finds a waiting job (`pending`) or a running one
+        (`processing`, `attempts` 1, no times); it keeps no ended jobs, so
+        a job that completed, failed or was cancelled is 404, and so is a
+        job without an ID. A job cancelled or closed while it waits stays
+        on the queue's `pending` page until a worker drops it, but is 404
+        here. A job a worker took into a batch but has not
+        started yet is briefly in neither place: 404.
+      responses:
+        "200":
+          description: The job.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404":
+          description: No queue with this ID (`queue not found`), or no job with this ID in it (`job not found`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "501":
+          description: "The queue's storage cannot read one job (`storage can't read a job by id`)."
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /queues/{id}/jobs/{jobId}/actions/{action}:
+    parameters:
+      - $ref: "#/components/parameters/QueueID"
+      - $ref: "#/components/parameters/JobID"
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [cancel]
+    patch:
+      operationId: jobAction
+      summary: Cancel a job, waiting or running.
+      description: |
+        Since 1.4.0. Cooperative: a waiting job never runs; a running job
+        has its context cancelled and stops only if its worker watches it
+        (in Go, `Job.Context()`), else it finishes as usual. The reply comes
+        when the request is made, not when the job ends: read the job (or
+        its queue's `cancelled` page) to see how it ended.
+
+        Shared storage (in Go, a `varmq.JobCanceller`) marks the ID for 24 h
+        and tells every process that consumes the queue (spec
+        redis-storage.md 6.14). It cannot tell a waiting job from an unknown
+        ID, so an unknown ID is 202 there; only an in-memory queue answers
+        404. Protect it at least as well as the worker routes, and
+        rate-limit untrusted callers.
+      responses:
+        "202":
+          description: Cancel requested. The body is empty.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+        "400":
+          description: Unknown action (`unknown action`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: |
+            No queue with this ID (`queue not found`), or, for an in-memory
+            queue, no waiting or running job with this ID (`job not found`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: |
+            The job already ended: completed, failed or cancelled
+            (`varmq: job already ended`). For an in-memory queue: a job
+            cancelled or closed that still waits in the queue; once a
+            worker drops it, it is 404.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "501":
+          description: "The queue's storage cannot cancel jobs by ID (`varmq: storage can't cancel jobs`)."
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: The storage could not store the request; `error` holds why.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /workflows:
     get:
@@ -403,6 +526,13 @@ components:
         `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
       schema: { type: string }
 
+    JobID:
+      name: jobId
+      in: path
+      required: true
+      description: The Job ID (`Job.id`), percent-encoded as one path segment.
+      schema: { type: string }
+
     WorkflowID:
       name: id
       in: path
@@ -525,11 +655,12 @@ components:
         Where a job is in its life. `pending`: in the queue, not handed out.
         `processing`: handed out to a worker, no outcome yet. `completed`:
         acknowledged. `failed`: rejected, that is failed for the last time,
-        with no retry.
+        with no retry. `cancelled` (since 1.4.0): cancelled before or while
+        it ran, never retried.
 
         A client MUST accept a value it does not know and show it as it is.
-        Later versions can add states; `cancelled` is reserved.
-      enum: [pending, processing, completed, failed]
+        Later versions can add states.
+      enum: [pending, processing, completed, failed, cancelled]
 
     QueueSummary:
       type: object
@@ -609,7 +740,7 @@ components:
           description: Unix milliseconds the last attempt started. Absent before the first.
         finished_at:
           type: integer
-          description: Unix milliseconds the job completed or failed. Only on completed and failed jobs.
+          description: Unix milliseconds the job completed, failed or was cancelled. Only on ended jobs.
         attempts:
           type: integer
           minimum: 0
@@ -621,6 +752,11 @@ components:
             The job's failed attempts, oldest first; the last is its final
             error. At most the last 10. Absent when no attempt failed.
           items: { $ref: "#/components/schemas/JobError" }
+        result:
+          description: |
+            Since 1.4.0. The JSON a result worker returned, verbatim, on a
+            completed job whose storage keeps it (spec redis-storage.md 6.13).
+            Absent otherwise.
 
     JobError:
       type: object

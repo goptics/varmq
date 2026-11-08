@@ -378,15 +378,21 @@ mux.Handle("/varmq/", varmq.Handler("/varmq"))
 http.ListenAndServe(":8080", mux)
 ```
 
-| Method   | Path                                      | Description                  |
-|----------|-------------------------------------------|------------------------------|
-| `GET`    | `/health`                                 | Health check                 |
-| `GET`    | `/workers`                                | List all workers (summary)   |
-| `GET`    | `/workers/{name}`                         | Get worker details + metrics |
-| `PATCH`  | `/workers/{name}/actions/{action}`        | Pause, resume, stop, restart |
-| `PATCH`  | `/workers/{name}/config/concurrency/{n}`  | Adjust concurrency           |
-| `GET`    | `/workflows`, `/workflows/{id}`           | List and read workflows      |
-| `PATCH`  | `/workflows/{id}/actions/cancel`          | Cancel a workflow            |
+| Method  | Path                                       | Description                  |
+|---------|--------------------------------------------|------------------------------|
+| `GET`   | `/health`                                  | Health check                 |
+| `GET`   | `/workers`                                 | List all workers (summary)   |
+| `GET`   | `/workers/{name}`                          | Get worker details + metrics |
+| `PATCH` | `/workers/{name}/actions/{action}`         | Pause, resume, stop, restart |
+| `PATCH` | `/workers/{name}/config/concurrency/{n}`   | Adjust concurrency           |
+| `GET`   | `/queues`, `/queues/{id}/jobs`             | List queues and their jobs   |
+| `GET`   | `/queues/{id}/jobs/{jobId}`                | Read one job                 |
+| `PATCH` | `/queues/{id}/actions/{action}`            | Pause, resume a queue        |
+| `PATCH` | `/queues/{id}/jobs/{jobId}/actions/cancel` | Cancel a job                 |
+| `GET`   | `/workflows`, `/workflows/{id}`            | List and read workflows      |
+| `PATCH` | `/workflows/{id}/actions/cancel`           | Cancel a workflow            |
+
+Job routes show one job (state, payload, attempts, times, errors, result) and cancel it. Cancel is cooperative: a waiting job never runs, a running one stops if its worker watches `j.Context()`. In-memory queues of named workers serve both for jobs with an ID, waiting or running; they keep no ended jobs. Shared storage serves them when it implements `JobReader` and `JobCanceller`. Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 
 > [!Warning]
 > The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.
