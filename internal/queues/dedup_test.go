@@ -19,7 +19,6 @@ func (i idItem) ID() string { return string(i) }
 type dedupStore struct {
 	once      func(item idItem) bool // EnqueueOnce under the item's own id
 	plain     func(item idItem) bool
-	force     func(item idItem) bool // EnqueueForce
 	forceOnce func(item idItem) bool // EnqueueOnceForce under the item's own id
 	dequeue   func() (any, bool)
 	purge     func()
@@ -36,7 +35,6 @@ func dedupStores() map[string]func() dedupStore {
 			return dedupStore{
 				once:      func(i idItem) bool { return q.EnqueueOnce(i, string(i)) },
 				plain:     func(i idItem) bool { return q.Enqueue(i) },
-				force:     func(i idItem) bool { return q.EnqueueForce(i) },
 				forceOnce: func(i idItem) bool { return q.EnqueueOnceForce(i, string(i)) },
 				dequeue:   q.Dequeue,
 				purge:     q.Purge,
@@ -56,7 +54,6 @@ func dedupStores() map[string]func() dedupStore {
 			return dedupStore{
 				once:      func(i idItem) bool { return q.EnqueueOnce(i, 0, string(i)) },
 				plain:     func(i idItem) bool { return q.Enqueue(i, 0) },
-				force:     func(i idItem) bool { return q.EnqueueForce(i, 0) },
 				forceOnce: func(i idItem) bool { return q.EnqueueOnceForce(i, 0, string(i)) },
 				dequeue:   q.Dequeue,
 				purge:     q.Purge,
@@ -73,22 +70,22 @@ func dedupStores() map[string]func() dedupStore {
 	}
 }
 
-// The force adds skip the capacity only: a repeat id and a closed queue
-// still refuse.
-func TestEnqueueForce(t *testing.T) {
+// The force add skips the capacity only: a repeat id and a closed queue
+// still refuse, and a queue forced past its capacity stays full.
+func TestEnqueueOnceForce(t *testing.T) {
 	for name, mk := range dedupStores() {
 		t.Run(name, func(t *testing.T) {
 			s := mk()
 			s.setCap(1)
 			assert.True(t, s.plain("a"))
 			assert.False(t, s.plain("b"), "full")
-			assert.True(t, s.force("b"), "force skips the capacity")
+			assert.True(t, s.forceOnce("b"), "force skips the capacity")
 			assert.True(t, s.forceOnce("c"))
 			assert.False(t, s.forceOnce("c"), "repeat id")
 			assert.Equal(t, 3, s.len())
+			assert.False(t, s.plain("x"), "past the capacity: still full")
 
 			s.close()
-			assert.False(t, s.force("d"), "closed")
 			assert.False(t, s.forceOnce("e"), "closed")
 		})
 	}
