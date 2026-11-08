@@ -429,5 +429,4 @@ func TestResultGroupKeepsErrNoResult(t *testing.T) {
 		assert.ErrorIs(t, r.Err, ErrNoResult, "the result is gone, not zero")
 	}
 	assert.Equal(t, 2, n)
-
 }
