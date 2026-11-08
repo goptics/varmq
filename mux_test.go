@@ -956,6 +956,17 @@ func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
 	assert.Empty(t, recs)
+
+	// A store that listed less than a full page holds no more: its swept
+	// entry is just skipped.
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=100", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	require.NotEmpty(t, recs)
+	for _, r := range recs {
+		assert.NotEqual(t, "k5", r.ID)
+	}
 }
 
 // failReadStore lists keys, then fails every Record.
