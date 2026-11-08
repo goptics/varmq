@@ -86,7 +86,10 @@ func TestMemQueueCounts(t *testing.T) {
 
 	close(release)
 	// processing drops when a job's run ends, just after its outcome counts
-	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed+s.Totals.Failed == 3 && s.Counts == JobCounts{} }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		s := stats(t, m)
+		return s.Totals.Completed+s.Totals.Failed == 3 && s.Counts == JobCounts{}
+	}, time.Second, time.Millisecond)
 	s = stats(t, m)
 	assert.Equal(t, JobTotals{Submitted: 3, Completed: 2, Failed: 1}, s.Totals, "completed counts successful jobs, as redisq")
 }

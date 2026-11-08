@@ -23,11 +23,11 @@ type wfState struct {
 }
 
 type wfTask struct {
-	Plan      TaskPlan
-	State     JobState
-	Open      int // dependencies not ended yet
-	Reason    string
-	Result    []byte
+	Plan       TaskPlan
+	State      JobState
+	Open       int // dependencies not ended yet
+	Reason     string
+	Result     []byte
 	UndoState  JobState // "" none, waiting, pending, completed, failed
 	UndoOpen   int      // undos of completed descendants not ended yet
 	UndoReason string   // why the undo failed or was cancelled
