@@ -29,8 +29,6 @@ type RemoteJob interface {
 	EnqueuedErrJob
 	// WaitContext is Wait that gives up when ctx ends.
 	WaitContext(ctx context.Context) error
-	// Outcome waits for the job's end and returns it.
-	Outcome(ctx context.Context) (JobOutcome, error)
 }
 
 // remoteJob is the handle of a job on shared storage. R decodes a result
@@ -100,13 +98,6 @@ func (j *remoteJob[R]) WaitContext(ctx context.Context) error {
 	}
 }
 
-func (j *remoteJob[R]) Outcome(ctx context.Context) (JobOutcome, error) {
-	if err := j.WaitContext(ctx); err != nil {
-		return JobOutcome{}, err
-	}
-	return j.out, j.err
-}
-
 // Close stops waiting: Wait returns and Err reports ErrDetached. It does not
 // cancel the job, which still runs on its storage.
 func (j *remoteJob[R]) Close() error {
@@ -155,17 +146,13 @@ func decodeOutcome[R any](o JobOutcome, err error) (R, error) {
 	return r, json.Unmarshal(o.Result, &r)
 }
 
-// DecodeResult is a JobOutcome's result as R: the error of a failed job,
-// ErrNoResult without a result.
-func DecodeResult[R any](o JobOutcome) (R, error) { return decodeOutcome[R](o, nil) }
-
-// WaitJob waits for the end of job id on s, from any process: a restarted
-// producer, another service. A job that ended earlier is found while s
-// keeps its record.
-func WaitJob(ctx context.Context, s OutcomeWatcher, id string) (JobOutcome, error) {
-	j := watchRemote[struct{}](s, id, nil)
-	defer j.Close()
-	return j.Outcome(ctx)
+// OpenJob is the handle of job id on s from any process (a restarted
+// producer, another service), the same handle Add returns: WaitContext,
+// Err, and Result decoding a ResultWorker's R (use any for other workers).
+// A job that ended earlier is found while s keeps its record. Close it to
+// stop waiting on a job that may never end.
+func OpenJob[R any](s OutcomeWatcher, id string) RemoteResultJob[R] {
+	return watchRemote[R](s, id, nil)
 }
 
 // newRemoteID is a job ID for a durable job added without one, so its

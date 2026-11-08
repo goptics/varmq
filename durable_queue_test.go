@@ -248,7 +248,7 @@ func TestStorageWithoutResultAck(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoResult)
 }
 
-func TestProducerAndWaitJob(t *testing.T) {
+func TestProducerAndOpenJob(t *testing.T) {
 	s := newSharedStore()
 	p := NewQueue[int](s)
 	j, ok := p.Add(4, WithJobId("job-4"))
@@ -262,16 +262,20 @@ func TestProducerAndWaitJob(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	o, err := j.Outcome(ctx)
-	require.NoError(t, err)
-	r, err := DecodeResult[int](o)
+	require.NoError(t, j.WaitContext(ctx))
+	require.NoError(t, j.Err())
+
+	// another waiter, by ID, after the end: typed result
+	r, err := OpenJob[int](s, "job-4").Result()
 	require.NoError(t, err)
 	assert.Equal(t, 40, r)
 
-	// another waiter, by ID, after the end
-	o2, err := WaitJob(ctx, s, "job-4")
-	require.NoError(t, err)
-	assert.Equal(t, JobCompleted, o2.State)
+	// unknown job: waits until ctx ends
+	short, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stop()
+	o := OpenJob[any](s, "nope")
+	defer o.Close()
+	assert.ErrorIs(t, o.WaitContext(short), context.DeadlineExceeded)
 }
 
 func TestDetachedWithoutWatcher(t *testing.T) {
