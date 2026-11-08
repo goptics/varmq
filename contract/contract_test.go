@@ -2,6 +2,7 @@ package contract
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -25,5 +26,36 @@ func TestInstanceRecordJSON(t *testing.T) {
 		`"workers":[{"name":"emails","status":"Running","concurrency":4,"num_processing":1,"num_idle_workers":3,"completed":9,"successful":8,"failed":1,"queue_ids":["redisq:prio:{emails}"]}]}`
 	if string(got) != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestWorkflowRecordJSON(t *testing.T) {
+	if JobWaiting != "waiting" || JobCancelled != "cancelled" {
+		t.Fatalf("job states: %q %q", JobWaiting, JobCancelled)
+	}
+
+	states := []WorkflowState{WorkflowRunning, WorkflowCompleted, WorkflowFailed,
+		WorkflowCompensating, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled}
+	for _, s := range states {
+		want := WorkflowRecord{
+			ID: "w1", State: s, CreatedAt: 1, FinishedAt: 2, UndoOnCancel: true,
+			Tasks: []TaskRecord{{
+				Name: "a", State: JobWaiting, Deps: []string{"b"}, QueueID: "q", JobID: "j",
+				Always: true, Reason: "r", ResultSize: 3,
+				Undo: &TaskRecord{Name: "a", State: JobCancelled},
+			}},
+		}
+		b, err := json.Marshal(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var got WorkflowRecord
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(want, got) {
+			t.Fatalf("state %s: got %+v want %+v", s, got, want)
+		}
 	}
 }
