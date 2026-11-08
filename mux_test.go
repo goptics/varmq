@@ -1599,6 +1599,16 @@ func TestMuxJobOtherHandleNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusOK, get(m2.QueueID(), "only2").Code)
 	assert.Equal(t, http.StatusNotFound, cancel(m1.QueueID(), "only2").Code)
 	assert.Equal(t, "Queued", j2.Status())
+
+	// The pending page has the same scope: m1 does not list it, m2 does.
+	page := func(m *memQueue) []JobRecord {
+		recs, err := m.Jobs(context.Background(), JobPending, 0, 10)
+		require.NoError(t, err)
+		return recs
+	}
+	assert.Empty(t, page(m1))
+	require.Len(t, page(m2), 1)
+	assert.Equal(t, "only2", page(m2)[0].ID)
 }
 
 // Storage that rejects state=cancelled (older than openapi 1.4.0) gets an

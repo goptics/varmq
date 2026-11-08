@@ -153,21 +153,23 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 		return []JobRecord{}, nil
 	}
 
-	return pageWaiting(m.q.Values(), offset, limit), nil
+	return m.pageWaiting(m.q.Values(), offset, limit), nil
 }
 
 // pageWaiting is the records of items' waiting entries, skipping the
 // first offset of them, up to limit. A varmq job is kept only if
 // it waits both before and after its data is read (once): one closed,
 // started or ended is not pending. The read can still meet a job that
-// starts mid-read (see Job). Other stored items are kept as they are.
-func pageWaiting(items []any, offset, limit int) []JobRecord {
+// starts mid-read (see Job). A job added through another handle on the
+// same storage is left out, as find leaves it out. Other stored items are
+// kept as they are.
+func (m *memQueue) pageWaiting(items []any, offset, limit int) []JobRecord {
 	out := []JobRecord{}
 	for _, v := range items {
 		if len(out) == limit {
 			break
 		}
-		if !waitingItem(v) {
+		if j, ok := v.(memJob); ok && j.memTotals() != m || !waitingItem(v) {
 			continue
 		}
 		if offset > 0 {
