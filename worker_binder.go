@@ -264,6 +264,7 @@ func bindDistributed[T any, JobType iJob[T], H any](w *worker[T, JobType], dq in
 }, h H, configs []QueueConfigFunc) H {
 	c := loadQueueConfigs(configs...)
 	subscribeQueue(w, dq, w.bind(dq, c.priority))
+	w.watchCancels(dq)
 
 	return h
 }

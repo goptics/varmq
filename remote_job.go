@@ -95,11 +95,17 @@ func (j *remoteJob[R]) WaitContext(ctx context.Context) error {
 // process holds it: one still waiting never runs, a running one has its
 // Context cancelled. Its outcome then says cancelled (ErrJobCancelled), or
 // how it ended if it finished first. ErrJobAlreadyClosed once it ended;
-// ErrCancelUnsupported on storage that can't.
+// ErrCancelUnsupported on storage that can't. A handle that saw the
+// outcome answers ErrJobAlreadyClosed itself: the ID may name a newer job
+// by now (a re-add), which the request would cancel. A detached handle
+// still asks the storage.
 func (j *remoteJob[R]) Cancel() error {
 	c, ok := j.s.(JobCanceller)
 	if !ok || j.id == "" {
 		return ErrCancelUnsupported
+	}
+	if j.IsClosed() && j.err == nil { // err is written before done closes
+		return ErrJobAlreadyClosed
 	}
 	if err := c.CancelJob(j.id); err != nil {
 		if errors.Is(err, contract.ErrJobEnded) {

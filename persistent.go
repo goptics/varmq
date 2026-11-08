@@ -23,6 +23,7 @@ type persistentQueue[T any] struct {
 func newPersistentQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
+	w.watchCancels(pq)
 
 	return &persistentQueue[T]{queue: &queue[T]{
 		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer

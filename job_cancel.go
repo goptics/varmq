@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
+	"weak"
 )
 
 var (
@@ -54,20 +56,21 @@ func (j *job[T]) runOf() *jobRun {
 	if r, ok := runs.Load(j); ok {
 		return r.(*jobRun)
 	}
-	if j.status.Load() != processing {
-		return nil
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &jobRun{ctx: ctx, cancel: cancel}
+	// Counted before it is visible: an endRun that finds an entry always
+	// finds it counted, so its decrement never strands another job's run.
+	liveRuns.Add(1)
 	if old, loaded := runs.LoadOrStore(j, r); loaded {
+		liveRuns.Add(-1)
 		cancel()
 		return old.(*jobRun)
 	}
-	liveRuns.Add(1)
 
-	// The run loop sets finished before it ends the run: an entry stored
-	// after that end would never be dropped.
+	// Checked after the store: the run loop sets finished before it ends
+	// the run, so an entry stored after that end would never be dropped.
+	// A job not processing (outside a run) lands here too.
 	if j.status.Load() != processing {
 		j.endRun()
 		return nil
@@ -248,39 +251,87 @@ type runKey struct {
 }
 
 // trackRun lists j while it runs, when j came from shared storage with an
-// ID; the run loop calls it only while this worker watches cancel requests. It returns
-// the key to untrack; zero when j is not tracked.
+// ID; the run loop calls it only while this worker watches cancel requests.
+// It returns the key to untrack; zero when j is not tracked. Several live
+// runs may share a key (a redelivered item, a reused ID): a cancel reaches
+// each.
 func (w *worker[T, JobType]) trackRun(j JobType) runKey {
 	q := j.ackStorage()
 	id := j.ID()
-	if q == nil || id == "" || !reflect.TypeOf(q).Comparable() { // a map key must be comparable
+	// A map key must hash: a value whose type is comparable can still hold
+	// a map or slice in an interface field, so check the value.
+	if q == nil || id == "" || !reflect.ValueOf(q).Comparable() {
 		return runKey{}
 	}
 	k := runKey{q, id}
-	w.running.Store(k, j)
+	w.runMu.Lock()
+	if w.running == nil {
+		w.running = map[runKey][]JobType{}
+	}
+	w.running[k] = append(w.running[k], j)
+	w.runMu.Unlock()
 	return k
 }
 
-// untrackRun drops j's entry, not another job's under the same key (a
-// redelivered item, a reused ID).
+// untrackRun drops j's entry, not another run's under the same key.
 func (w *worker[T, JobType]) untrackRun(k runKey, j JobType) {
-	if k.id != "" {
-		w.running.CompareAndDelete(k, j)
+	if k.id == "" {
+		return
+	}
+	w.runMu.Lock()
+	defer w.runMu.Unlock()
+	js := w.running[k]
+	if i := slices.IndexFunc(js, func(x JobType) bool { return any(x) == any(j) }); i >= 0 {
+		js = slices.Delete(js, i, i+1)
+	}
+	if len(js) == 0 {
+		delete(w.running, k)
+		return
+	}
+	w.running[k] = js
+}
+
+// cancelRunning cancels this worker's running jobs from q with ID id.
+func (w *worker[T, JobType]) cancelRunning(q any, id string) {
+	w.runMu.Lock()
+	js := slices.Clone(w.running[runKey{q, id}])
+	w.runMu.Unlock()
+	for _, j := range js {
+		_ = j.Cancel()
 	}
 }
 
 // watchCancels makes s's cancel requests (CancelNotifier) cancel this
-// worker's running job of that ID. A job the worker took into a batch but
-// has not started is not tracked: it runs, as one already handed out.
+// worker's running jobs of that ID. Limits: a job the worker took into a
+// batch but has not started is not tracked, so it runs, as one already
+// handed out; storage whose value is not comparable (a value type holding
+// a map or slice; pointer storage always is) gets no watch, so a cancel
+// still drops its waiting jobs but does not reach running ones.
+//
+// The storage holds the hook, the hook holds the worker only weakly: a
+// discarded worker is collected, and its hook then stops itself.
 func (w *worker[T, JobType]) watchCancels(s any) {
 	cn, ok := s.(CancelNotifier)
-	if !ok || !reflect.TypeOf(s).Comparable() {
+	if !ok || !reflect.ValueOf(s).Comparable() {
 		return
 	}
 	w.cancelWatch.Store(true)
-	cn.OnCancel(func(id string) {
-		if j, ok := w.running.Load(runKey{s, id}); ok {
-			_ = j.(JobType).Cancel()
+	onCancel(cn, weak.Make(w), s)
+}
+
+// onCancel registers the hook; apart from watchCancels so the closure
+// cannot capture the worker.
+func onCancel[T any, JobType iJob[T]](cn CancelNotifier, ww weak.Pointer[worker[T, JobType]], s any) {
+	var self atomic.Pointer[func()]
+	stop := cn.OnCancel(func(id string) {
+		w := ww.Value()
+		if w == nil { // worker collected: drop the hook from the storage
+			if c := self.Load(); c != nil {
+				(*c)()
+			}
+			return
 		}
+		w.cancelRunning(s, id)
 	})
+	self.Store(&stop)
 }

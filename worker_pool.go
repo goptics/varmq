@@ -145,9 +145,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				key = w.trackRun(j)
 			}
 			if !j.startProcessing() {
-				if watch {
-					w.untrackRun(key, j)
-				}
+				w.untrackRun(key, j) // a zero key returns at once
 				run.add(j.memTotals(), -1)
 				continue
 			}

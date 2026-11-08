@@ -57,9 +57,11 @@ type worker[T any, JobType iJob[T]] struct {
 	status  atomic.Uint32
 	nParked atomic.Int64 // len of all parked batches, read without parkMx
 	parkMx  sync.Mutex
-	// running lists jobs by ID while they run, only when cancelWatch is
-	// on: a storage's cancel request (CancelNotifier) finds them there.
-	running      sync.Map
+	// running lists jobs by storage and ID while they run, only when
+	// cancelWatch is on: a storage's cancel request (CancelNotifier) finds
+	// them there. Guarded by runMu; nil until the first.
+	running      map[runKey][]JobType
+	runMu        sync.Mutex
 	cancelWatch  atomic.Bool
 	parked       []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause
 	parkUnsorted bool                   // parked gained a batch since unpark last sorted it by Seq

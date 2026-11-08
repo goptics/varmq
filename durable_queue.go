@@ -59,10 +59,13 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 }
 
 // add enqueues data through push and returns its watched handle. A job with
-// no ID gets one when the storage reports outcomes; only a given ID dedupes.
+// no ID gets one when the storage reports outcomes or cancels by ID; only a
+// given ID dedupes.
 func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []byte, onceID string) bool) (*remoteJob[R], bool) {
 	c := loadJobConfigs(d.cfg(), configs...)
-	if _, ok := d.s.(OutcomeWatcher); ok && c.Id == "" {
+	_, ow := d.s.(OutcomeWatcher)
+	_, jc := d.s.(JobCanceller)
+	if (ow || jc) && c.Id == "" {
 		// Random, not a counter: a counter restarts with the process and
 		// would match an old record.
 		c.Id = rand.Text()

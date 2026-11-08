@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/goptics/varmq/utils"
 )
 
 const (
@@ -737,32 +739,44 @@ func (rj *resultJob[T, R]) Drain() {}
 
 // keepResult stores R as JSON for Close to acknowledge with, when the job
 // came from storage that keeps results. R that does not marshal, or is over
-// remoteResultLimit, is left out: the job completes with no result.
-func (rj *resultJob[T, R]) keepResult() {
+// remoteResultLimit, is left out: the job completes with no result. A
+// MarshalJSON that panics is returned: the run fails with it.
+func (rj *resultJob[T, R]) keepResult() error {
 	ref := rj.ackRef.Load()
 	if ref == nil {
-		return
+		return nil
 	}
 	if _, ok := ref.q.(ResultAcknowledgeable); !ok {
-		return
+		return nil
 	}
 
-	b, err := json.Marshal(rj.data)
+	var b []byte
+	var err error
+	if p := utils.WithSafe("result MarshalJSON", func() { b, err = json.Marshal(rj.data) }); p != nil {
+		return p
+	}
 	if err != nil || len(b) > remoteResultLimit {
-		return
+		return nil
 	}
 
 	nref, ext := ackCopy(ref)
 	ext.result, nref.ext = b, &ext
 	rj.ackRef.Store(&nref)
+	return nil
 }
 
 // succeed is job.succeed; a workflow task (not an undo) leaves R as JSON,
-// its Result. R that does not marshal fails the task.
+// its Result. R that does not marshal fails the task; a MarshalJSON that
+// panics fails any job. Both run after the worker's recover, so the panic
+// is caught here.
 func (rj *resultJob[T, R]) succeed() {
 	t := rj.taskTag()
 	if t == nil {
-		rj.keepResult()
+		if err := rj.keepResult(); err != nil {
+			rj.err = err
+			rj.fail(err.Error())
+			return
+		}
 		rj.succeedWith(nil)
 		return
 	}
@@ -771,7 +785,11 @@ func (rj *resultJob[T, R]) succeed() {
 		return
 	}
 
-	b, err := json.Marshal(rj.data)
+	var b []byte
+	var err error
+	if p := utils.WithSafe("result MarshalJSON", func() { b, err = json.Marshal(rj.data) }); p != nil {
+		err = p
+	}
 	if err != nil {
 		rj.fail(fmt.Sprintf("varmq: task result: %v", err))
 		return
