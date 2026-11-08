@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
@@ -21,7 +22,7 @@ type sharedStore struct {
 	items    []sharedItem
 	pending  map[string]string // ack ID -> job ID
 	outcomes map[string]JobOutcome
-	watches  map[string][]func(JobOutcome)
+	watches  map[string][]*func(JobOutcome) // each watch's own cell: its cancel blanks only it
 	subs     []func(string)
 	nextAck  int
 }
@@ -32,7 +33,7 @@ type sharedItem struct {
 }
 
 func newSharedStore() *sharedStore {
-	return &sharedStore{pending: map[string]string{}, outcomes: map[string]JobOutcome{}, watches: map[string][]func(JobOutcome){}}
+	return &sharedStore{pending: map[string]string{}, outcomes: map[string]JobOutcome{}, watches: map[string][]*func(JobOutcome){}}
 }
 
 func (s *sharedStore) push(item any, prio int) bool {
@@ -97,7 +98,9 @@ func (s *sharedStore) finish(ackID string, st JobState, reason string, result []
 	var fns []func(JobOutcome)
 	if ok && id != "" {
 		s.outcomes[id] = o
-		fns = s.watches[id]
+		for _, p := range s.watches[id] {
+			fns = append(fns, *p) // read under mu: a cancel writes it
+		}
 		delete(s.watches, id)
 	}
 	s.mu.Unlock()
@@ -114,14 +117,17 @@ func (s *sharedStore) WatchOutcome(id string, fn func(JobOutcome)) func() {
 		fn(o)
 		return func() {}
 	}
-	s.watches[id] = append(s.watches[id], fn)
-	n := len(s.watches[id]) - 1
+	p := &fn
+	s.watches[id] = append(s.watches[id], p)
 	s.mu.Unlock()
-	return func() {
+	return func() { // this watch only, even after the id's list was reset
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if w := s.watches[id]; n < len(w) {
-			w[n] = func(JobOutcome) {}
+		*p = func(JobOutcome) {}
+		if w := slices.DeleteFunc(s.watches[id], func(x *func(JobOutcome)) bool { return x == p }); len(w) > 0 {
+			s.watches[id] = w
+		} else {
+			delete(s.watches, id)
 		}
 	}
 }
@@ -429,4 +435,107 @@ func TestResultGroupKeepsErrNoResult(t *testing.T) {
 		assert.ErrorIs(t, r.Err, ErrNoResult, "the result is gone, not zero")
 	}
 	assert.Equal(t, 2, n)
+}
+
+func TestDurablePriorityOrder(t *testing.T) {
+	s := newSharedStore()
+	var mu sync.Mutex
+	var order []string
+	w := NewWorker(func(j Job[string]) {
+		mu.Lock()
+		order = append(order, j.Data())
+		mu.Unlock()
+	}, WithAutoRun(false), WithConcurrency(1))
+	defer w.Stop()
+
+	g := w.WithPriorityQueue(sharedPrio{s}).AddAll([]Item[string]{{Data: "a", Priority: 3}, {Data: "b", Priority: 1}, {Data: "c", Priority: 2}})
+	require.NoError(t, w.Start())
+	g.Wait()
+	assert.Equal(t, []string{"b", "c", "a"}, order, "each item kept its priority")
+}
+
+// pushRefused refuses every push.
+type pushRefused struct{ *sharedStore }
+
+func (pushRefused) Enqueue(any) bool             { return false }
+func (pushRefused) EnqueueOnce(any, string) bool { return false }
+
+type prioRefused struct{ *sharedStore }
+
+func (prioRefused) Enqueue(any, int) bool             { return false }
+func (prioRefused) EnqueueOnce(any, int, string) bool { return false }
+
+func TestDurableAddRefused(t *testing.T) {
+	s := newSharedStore()
+	_, ok := NewQueue[int](pushRefused{s}).Add(1)
+	assert.False(t, ok, "refused push")
+	_, ok = NewPriorityQueue[int](prioRefused{s}).Add(1, 0)
+	assert.False(t, ok, "refused priority push")
+	_, ok = NewQueue[chan int](s).Add(make(chan int))
+	assert.False(t, ok, "data that does not marshal")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Empty(t, s.watches, "the refused job's watch was dropped")
+}
+
+func TestDurableBatchStoragePoked(t *testing.T) {
+	ran := make(chan string, 1)
+	w := NewWorker(func(j Job[string]) { ran <- j.Data() })
+	defer w.Stop()
+
+	_, ok := w.WithQueue(&batchTestQueue{}).Add("x") // pops in batches: Add pokes the source
+	require.True(t, ok)
+	select {
+	case got := <-ran:
+		assert.Equal(t, "x", got)
+	case <-time.After(2 * time.Second):
+		t.Fatal("not run")
+	}
+}
+
+func TestDurableHandles(t *testing.T) {
+	s := newSharedStore()
+	w := NewErrWorker(func(Job[int]) error { return nil })
+	defer w.Stop()
+
+	_, err := w.WithQueue(s).WorkflowItem(1)
+	assert.Error(t, err, "no workflow store")
+	_, err = w.WithPriorityQueue(sharedPrio{s}).WorkflowItem(1)
+	assert.Error(t, err)
+
+	assert.Equal(t, "boom", (&RemoteError{Reason: "boom"}).Error())
+
+	p := NewErrQueue[int](newSharedStore()) // no consumer
+	j, _ := p.Add(1)
+	assert.Equal(t, "Queued", j.Status())
+	j.(EnqueuedResultJob[struct{}]).Drain()
+
+	idle := NewErrWorker(func(Job[int]) error { return nil })
+	idle.Pause() // nothing runs: the group waits
+	defer idle.Stop()
+	q := idle.WithQueue(newSharedStore())
+	g := q.AddAll([]Item[int]{{Data: 1}})
+	g.Drain()
+	require.NoError(t, q.Close()) // detaches: the group ends
+	g.Wait()
+	for range g.Errs() { // closes once the group ended
+	}
+}
+
+func TestOldHandleCloseKeepsNewWatch(t *testing.T) {
+	s := newSharedStore()
+	c := &clearOnPush{s}
+	p := NewErrQueue[int](c)
+	w := NewErrWorker(func(Job[int]) error { return nil })
+	defer w.Stop()
+	w.WithQueue(c)
+
+	old, _ := p.Add(1, WithJobId("r"))
+	require.NoError(t, old.Err())
+	readd, _ := p.Add(2, WithJobId("r"))
+	require.NoError(t, old.Close()) // must not cancel the new watch
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	assert.NoError(t, readd.WaitContext(ctx))
 }
