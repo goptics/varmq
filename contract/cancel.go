@@ -17,8 +17,8 @@ type JobCanceller interface {
 	// a waiting job from an unknown ID: authorize and rate-limit untrusted
 	// callers. On storage with workflows, a valid workflow item (spec
 	// section 3, id wf:<wf>:<task>[:undo]) is never dropped at pop: pop
-	// alone can't end its workflow, so it is handed out, its mark stays and
-	// the pre-run check ends it. Any other item is checked as a plain job.
+	// alone can't end its workflow, so it is handed out and runs unless its
+	// workflow is cancelled. Any other item is checked as a plain job.
 	// Cancel a waiting workflow task with Workflow.Cancel; CancelJob still
 	// reaches a running one through CancelNotifier.
 	CancelJob(id string) error
