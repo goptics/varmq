@@ -1452,6 +1452,69 @@ func TestInMemoryDuplicateIDRunsTrackedApart(t *testing.T) {
 	assert.NoError(t, run2.WaitContext(ctx))
 }
 
+// Without a REST mux nothing is tracked, even on a listed queue.
+func TestInMemoryUntrackedWithoutMux(t *testing.T) {
+	old := served.Load()
+	served.Store(false)
+	t.Cleanup(func() { served.Store(old) })
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("untracked-nomux"))
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+	require.True(t, m.listed.Load())
+
+	j, _ := q.Add(1, WithJobId("n"))
+	<-started
+	assert.Nil(t, m.runsOf("n"))
+	_, err := m.Job(context.Background(), "n")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	require.NoError(t, j.Cancel())
+	j.Wait()
+}
+
+// Untracking any of three runs under one ID keeps the others; the last
+// leaves both maps empty.
+func TestMemQueueUntrackOrders(t *testing.T) {
+	for _, order := range [][3]int{{1, 0, 2}, {0, 1, 2}, {2, 1, 0}, {0, 2, 1}} {
+		m := &memQueue{}
+		js := []any{newJob(1, jobConfigs{}), newJob(2, jobConfigs{}), newJob(3, jobConfigs{})}
+		for _, j := range js {
+			m.track("d", j)
+		}
+		require.Len(t, m.runsOf("d"), 3)
+		for n, i := range order {
+			m.untrack("d", js[i])
+			runs := m.runsOf("d")
+			assert.Len(t, runs, 2-n, "order %v", order)
+			assert.False(t, slices.Contains(runs, js[i]), "order %v: run %d gone", order, i)
+		}
+		assert.Empty(t, m.running)
+		assert.Empty(t, m.extra)
+	}
+}
+
+// CancelJob reaches every live run of an ID.
+func TestInMemoryCancelReachesDuplicateRuns(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 2)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-dup-cancel"), 2)
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	r1, _ := q.Add(1, WithJobId("d"))
+	<-started
+	r2, ok := q.Add(2, WithJobId("d"))
+	require.True(t, ok)
+	<-started
+	require.NoError(t, m.CancelJob("d"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	assert.NoError(t, r1.WaitContext(ctx))
+	assert.NoError(t, r2.WaitContext(ctx))
+}
+
 // cancelOnly can cancel by ID but reports no outcomes.
 type cancelOnly struct{ *cancelStore }
 

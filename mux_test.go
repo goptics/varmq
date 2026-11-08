@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1444,4 +1445,118 @@ func TestMuxJobsCancelledRejected(t *testing.T) {
 	rr = list("custom:down")
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.JSONEq(t, `{"error":"down"}`, rr.Body.String())
+
+	// only state=cancelled falls back: a failing pending page stays 500
+	queueRegistry.Store("custom:fails-pending", failsPending{})
+	defer queueRegistry.Delete("custom:fails-pending")
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/custom:fails-pending/jobs?state=pending", nil))
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+// failsPending fails its pending page and serves failed.
+type failsPending struct{ plainInspector }
+
+func (failsPending) QueueID() string { return "custom:fails-pending" }
+func (failsPending) Jobs(_ context.Context, s JobState, _, _ int) ([]JobRecord, error) {
+	if s == JobPending {
+		return nil, errors.New("pending broken")
+	}
+	return nil, nil
+}
+
+// hookData runs onMarshal when a REST read marshals it, then marshals M.
+type hookData struct {
+	M         map[string]int
+	onMarshal func()
+}
+
+func (d hookData) MarshalJSON() ([]byte, error) {
+	if d.onMarshal != nil {
+		d.onMarshal()
+	}
+	return json.Marshal(d.M)
+}
+
+// A REST read holds a waiting job: a worker resumed mid-read starts it,
+// and writes its data, only after the read. Both the one-job and the list
+// route.
+func TestMuxJobReadHoldsJobWaiting(t *testing.T) {
+	for _, list := range []bool{false, true} {
+		started := make(chan struct{})
+		w := NewWorker(func(j Job[hookData]) {
+			j.Data().M["w"] = 1 // a write racing a read of M, if it ran mid-read
+			close(started)
+		}, WithName("job-rest-hold"))
+		q := w.BindQueue()
+		m := q.(*queue[hookData]).totals
+		require.NoError(t, w.Pause())
+		var once sync.Once
+		during := false
+		data := hookData{M: map[string]int{"a": 1}}
+		data.onMarshal = func() {
+			once.Do(func() {
+				require.NoError(t, w.Resume()) // the worker would take the job now
+				select {
+				case <-started:
+					during = true
+				case <-time.After(100 * time.Millisecond):
+				}
+			})
+		}
+		q.Add(data, WithJobId("h"))
+
+		rr := httptest.NewRecorder()
+		path := "/queues/" + url.PathEscape(m.QueueID()) + "/jobs/h"
+		want := `{"id":"h","state":"pending","payload":{"a":1},"attempts":0}`
+		if list {
+			path = "/queues/" + url.PathEscape(m.QueueID()) + "/jobs?state=pending"
+			want = "[" + want + "]"
+		}
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.JSONEq(t, want, rr.Body.String())
+		assert.False(t, during, "the job started mid-read (list=%v)", list)
+		select {
+		case <-started:
+		case <-time.After(2 * time.Second):
+			t.Fatal("the job never started after the read")
+		}
+		w.Stop()
+	}
+}
+
+// A Close during a read waits for it: the read answers pending, then the
+// closed job is 404.
+func TestMuxJobCloseDuringRead(t *testing.T) {
+	w := NewWorker(func(Job[hookData]) {}, WithName("job-rest-close-read"))
+	defer w.Stop()
+	q := w.BindQueue()
+	m := q.(*queue[hookData]).totals
+	require.NoError(t, w.Pause())
+	get, _ := jobRoutes(t)
+
+	var j EnqueuedJob
+	closed := make(chan struct{})
+	early := false
+	var once sync.Once
+	data := hookData{M: map[string]int{"a": 1}}
+	data.onMarshal = func() {
+		once.Do(func() {
+			go func() { _ = j.Close(); close(closed) }()
+			select {
+			case <-closed:
+				early = true
+			case <-time.After(50 * time.Millisecond):
+			}
+		})
+	}
+	j, _ = q.Add(data, WithJobId("c"))
+
+	rr := get(m.QueueID(), "c")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), `"state":"pending"`)
+	assert.False(t, early, "Close went through mid-read")
+	<-closed
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "c").Code, "closed during the read: gone")
 }
