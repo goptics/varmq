@@ -1341,6 +1341,7 @@ func TestUnhashableStorageGetsNoCancelWatch(t *testing.T) {
 // A worker's cancel watch (shared storage) does not track its in-memory
 // jobs: only a listed memQueue does (listMem).
 func TestCancelWatchSkipsUnlistedInMemoryJobs(t *testing.T) {
+	NewServerMux() // served: only listed gates tracking
 	w := NewWorker(func(Job[int]) {})
 	defer w.Stop()
 	w.WithQueue(newCancelStore()) // the watch is on
@@ -1356,9 +1357,17 @@ func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
 	started := make(chan string, 1)
 	unnamed := NewWorker(blockOnCancel(started))
 	t.Cleanup(func() { unnamed.Stop() })
-	um := memOf(t, unnamed.BindQueue())
+	uq := unnamed.BindQueue()
+	um := memOf(t, uq)
 	assert.False(t, um.listed.Load(), "not listed for REST: the run loop tracks nothing")
 	assert.False(t, unnamed.(*workerBinder[int]).cancelWatch.Load())
+	u, _ := uq.Add(0, WithJobId("u"))
+	require.Equal(t, "u", within(t, started))
+	assert.Nil(t, um.runsOf("u"), "unlisted: not tracked")
+	_, err := um.Job(context.Background(), "u")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	require.NoError(t, u.Cancel())
+	u.Wait()
 
 	named := NewWorker(blockOnCancel(started), WithName("tracked-runs"))
 	t.Cleanup(func() { named.Stop() })
@@ -1472,6 +1481,36 @@ func TestInMemoryUntrackedWithoutMux(t *testing.T) {
 	assert.ErrorIs(t, err, ErrJobNotFound)
 	require.NoError(t, j.Cancel())
 	j.Wait()
+}
+
+// A mux built while a job runs: that run stays untracked, later runs on
+// the same worker are tracked (served is read per run, not cached).
+func TestInMemoryTrackedFromMuxOn(t *testing.T) {
+	old := served.Load()
+	served.Store(false)
+	t.Cleanup(func() { served.Store(old) })
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-late-mux"), 2)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	ctx := context.Background()
+
+	r1, _ := q.Add(1, WithJobId("r1"))
+	require.Equal(t, "r1", within(t, started))
+	NewServerMux()
+	_, err := m.Job(ctx, "r1")
+	assert.ErrorIs(t, err, ErrJobNotFound, "running before the mux: untracked")
+
+	r2, _ := q.Add(2, WithJobId("r2"))
+	require.Equal(t, "r2", within(t, started))
+	rec, err := m.Job(ctx, "r2")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	require.NoError(t, m.CancelJob("r2"))
+	r2.Wait()
+	require.NoError(t, r1.Cancel())
+	r1.Wait()
 }
 
 // Untracking any of three runs under one ID keeps the others; the last
