@@ -1373,6 +1373,56 @@ func TestMuxJobUnsupportedAndFailing(t *testing.T) {
 	assert.JSONEq(t, `[{"id":"x","state":"completed","payload":null,"attempts":0,"result_size":7}]`, rr.Body.String())
 }
 
+// Job IDs with path characters, escaped as one segment, reach the job
+// routes under a prefix. "." and ".." can't: ServeMux cleans the path and
+// redirects (307), and the Location drops the prefix.
+func TestMuxJobIDEscaping(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithName("job-rest-ids"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	require.NoError(t, w.Pause())
+	h := Handler("/admin")
+	do := func(method, id, suffix string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(method, "/admin/queues/"+url.PathEscape(m.QueueID())+"/jobs/"+url.PathEscape(id)+suffix, nil))
+		return rr
+	}
+
+	for _, id := range []string{"a/b", "a%b", "a b", "wf:x:y", "a//b", "a/../b", "a/./b", "/a", "a/", "a?b#c"} {
+		t.Run(id, func(t *testing.T) {
+			j, ok := q.Add(1, WithJobId(id))
+			require.True(t, ok)
+			rr := do("GET", id, "")
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			assert.Equal(t, id, mustJob(t, rr).ID)
+			assert.Equal(t, http.StatusAccepted, do("PATCH", id, "/actions/cancel").Code)
+			assert.True(t, j.IsClosed())
+		})
+	}
+
+	enc := url.PathEscape(m.QueueID())
+	for _, c := range []struct{ id, get, cancel string }{
+		{".", "/queues/" + enc + "/jobs", "/queues/" + enc + "/jobs/actions/cancel"},
+		{"..", "/queues/" + enc, "/queues/" + enc + "/actions/cancel"},
+	} {
+		q.Add(1, WithJobId(c.id))
+		rr := do("GET", c.id, "")
+		assert.Equal(t, http.StatusTemporaryRedirect, rr.Code, c.id)
+		assert.Equal(t, c.get, rr.Header().Get("Location"), c.id)
+		rr = do("PATCH", c.id, "/actions/cancel")
+		assert.Equal(t, http.StatusTemporaryRedirect, rr.Code, c.id)
+		assert.Equal(t, c.cancel, rr.Header().Get("Location"), c.id)
+	}
+}
+
+func mustJob(t *testing.T, rr *httptest.ResponseRecorder) JobRecord {
+	t.Helper()
+	var r JobRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &r))
+	return r
+}
+
 // Two workers on one storage: a job added through the named worker's
 // handle but run by the unnamed one is still read and cancelled by ID.
 func TestMuxJobRunByAnotherWorker(t *testing.T) {
