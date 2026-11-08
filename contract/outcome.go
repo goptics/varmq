@@ -15,10 +15,13 @@ type JobOutcome struct {
 }
 
 // OutcomeWatcher is optional for shared storage: it tells a waiter when a
-// job ends, whichever process ran it.
+// job ends, whichever process ran it. An EnqueueOnce that stores its id
+// MUST drop that id's ended record in the same step (spec 6.13 Re-add):
+// varmq watches a given id after the push, and a kept record would report
+// the earlier run as the new job's outcome.
 type OutcomeWatcher interface {
 	// WatchOutcome calls fn once, from a storage goroutine, when the job
-	// with ID id completes or fails. A job that ended before the call is
+	// with ID id completes, fails or is cancelled. A job that ended before the call is
 	// reported too while its Job Record is kept. After fn the watch ends by
 	// itself (storage drops it and any subscription it held); cancel stops
 	// it early, and is a no-op after fn. fn is not called after cancel

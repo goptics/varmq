@@ -131,7 +131,7 @@ queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is alre
 
 ### Shared Storage (Redis, SQLite)
 
-Same `WithQueue` / `WithPriorityQueue`. Storage that acknowledges (`IAcknowledgeable`) is detected: jobs go out as JSON, survive restarts, and any process bound to the same queue runs them. Storage that notifies (`ISubscribable`, e.g. redisq) wakes idle workers at once; other storage is polled.
+Same `WithQueue` / `WithPriorityQueue`. Storage that acknowledges (`IAcknowledgeable`) is detected: jobs go out as JSON, survive restarts when the storage persists them, and any process bound to the same queue runs them. Storage that notifies (`ISubscribable`, e.g. redisq) wakes idle workers at once; other storage is polled.
 
 ```go
 rq := redisq.New(url)
@@ -150,24 +150,27 @@ j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / O
 s, err = j.Result()
 ```
 
-Needs redisq after v1.5.1 (one queue kind, `WatchOutcome`, `AcknowledgeResult`, `CancelJob`); with v1.5.1 handles report `ErrDetached` and `Cancel` gives `ErrCancelUnsupported`.
+Needs the redisq release that implements `redis-storage.md` 1.7.0 (`WatchOutcome`, `AcknowledgeResult`, `CancelJob`). Older redisq, v1.5.1 included, lacks `Reject` and does not compile with this varmq (no `IPersistentQueue`).
 
-On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
+On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it (sqliteq, custom) gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
 
 ### Cancel a Job
 
-`job.Cancel()` works on every handle, in-memory or shared. A job not started never runs. A running job has its context cancelled; it stops if the worker watches `j.Context()`:
+`job.Cancel()` works on every in-memory handle, and on a shared one when the storage can cancel (redisq; custom storage: `JobCanceller`, plus `CancelNotifier` to reach running jobs and `CancelAcknowledgeable` to finish them cancelled). Other storage gives `ErrCancelUnsupported`. A job not started never runs. A running job has its context cancelled; it stops if the worker watches `j.Context()`:
 
 ```go
 w := varmq.NewErrWorker(func(j varmq.Job[Img]) error {
 	return resize(j.Context(), j.Data()) // returns once cancelled
 })
+q := w.WithQueue(rq.NewQueue("imgs"))
 
 job, _ := q.Add(img)
-job.Cancel()                                    // or, from any process:
-varmq.OpenErrJob(rq.NewQueue("imgs"), id).Cancel()
-errors.Is(job.Err(), varmq.ErrJobCancelled)     // true, unless it finished first
+job.Cancel()                                             // or, from any process:
+varmq.OpenErrJob(rq.NewQueue("imgs"), job.ID()).Cancel() // by the job's ID
+errors.Is(job.Err(), varmq.ErrJobCancelled)              // true, unless it finished first
 ```
+
+A workflow task waiting in its queue is stopped with `Workflow.Cancel`; `Cancel` by ID reaches a running one.
 
 Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
 

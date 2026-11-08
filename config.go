@@ -91,7 +91,10 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 // (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
 // nanoid, never a business key or a counter that restarts). In-memory queues
-// do not check generated ids.
+// do not check generated ids. WithQueue / WithPriorityQueue on shared
+// storage do not dedupe generated ids but key outcomes by them: a repeated
+// id makes the new job's handle report the earlier job's outcome, so keep
+// them globally unique there too.
 func DefaultJobIdGenerator(fn func() string) {
 	if fn == nil {
 		return
@@ -301,7 +304,10 @@ func WithAutoRun(run bool) ConfigFunc {
 // (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
 // window and still returns true, so ids must be globally unique (a UUID or
 // nanoid, never a business key or a counter that restarts). In-memory queues
-// do not check generated ids.
+// do not check generated ids. WithQueue / WithPriorityQueue on shared
+// storage do not dedupe generated ids but key outcomes by them: a repeated
+// id makes the new job's handle report the earlier job's outcome, so keep
+// them globally unique there too.
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		if fn == nil {

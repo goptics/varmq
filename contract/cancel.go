@@ -15,14 +15,21 @@ type JobCanceller interface {
 	// stops it if it watches its context. ErrJobEnded when its record shows
 	// it ended. Each mark expires 24 h after its request. Storage can't tell
 	// a waiting job from an unknown ID: authorize and rate-limit untrusted
-	// callers.
+	// callers. A workflow item (envelope with wf) is never dropped at pop:
+	// pop alone can't end its workflow, so it is handed out and its mark
+	// stays. Cancel a waiting workflow task with Workflow.Cancel; CancelJob
+	// still reaches a running one through CancelNotifier.
 	CancelJob(id string) error
 }
 
 // CancelNotifier is optional for shared storage: it tells this process of
-// cancel requests, so a worker running the job can cancel it.
+// cancel requests, so a worker running the job can cancel it. varmq finds
+// the running job by storage value and ID, so the storage value must be
+// comparable (pointer storage is); other storage gets no watch.
 type CancelNotifier interface {
 	// OnCancel calls fn with the job ID of each cancel request, until stop.
+	// A request whose mark is gone by then (the job finished, or its ID
+	// was re-added) is stale: storage SHOULD drop it, not call fn.
 	OnCancel(fn func(jobID string)) (stop func())
 }
 
