@@ -365,6 +365,9 @@ func (j *job[T]) Status() string {
 	}
 }
 
+// phase is the job's status value.
+func (j *job[T]) phase() status { return j.status.Load() }
+
 // IsClosed returns true if the job has been closed.
 func (j *job[T]) IsClosed() bool {
 	return j.status.Load() == closed

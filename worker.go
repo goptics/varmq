@@ -57,9 +57,11 @@ type worker[T any, JobType iJob[T]] struct {
 	status  atomic.Uint32
 	nParked atomic.Int64 // len of all parked batches, read without parkMx
 	parkMx  sync.Mutex
-	// running lists jobs by storage and ID while they run, only when
-	// cancelWatch is on: a storage's cancel request (CancelNotifier) finds
-	// them there. Guarded by runMu; nil until the first.
+	// running lists jobs by storage (an in-memory queue's: its memQueue)
+	// and ID while they run, only when cancelWatch is on: a storage's
+	// cancel request (CancelNotifier), or a REST read or cancel by ID of an
+	// in-memory job (listMem), finds them there. Guarded by runMu; nil
+	// until the first.
 	running      map[runKey][]JobType
 	runMu        sync.Mutex
 	cancelWatch  atomic.Bool
@@ -338,6 +340,7 @@ type Worker interface {
 	configs() configs
 	notifyToPullNextJobs()
 	addMemQueue(m *memQueue)
+	runningJobs(q any, id string) []any
 }
 
 // newWorker creates a new worker with the given worker function and configurations

@@ -178,6 +178,7 @@ type (
 	JobRecord      = contract.JobRecord
 	JobError       = contract.JobError
 	QueueInspector = contract.QueueInspector
+	JobReader      = contract.JobReader
 
 	JobOutcome            = contract.JobOutcome
 	OutcomeWatcher        = contract.OutcomeWatcher
@@ -236,3 +237,7 @@ var (
 	ErrResultTooLarge   = contract.ErrResultTooLarge
 	ErrScopeMismatch    = contract.ErrScopeMismatch
 )
+
+// ErrJobNotFound is JobReader's and an in-memory queue's JobCanceller
+// answer for an ID they hold no job under.
+var ErrJobNotFound = contract.ErrJobNotFound

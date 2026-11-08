@@ -251,17 +251,22 @@ type runKey struct {
 	id string
 }
 
-// trackRun lists j while it runs, when j came from shared storage with an
-// ID; the run loop calls it only while this worker watches cancel requests.
-// It returns the key to untrack; zero when j is not tracked. Several live
-// runs may share a key (a redelivered item, a reused ID): a cancel reaches
-// each.
+// trackRun lists j while it runs, when j has an ID and came from shared
+// storage or from an in-memory queue (keyed by its memQueue); the run loop
+// calls it only while cancelWatch is on. It returns the key to untrack;
+// zero when j is not tracked. Several live runs may share a key (a
+// redelivered item, a reused ID): a cancel reaches each.
 func (w *worker[T, JobType]) trackRun(j JobType) runKey {
-	q := j.ackStorage()
 	id := j.ID()
-	// A map key must hash: a value whose type is comparable can still hold
-	// a map or slice in an interface field, so check the value.
-	if q == nil || id == "" || !reflect.ValueOf(q).Comparable() {
+	if id == "" {
+		return runKey{}
+	}
+	var q any
+	if m := j.memTotals(); m != nil {
+		q = m // a pointer: always hashes
+	} else if q = j.ackStorage(); q == nil || !reflect.ValueOf(q).Comparable() {
+		// A map key must hash: a value whose type is comparable can still
+		// hold a map or slice in an interface field, so check the value.
 		return runKey{}
 	}
 	k := runKey{q, id}
@@ -300,6 +305,27 @@ func (w *worker[T, JobType]) cancelRunning(q any, id string) {
 	for _, j := range js {
 		_ = j.Cancel()
 	}
+}
+
+// runningJobs is this worker's tracked jobs from q with ID id.
+func (w *worker[T, JobType]) runningJobs(q any, id string) []any {
+	w.runMu.Lock()
+	defer w.runMu.Unlock()
+	js := w.running[runKey{q, id}]
+	out := make([]any, len(js))
+	for i, j := range js {
+		out[i] = j
+	}
+	return out
+}
+
+// listMem lists in-memory queue m under GET /queues and turns run tracking
+// on, so its running jobs can be read and cancelled by ID. Only workers
+// with a listed queue (named ones) pay for tracking, and only for jobs
+// with an ID.
+func (w *worker[T, JobType]) listMem(m *memQueue) {
+	registerQueue(m)
+	w.cancelWatch.Store(true)
 }
 
 // watchCancels makes s's cancel requests (CancelNotifier) cancel this

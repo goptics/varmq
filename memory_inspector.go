@@ -3,8 +3,12 @@ package varmq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
+
+	"github.com/goptics/varmq/contract"
 )
 
 // memQueueSeq numbers the in-memory queues of this process, for their Queue IDs.
@@ -17,6 +21,7 @@ var memQueueSeq atomic.Uint64
 type memQueue struct {
 	id string
 	q  IBaseQueue
+	w  Worker // runs its jobs: Job and CancelJob find running ones there
 
 	submitted, completed, failed atomic.Uint64
 	processing                   atomic.Int64
@@ -39,6 +44,7 @@ func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
 	m := &memQueue{
 		id: fmt.Sprintf("memory:%s:%d", InstanceID, memQueueSeq.Add(1)),
 		q:  eq.q,
+		w:  eq.w,
 	}
 	m.ref.totals = m
 	eq.totals = m
@@ -162,4 +168,80 @@ func pendingRecord(v any) JobRecord {
 	}
 
 	return r
+}
+
+// memJob is a varmq job as an in-memory queue or its worker holds it.
+type memJob interface {
+	recordOf() (string, any)
+	phase() status
+	Cancel() error
+}
+
+// find returns m's jobs with ID id: waiting in the queue, then running in
+// its worker (tracked while m is listed for REST: listMem). Ended ones
+// too. A job taken into a batch but not reached yet is in neither.
+// ponytail: copies the whole queue (Values); an ID index if in-memory
+// queues of millions get read by ID often.
+func (m *memQueue) find(id string) []memJob {
+	if id == "" {
+		return nil
+	}
+
+	var out []memJob
+	add := func(v any) {
+		j, ok := v.(memJob)
+		if !ok {
+			return
+		}
+		if jid, _ := j.recordOf(); jid == id && !slices.ContainsFunc(out, func(x memJob) bool { return x == j }) {
+			out = append(out, j)
+		}
+	}
+	for _, v := range m.q.Values() {
+		add(v)
+	}
+	for _, v := range m.w.runningJobs(m, id) { // moved from the queue meanwhile: listed again, once
+		add(v)
+	}
+
+	return out
+}
+
+// Job is the JobReader of an in-memory queue: a waiting job (pending) or
+// a running one (processing). Ended jobs are not kept: ErrJobNotFound.
+func (m *memQueue) Job(_ context.Context, id string) (JobRecord, error) {
+	for _, j := range m.find(id) {
+		switch j.phase() {
+		case created, queued:
+			return pendingRecord(j), nil
+		case processing:
+			r := pendingRecord(j)
+			r.State, r.Attempts = JobProcessing, 1
+			return r, nil
+		}
+	}
+
+	return JobRecord{}, ErrJobNotFound
+}
+
+// CancelJob is the JobCanceller of an in-memory queue: Cancel on each job
+// with ID id, waiting or running. ErrJobNotFound when there is none,
+// ErrJobEnded when each one ended.
+func (m *memQueue) CancelJob(id string) error {
+	js := m.find(id)
+	if len(js) == 0 {
+		return ErrJobNotFound
+	}
+
+	err := contract.ErrJobEnded
+	for _, j := range js {
+		switch e := j.Cancel(); {
+		case e == nil:
+			err = nil
+		case err != nil && !errors.Is(e, ErrJobAlreadyClosed):
+			err = e
+		}
+	}
+
+	return err
 }
