@@ -55,7 +55,7 @@ type memWorkflowStore struct {
 type memWorkflow struct {
 	id, hash string
 	s        *wfState
-	created  int64 // Unix ms
+	created  int64 // Unix ms; never below the previous Submit's, so order stays sorted
 	finished int64 // Unix ms; 0 while running or compensating
 	gone     bool  // swept: only order still holds it
 }
@@ -122,7 +122,11 @@ func (m *memWorkflowStore) Submit(_ context.Context, p WorkflowPlan) error {
 		}
 	}
 	st, roots := newWFState(p)
-	w := &memWorkflow{id: p.ID, hash: p.Hash, s: st, created: m.now().UnixMilli()}
+	created := m.now().UnixMilli()
+	if n := len(m.order); n > 0 { // the wall clock may step back
+		created = max(created, m.order[n-1].created)
+	}
+	w := &memWorkflow{id: p.ID, hash: p.Hash, s: st, created: created}
 	m.wfs[p.ID] = w
 	m.order = append(m.order, w)
 	pushes := m.effects(w, roots)

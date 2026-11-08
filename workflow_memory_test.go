@@ -256,6 +256,34 @@ func TestMemStoreWorkflowsTies(t *testing.T) {
 	assert.Equal(t, ids(list), paged, "limit 1 pages tile")
 }
 
+// TestMemStoreClockBack: a wall clock stepped back between Submits does not
+// date a workflow before an earlier one, so the newest still lists first.
+func TestMemStoreClockBack(t *testing.T) {
+	ctx := context.Background()
+	s, clock := newMemStore(t)
+
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	for _, step := range []struct {
+		id string
+		ms int64
+	}{{"a", 100}, {"b", 200}, {"c", 150}} {
+		*clock = time.UnixMilli(step.ms)
+		wf := NewWorkflow(s, WithWorkflowID(step.id))
+		wf.Add("a", q, 1)
+		require.NoError(t, submit(t, wf))
+	}
+
+	list, err := s.Workflows(ctx, "", 0, 1)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b"}, ids(list), "b and c tie at 200: by ID")
+	r, err := s.Record(ctx, "c")
+	require.NoError(t, err)
+	assert.Equal(t, int64(200), r.CreatedAt, "clamped to b's")
+	list, _ = s.Workflows(ctx, "", 0, 10)
+	assert.Equal(t, []string{"b", "c", "a"}, ids(list))
+}
+
 // TestMemStoreListBounded: a state-filtered listing scans at most
 // maxWorkflowsOffset+limit workflows, matched or not; keys list the same.
 func TestMemStoreListBounded(t *testing.T) {
