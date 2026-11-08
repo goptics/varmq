@@ -429,72 +429,97 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 	// each store may hold the whole page, so every one gives offset+limit
 	want := offset + limit
-	var (
-		all    []listed
-		failed error
-		down   []bool // per store: its listing or a read failed
-		ndown  int
-	)
-	for _, ws := range workflowStores() {
-		if _, ok := ws.(WorkflowInspector); !ok {
-			continue
-		}
-		si := len(down)
-		down = append(down, false)
-		got, err := listWorkflows(r, ws, si, state, want)
-		if err != nil {
-			failed, down[si], ndown = err, true, ndown+1
-			continue
-		}
-		all = append(all, got...)
-	}
-
-	if ndown > 0 && ndown == len(down) {
-		writeError(w, http.StatusServiceUnavailable, failed.Error())
-		return
-	}
-
-	// ponytail: O(stores x (offset+limit)) keys per call; a cursor if deep pages matter.
-	slices.SortStableFunc(all, func(a, b listed) int {
-		if c := cmp.Compare(b.key.CreatedAt, a.key.CreatedAt); c != 0 {
-			return c
-		}
-
-		return strings.Compare(a.key.ID, b.key.ID)
-	})
-
-	// Walk the whole merge, not all[offset:want]: a swept entry frees its
-	// slot for the next one, and a store whose read fails restarts the walk
-	// without it, so the page is the other stores' merge. Read records stay
-	// in all: a restart rereads only swept entries.
-	page := []WorkflowRecord{}
-	for i, skip := 0, offset; i < len(all) && len(page) < limit; i++ {
-		l := &all[i]
-		if down[l.si] {
-			continue
-		}
-		if skip > 0 {
-			skip--
-			continue
-		}
-		if l.rec == nil {
-			rec, err := l.ws.Record(r.Context(), l.key.ID)
-			if errors.Is(err, ErrWorkflowNotFound) { // swept since the listing
+	var page []WorkflowRecord
+	for try := 0; ; try++ {
+		var (
+			all    []listed
+			failed error
+			down   []bool // per store: its listing or a read failed
+			n      []int  // per store: entries listed
+			ndown  int
+		)
+		for _, ws := range workflowStores() {
+			if _, ok := ws.(WorkflowInspector); !ok {
 				continue
 			}
-			if err != nil { // the store failed since the listing
-				failed, down[l.si], ndown = err, true, ndown+1
-				i, skip, page = -1, offset, page[:0]
+			si := len(down)
+			down = append(down, false)
+			got, err := listWorkflows(r, ws, si, state, want)
+			n = append(n, len(got))
+			if err != nil {
+				failed, down[si], ndown = err, true, ndown+1
 				continue
 			}
-			l.rec = &rec
+			all = append(all, got...)
 		}
-		page = append(page, *l.rec)
-	}
 
-	if ndown > 0 && ndown == len(down) {
-		writeError(w, http.StatusServiceUnavailable, failed.Error())
-		return
+		if ndown > 0 && ndown == len(down) {
+			writeError(w, http.StatusServiceUnavailable, failed.Error())
+			return
+		}
+
+		// ponytail: O(stores x (offset+limit)) keys per call; a cursor if deep pages matter.
+		slices.SortStableFunc(all, func(a, b listed) int {
+			if c := cmp.Compare(b.key.CreatedAt, a.key.CreatedAt); c != 0 {
+				return c
+			}
+
+			return strings.Compare(a.key.ID, b.key.ID)
+		})
+
+		// Walk the whole merge, not all[offset:want]: a swept entry frees its
+		// slot for the next one, and a store whose read fails restarts the walk
+		// without it, so the page is the other stores' merge. Read records stay
+		// in all: a restart rereads only swept entries. A store that listed a
+		// full want may hold unlisted entries that sort before the next one:
+		// a sweep there lists again (twice at most), then the page stops at
+		// that store's last listed entry, short but in order.
+		page = []WorkflowRecord{}
+		relist := false
+		stop := len(all)
+		for i, skip := 0, offset; i < stop && len(page) < limit; i++ {
+			l := &all[i]
+			if down[l.si] {
+				continue
+			}
+			if skip > 0 {
+				skip--
+				continue
+			}
+			if l.rec == nil {
+				rec, err := l.ws.Record(r.Context(), l.key.ID)
+				if errors.Is(err, ErrWorkflowNotFound) { // swept since the listing
+					if n[l.si] < want {
+						continue
+					}
+					if relist = try < 2; relist {
+						break
+					}
+					for j := len(all) - 1; j >= i; j-- {
+						if all[j].si == l.si {
+							stop = min(stop, j+1)
+							break
+						}
+					}
+					continue
+				}
+				if err != nil { // the store failed since the listing
+					failed, down[l.si], ndown = err, true, ndown+1
+					i, skip, page, stop = -1, offset, page[:0], len(all)
+					continue
+				}
+				l.rec = &rec
+			}
+			page = append(page, *l.rec)
+		}
+
+		if ndown > 0 && ndown == len(down) {
+			writeError(w, http.StatusServiceUnavailable, failed.Error())
+			return
+		}
+		if !relist {
+			break
+		}
 	}
 
 	writeJSON(w, http.StatusOK, page)

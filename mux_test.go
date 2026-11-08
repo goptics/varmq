@@ -884,13 +884,17 @@ type keyedWorkflowStore struct {
 	*fakeWorkflowStore
 	reads []string
 	gone  string // listed, but its Record is not found
+	stuck bool   // gone stays listed (else its read sweeps it from the listing)
+	swept bool
 }
 
 func (k *keyedWorkflowStore) WorkflowKeys(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error) {
-	recs, err := k.fakeWorkflowStore.Workflows(ctx, state, offset, limit)
-	keys := make([]WorkflowKey, len(recs))
-	for i, r := range recs {
-		keys[i] = WorkflowKey{ID: r.ID, CreatedAt: r.CreatedAt}
+	recs, err := k.fakeWorkflowStore.Workflows(ctx, state, offset, limit+1)
+	keys := []WorkflowKey{}
+	for _, r := range recs {
+		if (r.ID != k.gone || !k.swept) && len(keys) < limit {
+			keys = append(keys, WorkflowKey{ID: r.ID, CreatedAt: r.CreatedAt})
+		}
 	}
 	return keys, err
 }
@@ -898,6 +902,7 @@ func (k *keyedWorkflowStore) WorkflowKeys(ctx context.Context, state WorkflowSta
 func (k *keyedWorkflowStore) Record(ctx context.Context, id string) (WorkflowRecord, error) {
 	k.reads = append(k.reads, id)
 	if id == k.gone {
+		k.swept = !k.stuck
 		return WorkflowRecord{}, ErrWorkflowNotFound
 	}
 	return k.fakeWorkflowStore.Record(ctx, id)
@@ -932,15 +937,25 @@ func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
 	assert.Equal(t, []string{"k4", "p"}, got, "CreatedAt desc, then ID")
 	assert.Equal(t, []string{"k4"}, k.reads, "only the page's records are read")
 
-	// A workflow gone between the listing and the read is skipped; the next
-	// merged one takes its slot.
+	// A workflow swept between the listing and the read: k listed a full
+	// page, so its next key is unknown; it lists again and k4 (ties p,
+	// smaller ID) takes the slot, not p.
 	k.gone = "k5"
 	rr = httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=1", nil))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
 	require.Len(t, recs, 1)
-	assert.Equal(t, "p", recs[0].ID)
+	assert.Equal(t, "k4", recs[0].ID)
+
+	// Still listed after two relists: the page stops at k's last listed
+	// entry, short but in order.
+	k.swept, k.stuck = false, true
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=1", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	assert.Empty(t, recs)
 }
 
 // failReadStore lists keys, then fails every Record.
