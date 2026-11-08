@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/goptics/varmq/contract"
+	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1492,6 +1493,25 @@ func TestMemQueueUntrackOrders(t *testing.T) {
 		assert.Empty(t, m.running)
 		assert.Empty(t, m.extra)
 	}
+}
+
+// find skips values that are no memJob; CancelJob reports a run's own
+// cancel error over ErrJobEnded.
+type failingMemJob struct{ m *memQueue }
+
+func (f failingMemJob) recordOf() (string, any) { return "x", nil }
+func (failingMemJob) phase() status             { return processing }
+func (f failingMemJob) memTotals() *memQueue    { return f.m }
+func (failingMemJob) Cancel() error             { return errors.New("boom") }
+
+func TestMemQueueCancelJobOddRuns(t *testing.T) {
+	m := &memQueue{q: queues.NewQueue[any]()}
+	m.track("x", "not a job")
+	_, err := m.Job(context.Background(), "x")
+	require.ErrorIs(t, err, ErrJobNotFound)
+
+	m.track("x", failingMemJob{m})
+	require.EqualError(t, m.CancelJob("x"), "boom")
 }
 
 // CancelJob reaches every live run of an ID.
