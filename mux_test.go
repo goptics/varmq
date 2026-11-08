@@ -700,6 +700,7 @@ func TestMuxWorkflows(t *testing.T) {
 	defer workflowRegistry.Clear()
 
 	mem, clock := newMemStore(t)
+	defer runtime.KeepAlive(mem) // the registry holds stores weakly
 	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 	q := w.BindQueue()
 	for _, id := range []string{"m-old", "m-new"} {
