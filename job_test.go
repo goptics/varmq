@@ -1346,6 +1346,43 @@ func TestCancelWatchSkipsInMemoryJobs(t *testing.T) {
 	assert.Equal(t, "Closed", j.Status())
 }
 
+func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
+	started := make(chan string, 1)
+	unnamed := NewWorker(blockOnCancel(started))
+	defer unnamed.Stop()
+	um := memOf(t, unnamed.BindQueue())
+	assert.False(t, um.w.(*worker[int, iJob[int]]).cancelWatch.Load(), "not listed for REST: the run loop tracks nothing")
+
+	named := NewWorker(blockOnCancel(started), WithName("tracked-runs"))
+	defer named.Stop()
+	q := named.BindPriorityQueue()
+	m := memOf(t, q)
+	assert.True(t, m.w.(*worker[int, iJob[int]]).cancelWatch.Load(), "listed: runs with an ID are tracked")
+
+	ctx := context.Background()
+	run, _ := q.Add(1, 0, WithJobId("r"))
+	require.Equal(t, "r", <-started)
+	wait, _ := q.Add(2, 0, WithJobId("w"))
+
+	rec, err := m.Job(ctx, "r")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	rec, err = m.Job(ctx, "w")
+	require.NoError(t, err)
+	assert.Equal(t, JobPending, rec.State)
+	_, err = m.Job(ctx, "")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+
+	require.NoError(t, m.CancelJob("w"), "waiting: closed")
+	assert.True(t, wait.IsClosed())
+	assert.ErrorIs(t, m.CancelJob("w"), contract.ErrJobEnded, "closed, still in the queue")
+	require.NoError(t, m.CancelJob("r"), "running: context cancelled")
+	run.Wait()
+	assert.ErrorIs(t, m.CancelJob("r"), ErrJobNotFound, "ended jobs are not kept")
+	_, err = m.Job(ctx, "r")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+}
+
 // cancelOnly can cancel by ID but reports no outcomes.
 type cancelOnly struct{ *cancelStore }
 

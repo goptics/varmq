@@ -1129,3 +1129,173 @@ func TestWorkflowRegistryWeak(t *testing.T) {
 type plainWorkflowStore struct{ WorkflowStore }
 
 func (plainWorkflowStore) ScopeID() string { return "plain" }
+
+// inspectedCancelStore is cancelStore listed under GET /queues, its Job
+// Records read from its outcomes: what a result worker left, cancelled
+// ones listed under cancelled.
+type inspectedCancelStore struct{ *cancelStore }
+
+func (*inspectedCancelStore) QueueID() string { return "shared:cancel" }
+func (*inspectedCancelStore) QueueStats(context.Context) (QueueStats, error) {
+	return QueueStats{}, nil
+}
+
+func outcomeRecord(o JobOutcome) JobRecord {
+	return JobRecord{ID: o.ID, State: o.State, Payload: json.RawMessage("null"), Attempts: 1, Result: o.Result}
+}
+
+func (s *inspectedCancelStore) Jobs(_ context.Context, state JobState, _, _ int) ([]JobRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []JobRecord
+	for _, o := range s.outcomes {
+		if o.State == state {
+			out = append(out, outcomeRecord(o))
+		}
+	}
+	return out, nil
+}
+
+func (s *inspectedCancelStore) Job(_ context.Context, id string) (JobRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.outcomes[id]; ok {
+		return outcomeRecord(o), nil
+	}
+	return JobRecord{}, ErrJobNotFound
+}
+
+// brokenJobStore reads and cancels jobs, and fails at both.
+type brokenJobStore struct{ plainInspector }
+
+func (brokenJobStore) QueueID() string { return "custom:broken-jobs" }
+func (brokenJobStore) Job(context.Context, string) (JobRecord, error) {
+	return JobRecord{}, errors.New("redis down")
+}
+func (brokenJobStore) CancelJob(string) error { return errors.New("redis down") }
+
+func jobRoutes(t *testing.T) (get, cancel func(q, job string) *httptest.ResponseRecorder) {
+	server := NewServerMux()
+	do := func(method, path string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(method, path, nil))
+		assert.Contains(t, rr.Header(), InstanceHeader)
+		return rr
+	}
+	get = func(q, job string) *httptest.ResponseRecorder {
+		return do("GET", "/queues/"+url.PathEscape(q)+"/jobs/"+url.PathEscape(job))
+	}
+	cancel = func(q, job string) *httptest.ResponseRecorder {
+		return do("PATCH", "/queues/"+url.PathEscape(q)+"/jobs/"+url.PathEscape(job)+"/actions/cancel")
+	}
+	return get, cancel
+}
+
+func TestMuxJobInMemory(t *testing.T) {
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("job-rest"))
+	defer w.Stop()
+	q := w.BindQueue()
+	m := memOf(t, q)
+	get, cancel := jobRoutes(t)
+
+	run, _ := q.Add(7, WithJobId("run"))
+	require.Equal(t, "run", <-started)
+	wait, _ := q.Add(8, WithJobId("wait")) // concurrency 1: stays in the queue
+
+	rr := get(m.QueueID(), "run")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"run","state":"processing","payload":7,"attempts":1}`, rr.Body.String())
+	rr = get(m.QueueID(), "wait")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"wait","state":"pending","payload":8,"attempts":0}`, rr.Body.String())
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusNotFound, get("nope", "run").Code)
+
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusNotFound, cancel("nope", "run").Code)
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/queues/"+url.PathEscape(m.QueueID())+"/jobs/run/actions/stop", nil))
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+
+	// waiting: closed, never runs; still in the queue, so a second cancel is 409
+	rr = cancel(m.QueueID(), "wait")
+	require.Equal(t, http.StatusAccepted, rr.Code, rr.Body.String())
+	assert.Empty(t, rr.Body.String())
+	assert.Equal(t, "Closed", wait.Status())
+	assert.Equal(t, http.StatusConflict, cancel(m.QueueID(), "wait").Code)
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "wait").Code, "ended jobs are not kept")
+
+	// running: its context is cancelled
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "run").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, run.WaitContext(ctx), "the running job saw the cancel")
+	require.NoError(t, w.WaitContext(ctx))
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "run").Code, "ended jobs are not kept")
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "run").Code)
+
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+"/jobs?state=cancelled", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "[]\n", rr.Body.String(), "in-memory queues keep no cancelled jobs")
+}
+
+func TestMuxJobSharedStorage(t *testing.T) {
+	s := &inspectedCancelStore{newCancelStore()}
+	started := make(chan struct{}, 1)
+	w := NewResultWorker(func(j Job[int]) (int, error) {
+		if j.Data() == 0 {
+			started <- struct{}{}
+			<-j.Context().Done()
+			return 0, j.Context().Err()
+		}
+		return j.Data() * 2, nil
+	})
+	defer w.Stop()
+	q := w.WithQueue(s) // lists s under GET /queues
+	defer queueRegistry.Delete(s.QueueID())
+	get, cancel := jobRoutes(t)
+
+	done, _ := q.Add(21, WithJobId("done"))
+	_, err := done.Result()
+	require.NoError(t, err)
+	rr := get(s.QueueID(), "done")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"done","state":"completed","payload":null,"attempts":1,"result":42}`, rr.Body.String())
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+s.QueueID()+"/jobs?state=completed", nil))
+	assert.JSONEq(t, `[{"id":"done","state":"completed","payload":null,"attempts":1,"result":42}]`, rr.Body.String(), "listed with its result")
+	assert.Equal(t, http.StatusConflict, cancel(s.QueueID(), "done").Code, "ended")
+	assert.Equal(t, http.StatusNotFound, get(s.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "nope").Code, "storage can't tell waiting from unknown")
+
+	long, _ := q.Add(0, WithJobId("long"))
+	<-started
+	require.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "long").Code)
+	_, err = long.Result()
+	require.ErrorIs(t, err, ErrJobCancelled)
+	rr = get(s.QueueID(), "long")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"state":"cancelled"`)
+
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+s.QueueID()+"/jobs?state=cancelled", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `[{"id":"long","state":"cancelled","payload":null,"attempts":1}]`, rr.Body.String())
+}
+
+func TestMuxJobUnsupportedAndFailing(t *testing.T) {
+	queueRegistry.Store("custom:plain", plainInspector{})
+	queueRegistry.Store("custom:broken-jobs", brokenJobStore{})
+	defer queueRegistry.Delete("custom:plain")
+	defer queueRegistry.Delete("custom:broken-jobs")
+	get, cancel := jobRoutes(t)
+
+	assert.Equal(t, http.StatusNotImplemented, get("custom:plain", "x").Code)
+	assert.Equal(t, http.StatusNotImplemented, cancel("custom:plain", "x").Code)
+	assert.Equal(t, http.StatusInternalServerError, get("custom:broken-jobs", "x").Code)
+	rr := cancel("custom:broken-jobs", "x")
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	assert.JSONEq(t, `{"error":"redis down"}`, rr.Body.String())
+}
