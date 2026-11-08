@@ -463,9 +463,18 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 		return strings.Compare(a.key.ID, b.key.ID)
 	})
 
+	// Walk the whole merge, not all[offset:want]: a swept entry frees its
+	// slot for the next one, and a store whose read fails restarts the walk
+	// without it, so the page is the other stores' merge. Read records stay
+	// in all: a restart rereads only swept entries.
 	page := []WorkflowRecord{}
-	for _, l := range all[min(offset, len(all)):min(want, len(all))] {
+	for i, skip := 0, offset; i < len(all) && len(page) < limit; i++ {
+		l := &all[i]
 		if down[l.si] {
+			continue
+		}
+		if skip > 0 {
+			skip--
 			continue
 		}
 		if l.rec == nil {
@@ -475,6 +484,7 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 			}
 			if err != nil { // the store failed since the listing
 				failed, down[l.si], ndown = err, true, ndown+1
+				i, skip, page = -1, offset, page[:0]
 				continue
 			}
 			l.rec = &rec

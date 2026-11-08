@@ -123,6 +123,15 @@ func TestLog(t *testing.T) {
 		assert.False(t, l.Full())
 	})
 
+	t.Run("AppendForce stores past the bound", func(t *testing.T) {
+		l := NewBoundedLog[int](1)
+		c := l.NewCursor()
+		assert.Equal(t, 1, l.Append(1))
+		assert.Equal(t, 0, l.Append(2), "full")
+		assert.Equal(t, 1, l.AppendForce(3))
+		assert.Equal(t, []int{1, 3}, drain(c))
+	})
+
 	t.Run("bounded append waiting for the lock observes a close made meanwhile", func(t *testing.T) {
 		l := NewBoundedLog[int](10)
 		c := l.NewCursor()

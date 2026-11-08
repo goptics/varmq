@@ -932,11 +932,15 @@ func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
 	assert.Equal(t, []string{"k4", "p"}, got, "CreatedAt desc, then ID")
 	assert.Equal(t, []string{"k4"}, k.reads, "only the page's records are read")
 
-	// A workflow gone between the listing and the read is skipped.
+	// A workflow gone between the listing and the read is skipped; the next
+	// merged one takes its slot.
 	k.gone = "k5"
 	rr = httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=1", nil))
-	assert.Equal(t, "[]\n", rr.Body.String())
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, "p", recs[0].ID)
 }
 
 // failReadStore lists keys, then fails every Record.
@@ -977,6 +981,35 @@ func TestMuxWorkflowsReadFails(t *testing.T) {
 		}
 		return out
 	}())
+}
+
+// TestMuxWorkflowsReadFailsFills: a store whose read fails leaves no short
+// page: the other stores' entries fill it, past offset too.
+func TestMuxWorkflowsReadFailsFills(t *testing.T) {
+	workflowRegistry.Clear()
+	defer workflowRegistry.Clear()
+
+	registerWorkflowStore(failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
+		scope: "keyed", recs: []WorkflowRecord{{ID: "k4", CreatedAt: 4}, {ID: "k3", CreatedAt: 3}}}}})
+	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{
+		{ID: "p2", CreatedAt: 2}, {ID: "p1", CreatedAt: 1}}})
+
+	for target, want := range map[string][]string{
+		"/workflows?limit=1":          {"p2"},
+		"/workflows?limit=2":          {"p2", "p1"},
+		"/workflows?offset=1&limit=1": {"p1"},
+	} {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", target, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var recs []WorkflowRecord
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+		got := []string{}
+		for _, r := range recs {
+			got = append(got, r.ID)
+		}
+		assert.Equal(t, want, got, target)
+	}
 }
 
 // TestMuxWorkflowNoInspector: a store that cannot list still serves GET
