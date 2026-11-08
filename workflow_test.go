@@ -2125,6 +2125,34 @@ func TestWorkflowCancelSkipsQueued(t *testing.T) {
 	assert.Zero(t, q.Len())
 }
 
+// A REST cancel of a waiting in-memory task cancels it and its
+// dependents; the workflow ends failed and b never runs.
+func TestWorkflowTaskRESTCancel(t *testing.T) {
+	ctx := context.Background()
+	var ran atomic.Int32
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, WithName("wf-rest-cancel"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	require.NoError(t, w.PauseAndWait())
+	_, cancel := jobRoutes(t)
+
+	wf := NewWorkflow(NewWorkflowStore(), WithWorkflowID("rc"))
+	a := wf.Add("a", q, 1)
+	wf.Add("b", q, 2).After(a)
+	require.NoError(t, wf.Submit(ctx))
+	require.Equal(t, 1, q.Len(), "a waits, b waits on a")
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "wf:rc:a").Code)
+	require.NoError(t, w.Resume())
+
+	r := waitWF(t, wf)
+	assert.Equal(t, WorkflowFailed, r.State)
+	assert.Equal(t, JobCancelled, r.Tasks[0].State)
+	assert.Equal(t, JobCancelled, r.Tasks[1].State)
+	w.Wait()
+	assert.Zero(t, ran.Load(), "neither task ran")
+}
+
 // TestWorkflowUndoOnCancelFrozen: WithUndoOnCancel is kept with the workflow,
 // so a cancel from any handle (or REST without undo) follows it; the store's
 // undo overrides it.
