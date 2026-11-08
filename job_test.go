@@ -1337,13 +1337,17 @@ func TestUnhashableStorageGetsNoCancelWatch(t *testing.T) {
 	assert.NoError(t, j.Err(), "not reached: ran to the end")
 }
 
-func TestCancelWatchSkipsInMemoryJobs(t *testing.T) {
+// A worker's cancel watch (shared storage) does not track its in-memory
+// jobs: only a listed memQueue does (listMem).
+func TestCancelWatchSkipsUnlistedInMemoryJobs(t *testing.T) {
 	w := NewWorker(func(Job[int]) {})
 	defer w.Stop()
 	w.WithQueue(newCancelStore()) // the watch is on
-	j, _ := w.BindQueue().Add(1)  // no storage: not tracked
+	q := w.BindQueue()            // unnamed worker: not listed
+	j, _ := q.Add(1, WithJobId("m"))
 	j.Wait()
 	assert.Equal(t, "Closed", j.Status())
+	assert.Nil(t, memOf(t, q).running, "never tracked")
 }
 
 func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
@@ -1351,13 +1355,15 @@ func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
 	unnamed := NewWorker(blockOnCancel(started))
 	defer unnamed.Stop()
 	um := memOf(t, unnamed.BindQueue())
-	assert.False(t, um.w.(*worker[int, iJob[int]]).cancelWatch.Load(), "not listed for REST: the run loop tracks nothing")
+	assert.False(t, um.listed.Load(), "not listed for REST: the run loop tracks nothing")
+	assert.False(t, unnamed.(*workerBinder[int]).cancelWatch.Load())
 
 	named := NewWorker(blockOnCancel(started), WithName("tracked-runs"))
 	defer named.Stop()
 	q := named.BindPriorityQueue()
 	m := memOf(t, q)
-	assert.True(t, m.w.(*worker[int, iJob[int]]).cancelWatch.Load(), "listed: runs with an ID are tracked")
+	assert.True(t, m.listed.Load(), "listed: runs with an ID are tracked")
+	assert.False(t, named.(*workerBinder[int]).cancelWatch.Load(), "the worker's watch stays off")
 
 	ctx := context.Background()
 	run, _ := q.Add(1, 0, WithJobId("r"))

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
 
 	"github.com/goptics/varmq/contract"
@@ -21,7 +22,13 @@ var memQueueSeq atomic.Uint64
 type memQueue struct {
 	id string
 	q  IBaseQueue
-	w  Worker // runs its jobs: Job and CancelJob find running ones there
+
+	// listed is set once m is under GET /queues (listMem): from then on
+	// every worker that runs a job of m with an ID tracks it in running,
+	// so Job and CancelJob find it. ponytail: never cleared on unlisting.
+	listed  atomic.Bool
+	runMu   sync.Mutex
+	running map[string][]any // job ID -> its live runs (memJob)
 
 	submitted, completed, failed atomic.Uint64
 	processing                   atomic.Int64
@@ -44,7 +51,6 @@ func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
 	m := &memQueue{
 		id: fmt.Sprintf("memory:%s:%d", InstanceID, memQueueSeq.Add(1)),
 		q:  eq.q,
-		w:  eq.w,
 	}
 	m.ref.totals = m
 	eq.totals = m
@@ -170,16 +176,51 @@ func pendingRecord(v any) JobRecord {
 	return r
 }
 
-// memJob is a varmq job as an in-memory queue or its worker holds it.
+// listMem lists m under GET /queues and turns tracking of its runs on, so
+// its running jobs can be read and cancelled by ID. Only jobs of a listed
+// queue (a named worker's) with an ID pay for it.
+func listMem(m *memQueue) {
+	registerQueue(m)
+	m.listed.Store(true)
+}
+
+// track adds a live run of job j with ID id.
+func (m *memQueue) track(id string, j any) {
+	m.runMu.Lock()
+	if m.running == nil {
+		m.running = map[string][]any{}
+	}
+	m.running[id] = append(m.running[id], j)
+	m.runMu.Unlock()
+}
+
+// untrack drops j's run, not another run under the same ID.
+func (m *memQueue) untrack(id string, j any) {
+	m.runMu.Lock()
+	defer m.runMu.Unlock()
+	js := m.running[id]
+	if i := slices.Index(js, j); i >= 0 {
+		js = slices.Delete(js, i, i+1)
+	}
+	if len(js) == 0 {
+		delete(m.running, id)
+		return
+	}
+	m.running[id] = js
+}
+
+// memJob is a varmq job as an in-memory queue or a worker holds it.
 type memJob interface {
 	recordOf() (string, any)
 	phase() status
+	memTotals() *memQueue
 	Cancel() error
 }
 
-// find returns m's jobs with ID id: waiting in the queue, then running in
-// its worker (tracked while m is listed for REST: listMem). Ended ones
-// too. A job taken into a batch but not reached yet is in neither.
+// find returns m's jobs with ID id: waiting in the queue (added through
+// m: another handle on the same storage counts its own), then running in
+// any worker (tracked while m is listed: listMem). Ended ones too. A job
+// taken into a batch but not reached yet is in neither.
 // ponytail: copies the whole queue (Values); an ID index if in-memory
 // queues of millions get read by ID often.
 func (m *memQueue) find(id string) []memJob {
@@ -193,14 +234,17 @@ func (m *memQueue) find(id string) []memJob {
 		if !ok {
 			return
 		}
-		if jid, _ := j.recordOf(); jid == id && !slices.ContainsFunc(out, func(x memJob) bool { return x == j }) {
+		if jid, _ := j.recordOf(); jid == id && j.memTotals() == m && !slices.Contains(out, j) {
 			out = append(out, j)
 		}
 	}
 	for _, v := range m.q.Values() {
 		add(v)
 	}
-	for _, v := range m.w.runningJobs(m, id) { // moved from the queue meanwhile: listed again, once
+	m.runMu.Lock()
+	running := slices.Clone(m.running[id])
+	m.runMu.Unlock()
+	for _, v := range running { // moved from the queue meanwhile: listed again, once
 		add(v)
 	}
 

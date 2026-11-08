@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 )
 
@@ -1265,7 +1266,7 @@ func TestMuxJobSharedStorage(t *testing.T) {
 	assert.JSONEq(t, `{"id":"done","state":"completed","payload":null,"attempts":1,"result":42}`, rr.Body.String())
 	rr = httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+s.QueueID()+"/jobs?state=completed", nil))
-	assert.JSONEq(t, `[{"id":"done","state":"completed","payload":null,"attempts":1,"result":42}]`, rr.Body.String(), "listed with its result")
+	assert.JSONEq(t, `[{"id":"done","state":"completed","payload":null,"attempts":1,"result_size":2}]`, rr.Body.String(), "listed with its result size, not its bytes")
 	assert.Equal(t, http.StatusConflict, cancel(s.QueueID(), "done").Code, "ended")
 	assert.Equal(t, http.StatusNotFound, get(s.QueueID(), "nope").Code)
 	assert.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "nope").Code, "storage can't tell waiting from unknown")
@@ -1298,4 +1299,39 @@ func TestMuxJobUnsupportedAndFailing(t *testing.T) {
 	rr := cancel("custom:broken-jobs", "x")
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.JSONEq(t, `{"error":"redis down"}`, rr.Body.String())
+}
+
+// Two workers on one storage: a job added through the named worker's
+// handle but run by the unnamed one is still read and cancelled by ID.
+func TestMuxJobRunByAnotherWorker(t *testing.T) {
+	shared := queues.NewQueue[any]()
+	started := make(chan string, 1)
+	runner := NewWorker(blockOnCancel(started)) // unnamed: lists nothing
+	defer runner.Stop()
+	runner.WithQueue(shared)
+	owner := NewWorker(func(Job[int]) {}, WithName("job-rest-owner"))
+	defer owner.Stop()
+	q := owner.WithQueue(shared)
+	m := memOf(t, q)
+	require.NoError(t, owner.Pause()) // only runner takes jobs
+	require.NoError(t, runner.Pause())
+	get, cancel := jobRoutes(t)
+
+	j, _ := q.Add(5, WithJobId("x"))
+	require.NoError(t, runner.Resume()) // an add wakes only its own handle's worker
+	select {
+	case id := <-started:
+		require.Equal(t, "x", id)
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner never took the job")
+	}
+	rr := get(m.QueueID(), "x")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"x","state":"processing","payload":5,"attempts":1}`, rr.Body.String())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "x").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, j.WaitContext(ctx), "the runner's job saw the cancel")
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "x").Code)
 }

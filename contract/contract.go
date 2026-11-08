@@ -65,8 +65,12 @@ type JobRecord struct {
 	Attempts   int             `json:"attempts"`
 	Errors     []JobError      `json:"errors,omitempty"`
 	// Result is the JSON a result worker left on a completed job
-	// (ResultAcknowledgeable), verbatim; absent otherwise.
+	// (ResultAcknowledgeable), verbatim; absent otherwise. Served by
+	// GET /queues/{id}/jobs/{jobId} only: list pages carry ResultSize.
 	Result json.RawMessage `json:"result,omitempty"`
+	// ResultSize is the length of Result in bytes, 0 when none. On list
+	// pages varmq sets it from Result and drops Result.
+	ResultSize int `json:"result_size,omitempty"`
 }
 
 // JobError is one failed attempt of a job. A JobRecord keeps at most the last

@@ -128,7 +128,10 @@ type workerSummary struct {
 // The PATCH routes change state and have no auth: protect Handler. The
 // worker routes act on this process only, but PATCH /queues/{id}/actions
 // pauses a shared queue for every process that consumes it, and the pause
-// outlives restarts.
+// outlives restarts. PATCH /queues/{id}/jobs/{jobId}/actions/cancel on
+// shared storage also reaches every consumer process: it marks the ID for
+// 24 h (until a re-add of the ID clears it) and answers 202 for any ID,
+// known or not.
 func Handler(prefix string) http.Handler {
 	mux := http.StripPrefix(prefix, NewServerMux())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -401,6 +404,12 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 
 	if jobs == nil {
 		jobs = []JobRecord{}
+	}
+	// Pages carry the size only: up to maxJobsLimit results of 64 KiB.
+	for i := range jobs {
+		if n := len(jobs[i].Result); n > 0 {
+			jobs[i].ResultSize, jobs[i].Result = n, nil
+		}
 	}
 
 	writeJSON(w, http.StatusOK, jobs)

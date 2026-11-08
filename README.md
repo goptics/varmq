@@ -395,7 +395,7 @@ http.ListenAndServe(":8080", mux)
 Job routes show one job (state, payload, attempts, times, errors, result) and cancel it. Cancel is cooperative: a waiting job never runs, a running one stops if its worker watches `j.Context()`. In-memory queues of named workers serve both for jobs with an ID, waiting or running; they keep no ended jobs. Shared storage serves them when it implements `JobReader` and `JobCanceller`. Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 
 > [!Warning]
-> The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.
+> The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks. On shared storage, a job cancel reaches every consumer process: it marks the ID for 24 h (a re-add of the ID clears it) and answers 202 for any ID.
 
 ## How It Works
 

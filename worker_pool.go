@@ -138,9 +138,11 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// still Close it; skip it here like the dispatcher would have.
 			// Tracked before it starts: a cancel request that lands
 			// meanwhile finds it queued and closes it. The checks stay
-			// inline: a worker with no cancel watch pays two atomic loads.
+			// inline: a worker with no cancel watch and no listed in-memory
+			// queue pays a few atomic loads.
 			var key runKey
-			watch := w.cancelWatch.Load()
+			m := j.memTotals()
+			watch := w.cancelWatch.Load() || (m != nil && m.listed.Load())
 			if watch {
 				key = w.trackRun(j)
 			}
