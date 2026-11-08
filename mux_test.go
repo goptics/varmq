@@ -370,6 +370,7 @@ func TestMuxGetWorker(t *testing.T) {
 
 	// A bound shared queue and a priority queue join it, sorted.
 	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "a:shared"}
+	defer queueRegistry.Delete(shared.id)
 	wb.WithQueue(shared)
 	pid := memOf(t, wb.BindPriorityQueue()).QueueID()
 	assert.True(t, strings.HasPrefix(pid, "memory:"+InstanceID+":prio:"), pid)
