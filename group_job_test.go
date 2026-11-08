@@ -590,9 +590,13 @@ func TestGroupWaitContext(t *testing.T) {
 	release := make(chan struct{})
 	block := func() { <-release }
 
-	q := NewWorker(func(Job[int]) { block() }).BindQueue()
-	eq := NewErrWorker(func(Job[int]) error { block(); return nil }).BindQueue()
-	rq := NewResultWorker(func(Job[int]) (int, error) { block(); return 0, nil }).BindQueue()
+	w := NewWorker(func(Job[int]) { block() })
+	ew := NewErrWorker(func(Job[int]) error { block(); return nil })
+	rw := NewResultWorker(func(Job[int]) (int, error) { block(); return 0, nil })
+	defer w.Stop()
+	defer ew.Stop()
+	defer rw.Stop()
+	q, eq, rq := w.BindQueue(), ew.BindQueue(), rw.BindQueue()
 	groups := map[string]Awaitable{
 		"group":        q.AddAll([]Item[int]{{Data: 1}, {Data: 2}}),
 		"err group":    eq.AddAll([]Item[int]{{Data: 1}}),
@@ -603,6 +607,9 @@ func TestGroupWaitContext(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		assert.ErrorIs(t, g.WaitContext(ctx), context.DeadlineExceeded, name)
 		cancel()
+		ended, stop := context.WithCancel(context.Background())
+		stop()
+		assert.ErrorIs(t, g.WaitContext(ended), context.Canceled, name+": ended ctx")
 	}
 
 	close(release)

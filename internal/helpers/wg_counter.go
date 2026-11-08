@@ -1,20 +1,22 @@
 package helpers
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
+// WgCounter counts a group's jobs down; done closes when the last ends.
 type WgCounter struct {
 	count atomic.Uint32
-	wg    sync.WaitGroup
+	done  chan struct{}
 }
 
 func NewWgCounter(bufferSize int) *WgCounter {
-	wgc := &WgCounter{}
+	wgc := &WgCounter{done: make(chan struct{})}
 
 	wgc.count.Add(uint32(bufferSize))
-	wgc.wg.Add(bufferSize)
+	if bufferSize == 0 {
+		close(wgc.done)
+	}
 
 	return wgc
 }
@@ -34,12 +36,19 @@ func (pt *WgCounter) Done() bool {
 		}
 
 		if pt.count.CompareAndSwap(n, n-1) {
-			pt.wg.Done()
+			if n == 1 {
+				close(pt.done)
+			}
 			return n == 1
 		}
 	}
 }
 
 func (pt *WgCounter) Wait() {
-	pt.wg.Wait()
+	<-pt.done
+}
+
+// Ended is closed once every job ended, for a select with a deadline.
+func (pt *WgCounter) Ended() <-chan struct{} {
+	return pt.done
 }

@@ -65,7 +65,7 @@ func (gj *groupJob[T]) Wait() {
 
 // WaitContext is Wait that gives up when ctx ends.
 func (gj *groupJob[T]) WaitContext(ctx context.Context) error {
-	return waitContext(ctx, gj.wgc.Wait)
+	return waitDone(ctx, gj.wgc.Ended())
 }
 
 func (gj *groupJob[T]) Close() error {
@@ -146,7 +146,7 @@ func (gj *resultGroupJob[T, R]) Wait() {
 
 // WaitContext is Wait that gives up when ctx ends.
 func (gj *resultGroupJob[T, R]) WaitContext(ctx context.Context) error {
-	return waitContext(ctx, gj.wgc.Wait)
+	return waitDone(ctx, gj.wgc.Ended())
 }
 
 func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
@@ -210,7 +210,7 @@ func (gj *errorGroupJob[T]) Wait() {
 
 // WaitContext is Wait that gives up when ctx ends.
 func (gj *errorGroupJob[T]) WaitContext(ctx context.Context) error {
-	return waitContext(ctx, gj.wgc.Wait)
+	return waitDone(ctx, gj.wgc.Ended())
 }
 
 func (gj *errorGroupJob[T]) newJob(data T, config jobConfigs) *errorGroupJob[T] {

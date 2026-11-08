@@ -381,9 +381,10 @@ func (j *job[T]) Wait() {
 
 func (j *job[T]) WaitContext(ctx context.Context) error { return waitContext(ctx, j.wg.Wait) }
 
-// waitContext runs wait until it returns or ctx ends.
-// ponytail: one goroutine per call, gone when wait returns (every job and
-// group ends: run, purged or closed); a done channel if calls pile up.
+// waitContext runs wait until it returns or ctx ends; ctx wins a tie.
+// ponytail: one goroutine per call, gone only when wait returns: a job
+// that never ends (queued on a stopped worker) keeps one per timed-out
+// call. A done channel would push job out of its size class.
 func waitContext(ctx context.Context, wait func()) error {
 	if ctx.Done() == nil {
 		wait()
@@ -396,6 +397,11 @@ func waitContext(ctx context.Context, wait func()) error {
 		close(done)
 	}()
 
+	return waitDone(ctx, done)
+}
+
+// waitDone waits for done or ctx's end, whichever comes first.
+func waitDone(ctx context.Context, done <-chan struct{}) error {
 	select {
 	case <-done:
 		return nil

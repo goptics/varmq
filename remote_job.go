@@ -192,13 +192,14 @@ func OpenResultJob[R any](s OutcomeWatcher, id string) EnqueuedResultJob[R] {
 // groups get big.
 type remoteGroup[R any] struct {
 	wg      sync.WaitGroup
+	ended   chan struct{} // closed by seal once every tracked job ended
 	n       atomic.Int64
 	errs    chan error
 	results chan Result[R]
 }
 
 func newRemoteGroup[R any](size int) *remoteGroup[R] {
-	return &remoteGroup[R]{errs: make(chan error, size), results: make(chan Result[R], size)}
+	return &remoteGroup[R]{ended: make(chan struct{}), errs: make(chan error, size), results: make(chan Result[R], size)}
 }
 
 // track waits for j in the background and reports its end to the group.
@@ -222,16 +223,17 @@ func (g *remoteGroup[R]) track(j *remoteJob[R]) {
 func (g *remoteGroup[R]) seal() {
 	go func() {
 		g.wg.Wait()
+		close(g.ended)
 		close(g.errs)
 		close(g.results)
 	}()
 }
 
 func (g *remoteGroup[R]) NumPending() int { return int(g.n.Load()) }
-func (g *remoteGroup[R]) Wait()           { g.wg.Wait() }
+func (g *remoteGroup[R]) Wait()           { <-g.ended }
 
 // WaitContext is Wait that gives up when ctx ends.
-func (g *remoteGroup[R]) WaitContext(ctx context.Context) error { return waitContext(ctx, g.wg.Wait) }
+func (g *remoteGroup[R]) WaitContext(ctx context.Context) error { return waitDone(ctx, g.ended) }
 
 // Errs gets each failed item's error (*RemoteError or ErrDetached); closed
 // when the group ended.

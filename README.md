@@ -312,7 +312,7 @@ wf.Add("email", mailQ, "ann@example.com").
 	Undo(unsendQ, "ann@example.com")
 
 wf.Submit(ctx)            // idempotent per ID
-rec, _ := wf.WaitContext(ctx) // rec.State: completed, failed, compensated, ...
+rec, _ := wf.WaitContext(ctx) // or wf.Wait(); rec.State: completed, failed, compensated, ...
 
 // in a worker: read a dependency's result
 var src string
@@ -361,8 +361,9 @@ worker.TunePool(8) // change concurrency on the fly
 worker.Restart()   // stop and start again, keeping pending jobs
 worker.Stop()      // graceful stop
 
-worker.Wait()          // block until no job is running or pending
-worker.WaitUntilIdle() // block until the worker is Idle (never returns while paused or stopped)
+worker.Wait()           // block until no job is running or pending
+worker.WaitContext(ctx) // the same, until ctx ends (ctx.Err() then); jobs and groups have it too
+worker.WaitUntilIdle()  // block until the worker is Idle (never returns while paused or stopped)
 ```
 
 `Status()` reports the state (`Running`, `Idle`, `Paused`, `Stopped`, ...). `PauseAndWait`, `StopAndWait`, `WaitUntilPaused` and `WaitUntilStopped` block until a state is reached.

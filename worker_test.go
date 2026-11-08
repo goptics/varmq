@@ -2051,6 +2051,9 @@ func TestWorkerWaitContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	assert.ErrorIs(t, w.WaitContext(ctx), context.DeadlineExceeded, "a running job holds Wait")
+	done, stop := context.WithCancel(context.Background())
+	stop()
+	assert.ErrorIs(t, w.WaitContext(done), context.Canceled, "an ended ctx returns at once")
 
 	close(release)
 	assert.NoError(t, w.WaitContext(context.Background()))
