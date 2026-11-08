@@ -268,16 +268,19 @@ func TestProducerAndOpenJob(t *testing.T) {
 	assert.Equal(t, 40, got)
 
 	// another waiter, by ID, after the end: typed result
-	r, err := OpenJob[int](s, "job-4").Result()
+	r, err := OpenResultJob[int](s, "job-4").Result()
 	require.NoError(t, err)
 	assert.Equal(t, 40, r)
 
 	// unknown job: waits until ctx ends
 	short, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer stop()
-	o := OpenJob[any](s, "nope")
+	o := OpenJob(s, "nope")
 	defer o.Close()
 	assert.ErrorIs(t, o.WaitContext(short), context.DeadlineExceeded)
+
+	// an ErrWorker-style wait by ID: Err directly
+	assert.NoError(t, OpenErrJob(s, "job-4").Err())
 }
 
 func TestDetachedWithoutWatcher(t *testing.T) {

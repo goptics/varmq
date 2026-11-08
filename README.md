@@ -146,7 +146,7 @@ job, _ := q.Add(64)
 s, err := job.Result() // waits, whichever process ran it
 
 // any process, by ID
-j := varmq.OpenJob[string](rq.NewQueue("thumbs"), job.ID()) // same handle as Add's
+j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / OpenErrJob for the other workers
 s, err = j.Result()
 ```
 

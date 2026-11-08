@@ -100,7 +100,7 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 
 // Purge drops the waiting jobs and detaches this handle's live job
 // handles (ErrDetached): a purged job never ends on its storage, so its Wait
-// would block for good. OpenJob still sees jobs that do end.
+// would block for good. OpenJob and the rest still see jobs that do end.
 // ponytail: storage does not say which jobs it dropped, so running jobs'
 // handles detach too; per-ID purge if that matters.
 func (d durableBase[T, R]) Purge() {

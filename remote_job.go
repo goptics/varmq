@@ -138,13 +138,21 @@ func decodeOutcome[R any](o JobOutcome, err error) (R, error) {
 	return r, json.Unmarshal(o.Result, &r)
 }
 
-// OpenJob is the handle of job id on s from any process (a restarted
-// producer, another service): WaitContext, and Result, which decodes a
-// ResultWorker's R and returns the job's error (*RemoteError) for any
-// worker kind (use any as R for Worker / ErrWorker jobs).
-// A job that ended earlier is found while s keeps its record. Close it to
-// stop waiting on a job that may never end.
-func OpenJob[R any](s OutcomeWatcher, id string) EnqueuedResultJob[R] {
+// OpenJob is the handle of a Worker's job id on s, from any process (a
+// restarted producer, another service), as NewQueue's Add returns it. A job
+// that ended earlier is found while s keeps its record. Close it to stop
+// waiting on a job that may never end.
+func OpenJob(s OutcomeWatcher, id string) EnqueuedJob {
+	return watchRemote[struct{}](s, id, nil)
+}
+
+// OpenErrJob is OpenJob for an ErrWorker's job: it has Err.
+func OpenErrJob(s OutcomeWatcher, id string) EnqueuedErrJob {
+	return watchRemote[struct{}](s, id, nil)
+}
+
+// OpenResultJob is OpenJob for a ResultWorker's job: Result decodes its R.
+func OpenResultJob[R any](s OutcomeWatcher, id string) EnqueuedResultJob[R] {
 	return watchRemote[R](s, id, nil)
 }
 
