@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-	"weak"
 )
 
 var (
@@ -56,6 +55,9 @@ func (j *job[T]) runOf() *jobRun {
 	if r, ok := runs.Load(j); ok {
 		return r.(*jobRun)
 	}
+	if j.status.Load() != processing { // outside a run: no allocation
+		return nil
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &jobRun{ctx: ctx, cancel: cancel}
@@ -70,7 +72,6 @@ func (j *job[T]) runOf() *jobRun {
 
 	// Checked after the store: the run loop sets finished before it ends
 	// the run, so an entry stored after that end would never be dropped.
-	// A job not processing (outside a run) lands here too.
 	if j.status.Load() != processing {
 		j.endRun()
 		return nil
@@ -308,30 +309,14 @@ func (w *worker[T, JobType]) cancelRunning(q any, id string) {
 // a map or slice; pointer storage always is) gets no watch, so a cancel
 // still drops its waiting jobs but does not reach running ones.
 //
-// The storage holds the hook, the hook holds the worker only weakly: a
-// discarded worker is collected, and its hook then stops itself.
+// ponytail: the storage holds the hook, so the worker, until the storage
+// closes, as its Subscribe hook does; stop it if workers come and go on
+// one long-lived storage.
 func (w *worker[T, JobType]) watchCancels(s any) {
 	cn, ok := s.(CancelNotifier)
 	if !ok || !reflect.ValueOf(s).Comparable() {
 		return
 	}
 	w.cancelWatch.Store(true)
-	onCancel(cn, weak.Make(w), s)
-}
-
-// onCancel registers the hook; apart from watchCancels so the closure
-// cannot capture the worker.
-func onCancel[T any, JobType iJob[T]](cn CancelNotifier, ww weak.Pointer[worker[T, JobType]], s any) {
-	var self atomic.Pointer[func()]
-	stop := cn.OnCancel(func(id string) {
-		w := ww.Value()
-		if w == nil { // worker collected: drop the hook from the storage
-			if c := self.Load(); c != nil {
-				(*c)()
-			}
-			return
-		}
-		w.cancelRunning(s, id)
-	})
-	self.Store(&stop)
+	cn.OnCancel(func(id string) { w.cancelRunning(s, id) })
 }

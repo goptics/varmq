@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1043,12 +1042,6 @@ func (c *cancelStore) OnCancel(fn func(string)) func() {
 	}
 }
 
-func (c *cancelStore) numHooks() int {
-	c.cmu.Lock()
-	defer c.cmu.Unlock()
-	return len(c.hooks)
-}
-
 func (c *cancelStore) EnqueueOnce(item any, id string) bool {
 	c.mu.Lock()
 	delete(c.outcomes, id)
@@ -1351,32 +1344,6 @@ func TestCancelWatchSkipsInMemoryJobs(t *testing.T) {
 	j, _ := w.BindQueue().Add(1)  // no storage: not tracked
 	j.Wait()
 	assert.Equal(t, "Closed", j.Status())
-}
-
-// unsubscribed is cancelStore without Subscribe, so nothing but the
-// cancel hook refers to the worker.
-type unsubscribed struct{ *cancelStore }
-
-func (unsubscribed) Subscribe() {}
-
-func TestCancelHookDropsCollectedWorker(t *testing.T) {
-	s := newCancelStore()
-	func() {
-		w := NewWorker(func(Job[int]) {})
-		w.WithQueue(unsubscribed{s})
-		require.NoError(t, w.Stop())
-	}()
-	require.Equal(t, 1, s.numHooks())
-
-	for range 10 {
-		runtime.GC()
-		require.NoError(t, s.CancelJob("any"))
-		if s.numHooks() == 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Skip("worker not collected yet; GC timing")
 }
 
 // cancelOnly can cancel by ID but reports no outcomes.
