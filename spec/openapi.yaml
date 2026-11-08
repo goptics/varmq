@@ -682,7 +682,7 @@ components:
           description: |
             A `JobState` value, or `waiting` (its dependencies have not
             ended) or `cancelled`. Open: a client accepts a value it does
-            not know.
+            not know. `pending` covers queued or running: a pop writes no state.
         deps:
           type: array
           description: Names of the tasks this one waits for. Absent for a root.
