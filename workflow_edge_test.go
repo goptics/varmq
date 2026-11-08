@@ -80,8 +80,9 @@ func TestWorkflowStoreErrors(t *testing.T) {
 // plainJob is a Job[int] that is no varmq job.
 type plainJob struct{}
 
-func (plainJob) ID() string { return "p" }
-func (plainJob) Data() int  { return 0 }
+func (plainJob) ID() string               { return "p" }
+func (plainJob) Data() int                { return 0 }
+func (plainJob) Context() context.Context { return context.Background() }
 
 func TestTaskContextErrors(t *testing.T) {
 	assert.Nil(t, TaskOf[int](plainJob{}), "not a varmq job")

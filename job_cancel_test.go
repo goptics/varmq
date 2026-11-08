@@ -564,14 +564,27 @@ func TestResultMarshalPanicFailsJob(t *testing.T) {
 	// a workflow task: the task fails
 	tj := newResultJob[int, panicky](1, jobConfigs{Id: "wf:w1:a"})
 	tj.setTask(taskTag{wf: "w1", task: "a"})
-	tj.succeed()
-	end := tj.ackRef.Load().ext.end
-	require.NotNil(t, end)
-	assert.Equal(t, OutcomeFailed, end.Outcome)
-	assert.Contains(t, end.Reason, "encode")
+	require.ErrorContains(t, tj.succeedResult(), "encode")
 
 	// in memory (no ack): nothing is encoded
 	mj := newResultJob[int, panicky](1, jobConfigs{})
-	mj.succeed()
+	require.NoError(t, mj.succeedResult())
 	assert.Nil(t, mj.ackRef.Load())
+
+	// the worker counts it failed and reports it on Errs
+	mw := NewResultWorker(func(Job[int]) (panicky, error) { return panicky{}, nil })
+	defer mw.Stop()
+	ms := newSharedStore()
+	errs := mw.Errs()
+	mj2, _ := mw.WithQueue(ms).Add(1)
+	_, err = mj2.Result()
+	require.Error(t, err)
+	select {
+	case e := <-errs:
+		assert.ErrorContains(t, e, "encode")
+	case <-time.After(time.Second):
+		t.Fatal("no error on Errs")
+	}
+	assert.EqualValues(t, 1, mw.Metrics().Failed())
+	assert.EqualValues(t, 0, mw.Metrics().Successful())
 }

@@ -677,6 +677,7 @@ func (ej *errorJob[T]) Drain() {}
 type iResultJob[T, R any] interface {
 	iErrorJob[T]
 	sendResult(result R)
+	succeedResult() error
 }
 
 // resultJob is a single job whose worker reports a result or an error, stored
@@ -765,24 +766,23 @@ func (rj *resultJob[T, R]) keepResult() error {
 	return nil
 }
 
-// succeed is job.succeed; a workflow task (not an undo) leaves R as JSON,
-// its Result. R that does not marshal fails the task; a MarshalJSON that
-// panics fails any job. Both run after the worker's recover, so the panic
-// is caught here.
-func (rj *resultJob[T, R]) succeed() {
+// succeedResult is succeed for a result job. A workflow task (not an undo)
+// leaves R as JSON, its Result; shared storage that keeps results gets R
+// via keepResult. It returns the error the run fails with instead: R of a
+// task that does not marshal, or a MarshalJSON that panics (after the
+// worker's recover, so caught here).
+func (rj *resultJob[T, R]) succeedResult() error {
 	t := rj.taskTag()
 	if t == nil {
 		if err := rj.keepResult(); err != nil {
-			rj.err = err
-			rj.fail(err.Error())
-			return
+			return err
 		}
 		rj.succeedWith(nil)
-		return
+		return nil
 	}
 	if t.undo {
 		rj.succeedWith(nil)
-		return
+		return nil
 	}
 
 	var b []byte
@@ -791,9 +791,9 @@ func (rj *resultJob[T, R]) succeed() {
 		err = p
 	}
 	if err != nil {
-		rj.fail(fmt.Sprintf("varmq: task result: %v", err))
-		return
+		return fmt.Errorf("varmq: task result: %w", err)
 	}
 
 	rj.succeedWith(b)
+	return nil
 }

@@ -229,3 +229,9 @@ func (gj *errorGroupJob[T]) Close() error {
 
 	return nil
 }
+
+// succeedResult is succeed: a group member keeps no result in storage.
+func (gj *resultGroupJob[T, R]) succeedResult() error {
+	gj.succeed()
+	return nil
+}

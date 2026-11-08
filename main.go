@@ -115,16 +115,18 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 			}
 		})
 
-		// send error if any
-		if err := utils.SelectError(panicErr, err); err != nil {
-			err = ij.endFailed(err)
-			ij.sendError(err)
-			w.sendError(err)
-			w.metrics.incFailed()
-		} else {
-			ij.succeed()
-			w.metrics.incSuccessful()
+		// send error if any; a result that fails to encode fails the run
+		err = utils.SelectError(panicErr, err)
+		if err == nil {
+			if err = ij.succeedResult(); err == nil {
+				w.metrics.incSuccessful()
+				return
+			}
 		}
+		err = ij.endFailed(err)
+		ij.sendError(err)
+		w.sendError(err)
+		w.metrics.incFailed()
 	}, config...)
 
 	return newResultQueues(w)
