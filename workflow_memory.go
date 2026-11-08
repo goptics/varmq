@@ -401,7 +401,7 @@ func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWo
 		}
 		// Submit order is CreatedAt order: past want, only the last one's
 		// ties (same ms) may still sort into the page.
-		if len(out) >= want && w.created != out[len(out)-1].created {
+		if len(out) >= want && (want == 0 || w.created != out[len(out)-1].created) {
 			break
 		}
 		out = append(out, w)

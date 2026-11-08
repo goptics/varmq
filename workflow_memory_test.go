@@ -222,6 +222,9 @@ func TestMemStoreWorkflows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list)
 	assert.NotNil(t, list, "an empty page is [], not null")
+	list, err = s.Workflows(ctx, "", 0, 0)
+	require.NoError(t, err)
+	assert.Empty(t, list, "limit 0")
 }
 
 // TestMemStoreWorkflowsTies: workflows of one ms list by ID, as GET
