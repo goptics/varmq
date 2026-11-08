@@ -319,6 +319,24 @@ func TestMuxListWorkers(t *testing.T) {
 		assert.Equal(t, []string{}, w.QueueIDs, "no queue bound: empty, not null")
 	}
 
+	// a Worker that is not varmq's: queue_ids [], not null
+	WorkerRegistry.Store("plain", plainWorker{w1})
+	defer WorkerRegistry.Delete("plain")
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
+	var raw []map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&raw))
+	require.Len(t, raw, 3)
+	for _, w := range raw {
+		assert.JSONEq(t, `[]`, string(w["queue_ids"]))
+	}
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers/plain", nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	var one map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&one))
+	assert.JSONEq(t, `[]`, string(one["queue_ids"]))
+
 	w1.Stop()
 	w2.Stop()
 }
@@ -369,7 +387,7 @@ func TestMuxGetWorker(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 
 	// A bound shared queue and a priority queue join it, sorted.
-	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "a:shared"}
+	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "z:shared"}
 	defer queueRegistry.Delete(shared.id)
 	wb.WithQueue(shared)
 	pid := memOf(t, wb.BindPriorityQueue()).QueueID()
@@ -379,7 +397,7 @@ func TestMuxGetWorker(t *testing.T) {
 	var list []workerSummary
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&list))
 	require.Len(t, list, 1)
-	assert.Equal(t, []string{"a:shared", id, pid}, list[0].QueueIDs)
+	assert.Equal(t, []string{id, pid, "z:shared"}, list[0].QueueIDs)
 
 	w.Stop()
 }
