@@ -150,8 +150,9 @@ func summarizeWorker(w Worker) workerSummary {
 // pauses a shared queue for every process that consumes it, and the pause
 // outlives restarts. PATCH /queues/{id}/jobs/{jobId}/actions/cancel on
 // shared storage also reaches every consumer process: it marks the ID for
-// 24 h (until a re-add of the ID clears it) and answers 202 for any ID,
-// known or not.
+// 24 h (until a re-add of the ID clears it) and answers 202 for any ID with
+// no ended record, known or not; a retained ended job answers 409. A waiting
+// workflow task there answers 202 but still runs: cancel its workflow.
 func Handler(prefix string) http.Handler {
 	mux := http.StripPrefix(prefix, NewServerMux())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -452,12 +453,15 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err.Error())
 	default:
+		rec.ResultSize = 0 // list pages only; a reader may fill both
 		writeJSON(w, http.StatusOK, rec)
 	}
 }
 
 // handleJobAction cancels a job by ID (JobCanceller). 202: a waiting job
 // never runs; a running one stops only if its worker watches Context().
+// Exception: a waiting workflow task on shared storage still runs; PATCH
+// /workflows/{id}/actions/cancel stops it.
 func handleJobAction(w http.ResponseWriter, r *http.Request) {
 	v, ok := queueRegistry.Load(r.PathValue("id"))
 	if !ok {

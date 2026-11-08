@@ -1198,6 +1198,14 @@ func (brokenJobStore) Job(context.Context, string) (JobRecord, error) {
 }
 func (brokenJobStore) CancelJob(string) error { return errors.New("redis down") }
 
+// sizedJobStore reads a job with both result and result_size set.
+type sizedJobStore struct{ plainInspector }
+
+func (sizedJobStore) QueueID() string { return "custom:sized" }
+func (sizedJobStore) Job(context.Context, string) (JobRecord, error) {
+	return JobRecord{ID: "x", State: JobCompleted, Payload: json.RawMessage("null"), Result: json.RawMessage("1"), ResultSize: 1}, nil
+}
+
 func jobRoutes(t *testing.T) (get, cancel func(q, job string) *httptest.ResponseRecorder) {
 	server := NewServerMux()
 	do := func(method, path string) *httptest.ResponseRecorder {
@@ -1322,6 +1330,13 @@ func TestMuxJobUnsupportedAndFailing(t *testing.T) {
 	rr := cancel("custom:broken-jobs", "x")
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.JSONEq(t, `{"error":"redis down"}`, rr.Body.String())
+
+	// result_size is for list pages: a one-job read drops it.
+	queueRegistry.Store("custom:sized", sizedJobStore{})
+	defer queueRegistry.Delete("custom:sized")
+	rr = get("custom:sized", "x")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.NotContains(t, rr.Body.String(), "result_size")
 }
 
 // Two workers on one storage: a job added through the named worker's
