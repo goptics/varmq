@@ -126,7 +126,8 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// A workflow task its workflow no longer wants (cancelled, ended)
 			// ends cancelled without running.
 			if !w.runnable(j) {
-				err := finishTask[T](j, OutcomeCancelled, "workflow cancelled")
+				j.endTask(OutcomeCancelled, "workflow cancelled", nil)
+				err := j.Close()
 				if err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
 					w.sendError(err)
 				}

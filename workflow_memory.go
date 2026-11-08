@@ -198,7 +198,7 @@ func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 		p := memPush{w: w, task: e.Push, undo: e.Undo,
 			target: tp.Queue.(memTarget), item: tp.Item.(memTaskItem), prio: tp.Priority}
 		if e.Undo {
-			p.target, p.item, p.prio = tp.Undo.Queue.(memTarget), tp.Undo.Item.(memTaskItem), tp.Undo.Priority
+			p.target, p.item, p.prio = tp.Undo.Queue.(memTarget), tp.Undo.Item.(memTaskItem), 0
 		}
 		out = append(out, p)
 	}
@@ -206,16 +206,14 @@ func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 	return out
 }
 
-// push runs the pushes and returns the queue IDs pushed into. A refused
-// push (custom storage without a force path) fails its task and closes the
-// job, so its waiters release; the effects of that failure run too.
-func (m *memWorkflowStore) push(work []memPush) []string {
-	var pushed []string
+// push runs the pushes. A refused push (custom storage without a force
+// path) fails its task and closes the job, so its waiters release; the
+// effects of that failure run too.
+func (m *memWorkflowStore) push(work []memPush) {
 	for len(work) > 0 {
 		p := work[0]
 		work = work[1:]
 		if p.target.push(p.item, p.prio) {
-			pushed = append(pushed, p.target.queueID)
 			continue
 		}
 
@@ -229,8 +227,6 @@ func (m *memWorkflowStore) push(work []memPush) []string {
 		// After the finish, so a Close that reports the task finds it ended.
 		_ = p.item.Close()
 	}
-
-	return pushed
 }
 
 // tooLarge reports whether t's in-memory store fails it for result: over
@@ -241,9 +237,9 @@ func (t *taskTag) tooLarge(result []byte) bool {
 }
 
 // finish records a task's (or undo's) outcome and pushes what it releases.
-// It returns the queue IDs pushed into. Only a completed task keeps a
-// result; one over the limit fails the task with ErrResultTooLarge.
-func (m *memWorkflowStore) finish(e TaskEnd) (pushed []string, err error) {
+// Only a completed task keeps a result; one over the limit fails the task
+// with ErrResultTooLarge.
+func (m *memWorkflowStore) finish(e TaskEnd) error {
 	switch {
 	case e.Outcome != OutcomeCompleted || e.Undo:
 		e.Result = nil
@@ -257,17 +253,19 @@ func (m *memWorkflowStore) finish(e TaskEnd) (pushed []string, err error) {
 	w, err := m.get(e.Workflow)
 	if err != nil {
 		m.mu.Unlock()
-		return nil, err
+		return err
 	}
 	fx, err := w.s.finish(e)
 	pushes := m.effects(w, fx)
 	m.mu.Unlock()
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return m.push(pushes), nil
+	m.push(pushes)
+
+	return nil
 }
 
 // get returns workflow id. Callers hold mu.

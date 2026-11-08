@@ -50,12 +50,11 @@ type TaskPlan struct {
 	Undo                 *UndoPlan
 }
 
-// UndoPlan is a task's compensation job.
+// UndoPlan is a task's compensation job. A priority queue's undo is pushed
+// at priority 0.
 type UndoPlan struct {
 	JobID, QueueID string
 	Queue          any
-	Priority       int
-	HasPriority    bool
 	Item           any
 }
 

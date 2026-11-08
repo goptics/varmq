@@ -86,7 +86,7 @@ Workflow keys belong to a namespace, not to a queue (section 6.9):
 | Field | Value |
 |---|---|
 | `meta` | JSON: `state`, `created_at` and `finished_at` (ms, the latter absent while running), `fail_fast`, `undo_on_cancel` (Submit's option; a Cancel that gives `undo` overwrites it, section 6.11), `cancelled` (a cancel was called), `failed` (an unabsorbed failure happened before any cancel), `hash` (the plan hash), and `tasks`, the task names in Add order (a topological order). |
-| `t:<task>` | JSON, written at Submit and never changed: the queue's base key and kind (`fifo` or `prio`), priority, `deps`, `dependents` (names, in Add order), `always` (the dependency policy), the job ID, and `undo` (the undo's queue base key, kind, priority, job ID and envelope, embedded verbatim) or absent. |
+| `t:<task>` | JSON, written at Submit and never changed: the queue's base key and kind (`fifo` or `prio`), priority, `deps`, `dependents` (names, in Add order), `always` (the dependency policy), the job ID, and `undo` (the undo's queue base key, kind, job ID and envelope, embedded verbatim; a prio undo is pushed at priority 0) or absent. |
 | `s:<task>` | The task's state: `waiting`, `pending`, `completed`, `failed` or `cancelled`. A pop does not write it, so it stays `pending` while the task is queued or processing. |
 | `n:<task>` | Integer: dependencies not ended yet. Present while the task is `waiting`. |
 | `i:<task>` | The task's envelope, until it is pushed. |

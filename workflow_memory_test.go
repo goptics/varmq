@@ -118,16 +118,13 @@ func TestMemStoreRecord(t *testing.T) {
 
 	e := end("rec", "a", OutcomeCompleted)
 	e.Result = []byte(`{"x":1}`)
-	pushed, err := s.finish(e)
-	require.NoError(t, err)
-	assert.Equal(t, []string{prioID}, pushed)
+	require.NoError(t, s.finish(e))
 	assert.Equal(t, 1, prio.Len())
 
 	e = end("rec", "b", OutcomeFailed)
 	e.Reason = "boom"
-	pushed, err = s.finish(e)
-	require.NoError(t, err)
-	assert.Equal(t, []string{fifoID}, pushed, "c is Always: runs anyway")
+	require.NoError(t, s.finish(e))
+	assert.Equal(t, 2, fifo.Len(), "c is Always: runs anyway")
 
 	r, _ = s.Record(ctx, "rec")
 	assert.Equal(t, JobCompleted, r.Tasks[0].State)
@@ -138,7 +135,7 @@ func TestMemStoreRecord(t *testing.T) {
 	assert.Zero(t, r.FinishedAt)
 
 	*clock = clock.Add(time.Second)
-	_, err = s.finish(end("rec", "c", OutcomeCompleted))
+	err = s.finish(end("rec", "c", OutcomeCompleted))
 	require.NoError(t, err)
 	r, _ = s.Record(ctx, "rec")
 	assert.Equal(t, WorkflowCompleted, r.State, "b's failure is absorbed by Always c")
@@ -146,9 +143,9 @@ func TestMemStoreRecord(t *testing.T) {
 
 	_, err = s.Record(ctx, "nope")
 	assert.ErrorIs(t, err, ErrWorkflowNotFound)
-	_, err = s.finish(end("nope", "a", OutcomeCompleted))
+	err = s.finish(end("nope", "a", OutcomeCompleted))
 	assert.ErrorIs(t, err, ErrWorkflowNotFound)
-	_, err = s.finish(end("rec", "zzz", OutcomeCompleted))
+	err = s.finish(end("rec", "zzz", OutcomeCompleted))
 	assert.Error(t, err, "unknown task")
 }
 
@@ -166,7 +163,7 @@ func TestMemStoreRetention(t *testing.T) {
 
 	require.NoError(t, submit(t, one("old", 1)))
 	require.NoError(t, submit(t, one("live", 1)))
-	_, err := s.finish(end("old", "a", OutcomeCompleted))
+	err := s.finish(end("old", "a", OutcomeCompleted))
 	require.NoError(t, err)
 
 	*clock = clock.Add(59 * time.Minute)
@@ -208,9 +205,9 @@ func TestMemStoreWorkflows(t *testing.T) {
 		require.NoError(t, submit(t, wf))
 		*clock = clock.Add(time.Millisecond)
 	}
-	_, err := s.finish(end("w2", "a", OutcomeCompleted))
+	err := s.finish(end("w2", "a", OutcomeCompleted))
 	require.NoError(t, err)
-	_, err = s.finish(end("w3", "a", OutcomeFailed))
+	err = s.finish(end("w3", "a", OutcomeFailed))
 	require.NoError(t, err)
 
 	list, _ := s.Workflows(ctx, "", 0, 10)
@@ -305,7 +302,7 @@ func TestMemStoreResults(t *testing.T) {
 
 	e := end("res", "a", OutcomeCompleted)
 	e.Result = []byte("1234")
-	_, err = s.finish(e)
+	err = s.finish(e)
 	require.NoError(t, err)
 	e.Result[0] = 'X' // the store keeps its own copy
 	got, err := s.DepResult(ctx, "res", "a")
@@ -315,14 +312,14 @@ func TestMemStoreResults(t *testing.T) {
 	got, _ = s.DepResult(ctx, "res", "a")
 	assert.Equal(t, []byte("1234"), got, "callers get a copy")
 
-	_, err = s.finish(end("res", "b", OutcomeFailed))
+	err = s.finish(end("res", "b", OutcomeFailed))
 	require.NoError(t, err)
 	_, err = s.DepResult(ctx, "res", "b")
 	assert.ErrorIs(t, err, ErrDepFailed)
 
 	e = end("res", "big", OutcomeCompleted)
 	e.Result = []byte("12345")
-	_, err = s.finish(e)
+	err = s.finish(e)
 	require.NoError(t, err)
 	_, err = s.DepResult(ctx, "res", "big")
 	assert.ErrorIs(t, err, ErrDepFailed, "over the limit: failed")
@@ -331,7 +328,7 @@ func TestMemStoreResults(t *testing.T) {
 	assert.Equal(t, ErrResultTooLarge.Error(), r.Tasks[2].Reason)
 	assert.Zero(t, r.Tasks[2].ResultSize)
 
-	_, err = s.finish(end("res", "none", OutcomeCompleted))
+	err = s.finish(end("res", "none", OutcomeCompleted))
 	require.NoError(t, err)
 	_, err = s.DepResult(ctx, "res", "none")
 	assert.ErrorIs(t, err, ErrNoResult, "completed without a result")
@@ -353,7 +350,7 @@ func TestMemStoreCancel(t *testing.T) {
 	b := wf.Add("b", q, 2).After(a)
 	wf.Add("c", q, 3).After(b)
 	require.NoError(t, submit(t, wf))
-	_, err := s.finish(end("cx", "a", OutcomeCompleted))
+	err := s.finish(end("cx", "a", OutcomeCompleted))
 	require.NoError(t, err)
 	// Empty q without closing: a Purge would cancel queued b.
 	for q.Len() > 0 {
@@ -371,7 +368,7 @@ func TestMemStoreCancel(t *testing.T) {
 	assert.Equal(t, JobCancelled, r.Tasks[2].State, "waiting c cancelled now")
 	assert.Equal(t, WorkflowRunning, r.State, "b is still queued")
 
-	_, err = s.finish(end("cx", "b", OutcomeCancelled))
+	err = s.finish(end("cx", "b", OutcomeCancelled))
 	require.NoError(t, err)
 	r, _ = s.Record(ctx, "cx")
 	assert.Equal(t, WorkflowCompensating, r.State)
@@ -382,7 +379,7 @@ func TestMemStoreCancel(t *testing.T) {
 
 	ok, _ = s.Runnable(ctx, "cx", "a", true)
 	assert.True(t, ok)
-	_, err = s.finish(TaskEnd{Workflow: "cx", Task: "a", Outcome: OutcomeCompleted, Undo: true})
+	err = s.finish(TaskEnd{Workflow: "cx", Task: "a", Outcome: OutcomeCompleted, Undo: true})
 	require.NoError(t, err)
 	r, _ = s.Record(ctx, "cx")
 	assert.Equal(t, WorkflowCompensated, r.State)
@@ -405,16 +402,16 @@ func TestMemStoreUndoReason(t *testing.T) {
 	a := wf.Add("a", q, 1).Undo(q, 10)
 	wf.Add("b", q, 2).After(a)
 	require.NoError(t, submit(t, wf))
-	_, err := s.finish(end("ur", "a", OutcomeCompleted))
+	err := s.finish(end("ur", "a", OutcomeCompleted))
 	require.NoError(t, err)
-	_, err = s.finish(end("ur", "b", OutcomeFailed))
+	err = s.finish(end("ur", "b", OutcomeFailed))
 	require.NoError(t, err)
 
 	r, _ := s.Record(ctx, "ur")
 	require.Equal(t, WorkflowCompensating, r.State)
 	assert.Empty(t, r.Tasks[0].Undo.Reason)
 
-	_, err = s.finish(TaskEnd{Workflow: "ur", Task: "a", Outcome: OutcomeFailed, Reason: "undo boom", Undo: true})
+	err = s.finish(TaskEnd{Workflow: "ur", Task: "a", Outcome: OutcomeFailed, Reason: "undo boom", Undo: true})
 	require.NoError(t, err)
 	r, _ = s.Record(ctx, "ur")
 	assert.Equal(t, WorkflowCompensationFailed, r.State)
@@ -460,9 +457,7 @@ func TestMemStorePromotion(t *testing.T) {
 		_, ok = pq.Add(10, 0)
 		require.False(t, ok, "pq full")
 
-		pushed, err := s.finish(end("cap", "a", OutcomeCompleted))
-		require.NoError(t, err)
-		assert.Len(t, pushed, 2)
+		require.NoError(t, s.finish(end("cap", "a", OutcomeCompleted)))
 		assert.Equal(t, 2, q.Len(), "b promoted past capacity")
 		assert.Equal(t, 2, pq.Len(), "c promoted past capacity")
 	})
@@ -484,9 +479,7 @@ func TestMemStorePromotion(t *testing.T) {
 		submitted := q.(*queue[int]).totals.submitted.Load()
 
 		rq.refuse.Store(true)
-		pushed, err := s.finish(end("ref", "a", OutcomeCompleted))
-		require.NoError(t, err)
-		assert.Empty(t, pushed)
+		require.NoError(t, s.finish(end("ref", "a", OutcomeCompleted)))
 
 		r, _ := s.Record(ctx, "ref")
 		assert.Equal(t, JobFailed, r.Tasks[1].State)
@@ -530,10 +523,10 @@ func TestMemStoreConcurrent(t *testing.T) {
 			a := wf.Add("a", q, i)
 			wf.Add("b", q, i).After(a)
 			assert.NoError(t, submit(t, wf))
-			_, err := s.finish(end(id, "a", OutcomeCompleted))
+			err := s.finish(end(id, "a", OutcomeCompleted))
 			assert.NoError(t, err)
 			_, _ = s.Workflows(ctx, "", 0, 5)
-			_, err = s.finish(end(id, "b", OutcomeCompleted))
+			err = s.finish(end(id, "b", OutcomeCompleted))
 			assert.NoError(t, err)
 		})
 	}

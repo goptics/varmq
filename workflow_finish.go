@@ -27,14 +27,8 @@ func taskEnd(ext *ackExt) TaskEnd {
 // so already ended) or a tag not from its plan; the job closes anyway.
 func finishMemTask(ext *ackExt) {
 	if m, ok := ext.task.store.(*memWorkflowStore); ok {
-		_, _ = m.finish(taskEnd(ext))
+		_ = m.finish(taskEnd(ext))
 	}
-}
-
-// finishTask ends j's task with outcome o without running it, and closes j.
-func finishTask[T any](j iJob[T], o Outcome, reason string) error {
-	j.endTask(o, reason, nil)
-	return j.Close()
 }
 
 // runnable is the pre-run check: false when j's workflow says its task may
