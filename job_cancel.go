@@ -263,7 +263,7 @@ func (w *worker[T, JobType]) trackRun(j JobType) runKey {
 		return runKey{}
 	}
 	if m := j.memTotals(); m != nil {
-		if !m.listed.Load() {
+		if !m.tracked() {
 			return runKey{}
 		}
 		m.track(id, j)

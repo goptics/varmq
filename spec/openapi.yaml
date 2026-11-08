@@ -281,12 +281,16 @@ paths:
         Since 1.4.0. Served when the queue's storage reads one job (in Go,
         its `QueueInspector` is also a `varmq.JobReader`); else 501. An
         in-memory queue finds a waiting job (`pending`) or a running one
-        (`processing`, `attempts` 1, no times); it keeps no ended jobs, so
-        a job that completed, failed or was cancelled is 404, and so is a
-        job without an ID. A job cancelled or closed while it waits stays
-        on the queue's `pending` page until a worker drops it, but is 404
-        here. A job a worker took into a batch but has not
-        started yet is briefly in neither place: 404.
+        (`processing`, `attempts` 1, no times, `payload` null: its worker
+        may change the data while it runs); it keeps no ended jobs, so a
+        job that completed, failed or was cancelled is 404, and so is a job
+        without an ID. A job cancelled or closed while it waits stays on
+        the queue's `pending` page until a worker drops it, but is 404
+        here. A job a worker took into a batch behind a running job is in
+        neither place until it starts, however long the job ahead runs:
+        404 for both routes, and it still runs. Running jobs are tracked
+        from when the process builds its REST handler; one already running
+        then is 404 until it ends.
       responses:
         "200":
           description: The job.

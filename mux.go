@@ -144,6 +144,7 @@ func Handler(prefix string) http.Handler {
 // The returned mux has no path prefix, so it can be used directly or mounted
 // under any prefix using [Handler].
 func NewServerMux() *http.ServeMux {
+	served.Store(true) // in-memory runs are tracked for the job routes from now on
 	mux := http.NewServeMux()
 	// GET /health
 	mux.HandleFunc("GET /health", handleHealthCheck)
@@ -396,7 +397,15 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, err := v.(QueueInspector).Jobs(r.Context(), state, offset, limit)
+	qi := v.(QueueInspector)
+	jobs, err := qi.Jobs(r.Context(), state, offset, limit)
+	if err != nil && state == JobCancelled {
+		// Storage older than openapi 1.4.0 rejects the state: an empty
+		// page, if it still answers a failed page.
+		if _, ferr := qi.Jobs(r.Context(), JobFailed, 0, 1); ferr == nil {
+			jobs, err = nil, nil
+		}
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

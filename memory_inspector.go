@@ -28,7 +28,8 @@ type memQueue struct {
 	// so Job and CancelJob find it. ponytail: never cleared on unlisting.
 	listed  atomic.Bool
 	runMu   sync.Mutex
-	running map[string][]any // job ID -> its live runs (memJob)
+	running map[string]any   // job ID -> its first live run (memJob): no slice per run
+	extra   map[string][]any // job ID -> its other live runs, rare (a reused ID)
 
 	submitted, completed, failed atomic.Uint64
 	processing                   atomic.Int64
@@ -176,9 +177,20 @@ func pendingRecord(v any) JobRecord {
 	return r
 }
 
-// listMem lists m under GET /queues and turns tracking of its runs on, so
-// its running jobs can be read and cancelled by ID. Only jobs of a listed
-// queue (a named worker's) with an ID pay for it.
+// served is set once a REST mux is built (NewServerMux, so Handler):
+// in-memory runs are tracked only then. Jobs already running when it is
+// set stay untracked until they end.
+var served atomic.Bool
+
+// tracked reports whether runs of m's jobs with an ID are tracked: m is
+// listed and a REST mux exists. Nil-safe.
+func (m *memQueue) tracked() bool {
+	return m != nil && m.listed.Load() && served.Load()
+}
+
+// listMem lists m under GET /queues and turns tracking of its runs on
+// (once a mux is served), so its running jobs can be read and cancelled
+// by ID. Only jobs of a listed queue (a named worker's) with an ID pay.
 func listMem(m *memQueue) {
 	registerQueue(m)
 	m.listed.Store(true)
@@ -187,26 +199,50 @@ func listMem(m *memQueue) {
 // track adds a live run of job j with ID id.
 func (m *memQueue) track(id string, j any) {
 	m.runMu.Lock()
+	defer m.runMu.Unlock()
 	if m.running == nil {
-		m.running = map[string][]any{}
+		m.running = map[string]any{}
 	}
-	m.running[id] = append(m.running[id], j)
-	m.runMu.Unlock()
+	if _, ok := m.running[id]; !ok {
+		m.running[id] = j
+		return
+	}
+	if m.extra == nil {
+		m.extra = map[string][]any{}
+	}
+	m.extra[id] = append(m.extra[id], j)
 }
 
 // untrack drops j's run, not another run under the same ID.
 func (m *memQueue) untrack(id string, j any) {
 	m.runMu.Lock()
 	defer m.runMu.Unlock()
-	js := m.running[id]
-	if i := slices.Index(js, j); i >= 0 {
+	js := m.extra[id]
+	if m.running[id] == j {
+		if len(js) == 0 {
+			delete(m.running, id)
+			return
+		}
+		m.running[id], js = js[0], js[1:]
+	} else if i := slices.Index(js, j); i >= 0 {
 		js = slices.Delete(js, i, i+1)
 	}
 	if len(js) == 0 {
-		delete(m.running, id)
+		delete(m.extra, id)
 		return
 	}
-	m.running[id] = js
+	m.extra[id] = js
+}
+
+// runsOf is the live runs of ID id.
+func (m *memQueue) runsOf(id string) []any {
+	m.runMu.Lock()
+	defer m.runMu.Unlock()
+	j, ok := m.running[id]
+	if !ok {
+		return nil
+	}
+	return append([]any{j}, m.extra[id]...)
 }
 
 // memJob is a varmq job as an in-memory queue or a worker holds it.
@@ -241,10 +277,7 @@ func (m *memQueue) find(id string) []memJob {
 	for _, v := range m.q.Values() {
 		add(v)
 	}
-	m.runMu.Lock()
-	running := slices.Clone(m.running[id])
-	m.runMu.Unlock()
-	for _, v := range running { // moved from the queue meanwhile: listed again, once
+	for _, v := range m.runsOf(id) { // moved from the queue meanwhile: listed again, once
 		add(v)
 	}
 
@@ -253,15 +286,22 @@ func (m *memQueue) find(id string) []memJob {
 
 // Job is the JobReader of an in-memory queue: a waiting job (pending) or
 // a running one (processing). Ended jobs are not kept: ErrJobNotFound.
+//
+// A running job's payload is null: its worker may write its data while it
+// runs (a map: a fatal concurrent read). A waiting job's data is read as
+// GET /queues/{id}/jobs reads it; one that started during the read is
+// reported running, its payload dropped.
 func (m *memQueue) Job(_ context.Context, id string) (JobRecord, error) {
 	for _, j := range m.find(id) {
 		switch j.phase() {
 		case created, queued:
-			return pendingRecord(j), nil
-		case processing:
 			r := pendingRecord(j)
-			r.State, r.Attempts = JobProcessing, 1
-			return r, nil
+			if p := j.phase(); p == created || p == queued {
+				return r, nil
+			}
+			fallthrough // started meanwhile
+		case processing:
+			return JobRecord{ID: id, State: JobProcessing, Payload: json.RawMessage("null"), Attempts: 1}, nil
 		}
 	}
 

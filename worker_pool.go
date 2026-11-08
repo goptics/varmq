@@ -142,7 +142,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// queue pays a few atomic loads.
 			var key runKey
 			m := j.memTotals()
-			watch := w.cancelWatch.Load() || (m != nil && m.listed.Load())
+			watch := w.cancelWatch.Load() || m.tracked()
 			if watch {
 				key = w.trackRun(j)
 			}
