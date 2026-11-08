@@ -271,6 +271,9 @@ func (p cancelPrio) EnqueueOnce(item any, prio int, id string) bool {
 	p.mu.Lock()
 	delete(p.outcomes, id)
 	p.mu.Unlock()
+	p.cmu.Lock()
+	delete(p.marked, id)
+	p.cmu.Unlock()
 	return p.push(item, prio)
 }
 

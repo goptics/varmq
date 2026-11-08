@@ -150,7 +150,7 @@ j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / O
 s, err = j.Result()
 ```
 
-Needs the redisq release that implements `redis-storage.md` 1.7.0 (`WatchOutcome`, `AcknowledgeResult`, `CancelJob`). Older redisq, v1.5.1 included, lacks `Reject` and does not compile with this varmq (no `IPersistentQueue`).
+Needs the redisq release that implements `redis-storage.md` 1.7.0 (`WatchOutcome`, `AcknowledgeResult`, `CancelJob`). Older redisq, v1.5.1 included, lacks `Reject` and does not compile with this varmq (its queue does not satisfy `IPersistentQueue`).
 
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it (sqliteq, custom) gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
 
