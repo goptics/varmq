@@ -58,7 +58,7 @@ func main() {
 
 	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rec, err := wf.Wait(wctx)
+	rec, err := wf.WaitContext(wctx)
 	if err != nil {
 		panic(err)
 	}

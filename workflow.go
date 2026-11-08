@@ -458,8 +458,12 @@ func (wf *Workflow) Status(ctx context.Context) (WorkflowRecord, error) {
 
 func isFinal(s WorkflowState) bool { return s != WorkflowRunning && s != WorkflowCompensating }
 
-// Wait blocks until the workflow reaches a final state or ctx is done.
-func (wf *Workflow) Wait(ctx context.Context) (WorkflowRecord, error) {
+// Wait blocks until the workflow reaches a final state; a store read error
+// returns early.
+func (wf *Workflow) Wait() (WorkflowRecord, error) { return wf.WaitContext(context.Background()) }
+
+// WaitContext is Wait that gives up when ctx ends: ctx.Err() then.
+func (wf *Workflow) WaitContext(ctx context.Context) (WorkflowRecord, error) {
 	if err := wf.handleErr(); err != nil {
 		return WorkflowRecord{}, err
 	}

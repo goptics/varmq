@@ -1,6 +1,10 @@
 package varmq
 
-import "github.com/goptics/varmq/internal/helpers"
+import (
+	"context"
+
+	"github.com/goptics/varmq/internal/helpers"
+)
 
 // groupJob represents a job that can be used in a group.
 type groupJob[T any] struct {
@@ -57,6 +61,11 @@ func (gj *groupJob[T]) NumPending() int {
 
 func (gj *groupJob[T]) Wait() {
 	gj.wgc.Wait()
+}
+
+// WaitContext is Wait that gives up when ctx ends.
+func (gj *groupJob[T]) WaitContext(ctx context.Context) error {
+	return waitContext(ctx, gj.wgc.Wait)
 }
 
 func (gj *groupJob[T]) Close() error {
@@ -135,6 +144,11 @@ func (gj *resultGroupJob[T, R]) Wait() {
 	gj.wgc.Wait()
 }
 
+// WaitContext is Wait that gives up when ctx ends.
+func (gj *resultGroupJob[T, R]) WaitContext(ctx context.Context) error {
+	return waitContext(ctx, gj.wgc.Wait)
+}
+
 func (gj *resultGroupJob[T, R]) Results() <-chan Result[R] {
 	return gj.resp.Read()
 }
@@ -192,6 +206,11 @@ func (gj *errorGroupJob[T]) NumPending() int {
 
 func (gj *errorGroupJob[T]) Wait() {
 	gj.wgc.Wait()
+}
+
+// WaitContext is Wait that gives up when ctx ends.
+func (gj *errorGroupJob[T]) WaitContext(ctx context.Context) error {
+	return waitContext(ctx, gj.wgc.Wait)
 }
 
 func (gj *errorGroupJob[T]) newJob(data T, config jobConfigs) *errorGroupJob[T] {

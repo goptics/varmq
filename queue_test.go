@@ -2325,3 +2325,17 @@ func TestOldHandleCloseKeepsNewWatch(t *testing.T) {
 	defer cancel()
 	assert.NoError(t, readd.WaitContext(ctx))
 }
+
+func TestRemoteGroupWaitContext(t *testing.T) {
+	w := NewResultWorker(func(j Job[int]) (int, error) { return j.Data(), nil }, WithAutoRun(false))
+	defer w.Stop()
+	g := w.WithQueue(newSharedStore()).AddAll([]Item[int]{{Data: 1}})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	assert.ErrorIs(t, g.WaitContext(ctx), context.DeadlineExceeded, "the worker has not started")
+
+	require.NoError(t, w.Start())
+	g.Drain()
+	assert.NoError(t, g.WaitContext(context.Background()))
+}

@@ -490,10 +490,13 @@ func TestWorkflowHandleOps(t *testing.T) {
 	require.NoError(t, h.Cancel(ctx))
 	close(release) // a completes through its worker; waiting b was cancelled
 
-	r, err := wf.Wait(ctx)
+	r, err := wf.WaitContext(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, WorkflowCancelled, r.State)
 	assert.Equal(t, JobCompleted, r.Tasks[0].State, "a's worker reported it")
+	r2, err := h.Wait() // no deadline: returns at the final state
+	require.NoError(t, err)
+	assert.Equal(t, r.State, r2.State)
 	st, err := h.Status(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, WorkflowCancelled, st.State)
@@ -503,7 +506,7 @@ func TestWorkflowHandleOps(t *testing.T) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
-	_, err = wf.Wait(cctx)
+	_, err = wf.WaitContext(cctx)
 	assert.ErrorIs(t, err, context.Canceled)
 
 	_, err = OpenWorkflow(store, "nope").Status(ctx)
@@ -655,7 +658,7 @@ func TestWorkflowGuards(t *testing.T) {
 			assert.ErrorIs(t, wf.Cancel(ctx), errNoWorkflowStore)
 			_, err := wf.Status(ctx)
 			assert.ErrorIs(t, err, errNoWorkflowStore)
-			_, err = wf.Wait(ctx)
+			_, err = wf.WaitContext(ctx)
 			assert.ErrorIs(t, err, errNoWorkflowStore)
 		}
 	})
@@ -666,7 +669,7 @@ func TestWorkflowGuards(t *testing.T) {
 			assert.ErrorIs(t, h.Cancel(ctx), ErrWorkflowNotFound, id)
 			_, err := h.Status(ctx)
 			assert.ErrorIs(t, err, ErrWorkflowNotFound, id)
-			_, err = h.Wait(ctx)
+			_, err = h.WaitContext(ctx)
 			assert.ErrorIs(t, err, ErrWorkflowNotFound, id)
 		}
 	})
@@ -1953,7 +1956,7 @@ func waitWF(t *testing.T, wf *Workflow) WorkflowRecord {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	r, err := wf.Wait(ctx)
+	r, err := wf.WaitContext(ctx)
 	require.NoError(t, err)
 
 	return r
@@ -2656,7 +2659,7 @@ func TestWorkflowStoreErrors(t *testing.T) {
 			cancel() // done before the poll's sleep
 			return WorkflowRecord{State: WorkflowRunning}, nil
 		}}
-		_, err := OpenWorkflow(s, "w").Wait(ctx)
+		_, err := OpenWorkflow(s, "w").WaitContext(ctx)
 		assert.ErrorIs(t, err, context.Canceled)
 	})
 

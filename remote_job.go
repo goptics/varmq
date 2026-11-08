@@ -5,9 +5,10 @@ import (
 
 	"encoding/json"
 	"errors"
-	"github.com/goptics/varmq/contract"
 	"sync"
 	"sync/atomic"
+
+	"github.com/goptics/varmq/contract"
 )
 
 // ErrDetached is the outcome of a job on shared storage that can't report
@@ -228,6 +229,9 @@ func (g *remoteGroup[R]) seal() {
 
 func (g *remoteGroup[R]) NumPending() int { return int(g.n.Load()) }
 func (g *remoteGroup[R]) Wait()           { g.wg.Wait() }
+
+// WaitContext is Wait that gives up when ctx ends.
+func (g *remoteGroup[R]) WaitContext(ctx context.Context) error { return waitContext(ctx, g.wg.Wait) }
 
 // Errs gets each failed item's error (*RemoteError or ErrDetached); closed
 // when the group ended.

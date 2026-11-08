@@ -260,6 +260,8 @@ type Worker interface {
 	// Use this when you only care that work is done, regardless of final status.
 	// Use WaitUntilIdle() when you specifically need the Idle state.
 	Wait()
+	// WaitContext is Wait that gives up when ctx ends: ctx.Err() then.
+	WaitContext(ctx context.Context) error
 	// WaitUntilIdle blocks until the worker reaches Idle status with no pending jobs.
 	//
 	// Unlike Wait(), which returns as soon as all in-flight jobs complete and the

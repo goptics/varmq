@@ -8,7 +8,7 @@
 
 - **Queue handles gain `WorkflowItem(data) (WorkflowItem, error)`**: every exported queue handle interface (`Queue`, `PriorityQueue`, result and err variants, `ProducerQueue`, `ProducerPriorityQueue`) has it, so `wf.Add` type-checks queue and data together. Breaks only code that implements these interfaces itself (mocks). Deprecated `PersistentQueue` / `DistributedQueue` handles are no workflow targets: bind the storage with `WithQueue`.
 
-- **`EnqueuedJob` gains `WaitContext(ctx) error`** (so `EnqueuedErrJob`, `EnqueuedResultJob` too): every job handle, in-memory or remote, can wait with a deadline. Breaks only code that implements these interfaces itself (mocks).
+- **`Awaitable` and `Worker` gain `WaitContext(ctx) error`**: every job and group handle (single, err, result, in memory or remote) and the worker's `Wait` can wait with a deadline; `ctx.Err()` when it ends first. `Workflow` has `Wait()` and `WaitContext(ctx)` too. Breaks only code that implements these interfaces itself (mocks).
 
 - **`EnqueuedJob` gains `Cancel() error`, `Job[T]` gains `Context() context.Context`** (job cancel, above). Breaks only code that implements these interfaces itself (mocks).
 

@@ -312,7 +312,7 @@ wf.Add("email", mailQ, "ann@example.com").
 	Undo(unsendQ, "ann@example.com")
 
 wf.Submit(ctx)            // idempotent per ID
-rec, _ := wf.Wait(ctx)    // rec.State: completed, failed, compensated, ...
+rec, _ := wf.WaitContext(ctx) // rec.State: completed, failed, compensated, ...
 
 // in a worker: read a dependency's result
 var src string

@@ -2041,3 +2041,17 @@ func TestPendingUnhookedHeld(t *testing.T) {
 		t.Fatalf("Wait hangs: pending=%d", w.NumPending())
 	}
 }
+
+func TestWorkerWaitContext(t *testing.T) {
+	release := make(chan struct{})
+	w := NewWorker(func(Job[int]) { <-release })
+	defer w.Stop()
+	w.BindQueue().Add(1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	assert.ErrorIs(t, w.WaitContext(ctx), context.DeadlineExceeded, "a running job holds Wait")
+
+	close(release)
+	assert.NoError(t, w.WaitContext(context.Background()))
+}

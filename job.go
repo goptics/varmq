@@ -63,6 +63,8 @@ type Awaitable interface {
 	// This method can be used to synchronize execution flow with job completion.
 	// If the job has already finished, this method returns immediately.
 	Wait()
+	// WaitContext is Wait that gives up when ctx ends: ctx.Err() then.
+	WaitContext(ctx context.Context) error
 }
 
 type Drainer interface {
@@ -196,8 +198,6 @@ type EnqueuedJob interface {
 	// When a closed job is dequeued, the worker will skip processing it.
 	// This operation takes constant time as it only updates the job's state.
 	Close() error
-	// WaitContext is Wait that gives up when ctx ends.
-	WaitContext(ctx context.Context) error
 	// Cancel stops the job: one not started never runs; a running one has
 	// its Context cancelled. ErrJobAlreadyClosed once it ended.
 	Cancel() error
@@ -379,13 +379,20 @@ func (j *job[T]) Wait() {
 	j.wg.Wait()
 }
 
-// WaitContext is Wait that gives up when ctx ends.
-// ponytail: one goroutine per call, gone when the job closes (every job
-// closes: run, purged or closed); a done channel on job if calls pile up.
-func (j *job[T]) WaitContext(ctx context.Context) error {
+func (j *job[T]) WaitContext(ctx context.Context) error { return waitContext(ctx, j.wg.Wait) }
+
+// waitContext runs wait until it returns or ctx ends.
+// ponytail: one goroutine per call, gone when wait returns (every job and
+// group ends: run, purged or closed); a done channel if calls pile up.
+func waitContext(ctx context.Context, wait func()) error {
+	if ctx.Done() == nil {
+		wait()
+		return nil
+	}
+
 	done := make(chan struct{})
 	go func() {
-		j.wg.Wait()
+		wait()
 		close(done)
 	}()
 
