@@ -3,6 +3,7 @@ package varmq
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -197,7 +198,7 @@ func ids(rs []WorkflowRecord) []string {
 
 func TestMemStoreWorkflows(t *testing.T) {
 	ctx := context.Background()
-	s, _ := newMemStore(t)
+	s, clock := newMemStore(t)
 
 	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 	q := w.BindQueue()
@@ -205,6 +206,7 @@ func TestMemStoreWorkflows(t *testing.T) {
 		wf := NewWorkflow(s, WithWorkflowID(id))
 		wf.Add("a", q, 1)
 		require.NoError(t, submit(t, wf))
+		*clock = clock.Add(time.Millisecond)
 	}
 	_, err := s.finish(end("w2", "a", OutcomeCompleted))
 	require.NoError(t, err)
@@ -219,10 +221,39 @@ func TestMemStoreWorkflows(t *testing.T) {
 	assert.Equal(t, []string{"w4", "w1"}, ids(list))
 	list, _ = s.Workflows(ctx, WorkflowFailed, 0, 10)
 	assert.Equal(t, []string{"w3"}, ids(list))
-	list, err = s.Workflows(ctx, "", 1<<62, 1<<62)
+	list, err = s.Workflows(ctx, "", math.MaxInt, math.MaxInt)
 	require.NoError(t, err)
 	assert.Empty(t, list)
 	assert.NotNil(t, list, "an empty page is [], not null")
+}
+
+// TestMemStoreWorkflowsTies: workflows of one ms list by ID, as GET
+// /workflows merges, so pages tile with no overlap or drop.
+func TestMemStoreWorkflowsTies(t *testing.T) {
+	ctx := context.Background()
+	s, clock := newMemStore(t)
+
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	for _, id := range []string{"old", "c", "a", "d", "b"} {
+		wf := NewWorkflow(s, WithWorkflowID(id))
+		wf.Add("a", q, 1)
+		require.NoError(t, submit(t, wf))
+		if id == "old" {
+			*clock = clock.Add(time.Millisecond) // the rest share one ms
+		}
+	}
+
+	list, _ := s.Workflows(ctx, "", 0, 10)
+	assert.Equal(t, []string{"a", "b", "c", "d", "old"}, ids(list))
+	var paged []string
+	for off := range 5 {
+		keys, err := s.WorkflowKeys(ctx, "", off, 1)
+		require.NoError(t, err)
+		require.Len(t, keys, 1)
+		paged = append(paged, keys[0].ID)
+	}
+	assert.Equal(t, ids(list), paged, "limit 1 pages tile")
 }
 
 // TestMemStoreListBounded: a state-filtered listing scans at most

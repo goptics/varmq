@@ -2,9 +2,12 @@ package varmq
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -367,18 +370,21 @@ func (m *memWorkflowStore) WorkflowKeys(_ context.Context, state WorkflowState, 
 	return out, nil
 }
 
-// list collects the listed workflows under mu. A state filter scans at most
+// list collects the listed workflows under mu, in the order GET /workflows
+// merges: CreatedAt newest first, then ID. A state filter scans at most
 // maxWorkflowsOffset+limit workflows, matched or not, so a rare state never
 // walks the whole store.
 // ponytail: walks the kept workflows; an index per state if listing big
 // stores shows up.
 func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWorkflow {
+	offset, limit = max(offset, 0), max(limit, 0)
+	want := offset + min(limit, math.MaxInt-offset)
 	var out []*memWorkflow
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for i := len(m.order) - 1; i >= 0 && len(out) < limit; i-- {
+	for i := len(m.order) - 1; i >= 0; i-- {
 		if scanned := len(m.order) - 1 - i; state != "" && scanned-limit >= maxWorkflowsOffset {
 			break
 		}
@@ -386,14 +392,19 @@ func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWo
 		if w.gone || state != "" && w.s.State != state {
 			continue
 		}
-		if offset > 0 {
-			offset--
-			continue
+		// Submit order is CreatedAt order: past want, only the last one's
+		// ties (same ms) may still sort into the page.
+		if len(out) >= want && w.created != out[len(out)-1].created {
+			break
 		}
 		out = append(out, w)
 	}
 
-	return out
+	slices.SortFunc(out, func(a, b *memWorkflow) int {
+		return cmp.Or(cmp.Compare(b.created, a.created), strings.Compare(a.id, b.id))
+	})
+
+	return out[min(offset, len(out)):min(want, len(out))]
 }
 
 // record builds w's WorkflowRecord: tasks in Add order. An undo is waiting
