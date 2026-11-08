@@ -78,7 +78,9 @@ type memTaskItem interface {
 
 // NewWorkflowStore returns the workflow store of in-memory queues. Its
 // scope is "memory:<InstanceID>", so a workflow may span every in-memory
-// queue of the process. It is also a WorkflowInspector.
+// queue of the process. Every in-memory store shares that scope ID but not
+// state: a workflow's queues use the store it was submitted to. It is also
+// a WorkflowInspector.
 func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 	c := storeConfig{resultLimit: 64 << 10, retention: 7 * 24 * time.Hour}
 	for _, o := range opts {
