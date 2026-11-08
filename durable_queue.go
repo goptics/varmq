@@ -29,6 +29,7 @@ func bindDurable[T, R any, J iJob[T]](w *worker[T, J], s IBaseQueue, configs []Q
 	if sq, ok := s.(ISubscribable); ok {
 		subscribeQueue(w, sq, src)
 	}
+	w.watchCancels(s)
 
 	return durableBase[T, R]{
 		externalBaseQueue: newExternalQueue(s, w, c, nil), // never batches: nothing waits in a buffer

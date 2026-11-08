@@ -6,8 +6,8 @@ import "encoding/json"
 // process (spec/redis-storage.md, section 6.13).
 type JobOutcome struct {
 	ID    string   `json:"id"`
-	State JobState `json:"state"` // JobCompleted or JobFailed
-	// Error is the reason of a failed job: its last errors entry.
+	State JobState `json:"state"` // JobCompleted, JobFailed or JobCancelled
+	// Error is the reason of a failed or cancelled job.
 	Error string `json:"error,omitempty"`
 	// Result is the JSON a result worker left (AcknowledgeResult); absent
 	// for other jobs and for a result storage dropped.

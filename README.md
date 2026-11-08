@@ -152,6 +152,21 @@ s, err = j.Result()
 
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
 
+### Cancel a Job
+
+`job.Cancel()` works on every handle, in-memory or shared. A job not started never runs. A running job has its context cancelled; it stops if the worker watches `j.Context()`:
+
+```go
+w := varmq.NewErrWorker(func(j varmq.Job[Img]) error {
+	return resize(j.Context(), j.Data()) // returns once cancelled
+})
+
+job, _ := q.Add(img)
+job.Cancel()                                    // or, from any process:
+varmq.OpenErrJob(rq.NewQueue("imgs"), id).Cancel()
+errors.Is(job.Err(), varmq.ErrJobCancelled)     // true, unless it finished first
+```
+
 Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
 
 When the adapter deduplicates pushes (`EnqueueOnce`, e.g. redisq), give each job a unique id such as a UUID. A retried `Add` with the same id is then stored once:

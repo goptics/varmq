@@ -182,6 +182,9 @@ type (
 	JobOutcome            = contract.JobOutcome
 	OutcomeWatcher        = contract.OutcomeWatcher
 	ResultAcknowledgeable = contract.ResultAcknowledgeable
+	JobCanceller          = contract.JobCanceller
+	CancelNotifier        = contract.CancelNotifier
+	CancelAcknowledgeable = contract.CancelAcknowledgeable
 
 	InstanceRecord   = contract.InstanceRecord
 	InstanceWorker   = contract.InstanceWorker

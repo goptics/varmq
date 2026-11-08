@@ -2,10 +2,12 @@ package varmq
 
 import (
 	"context"
+
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/goptics/varmq/contract"
 	"sync"
 	"sync/atomic"
 )
@@ -33,12 +35,13 @@ type remoteJob[R any] struct {
 	err    error // ErrDetached: no outcome will come
 	cancel func()
 	onEnd  func(*remoteJob[R]) // set before the watch; runs once, at the end
+	s      any                 // the storage: Cancel asks it (JobCanceller)
 }
 
 // watchRemote is the handle of job id on storage s: watched when s reports
 // outcomes, detached otherwise. onEnd, if any, runs once at its end.
 func watchRemote[R any](s any, id string, onEnd func(*remoteJob[R])) *remoteJob[R] {
-	j := &remoteJob[R]{id: id, done: make(chan struct{}), onEnd: onEnd}
+	j := &remoteJob[R]{id: id, done: make(chan struct{}), onEnd: onEnd, s: s}
 
 	ow, ok := s.(OutcomeWatcher)
 	if !ok || id == "" {
@@ -90,8 +93,27 @@ func (j *remoteJob[R]) WaitContext(ctx context.Context) error {
 	}
 }
 
+// Cancel asks the storage to cancel the job (JobCanceller), whichever
+// process holds it: one still waiting never runs, a running one has its
+// Context cancelled. Its outcome then says cancelled (ErrJobCancelled), or
+// how it ended if it finished first. ErrJobAlreadyClosed once it ended;
+// ErrCancelUnsupported on storage that can't.
+func (j *remoteJob[R]) Cancel() error {
+	c, ok := j.s.(JobCanceller)
+	if !ok || j.id == "" {
+		return ErrCancelUnsupported
+	}
+	if err := c.CancelJob(j.id); err != nil {
+		if errors.Is(err, contract.ErrJobEnded) {
+			return ErrJobAlreadyClosed
+		}
+		return err
+	}
+	return nil
+}
+
 // Close stops waiting: Wait returns and Err reports ErrDetached. It does not
-// cancel the job, which still runs on its storage.
+// cancel the job, which still runs on its storage (see Cancel).
 func (j *remoteJob[R]) Close() error {
 	if j.cancel != nil {
 		j.cancel()
@@ -123,6 +145,8 @@ func outcomeErr(o JobOutcome, err error) error {
 		return err
 	case o.State == JobFailed:
 		return &RemoteError{Reason: o.Error}
+	case o.State == JobCancelled:
+		return ErrJobCancelled
 	}
 	return nil
 }

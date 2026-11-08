@@ -109,6 +109,9 @@ type ackExt struct {
 	// result is a plain result job's R as JSON, for storage that keeps it
 	// (ResultAcknowledgeable): Close acknowledges with it.
 	result []byte
+	// cancelled: the run failed because Cancel stopped it; storage that can
+	// (CancelAcknowledgeable) finishes it cancelled, not failed.
+	cancelled bool
 }
 
 // remoteResultLimit caps the R a result worker leaves on shared storage.
@@ -155,6 +158,9 @@ type Job[T any] interface {
 	Identifiable
 	// Data returns the data associated with the job.
 	Data() T
+	// Context is cancelled when the job is cancelled (Cancel, from this or
+	// any process) while it runs. Watch it to stop a cancelled job.
+	Context() context.Context
 }
 
 type iJob[T any] interface {
@@ -169,6 +175,9 @@ type iJob[T any] interface {
 	fail(reason string)
 	succeed()
 	memTotals() *memQueue
+	Cancel() error
+	endRun()
+	endFailed(err error) error
 	io.Closer
 }
 
@@ -186,6 +195,9 @@ type EnqueuedJob interface {
 	Close() error
 	// WaitContext is Wait that gives up when ctx ends.
 	WaitContext(ctx context.Context) error
+	// Cancel stops the job: one not started never runs; a running one has
+	// its Context cancelled. ErrJobAlreadyClosed once it ended.
+	Cancel() error
 }
 
 // New creates a new job with the provided data.
@@ -557,7 +569,11 @@ func (j *job[T]) acknowledge() error {
 		pushed, ok = wa.FinishTask(ref.id, taskEnd(ref.ext))
 		pokeLocal(pushed)
 	} else if reason, failed := failReason(ref.ext); failed {
-		ok = ref.q.Reject(ref.id, reason)
+		if ca, can := ref.q.(CancelAcknowledgeable); can && ref.ext.cancelled {
+			ok = ca.AcknowledgeCancelled(ref.id, reason)
+		} else {
+			ok = ref.q.Reject(ref.id, reason)
+		}
 	} else if ra, has := ref.q.(ResultAcknowledgeable); has && ref.ext != nil && ref.ext.result != nil {
 		// A result storage refuses (e.g. JSON its decoder can't take) must
 		// not keep the job unacked, redelivered forever: complete it

@@ -54,9 +54,13 @@ type worker[T any, JobType iJob[T]] struct {
 	// status is read before every job, so it sits apart from the per-batch
 	// counters above. The park fields share its line: they change only on a
 	// stop or pause and while parked jobs are handed out again.
-	status       atomic.Uint32
-	nParked      atomic.Int64 // len of all parked batches, read without parkMx
-	parkMx       sync.Mutex
+	status  atomic.Uint32
+	nParked atomic.Int64 // len of all parked batches, read without parkMx
+	parkMx  sync.Mutex
+	// running lists jobs by ID while they run, only when cancelWatch is
+	// on: a storage's cancel request (CancelNotifier) finds them there.
+	running      sync.Map
+	cancelWatch  atomic.Bool
 	parked       []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause
 	parkUnsorted bool                   // parked gained a batch since unpark last sorted it by Seq
 	hookOnce     sync.Once

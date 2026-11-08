@@ -140,9 +140,12 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 				continue
 			}
 
+			id := w.trackRun(j)
 			w.workerFunc(j)
 
 			j.changeStatus(finished)
+			j.endRun() // after finished: a late Context or Cancel finds the run over
+			w.untrackRun(id)
 			// The user may close a finished job first; that is not an error.
 			if err := j.Close(); err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
 				w.sendError(err)
