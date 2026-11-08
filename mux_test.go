@@ -363,20 +363,22 @@ func TestMuxGetWorker(t *testing.T) {
 	ids, _ := response["queue_ids"].([]any)
 	require.Len(t, ids, 1)
 	id, _ := ids[0].(string)
-	assert.True(t, strings.HasPrefix(id, "memory:"), id)
+	assert.True(t, strings.HasPrefix(id, "memory:"+InstanceID+":fifo:"), id)
 	rr = httptest.NewRecorder()
 	server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(id)+"/jobs?state=pending", nil))
 	assert.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 
-	// A bound shared queue joins it, sorted.
+	// A bound shared queue and a priority queue join it, sorted.
 	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "a:shared"}
 	wb.WithQueue(shared)
+	pid := memOf(t, wb.BindPriorityQueue()).QueueID()
+	assert.True(t, strings.HasPrefix(pid, "memory:"+InstanceID+":prio:"), pid)
 	rr = httptest.NewRecorder()
 	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
 	var list []workerSummary
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&list))
 	require.Len(t, list, 1)
-	assert.Equal(t, []string{"a:shared", id}, list[0].QueueIDs)
+	assert.Equal(t, []string{"a:shared", id, pid}, list[0].QueueIDs)
 
 	w.Stop()
 }

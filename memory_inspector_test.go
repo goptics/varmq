@@ -373,6 +373,8 @@ func TestMemQueueJobsSkipsClosedQueuedJob(t *testing.T) {
 	t.Cleanup(func() { w.Stop() })
 	require.NoError(t, w.Pause())
 	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
+	assert.Contains(t, memOf(t, fifo).QueueID(), ":fifo:")
+	assert.Contains(t, memOf(t, prio).QueueID(), ":prio:")
 
 	fifo.Add(0, WithJobId("c"))
 	a, _ := fifo.Add(1, WithJobId("a"))

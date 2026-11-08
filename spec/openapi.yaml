@@ -151,7 +151,7 @@ paths:
         A queue is listed when its storage can report shared counts (in Go,
         it implements `varmq.QueueInspector`), once per Queue ID however many
         workers bind it. Since 1.1.0 in-memory queues of listed (named)
-        workers are listed too, under `memory:<instance>:<n>`: this
+        workers are listed too, under `memory:<instance>:fifo|prio:<n>`: this
         process's counts only; they keep no
         finished jobs, so `counts.completed` and `counts.failed` are 0 and
         their `completed` and `failed` pages are empty. Other queues whose
@@ -663,7 +663,7 @@ components:
           description: |
             Since 1.4.0. The `GET /queues` IDs of the queues the worker
             consumes, sorted: shared storage with a Queue ID and the worker's
-            in-memory queues (`memory:<instance>:<n>`, readable on this
+            in-memory queues (`memory:<instance>:fifo|prio:<n>`, readable on this
             process only). Empty when it binds none with an ID. Absent from
             older servers.
 
@@ -712,7 +712,7 @@ components:
       properties:
         id:
           type: string
-          description: The Queue ID, the same on every instance for shared storage; for redisq, the queue's full Redis key; `memory:<instance>:<n>` for an in-memory queue, unique to its process.
+          description: The Queue ID, the same on every instance for shared storage; for redisq, the queue's full Redis key; `memory:<instance>:fifo|prio:<n>` for an in-memory queue, unique to its process.
         counts:
           type: object
           description: |

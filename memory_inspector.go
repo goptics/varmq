@@ -43,7 +43,8 @@ type memQueue struct {
 // withMemInspector gives eq an in-memory QueueInspector, unless eq's storage
 // inspects itself. GET /queues lists it while its worker is listed under
 // GET /workers (addMemQueue), so short-lived unnamed workers leave nothing. The ID is
-// "memory:<InstanceID>:<n>", n unique in the process; InstanceID is read now.
+// "memory:<InstanceID>:<kind>:<n>", kind fifo or prio (as redisq's), n
+// unique in the process; InstanceID is read now.
 // The ID is not a worker's Instance Record queue_ids: no other process can
 // read it.
 func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
@@ -52,8 +53,12 @@ func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
 		return eq
 	}
 
+	kind := "fifo"
+	if _, ok := eq.q.(IPriorityQueue); ok {
+		kind = "prio"
+	}
 	m := &memQueue{
-		id: fmt.Sprintf("memory:%s:%d", InstanceID, memQueueSeq.Add(1)),
+		id: fmt.Sprintf("memory:%s:%s:%d", InstanceID, kind, memQueueSeq.Add(1)),
 		q:  eq.q,
 	}
 	m.ref.totals = m
