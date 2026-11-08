@@ -159,6 +159,9 @@ func durableWorkflowItem[T any](storage any, priority bool, data T) (WorkflowIte
 
 		return WorkflowItem{}, fmt.Errorf("%w: queue %s can't take workflow tasks", ErrScopeMismatch, name)
 	}
+	if wa.WorkflowStore() == nil { // its tasks would skip the pre-run check
+		return WorkflowItem{}, fmt.Errorf("%w: queue %s: storage has no workflow store", ErrScopeMismatch, qi.QueueID())
+	}
 
 	build := func(jobID string, tag taskTag) (any, error) {
 		j := newJob(data, jobConfigs{Id: jobID})
