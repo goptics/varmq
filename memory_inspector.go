@@ -131,7 +131,8 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 
 // Jobs lists pending jobs in hand-out order; other states hold none in
 // memory, so their pages are empty. A priority queue pages without sorting
-// (Page).
+// (Page). A job closed, or started, since the queue was read is left out
+// (appendPending), so a page can be short.
 // ponytail: a FIFO page still copies the whole queue (Values); a paged
 // cursor read if in-memory queues of millions get inspected often.
 func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
@@ -145,7 +146,7 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 	}
 	if p, ok := m.q.(interface{ Page(offset, limit int) []any }); ok {
 		for _, v := range p.Page(offset, limit) {
-			out = append(out, pendingRecord(v))
+			out = appendPending(out, v)
 		}
 		return out, nil
 	}
@@ -155,7 +156,7 @@ func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([
 	}
 	// no offset+limit: offset may be near MaxInt
 	for _, v := range values[offset : offset+min(limit, len(values)-offset)] {
-		out = append(out, pendingRecord(v))
+		out = appendPending(out, v)
 	}
 
 	return out, nil
@@ -288,24 +289,49 @@ func (m *memQueue) find(id string) []memJob {
 // a running one (processing). Ended jobs are not kept: ErrJobNotFound.
 //
 // A running job's payload is null: its worker may write its data while it
-// runs (a map: a fatal concurrent read). A waiting job's data is read as
-// GET /queues/{id}/jobs reads it; one that started during the read is
-// reported running, its payload dropped.
+// runs (a map: a fatal concurrent read). A waiting job's data is read
+// without holding it (the job state machine never waits on a REST read):
+// a job that starts during the read may be read while its worker writes
+// Data(), as on GET /queues/{id}/jobs. Don't mutate Data() in place if you
+// use the job routes. Checked again after the read: one that started is
+// reported running, its payload dropped; one closed or ended is not found.
 func (m *memQueue) Job(_ context.Context, id string) (JobRecord, error) {
 	for _, j := range m.find(id) {
-		switch j.phase() {
-		case created, queued:
+		s := j.phase()
+		if waiting(s) {
 			r := pendingRecord(j)
-			if p := j.phase(); p == created || p == queued {
+			if s = j.phase(); waiting(s) {
 				return r, nil
 			}
-			fallthrough // started meanwhile
-		case processing:
+		}
+		if s == processing {
 			return JobRecord{ID: id, State: JobProcessing, Payload: json.RawMessage("null"), Attempts: 1}, nil
 		}
 	}
 
 	return JobRecord{}, ErrJobNotFound
+}
+
+// waiting reports a job state that has not started: created or queued.
+func waiting(s status) bool { return s == created || s == queued }
+
+// appendPending appends stored item v's pending record. A varmq job is
+// left out unless it waits both before and after its read: one closed,
+// started or ended since the queue was read is not pending. The read can
+// still meet a job that starts mid-read (see Job).
+func appendPending(out []JobRecord, v any) []JobRecord {
+	j, ok := v.(interface{ phase() status })
+	if !ok {
+		return append(out, pendingRecord(v))
+	}
+	if !waiting(j.phase()) {
+		return out
+	}
+	r := pendingRecord(v)
+	if !waiting(j.phase()) {
+		return out
+	}
+	return append(out, r)
 }
 
 // CancelJob is the JobCanceller of an in-memory queue: Cancel on each job

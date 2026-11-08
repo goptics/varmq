@@ -246,6 +246,12 @@ paths:
         separately, so jobs that change state between two requests can be
         skipped or repeated.
 
+        An in-memory queue leaves out a pending job that was closed, or
+        started, by the end of its read, so a page can be short. A job that
+        starts while its data is being read can be read while its worker
+        writes `Data()`: don't mutate `Data()` in place if you use the job
+        routes.
+
         `cancelled` since 1.4.0. Storage that keeps cancelled records with
         its failed ones (redisq, spec redis-storage.md 6.14) lists them under
         `failed` too, with `state` `cancelled`; storage that keeps none, such
@@ -284,9 +290,13 @@ paths:
         (`processing`, `attempts` 1, no times, `payload` null: its worker
         may change the data while it runs); it keeps no ended jobs, so a
         job that completed, failed or was cancelled is 404, and so is a job
-        without an ID. A job cancelled or closed while it waits stays on
-        the queue's `pending` page until a worker drops it, but is 404
-        here. A job a worker took into a batch behind a running job is in
+        without an ID, and one cancelled or closed while it waits. A
+        waiting job's data is read without stopping it from starting: a job
+        that starts while its data is being read can be read while its
+        worker writes `Data()`, so don't mutate `Data()` in place if you use
+        the job routes (the pending page has the same window). A job that
+        started during the read is answered `processing`, one closed or
+        ended then is 404. A job a worker took into a batch behind a running job is in
         neither place until it starts, however long the job ahead runs:
         404 for both routes, and it still runs. Running jobs are tracked
         from when the process builds its REST handler; one already running
