@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goptics/varmq/contract"
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 )
@@ -1206,6 +1208,20 @@ func (sizedJobStore) Job(context.Context, string) (JobRecord, error) {
 	return JobRecord{ID: "x", State: JobCompleted, Payload: json.RawMessage("null"), Result: json.RawMessage("1"), ResultSize: 1}, nil
 }
 
+// endedJobStore cancels with an ended-job error: err, and lists one
+// completed job whose result_size it fills without the result.
+type endedJobStore struct {
+	plainInspector
+	id  string
+	err error
+}
+
+func (e endedJobStore) QueueID() string        { return e.id }
+func (e endedJobStore) CancelJob(string) error { return e.err }
+func (endedJobStore) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
+	return []JobRecord{{ID: "x", State: JobCompleted, Payload: json.RawMessage("null"), ResultSize: 7}}, nil
+}
+
 func jobRoutes(t *testing.T) (get, cancel func(q, job string) *httptest.ResponseRecorder) {
 	server := NewServerMux()
 	do := func(method, path string) *httptest.ResponseRecorder {
@@ -1255,7 +1271,9 @@ func TestMuxJobInMemory(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, rr.Code, rr.Body.String())
 	assert.Empty(t, rr.Body.String())
 	assert.Equal(t, "Closed", wait.Status())
-	assert.Equal(t, http.StatusConflict, cancel(m.QueueID(), "wait").Code)
+	rr = cancel(m.QueueID(), "wait")
+	assert.Equal(t, http.StatusConflict, rr.Code)
+	assert.JSONEq(t, `{"error":"varmq: job already ended"}`, rr.Body.String())
 	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "wait").Code, "ended jobs are not kept")
 
 	// running: its context is cancelled
@@ -1337,6 +1355,22 @@ func TestMuxJobUnsupportedAndFailing(t *testing.T) {
 	rr = get("custom:sized", "x")
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.NotContains(t, rr.Body.String(), "result_size")
+
+	// ended: 409 with the storage's error, plain or wrapped
+	defer queueRegistry.Delete("custom:ended")
+	for _, e := range []error{ErrJobAlreadyClosed, fmt.Errorf("store: %w", contract.ErrJobEnded)} {
+		s := endedJobStore{id: "custom:ended", err: e}
+		queueRegistry.Store(s.id, s)
+		rr = cancel(s.id, "x")
+		assert.Equal(t, http.StatusConflict, rr.Code)
+		assert.JSONEq(t, `{"error":`+strconv.Quote(e.Error())+`}`, rr.Body.String())
+	}
+
+	// a storage-filled result_size without the result stays on the page
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/custom:ended/jobs?state=completed", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `[{"id":"x","state":"completed","payload":null,"attempts":0,"result_size":7}]`, rr.Body.String())
 }
 
 // Two workers on one storage: a job added through the named worker's
