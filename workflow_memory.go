@@ -2,9 +2,12 @@ package varmq
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -75,7 +78,9 @@ type memTaskItem interface {
 
 // NewWorkflowStore returns the workflow store of in-memory queues. Its
 // scope is "memory:<InstanceID>", so a workflow may span every in-memory
-// queue of the process. It is also a WorkflowInspector.
+// queue of the process. Every in-memory store shares that scope ID but not
+// state: a workflow's queues use the store it was submitted to. It is also
+// a WorkflowInspector.
 func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 	c := storeConfig{resultLimit: 64 << 10, retention: 7 * 24 * time.Hour}
 	for _, o := range opts {
@@ -193,7 +198,7 @@ func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 		p := memPush{w: w, task: e.Push, undo: e.Undo,
 			target: tp.Queue.(memTarget), item: tp.Item.(memTaskItem), prio: tp.Priority}
 		if e.Undo {
-			p.target, p.item, p.prio = tp.Undo.Queue.(memTarget), tp.Undo.Item.(memTaskItem), tp.Undo.Priority
+			p.target, p.item, p.prio = tp.Undo.Queue.(memTarget), tp.Undo.Item.(memTaskItem), 0
 		}
 		out = append(out, p)
 	}
@@ -201,16 +206,14 @@ func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 	return out
 }
 
-// push runs the pushes and returns the queue IDs pushed into. A refused
-// push (custom storage without a force path) fails its task and closes the
-// job, so its waiters release; the effects of that failure run too.
-func (m *memWorkflowStore) push(work []memPush) []string {
-	var pushed []string
+// push runs the pushes. A refused push (custom storage without a force
+// path) fails its task and closes the job, so its waiters release; the
+// effects of that failure run too.
+func (m *memWorkflowStore) push(work []memPush) {
 	for len(work) > 0 {
 		p := work[0]
 		work = work[1:]
 		if p.target.push(p.item, p.prio) {
-			pushed = append(pushed, p.target.queueID)
 			continue
 		}
 
@@ -224,14 +227,19 @@ func (m *memWorkflowStore) push(work []memPush) []string {
 		// After the finish, so a Close that reports the task finds it ended.
 		_ = p.item.Close()
 	}
+}
 
-	return pushed
+// tooLarge reports whether t's in-memory store fails it for result: over
+// the limit, and not an undo (an undo's result is dropped).
+func (t *taskTag) tooLarge(result []byte) bool {
+	m, ok := t.store.(*memWorkflowStore)
+	return ok && !t.undo && len(result) > m.cfg.resultLimit
 }
 
 // finish records a task's (or undo's) outcome and pushes what it releases.
-// It returns the queue IDs pushed into. Only a completed task keeps a
-// result; one over the limit fails the task with ErrResultTooLarge.
-func (m *memWorkflowStore) finish(e TaskEnd) (pushed []string, err error) {
+// Only a completed task keeps a result; one over the limit fails the task
+// with ErrResultTooLarge.
+func (m *memWorkflowStore) finish(e TaskEnd) error {
 	switch {
 	case e.Outcome != OutcomeCompleted || e.Undo:
 		e.Result = nil
@@ -245,17 +253,19 @@ func (m *memWorkflowStore) finish(e TaskEnd) (pushed []string, err error) {
 	w, err := m.get(e.Workflow)
 	if err != nil {
 		m.mu.Unlock()
-		return nil, err
+		return err
 	}
 	fx, err := w.s.finish(e)
 	pushes := m.effects(w, fx)
 	m.mu.Unlock()
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return m.push(pushes), nil
+	m.push(pushes)
+
+	return nil
 }
 
 // get returns workflow id. Callers hold mu.
@@ -367,18 +377,21 @@ func (m *memWorkflowStore) WorkflowKeys(_ context.Context, state WorkflowState, 
 	return out, nil
 }
 
-// list collects the listed workflows under mu. A state filter scans at most
+// list collects the listed workflows under mu, in the order GET /workflows
+// merges: CreatedAt newest first, then ID. A state filter scans at most
 // maxWorkflowsOffset+limit workflows, matched or not, so a rare state never
 // walks the whole store.
 // ponytail: walks the kept workflows; an index per state if listing big
 // stores shows up.
 func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWorkflow {
+	offset, limit = max(offset, 0), max(limit, 0)
+	want := offset + min(limit, math.MaxInt-offset)
 	var out []*memWorkflow
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for i := len(m.order) - 1; i >= 0 && len(out) < limit; i-- {
+	for i := len(m.order) - 1; i >= 0; i-- {
 		if scanned := len(m.order) - 1 - i; state != "" && scanned-limit >= maxWorkflowsOffset {
 			break
 		}
@@ -386,14 +399,19 @@ func (m *memWorkflowStore) list(state WorkflowState, offset, limit int) []*memWo
 		if w.gone || state != "" && w.s.State != state {
 			continue
 		}
-		if offset > 0 {
-			offset--
-			continue
+		// Submit order is CreatedAt order: past want, only the last one's
+		// ties (same ms) may still sort into the page.
+		if len(out) >= want && (want == 0 || w.created != out[len(out)-1].created) {
+			break
 		}
 		out = append(out, w)
 	}
 
-	return out
+	slices.SortFunc(out, func(a, b *memWorkflow) int {
+		return cmp.Or(cmp.Compare(b.created, a.created), strings.Compare(a.id, b.id))
+	})
+
+	return out[min(offset, len(out)):min(want, len(out))]
 }
 
 // record builds w's WorkflowRecord: tasks in Add order. An undo is waiting
@@ -411,7 +429,7 @@ func (w *memWorkflow) record() WorkflowRecord {
 			if st == "" {
 				st = JobWaiting
 			}
-			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID}
+			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID, Reason: t.UndoReason}
 		}
 		r.Tasks = append(r.Tasks, tr)
 	}

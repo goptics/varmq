@@ -270,7 +270,8 @@ func bindDistributed[T any, JobType iJob[T], H any](w *worker[T, JobType], dq in
 
 // subscribeQueue forwards q's notifications to w. For a batch source,
 // an "enqueued" also pokes its ready hint, and wake-ups replace the persistent
-// resync.
+// resync. One wake after Subscribe catches an enqueue that landed between
+// the bind's first (empty) pop and Subscribe.
 func subscribeQueue[T any, JobType iJob[T]](w *worker[T, JobType], q ISubscribable, src source[JobType]) {
 	bs, ok := src.(*batchAckSource[T, JobType])
 	if !ok {
@@ -279,6 +280,7 @@ func subscribeQueue[T any, JobType iJob[T]](w *worker[T, JobType], q ISubscribab
 				w.notifyToPullNextJobs()
 			}
 		})
+		w.notifyToPullNextJobs()
 		return
 	}
 
@@ -289,6 +291,8 @@ func subscribeQueue[T any, JobType iJob[T]](w *worker[T, JobType], q ISubscribab
 			w.notifyToPullNextJobs()
 		}
 	})
+	bs.poke()
+	w.notifyToPullNextJobs()
 }
 
 func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T] {

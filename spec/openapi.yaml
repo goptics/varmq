@@ -640,9 +640,11 @@ components:
       type: string
       description: |
         Where a workflow is in its life. `running`: tasks still run or wait.
-        `completed`: all tasks ended well. `failed`: a task failed and no
-        compensation ran. `compensating`: undo jobs run. `compensated`: the
-        undo jobs finished. `compensation_failed`: an undo job failed.
+        `completed`: the run ended with no unabsorbed failure (a task whose
+        dependents are all `always` may have failed). `failed`: a task
+        failed and no compensation ran. `compensating`: undo jobs run.
+        `compensated`: the undo jobs finished. `compensation_failed`: an
+        undo job failed.
         `cancelled`: cancelled, with no compensation.
 
         A client MUST accept a value it does not know and show it as it is.
@@ -691,5 +693,5 @@ components:
         reason: { type: string, description: Why the task failed or was cancelled. Absent otherwise. }
         result_size: { type: integer, description: Bytes of the stored result; absent when none. }
         undo:
-          description: The task's compensation job, when it has one.
+          description: The task's compensation job, when it has one. Its `reason` is why it failed or was cancelled.
           allOf: [{ $ref: "#/components/schemas/TaskRecord" }]

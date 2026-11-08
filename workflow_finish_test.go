@@ -151,6 +151,10 @@ func TestWorkflowResultTooLarge(t *testing.T) {
 	assert.Equal(t, ErrResultTooLarge.Error(), r.Tasks[0].Reason)
 	assert.Equal(t, JobCancelled, r.Tasks[1].State)
 	assert.Equal(t, int32(1), ran.Load(), "b never ran")
+
+	m := q.(*resultQueue[int, string]).totals
+	assert.Equal(t, uint64(1), m.failed.Load(), "the queue counts it failed")
+	assert.Zero(t, m.completed.Load())
 }
 
 func TestWorkflowCancelSkipsQueued(t *testing.T) {

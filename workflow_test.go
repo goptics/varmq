@@ -40,7 +40,7 @@ type wfStorage struct {
 
 func (s wfStorage) ScopeID() string                           { return s.scope }
 func (s wfStorage) QueueID() string                           { return s.id }
-func (wfStorage) WorkflowStore() WorkflowStore                { return nil }
+func (s wfStorage) WorkflowStore() WorkflowStore              { return fakeWFStore{scope: s.scope} }
 func (wfStorage) FinishTask(string, TaskEnd) ([]string, bool) { return nil, false }
 func (wfStorage) QueueStats(context.Context) (QueueStats, error) {
 	return QueueStats{}, nil
@@ -58,6 +58,11 @@ type wfDistributedPrio struct {
 	*mocks.MockDistributedPriorityQueue
 	wfStorage
 }
+
+// noStorePersistent is workflow storage whose WorkflowStore is nil.
+type noStorePersistent struct{ wfPersistent }
+
+func (noStorePersistent) WorkflowStore() WorkflowStore { return nil }
 
 func newWFPersistent(id, scope string) wfPersistent {
 	return wfPersistent{mocks.NewMockPersistentQueue(), wfStorage{id, scope}}
@@ -328,6 +333,16 @@ func TestWorkflowBuilder(t *testing.T) {
 		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
 		wf.Add("a", pq, 1)
 		assert.ErrorIs(t, planErr(t, wf), ErrScopeMismatch)
+	})
+
+	t.Run("durable storage with no workflow store", func(t *testing.T) {
+		pw := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+		pq := pw.WithPersistentQueue(noStorePersistent{newWFPersistent("q1", "redis://x")})
+		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
+		wf.Add("a", pq, 1)
+		err := planErr(t, wf)
+		assert.ErrorIs(t, err, ErrScopeMismatch)
+		assert.ErrorContains(t, err, "storage has no workflow store")
 	})
 
 	t.Run("nil queue", func(t *testing.T) {

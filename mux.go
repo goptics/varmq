@@ -31,35 +31,32 @@ func registerQueue(q any) {
 	}
 }
 
-// workflowStore is a registered store: it keeps workflows and lists them.
-type workflowStore interface {
-	WorkflowStore
-	WorkflowInspector
-}
-
 // workflowRegistry holds every known workflow store by ScopeID, for
 // /workflows. Filled by NewWorkflowStore and when a queue binds. An
 // in-memory store is held weakly, so dropping it frees it.
 // ponytail: durable entries are never removed, like queueRegistry's; a
 // closed storage stays: GET /workflows skips it, the ID routes answer 503
-// when no other store holds the ID.
+// when no other store holds the ID. One handle per durable scope is kept:
+// a later bind of the same scope replaces the earlier entry, so closing the
+// later handle loses the scope's workflows here; keep that handle open.
 var workflowRegistry sync.Map
 
-// registerWorkflowStore lists s under /workflows if it can also list.
+// registerWorkflowStore serves s under /workflows: GET /workflows lists it
+// if it is a WorkflowInspector.
 func registerWorkflowStore(s WorkflowStore) {
-	if m, ok := s.(*memWorkflowStore); ok { // every in-memory store shares one scope
+	switch m := s.(type) {
+	case nil:
+	case *memWorkflowStore: // every in-memory store shares one scope
 		workflowRegistry.Store(fmt.Sprintf("%s#%p", m.ScopeID(), m), weak.Make(m))
-		return
-	}
-	if ws, ok := s.(workflowStore); ok {
-		workflowRegistry.Store(ws.ScopeID(), ws)
+	default:
+		workflowRegistry.Store(s.ScopeID(), s)
 	}
 }
 
 // workflowStores is every registered store still alive; the entry of a
 // collected in-memory store is removed.
-func workflowStores() []workflowStore {
-	var out []workflowStore
+func workflowStores() []WorkflowStore {
+	var out []WorkflowStore
 	workflowRegistry.Range(func(k, v any) bool {
 		switch s := v.(type) {
 		case weak.Pointer[memWorkflowStore]:
@@ -68,7 +65,7 @@ func workflowStores() []workflowStore {
 			} else {
 				workflowRegistry.CompareAndDelete(k, v)
 			}
-		case workflowStore:
+		case WorkflowStore:
 			out = append(out, s)
 		}
 		return true
@@ -408,8 +405,8 @@ var workflowStates = []WorkflowState{WorkflowRunning, WorkflowCompleted, Workflo
 	WorkflowCompensating, WorkflowCompensated, WorkflowCompensationFailed, WorkflowCancelled}
 
 // handleListWorkflows returns one page of workflows from every registered
-// store, newest first. A store whose listing fails is skipped; 503 only
-// when every one fails.
+// WorkflowInspector, newest first. A store whose listing (or a read of a
+// listed record) fails is skipped; 503 only when every one fails.
 func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	state := WorkflowState(query.Get("state"))
@@ -432,22 +429,27 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 	// each store may hold the whole page, so every one gives offset+limit
 	want := offset + limit
-	stores := workflowStores()
 	var (
 		all    []listed
 		failed error
-		nfail  int
+		down   []bool // per store: its listing or a read failed
+		ndown  int
 	)
-	for _, ws := range stores {
-		got, err := listWorkflows(r, ws, state, want)
+	for _, ws := range workflowStores() {
+		if _, ok := ws.(WorkflowInspector); !ok {
+			continue
+		}
+		si := len(down)
+		down = append(down, false)
+		got, err := listWorkflows(r, ws, si, state, want)
 		if err != nil {
-			failed, nfail = err, nfail+1
+			failed, down[si], ndown = err, true, ndown+1
 			continue
 		}
 		all = append(all, got...)
 	}
 
-	if nfail > 0 && nfail == len(stores) {
+	if ndown > 0 && ndown == len(down) {
 		writeError(w, http.StatusServiceUnavailable, failed.Error())
 		return
 	}
@@ -463,9 +465,16 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 	page := []WorkflowRecord{}
 	for _, l := range all[min(offset, len(all)):min(want, len(all))] {
+		if down[l.si] {
+			continue
+		}
 		if l.rec == nil {
 			rec, err := l.ws.Record(r.Context(), l.key.ID)
-			if err != nil { // swept since the listing, or the store failed since
+			if errors.Is(err, ErrWorkflowNotFound) { // swept since the listing
+				continue
+			}
+			if err != nil { // the store failed since the listing
+				failed, down[l.si], ndown = err, true, ndown+1
 				continue
 			}
 			l.rec = &rec
@@ -473,33 +482,41 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 		page = append(page, *l.rec)
 	}
 
+	if ndown > 0 && ndown == len(down) {
+		writeError(w, http.StatusServiceUnavailable, failed.Error())
+		return
+	}
+
 	writeJSON(w, http.StatusOK, page)
 }
 
-// listed is one workflow of a store's listing: its sort key, and its record
-// when the store listed records.
+// listed is one workflow of a store's listing: its sort key, its store
+// (and the store's index in the listing), and its record when the store
+// listed records.
 type listed struct {
 	key WorkflowKey
-	ws  workflowStore
+	ws  WorkflowStore
+	si  int
 	rec *WorkflowRecord
 }
 
 // listWorkflows lists ws's first n workflows in state: keys only when ws is
-// a WorkflowKeyLister, else whole records.
-func listWorkflows(r *http.Request, ws workflowStore, state WorkflowState, n int) ([]listed, error) {
+// a WorkflowKeyLister, else whole records. ws is a WorkflowInspector; si
+// is its index.
+func listWorkflows(r *http.Request, ws WorkflowStore, si int, state WorkflowState, n int) ([]listed, error) {
 	if kl, ok := ws.(WorkflowKeyLister); ok {
 		keys, err := kl.WorkflowKeys(r.Context(), state, 0, n)
 		out := make([]listed, len(keys))
 		for i, k := range keys {
-			out[i] = listed{key: k, ws: ws}
+			out[i] = listed{key: k, ws: ws, si: si}
 		}
 		return out, err
 	}
 
-	recs, err := ws.Workflows(r.Context(), state, 0, n)
+	recs, err := ws.(WorkflowInspector).Workflows(r.Context(), state, 0, n)
 	out := make([]listed, len(recs))
 	for i := range recs {
-		out[i] = listed{key: WorkflowKey{ID: recs[i].ID, CreatedAt: recs[i].CreatedAt}, ws: ws, rec: &recs[i]}
+		out[i] = listed{key: WorkflowKey{ID: recs[i].ID, CreatedAt: recs[i].CreatedAt}, ws: ws, si: si, rec: &recs[i]}
 	}
 	return out, err
 }
@@ -512,13 +529,13 @@ var errWorkflowAmbiguous = errors.New("workflow id in several stores")
 // store is asked: it keeps "index" from reaching a store);
 // errWorkflowAmbiguous when several do; else the store error when some
 // store failed and none hit.
-func findWorkflow(r *http.Request, id string) (workflowStore, WorkflowRecord, error) {
+func findWorkflow(r *http.Request, id string) (WorkflowStore, WorkflowRecord, error) {
 	if !validWorkflowID(id) {
 		return nil, WorkflowRecord{}, ErrWorkflowNotFound
 	}
 
 	var (
-		found workflowStore
+		found WorkflowStore
 		rec   WorkflowRecord
 		miss  = ErrWorkflowNotFound
 	)

@@ -50,12 +50,11 @@ type TaskPlan struct {
 	Undo                 *UndoPlan
 }
 
-// UndoPlan is a task's compensation job.
+// UndoPlan is a task's compensation job. A priority queue's undo is pushed
+// at priority 0.
 type UndoPlan struct {
 	JobID, QueueID string
 	Queue          any
-	Priority       int
-	HasPriority    bool
 	Item           any
 }
 
@@ -91,8 +90,10 @@ type WorkflowRecord struct {
 	Tasks        []TaskRecord  `json:"tasks"`
 }
 
-// Scoped names the storage scope. Two objects with the same ScopeID share
-// state, so a workflow may span their queues.
+// Scoped names the storage scope. Two durable objects with the same ScopeID
+// share state, so a workflow may span their queues. In-memory stores all
+// share the process's scope ID but not state: a workflow's queues use the
+// store it was submitted to.
 type Scoped interface {
 	ScopeID() string
 }

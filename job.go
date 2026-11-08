@@ -305,9 +305,15 @@ func (j *job[T]) fail(reason string) {
 // finishes a workflow task completed, with no result.
 func (j *job[T]) succeed() { j.succeedWith(nil) }
 
-// succeedWith is succeed with the task's Result.
+// succeedWith is succeed with the task's Result. A result its in-memory
+// store refuses (too large) counts failed, as the store ends the task.
 func (j *job[T]) succeedWith(result []byte) {
-	if ref := j.endTask(OutcomeCompleted, "", result); ref != nil && ref.totals != nil {
+	ref := j.endTask(OutcomeCompleted, "", result)
+	switch {
+	case ref == nil || ref.totals == nil:
+	case ref.ext != nil && ref.ext.task != nil && ref.ext.task.tooLarge(result):
+		ref.totals.failed.Add(1)
+	default:
 		ref.totals.completed.Add(1)
 	}
 }

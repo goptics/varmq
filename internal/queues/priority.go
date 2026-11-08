@@ -112,13 +112,8 @@ func (q *PriorityQueue[T]) EnqueueOnce(item any, priority int, id string) bool {
 	return q.enqueue(item, priority, id, false)
 }
 
-// EnqueueForce is Enqueue past the capacity: it pushes item even when the
-// queue is full. Workflow promotion uses it.
-func (q *PriorityQueue[T]) EnqueueForce(item any, priority int) bool {
-	return q.enqueue(item, priority, "", true)
-}
-
-// EnqueueOnceForce is EnqueueOnce past the capacity, see EnqueueForce.
+// EnqueueOnceForce is EnqueueOnce past the capacity: it pushes item even
+// when the queue is full. Workflow promotion uses it.
 func (q *PriorityQueue[T]) EnqueueOnceForce(item any, priority int, id string) bool {
 	return q.enqueue(item, priority, id, true)
 }
@@ -141,7 +136,7 @@ func (q *PriorityQueue[T]) enqueue(item any, priority int, id string, force bool
 		return false
 	}
 
-	if !force && q.capacity > 0 && q.internal.Len() == q.capacity {
+	if !force && q.capacity > 0 && q.internal.Len() >= q.capacity {
 		q.mx.Unlock()
 		return false
 	}

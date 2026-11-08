@@ -28,8 +28,9 @@ type wfTask struct {
 	Open      int // dependencies not ended yet
 	Reason    string
 	Result    []byte
-	UndoState JobState // "" none, waiting, pending, completed, failed
-	UndoOpen  int      // undos of completed descendants not ended yet
+	UndoState  JobState // "" none, waiting, pending, completed, failed
+	UndoOpen   int      // undos of completed descendants not ended yet
+	UndoReason string   // why the undo failed or was cancelled
 }
 
 // wfEffect is one thing storage must do: push a task (or its undo), and/or
@@ -146,9 +147,9 @@ func (s *wfState) finishUndo(t *wfTask, e TaskEnd) []wfEffect {
 	if s.State != WorkflowCompensating || !active(t.UndoState) {
 		return nil
 	}
-	t.UndoState = JobFailed
+	t.UndoState, t.UndoReason = JobFailed, e.Reason
 	if e.Outcome == OutcomeCompleted {
-		t.UndoState = JobCompleted
+		t.UndoState, t.UndoReason = JobCompleted, ""
 	}
 	push := map[string]bool{}
 	up := s.reach(e.Task, true)
