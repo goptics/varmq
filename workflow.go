@@ -378,19 +378,21 @@ func (wf *Workflow) Submit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := wf.store.Submit(ctx, p); err != nil {
-		return err
-	}
-	wf.submitted = true
 
-	// Durable storage wakes only its distributed consumers.
+	// Durable storage wakes only its distributed consumers. Woken on error
+	// too: the store may have committed before the reply was lost.
 	var roots []string
 	for _, tp := range p.Tasks {
 		if len(tp.Deps) == 0 {
 			roots = appendNew(roots, tp.QueueID)
 		}
 	}
+	err = wf.store.Submit(ctx, p)
 	pokeLocal(roots)
+	if err != nil {
+		return err
+	}
+	wf.submitted = true
 
 	return nil
 }

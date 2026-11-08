@@ -584,6 +584,36 @@ func TestWorkflowPokesLocal(t *testing.T) {
 	}
 }
 
+// lostReplyStore commits the Submit (pushes the roots), then fails it, as
+// a store whose reply was lost.
+type lostReplyStore struct{ *pushStore }
+
+func (s lostReplyStore) Submit(ctx context.Context, p WorkflowPlan) error {
+	_ = s.pushStore.Submit(ctx, p)
+	return errors.New("reply lost")
+}
+
+// TestWorkflowPokesLocalOnSubmitError: a failed Submit still wakes the
+// roots' local consumers; the store may have committed.
+func TestWorkflowPokesLocalOnSubmitError(t *testing.T) {
+	ran := make(chan int, 1)
+	tq := pokeStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-t", "s"}}
+	tw := NewWorker(func(j Job[int]) { ran <- j.Data() })
+	th := tw.WithPersistentQueue(tq)
+	tw.WaitUntilIdle()
+
+	wf := NewWorkflow(lostReplyStore{&pushStore{fakeWFStore: fakeWFStore{scope: "s"}}}, WithWorkflowID("lr"))
+	wf.Add("a", th, 1)
+	require.EqualError(t, wf.Submit(context.Background()), "reply lost")
+	assert.False(t, wf.submitted, "retryable")
+	select {
+	case v := <-ran:
+		assert.Equal(t, 1, v)
+	case <-time.After(2 * time.Second):
+		t.Fatal("root never ran: no local poke after a failed Submit")
+	}
+}
+
 // zeroQueue is a user TaskQueue that returns a zero WorkflowItem.
 type zeroQueue struct{}
 
