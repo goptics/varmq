@@ -471,6 +471,11 @@ func TestCancelOnlyStorageGetsAnID(t *testing.T) {
 	assert.NotEmpty(t, j.ID(), "an ID to cancel by")
 	assert.ErrorIs(t, j.Err(), ErrDetached)
 	assert.NoError(t, j.Cancel(), "a detached handle still cancels by ID")
+
+	// ended on storage, unseen by this detached handle: storage says so
+	s := newCancelStore()
+	s.outcomes["e"] = JobOutcome{ID: "e", State: JobCompleted}
+	assert.ErrorIs(t, watchRemote[struct{}](cancelOnly{s}, "e", nil).Cancel(), ErrJobAlreadyClosed)
 }
 
 // failingCancel can't reach its backend.
