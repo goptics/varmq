@@ -1,6 +1,6 @@
 # varmq Redis storage
 
-**Version 1.5.0**
+**Version 1.6.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.6.0**: job outcome (section 6.13): channel `<base>:done:<job id>`, Acknowledge with a result, Job Record field `result`. Nothing from 1.5.0 changes for a reader that ignores them. redisq offers only distributed queues (every enqueue wakes idle consumers); the plain behaviour stays valid for other implementations.
 - **1.5.0**: workflows (sections 6.9 to 6.12, 7.3): keys `wf:<id>` and `wf:index`, envelope fields `wf`, `task` and `undo`, Purge cancels the workflow tasks it removes. 1.4.0 is reserved for retries (separate change). Nothing from 1.3.0 changes for a job without `wf`.
 - **1.3.0**: queue pause (sections 6.7, 6.8): key `<base>:paused` and channel `<base>:control`; every pop checks the key. Nothing from 1.2.0 changes while the key is absent.
 - **1.2.0**: a worker entry gains `completed`, `successful` and `failed`; an instance reports at once on a lifecycle change (section 8.3). Nothing from 1.1.0 changes.
@@ -164,6 +165,7 @@ When a job completes or fails, storage writes one Job Record under its Job ID in
 | `finished_at` | integer | Time the job completed or failed (ms). The same value as its score in `:completed` or `:failed`. |
 | `attempts` | integer | 1 plus the job's count in `<base>:attempts`. 1 when the envelope `id` is empty. |
 | `errors` | array, optional | The job's failed attempts, oldest first, at most the last 10: each `{"attempt": <integer>, "at": <ms>, "error": <string>}`. A writer that adds an 11th entry drops the oldest. Absent on a completed job. |
+| `result` | any JSON, optional | Since 1.6.0: the result an Acknowledge with result left (section 6.13), verbatim. Absent otherwise. |
 
 `enqueued_at` is not copied into the record: a reader takes it from `item.enqueued_at`. A reader MUST ignore fields it does not know, so later versions can add fields.
 
@@ -373,6 +375,14 @@ The pre-run check. A consumer MUST call it for an item whose envelope has `wf`, 
 - `undo` true: runnable only when `meta.state` is `compensating` and `u:<task>.state` is `pending`.
 
 A consumer that gets "not runnable" MUST finish the item with FinishTask outcome `cancelled` (reason `workflow cancelled`) without running it. When the check fails with an error, it SHOULD run the item: delivery is at least once, and a store that cannot answer cannot finish it either. A job without `wf` skips this check.
+
+### 6.13 Job outcome (since 1.6.0)
+
+A producer waits for a job's end from any process. Only a job with a non-empty Job ID has an outcome.
+
+- **Acknowledge with result.** Input: the ack ID and result bytes. As section 6.3, plus: the script MUST check the result is valid JSON (`pcall(cjson.decode, r)`) and, if not, change nothing and report failure; the completed record gets `result`, the bytes verbatim (never decoded and re-encoded: Lua numbers are doubles).
+- **Publish.** Every script that ends a job completed or failed (6.3, 6.4, Acknowledge with result; one item or a batch) MUST, after its record step and whatever retention keeps, `PUBLISH <base>:done:<job id> <outcome>`, where outcome is a JSON object: `id`; `state` (`completed` or `failed`); `error`, the reason, on failed; `result`, verbatim, when there is one. Strings via `cjson.encode`.
+- **Watch.** A waiter SUBSCRIBEs `<base>:done:<job id>`, then reads `HGET <base>:jobs <job id>` once, for a job that ended before the subscribe, and SHOULD read it again about once a second while it waits, for a message lost on a reconnect. From a record: `state`; `error` = the last `errors` entry's `error`; `result`. A record trimmed before the read and a missed message leave the waiter waiting; it SHOULD have a timeout.
 
 ## 7. Reading
 

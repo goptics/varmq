@@ -499,9 +499,10 @@ func TestNonWorkflowJobUnchanged(t *testing.T) {
 			}
 			return nil
 		})
-		p := w.WithPersistentQueue(pq)
-		require.True(t, p.Add(1))
-		require.True(t, p.Add(2))
+		p := w.WithQueue(pq)
+		_, ok1 := p.Add(1)
+		_, ok2 := p.Add(2)
+		require.True(t, ok1 && ok2)
 		require.Eventually(t, func() bool { return len(pq.Acked())+len(pq.Rejected()) == 2 },
 			5*time.Second, time.Millisecond)
 		assert.Equal(t, []string{"mock-ack-id"}, pq.Acked())
@@ -655,7 +656,7 @@ func TestWorkflowDurableEnds(t *testing.T) {
 					return "", boom
 				}
 				return fmt.Sprint("r-", j.Data()), nil
-			}).WithPersistentQueue(s)
+			}).WithQueue(s)
 		},
 		"err": func(s storage) {
 			NewErrWorker(func(j Job[int]) error {
@@ -663,7 +664,7 @@ func TestWorkflowDurableEnds(t *testing.T) {
 					return boom
 				}
 				return nil
-			}).WithPersistentQueue(s)
+			}).WithQueue(s)
 		},
 	}
 

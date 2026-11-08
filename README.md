@@ -129,14 +129,28 @@ queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued
 queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already waiting
 ```
 
-### Persistent and Distributed Queues
+### Shared Storage (Redis, SQLite)
 
-Plug in a storage adapter to keep jobs across restarts or share them between instances:
+Same `WithQueue` / `WithPriorityQueue`. Storage that acknowledges (`IAcknowledgeable`) is detected: jobs go out as JSON, survive restarts, and any process bound to the same queue runs them. Storage that notifies (`ISubscribable`, e.g. redisq) wakes idle workers at once; other storage is polled.
 
 ```go
-queue := worker.WithPersistentQueue(persistentAdapter)   // any IPersistentQueue
-queue := worker.WithDistributedQueue(distributedAdapter) // any IDistributedQueue
+rq := redisq.New(url)
+
+// consumer process
+w := varmq.NewResultWorker(func(j varmq.Job[int]) (string, error) { ... })
+w.WithQueue(rq.NewQueue("thumbs"))
+
+// producer process: no worker
+q := varmq.NewQueue[int](rq.NewQueue("thumbs"))
+job, _ := q.Add(64)
+o, err := job.Outcome(ctx)              // waits, whichever process ran it
+s, err := varmq.DecodeResult[string](o) // the worker's R
+
+// any process, by ID
+o, err = varmq.WaitJob(ctx, rq.NewQueue("thumbs"), job.ID())
 ```
+
+On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
 
 Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
 
@@ -144,7 +158,10 @@ When the adapter deduplicates pushes (`EnqueueOnce`, e.g. redisq), give each job
 
 ```go
 id := uuid.NewString() // once, so a retry carries the same id
-for !queue.Add(data, varmq.WithJobId(id)) {
+for {
+	if _, ok := queue.Add(data, varmq.WithJobId(id)); ok {
+		break
+	}
 	// back off and retry
 }
 ```

@@ -105,7 +105,15 @@ type ackExt struct {
 	// end is how the task's run ended; nil until it ran, and a task closed
 	// before it ran ends cancelled.
 	end *TaskEnd
+	// result is a plain result job's R as JSON, for storage that keeps it
+	// (ResultAcknowledgeable): Close acknowledges with it.
+	result []byte
 }
+
+// remoteResultLimit caps the R a result worker leaves on shared storage.
+// Bigger: the job still completes, with no result (ErrNoResult).
+// ponytail: fixed, a WithResultLimit option if someone needs another.
+const remoteResultLimit = 64 << 10
 
 // taskTag names the workflow task a job runs. store is nil until bound.
 type taskTag struct {
@@ -529,6 +537,8 @@ func (j *job[T]) acknowledge() error {
 		pokeLocal(pushed)
 	} else if reason, failed := failReason(ref.ext); failed {
 		ok = ref.q.Reject(ref.id, reason)
+	} else if ra, has := ref.q.(ResultAcknowledgeable); has && ref.ext != nil && ref.ext.result != nil {
+		ok = ra.AcknowledgeResult(ref.id, ref.ext.result)
 	} else {
 		ok = ref.q.Acknowledge(ref.id)
 	}
@@ -676,11 +686,38 @@ func (rj *resultJob[T, R]) sendError(err error) {
 // satisfies the Drainer embedded in EnqueuedResultJob.
 func (rj *resultJob[T, R]) Drain() {}
 
+// keepResult stores R as JSON for Close to acknowledge with, when the job
+// came from storage that keeps results. R that does not marshal, or is over
+// remoteResultLimit, is left out: the job completes with no result.
+func (rj *resultJob[T, R]) keepResult() {
+	ref := rj.ackRef.Load()
+	if ref == nil {
+		return
+	}
+	if _, ok := ref.q.(ResultAcknowledgeable); !ok {
+		return
+	}
+
+	b, err := json.Marshal(rj.data)
+	if err != nil || len(b) > remoteResultLimit {
+		return
+	}
+
+	nref, ext := ackCopy(ref)
+	ext.result, nref.ext = b, &ext
+	rj.ackRef.Store(&nref)
+}
+
 // succeed is job.succeed; a workflow task (not an undo) leaves R as JSON,
 // its Result. R that does not marshal fails the task.
 func (rj *resultJob[T, R]) succeed() {
 	t := rj.taskTag()
-	if t == nil || t.undo {
+	if t == nil {
+		rj.keepResult()
+		rj.succeedWith(nil)
+		return
+	}
+	if t.undo {
 		rj.succeedWith(nil)
 		return
 	}

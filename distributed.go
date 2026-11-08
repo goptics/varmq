@@ -13,6 +13,8 @@ type distributedQueue[T any] struct {
 	config queueConfig
 }
 
+// Deprecated: use NewQueue, which takes any shared storage and returns a
+// job handle.
 func NewDistributedQueue[T any](internalQueue IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
 	c := loadQueueConfigs(configs...)
 

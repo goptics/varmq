@@ -518,9 +518,10 @@ func TestResultWorkerPersistent(t *testing.T) {
 	defer w.Stop()
 
 	store := mocks.NewMockPersistentQueue()
-	q := w.WithPersistentQueue(store)
+	q := w.WithQueue(store)
 	for _, d := range []string{"a", "bad", "c"} {
-		assert.True(t, q.Add(d))
+		_, ok := q.Add(d)
+		assert.True(t, ok)
 	}
 
 	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)
@@ -538,9 +539,10 @@ func TestErrWorkerPersistent(t *testing.T) {
 	defer w.Stop()
 
 	store := mocks.NewMockPersistentPriorityQueue()
-	q := w.WithPersistentPriorityQueue(store)
+	q := w.WithPriorityQueue(store)
 	for i, d := range []string{"a", "bad", "c"} {
-		assert.True(t, q.Add(d, i))
+		_, ok := q.Add(d, i)
+		assert.True(t, ok)
 	}
 
 	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)
@@ -558,9 +560,10 @@ func TestResultWorkerDistributed(t *testing.T) {
 	defer w.Stop()
 
 	store := mocks.NewMockDistributedQueue()
-	q := w.WithDistributedQueue(store)
+	q := w.WithQueue(store)
 	for _, d := range []string{"a", "bad", "c"} {
-		assert.True(t, q.Add(d))
+		_, ok := q.Add(d)
+		assert.True(t, ok)
 	}
 
 	assert.Eventually(t, func() bool { return len(store.Acked())+len(store.Rejected()) == 3 }, time.Second, 5*time.Millisecond)

@@ -179,6 +179,10 @@ type (
 	JobError       = contract.JobError
 	QueueInspector = contract.QueueInspector
 
+	JobOutcome            = contract.JobOutcome
+	OutcomeWatcher        = contract.OutcomeWatcher
+	ResultAcknowledgeable = contract.ResultAcknowledgeable
+
 	InstanceRecord   = contract.InstanceRecord
 	InstanceWorker   = contract.InstanceWorker
 	InstanceRegistry = contract.InstanceRegistry
