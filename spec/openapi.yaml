@@ -246,6 +246,11 @@ paths:
         separately, so jobs that change state between two requests can be
         skipped or repeated.
 
+        An in-memory queue reads each pending job while holding it waiting,
+        so it can't start mid-read; a job closed or cancelled while it
+        waits, or started since the queue was read, is left out (a page can
+        be short).
+
         `cancelled` since 1.4.0. Storage that keeps cancelled records with
         its failed ones (redisq, spec redis-storage.md 6.14) lists them under
         `failed` too, with `state` `cancelled`; storage that keeps none, such
@@ -284,9 +289,10 @@ paths:
         (`processing`, `attempts` 1, no times, `payload` null: its worker
         may change the data while it runs); it keeps no ended jobs, so a
         job that completed, failed or was cancelled is 404, and so is a job
-        without an ID. A job cancelled or closed while it waits stays on
-        the queue's `pending` page until a worker drops it, but is 404
-        here. A job a worker took into a batch behind a running job is in
+        without an ID, and one cancelled or closed while it waits. A
+        waiting job's data is read while the job is held waiting: it starts
+        (and its worker can change the data) only after the read, so a slow
+        `MarshalJSON` delays it. A job a worker took into a batch behind a running job is in
         neither place until it starts, however long the job ahead runs:
         404 for both routes, and it still runs. Running jobs are tracked
         from when the process builds its REST handler; one already running

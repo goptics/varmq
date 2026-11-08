@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,10 @@ const (
 	finished
 	// closed indicates the job has been closed and resources freed
 	closed
+	// reading holds a waiting (created or queued) job while a REST read
+	// marshals its data (readWaiting): every transition waits, so the job
+	// can't start, and its worker can't write its data, mid-read.
+	reading
 )
 
 var (
@@ -352,7 +357,7 @@ func (j *job[T]) Status() string {
 	switch j.status.Load() {
 	case created:
 		return "Created"
-	case queued:
+	case queued, reading:
 		return "Queued"
 	case processing:
 		return "Processing"
@@ -364,9 +369,6 @@ func (j *job[T]) Status() string {
 		return "Unknown"
 	}
 }
-
-// phase is the job's status value.
-func (j *job[T]) phase() status { return j.status.Load() }
 
 // IsClosed returns true if the job has been closed.
 func (j *job[T]) IsClosed() bool {
@@ -494,6 +496,10 @@ func notClosed(s status) error {
 func (j *job[T]) transition(to status, allowed func(status) error) error {
 	for {
 		s := j.status.Load()
+		if s == reading { // a REST read holds it waiting: a marshal's time
+			runtime.Gosched()
+			continue
+		}
 		if err := allowed(s); err != nil {
 			return err
 		}
@@ -513,7 +519,31 @@ func (j *job[T]) claimClose() error {
 // markQueued records that Enqueue succeeded. It only moves a created job: a
 // worker may already have started it, or the user closed it, before this runs.
 func (j *job[T]) markQueued() {
-	j.status.CompareAndSwap(created, queued)
+	for !j.status.CompareAndSwap(created, queued) && j.status.Load() == reading {
+		runtime.Gosched() // a REST read holds it created: wait, then move it
+	}
+}
+
+// readWaiting runs fn while j waits (created or queued), holding it there:
+// a start, close or cancel waits until fn returns, so fn may read j's data
+// while no worker writes it. fn must not change j's state (Close, Cancel:
+// they would wait for themselves). It returns the state j was in: fn ran
+// only for created or queued.
+func (j *job[T]) readWaiting(fn func()) status {
+	for {
+		switch s := j.status.Load(); s {
+		case created, queued:
+			if j.status.CompareAndSwap(s, reading) {
+				defer j.status.Store(s)
+				fn()
+				return s
+			}
+		case reading: // another read: wait for it
+			runtime.Gosched()
+		default:
+			return s
+		}
+	}
 }
 
 // startProcessing moves a job a worker took to processing, unless it was
