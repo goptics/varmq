@@ -649,6 +649,15 @@ components:
             Jobs waiting in the worker's bound queues, as their `Len` reports
             it. For shared storage this includes jobs other processes added.
         num_idle_workers: { type: integer, description: Pool goroutines waiting for a job. }
+        queue_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Since 1.4.0. The `GET /queues` IDs of the queues the worker
+            consumes, sorted: shared storage with a Queue ID and the worker's
+            in-memory queues (`memory:<instance>:<n>`, readable on this
+            process only). Empty when it binds none with an ID. Absent from
+            older servers.
 
     WorkerDetails:
       allOf:

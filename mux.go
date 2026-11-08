@@ -111,6 +111,26 @@ type workerSummary struct {
 	NumProcessing  int    `json:"num_processing"`
 	NumPending     int    `json:"num_pending"`
 	NumIdleWorkers int    `json:"num_idle_workers"`
+	// QueueIDs are the GET /queues IDs of the queues the worker consumes,
+	// in-memory ones too, sorted. Empty when it binds none with an ID.
+	QueueIDs []string `json:"queue_ids"`
+}
+
+// summarizeWorker is w's workerSummary.
+func summarizeWorker(w Worker) workerSummary {
+	s := workerSummary{
+		Name:           w.Name(),
+		Status:         w.Status(),
+		Concurrency:    w.NumConcurrency(),
+		NumProcessing:  w.NumProcessing(),
+		NumPending:     w.NumPending(),
+		NumIdleWorkers: w.NumIdleWorkers(),
+		QueueIDs:       []string{},
+	}
+	if q, ok := w.(interface{ listedQueueIDs() []string }); ok {
+		s.QueueIDs = q.listedQueueIDs()
+	}
+	return s
 }
 
 // Handler returns an [http.Handler] that serves the varmq REST API
@@ -191,14 +211,7 @@ func handleListWorkers(w http.ResponseWriter, r *http.Request) {
 
 	WorkerRegistry.Range(func(key, value any) bool {
 		if worker, ok := value.(Worker); ok {
-			workers = append(workers, workerSummary{
-				Name:           worker.Name(),
-				Status:         worker.Status(),
-				Concurrency:    worker.NumConcurrency(),
-				NumProcessing:  worker.NumProcessing(),
-				NumPending:     worker.NumPending(),
-				NumIdleWorkers: worker.NumIdleWorkers(),
-			})
+			workers = append(workers, summarizeWorker(worker))
 		}
 
 		return true // continue iteration
@@ -238,14 +251,7 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 			Failed     uint64 `json:"failed"`
 		} `json:"metrics"`
 	}{
-		workerSummary: workerSummary{
-			Name:           worker.Name(),
-			Status:         worker.Status(),
-			Concurrency:    worker.NumConcurrency(),
-			NumProcessing:  worker.NumProcessing(),
-			NumPending:     worker.NumPending(),
-			NumIdleWorkers: worker.NumIdleWorkers(),
-		},
+		workerSummary: summarizeWorker(worker),
 	}
 
 	details.Metrics.Completed = metrics.Completed()

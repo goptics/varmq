@@ -313,6 +313,9 @@ func TestMuxListWorkers(t *testing.T) {
 	if !foundMap["test-worker-1"] || !foundMap["test-worker-2"] {
 		t.Errorf("did not find expected workers in response")
 	}
+	for _, w := range workers {
+		assert.Equal(t, []string{}, w.QueueIDs, "no queue bound: empty, not null")
+	}
 
 	w1.Stop()
 	w2.Stop()
@@ -353,6 +356,25 @@ func TestMuxGetWorker(t *testing.T) {
 	if _, ok := response["metrics"]; !ok {
 		t.Errorf("expected metrics payload")
 	}
+
+	// queue_ids names its in-memory queue as GET /queues lists it.
+	ids, _ := response["queue_ids"].([]any)
+	require.Len(t, ids, 1)
+	id, _ := ids[0].(string)
+	assert.True(t, strings.HasPrefix(id, "memory:"), id)
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(id)+"/jobs?state=pending", nil))
+	assert.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	// A bound shared queue joins it, sorted.
+	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "a:shared"}
+	wb.WithQueue(shared)
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
+	var list []workerSummary
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&list))
+	require.Len(t, list, 1)
+	assert.Equal(t, []string{"a:shared", id}, list[0].QueueIDs)
 
 	w.Stop()
 }
