@@ -317,9 +317,9 @@ func BenchmarkAddAll(b *testing.B) {
 // for B, so it is promotion latency, not throughput.
 func BenchmarkWorkflowPromotion(b *testing.B) {
 	ctx := context.Background()
-	// ponytail: one store per run; a store only sweeps ended workflows by
-	// retention, so a long -benchtime holds its b.N records until the run ends.
-	store := NewWorkflowStore()
+	// retention 0: ended workflows go at once, so a long -benchtime does
+	// not hold b.N records.
+	store := NewWorkflowStore(WithWorkflowRetention(0))
 
 	var endA atomic.Pointer[time.Time] // when A's function returns
 	var total atomic.Int64

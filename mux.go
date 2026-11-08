@@ -488,6 +488,9 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 			}
 			if l.rec == nil {
 				rec, err := l.ws.Record(r.Context(), l.key.ID)
+				if err == nil && rec.CreatedAt > l.key.CreatedAt {
+					err = ErrWorkflowNotFound // ID reused since the listing: not this key's workflow
+				}
 				if errors.Is(err, ErrWorkflowNotFound) { // swept since the listing
 					if n[l.si] < want {
 						continue

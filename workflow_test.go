@@ -1662,6 +1662,17 @@ func TestMemStoreClockBack(t *testing.T) {
 	assert.Equal(t, int64(200), r.CreatedAt, "clamped to b's")
 	list, _ = s.Workflows(ctx, "", 0, 10)
 	assert.Equal(t, []string{"b", "c", "a"}, ids(list))
+
+	// c ends while the clock is still back: it never ends before it began
+	*clock = time.UnixMilli(160)
+	require.NoError(t, s.Cancel(ctx, "c", nil))
+	require.NoError(t, w.Start()) // the queued task ends cancelled, ending c
+	defer w.Stop()
+	require.Eventually(t, func() bool {
+		r, err = s.Record(ctx, "c")
+		return err == nil && r.FinishedAt != 0
+	}, 5*time.Second, time.Millisecond)
+	assert.GreaterOrEqual(t, r.FinishedAt, r.CreatedAt)
 }
 
 // TestMemStoreListBounded: a state-filtered listing scans at most

@@ -191,7 +191,7 @@ func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 	var out []memPush
 	for _, e := range fx {
 		if e.End != "" {
-			w.finished = m.now().UnixMilli()
+			w.finished = max(m.now().UnixMilli(), w.created) // a clamped created_at never ends after its finish
 			m.ended = append(m.ended, w)
 		}
 		if e.Push == "" {

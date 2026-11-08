@@ -883,10 +883,11 @@ func TestMuxWorkflowsAllStoresFail(t *testing.T) {
 // keyedWorkflowStore lists keys only; its records are read one by one.
 type keyedWorkflowStore struct {
 	*fakeWorkflowStore
-	reads []string
-	gone  string // listed, but its Record is not found
-	stuck bool   // gone stays listed (else its read sweeps it from the listing)
-	swept bool
+	reads  []string
+	gone   string // listed, but its Record is not found
+	stuck  bool   // gone stays listed (else its read sweeps it from the listing)
+	swept  bool
+	reused string // its Record is a newer workflow under the same ID
 }
 
 func (k *keyedWorkflowStore) WorkflowKeys(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error) {
@@ -906,7 +907,11 @@ func (k *keyedWorkflowStore) Record(ctx context.Context, id string) (WorkflowRec
 		k.swept = !k.stuck
 		return WorkflowRecord{}, ErrWorkflowNotFound
 	}
-	return k.fakeWorkflowStore.Record(ctx, id)
+	r, err := k.fakeWorkflowStore.Record(ctx, id)
+	if id == k.reused {
+		r.CreatedAt += 1000
+	}
+	return r, err
 }
 
 func (k *keyedWorkflowStore) Workflows(context.Context, WorkflowState, int, int) ([]WorkflowRecord, error) {
@@ -957,6 +962,18 @@ func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
 	assert.Empty(t, recs)
+
+	// An ID reused between the listing and the read is not that key's
+	// workflow: skipped like a swept one, so the page keeps its order.
+	k.gone, k.stuck, k.swept, k.reused = "", false, false, "k5"
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?limit=100", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	for _, r := range recs {
+		assert.NotEqual(t, "k5", r.ID)
+	}
+	k.reused, k.gone, k.stuck = "", "k5", true
 
 	// A store that listed less than a full page holds no more: its swept
 	// entry is just skipped.

@@ -268,8 +268,9 @@ paths:
         Since 1.3.0. Newest `created_at` first, merged across the process's
         in-memory workflows and the workflows of every durable queue storage
         bound here. A workflow in a shared storage shows on every instance
-        that binds it; the same ID can repeat across instances, never within
-        one reply. Pages are read separately, so workflows created between
+        that binds it; the same ID can repeat across instances, and within
+        one reply when several storages bound here hold it (GET and PATCH
+        by that ID then answer 409). Pages are read separately, so workflows created between
         two requests can shift a page. A storage whose listing fails is left
         out of the reply; the reply is 503 only when every storage fails. A
         workflow that ends between the listing and the read of its record
