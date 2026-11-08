@@ -716,7 +716,13 @@ components:
             not every job that ever finished.
           required: [pending, processing, completed, failed]
           properties:
-            pending: { type: integer, minimum: 0 }
+            pending:
+              type: integer
+              minimum: 0
+              description: |
+                Jobs in the queue. An in-memory queue also counts jobs
+                cancelled or closed while they wait, until a worker drops
+                them, so it can be above the `pending` page's length.
             processing: { type: integer, minimum: 0 }
             completed: { type: integer, minimum: 0 }
             failed: { type: integer, minimum: 0 }
