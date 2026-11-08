@@ -135,17 +135,20 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			}
 			// A job stays Queued while it waits in the batch, so the user can
 			// still Close it; skip it here like the dispatcher would have.
+			// Tracked before it starts: a cancel request that lands
+			// meanwhile finds it queued and closes it.
+			id := w.trackRun(j)
 			if !j.startProcessing() {
+				w.untrackRun(id, j)
 				run.add(j.memTotals(), -1)
 				continue
 			}
 
-			id := w.trackRun(j)
 			w.workerFunc(j)
 
 			j.changeStatus(finished)
 			j.endRun() // after finished: a late Context or Cancel finds the run over
-			w.untrackRun(id)
+			w.untrackRun(id, j)
 			// The user may close a finished job first; that is not an error.
 			if err := j.Close(); err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
 				w.sendError(err)

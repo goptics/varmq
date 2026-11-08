@@ -182,3 +182,19 @@ func TestRemoteCancelUnsupported(t *testing.T) {
 	j, _ := NewQueue[int](newSharedStore()).Add(1)
 	assert.ErrorIs(t, j.Cancel(), ErrCancelUnsupported)
 }
+
+func TestCancelWaitingDurableJobFinishesInStorage(t *testing.T) {
+	s := newCancelStore()
+	h, _ := NewErrQueue[int](s).Add(1) // producer handle
+	_, ok, ack := s.sharedStore.DequeueWithAckId()
+	require.True(t, ok)
+
+	// the consumer's copy, taken but not started (as in a worker's batch)
+	j := newErrorJob(1, jobConfigs{Id: h.ID()})
+	j.setAck(s, ack)
+	j.markQueued()
+
+	require.NoError(t, j.Cancel())
+	assert.ErrorIs(t, j.Err(), ErrJobCancelled)
+	assert.ErrorIs(t, h.Err(), ErrJobCancelled, "storage finished it cancelled: no redelivery")
+}

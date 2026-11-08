@@ -117,11 +117,15 @@ func waitingOnly(s status) error {
 func (j *job[T]) cancel(set, release func()) error {
 	err := j.transition(closed, waitingOnly)
 	if err == nil {
+		// Won against startProcessing: the job never runs. Shared storage
+		// and workflow stores learn it ended cancelled, so the item is not
+		// redelivered and the workflow moves on.
+		ackErr := j.finishCancelled()
 		if set != nil {
 			set()
 		}
 		release()
-		return nil
+		return ackErr
 	}
 	if !errors.Is(err, ErrJobProcessing) {
 		return err
@@ -138,8 +142,8 @@ func (j *job[T]) cancel(set, release func()) error {
 
 // Cancel stops the job. One not started yet is closed and never runs. A
 // running one has its Context cancelled: it ends cancelled if it then
-// returns an error or panics, and as usual if it finishes anyway.
-// ErrJobAlreadyClosed once it ended.
+// returns an error or panics, and as usual if it finishes anyway, or if
+// its function already returned. ErrJobAlreadyClosed once it ended.
 func (j *job[T]) Cancel() error { return j.cancel(nil, j.wg.Done) }
 
 // Cancel is job.Cancel; a job cancelled before it ran reports
@@ -156,13 +160,25 @@ func (rj *resultJob[T, R]) Cancel() error {
 
 // endFailed records a run that returned err (or panicked): cancelled when
 // Cancel reached it while it ran, failed otherwise. It returns the error
-// the job reports.
+// the job reports. A Cancel after this read leaves the outcome as is.
 func (j *job[T]) endFailed(err error) error {
 	if !j.cancelRequested() {
 		j.fail(err.Error())
 		return err
 	}
 
+	j.endCancelled()
+	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
+		ref.totals.failed.Add(1)
+	}
+
+	return ErrJobCancelled
+}
+
+// endCancelled records that the job ended cancelled, for Close or
+// finishCancelled to report: a workflow task's end, or storage's
+// cancelled finish (CancelAcknowledgeable, else Reject).
+func (j *job[T]) endCancelled() {
 	reason := cancelReason
 	ref := j.ackRef.Load()
 	switch {
@@ -172,11 +188,25 @@ func (j *job[T]) endFailed(err error) error {
 	case ref.q != nil:
 		j.ackRef.Store(&jobAck{q: ref.q, id: ref.id, ext: &ackExt{reason: &reason, cancelled: true}})
 	}
-	if ref != nil && ref.totals != nil {
-		ref.totals.failed.Add(1)
+}
+
+// finishCancelled reports a job Cancel closed before it ran: to its
+// storage (acknowledge) or its in-memory workflow store. Nothing for a
+// plain in-memory job.
+func (j *job[T]) finishCancelled() error {
+	ref := j.ackRef.Load()
+	if ref == nil || (ref.q == nil && (ref.ext == nil || ref.ext.task == nil)) {
+		return nil
 	}
 
-	return ErrJobCancelled
+	j.endCancelled()
+	if ref.q != nil {
+		return j.acknowledge()
+	}
+	if r := j.ackRef.Load(); r != nil && r.ext != nil && r.ext.task != nil {
+		finishMemTask(r.ext)
+	}
+	return nil
 }
 
 // Cancel on a group member releases the group as its Close does.
@@ -214,9 +244,11 @@ func (w *worker[T, JobType]) trackRun(j JobType) string {
 	return id
 }
 
-func (w *worker[T, JobType]) untrackRun(id string) {
+// untrackRun drops j's entry, not another job's under the same ID (a
+// redelivered item, a reused ID).
+func (w *worker[T, JobType]) untrackRun(id string, j JobType) {
 	if id != "" {
-		w.running.Delete(id)
+		w.running.CompareAndDelete(id, j)
 	}
 }
 
