@@ -2,10 +2,10 @@ package varmq
 
 import "fmt"
 
-// PersistentQueue is an interface that extends Queue to support persistent job operations
 // errDeprecatedTarget: deprecated handles are no workflow targets.
 var errDeprecatedTarget = fmt.Errorf("%w: deprecated queue handle; bind with WithQueue", ErrScopeMismatch)
 
+// PersistentQueue is an interface that extends Queue to support persistent job operations
 type PersistentQueue[T any] interface {
 	IExternalBaseQueue
 
