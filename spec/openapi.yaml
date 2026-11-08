@@ -246,8 +246,10 @@ paths:
         separately, so jobs that change state between two requests can be
         skipped or repeated.
 
-        An in-memory queue lists only waiting jobs: one closed while it
-        waits, or started by the end of its read, is left out, `offset`
+        An in-memory queue lists only waiting jobs added through it (another
+        queue on the same storage lists its own, as the job routes do): one
+        closed while it waits, or started by the end of its read, is left
+        out, `offset`
         counts waiting jobs only, and a page fills up to `limit`, so a
         short page means the end. A job that starts while its data is being
         read can be read while its worker writes `Data()`: don't mutate
