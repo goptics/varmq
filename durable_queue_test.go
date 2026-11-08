@@ -348,3 +348,22 @@ func (c *clearOnPush) EnqueueOnce(item any, id string) bool {
 	c.mu.Unlock()
 	return c.push(item, 0)
 }
+
+func TestResultProducer(t *testing.T) {
+	s := newSharedStore()
+	w := NewResultWorker(func(j Job[int]) (string, error) { return fmt.Sprint("r-", j.Data()), nil })
+	defer w.Stop()
+	w.WithQueue(s)
+
+	j, ok := NewResultQueue[int, string](s).Add(3)
+	require.True(t, ok)
+	r, err := j.Result()
+	require.NoError(t, err)
+	assert.Equal(t, "r-3", r)
+
+	pj, ok := NewResultPriorityQueue[int, string](sharedPrio{newSharedStore()}).Add(1, 0)
+	require.True(t, ok)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	assert.ErrorIs(t, pj.WaitContext(ctx), context.DeadlineExceeded, "no consumer: still waiting")
+}

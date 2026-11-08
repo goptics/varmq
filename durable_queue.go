@@ -197,9 +197,42 @@ type ProducerPriorityQueue[T any] interface {
 	Add(data T, priority int, configs ...JobConfigFunc) (RemoteJob, bool)
 }
 
+// RemoteResultJob is a RemoteJob whose worker is a ResultWorker: Result
+// decodes its R.
+type RemoteResultJob[R any] interface {
+	RemoteJob
+	Result() (R, error)
+}
+
+// ProducerResultQueue is ProducerQueue for jobs a ResultWorker runs.
+type ProducerResultQueue[T, R any] interface {
+	TaskQueue[T]
+	IExternalBaseQueue
+	Add(data T, configs ...JobConfigFunc) (RemoteResultJob[R], bool)
+}
+
+// ProducerResultPriorityQueue is ProducerResultQueue for priority storage.
+type ProducerResultPriorityQueue[T, R any] interface {
+	TaskQueue[T]
+	IExternalBaseQueue
+	Add(data T, priority int, configs ...JobConfigFunc) (RemoteResultJob[R], bool)
+}
+
+// NewResultQueue is NewQueue for jobs a ResultWorker[T, R] runs: Add's job
+// has Result, as a bound ResultQueue's does.
+func NewResultQueue[T, R any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerResultQueue[T, R] {
+	return &durableQueue[T, R, RemoteResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
+}
+
+// NewResultPriorityQueue is NewResultQueue for priority storage.
+func NewResultPriorityQueue[T, R any](s IPersistentPriorityQueue, configs ...QueueConfigFunc) ProducerResultPriorityQueue[T, R] {
+	return &durablePriorityQueue[T, R, RemoteResultJob[R], EnqueuedResultGroupJob[R]]{producerBase[T, R](s, configs)}
+}
+
 // NewQueue is a producer handle on shared FIFO storage (rq.NewQueue("x"),
 // sqliteq, custom): it adds jobs that workers in any process bound with
-// WithQueue run. Use DecodeResult on a result worker's outcome.
+// WithQueue run. Its job has Wait and Err; for a ResultWorker's R use
+// NewResultQueue.
 func NewQueue[T any](s IPersistentQueue, configs ...QueueConfigFunc) ProducerQueue[T] {
 	return &durableQueue[T, struct{}, RemoteJob, EnqueuedErrGroupJob]{producerBase[T, struct{}](s, configs)}
 }

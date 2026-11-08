@@ -141,13 +141,13 @@ w := varmq.NewResultWorker(func(j varmq.Job[int]) (string, error) { ... })
 w.WithQueue(rq.NewQueue("thumbs"))
 
 // producer process: no worker
-q := varmq.NewQueue[int](rq.NewQueue("thumbs"))
+q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs")) // NewQueue[T] for Worker / ErrWorker jobs
 job, _ := q.Add(64)
-o, err := job.Outcome(ctx)              // waits, whichever process ran it
-s, err := varmq.DecodeResult[string](o) // the worker's R
+s, err := job.Result() // waits, whichever process ran it
 
 // any process, by ID
-o, err = varmq.WaitJob(ctx, rq.NewQueue("thumbs"), job.ID())
+o, err := varmq.WaitJob(ctx, rq.NewQueue("thumbs"), job.ID())
+s, err = varmq.DecodeResult[string](o)
 ```
 
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
