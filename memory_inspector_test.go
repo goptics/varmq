@@ -86,7 +86,10 @@ func TestMemQueueCounts(t *testing.T) {
 
 	close(release)
 	// processing drops when a job's run ends, just after its outcome counts
-	require.Eventually(t, func() bool { s := stats(t, m); return s.Totals.Completed+s.Totals.Failed == 3 && s.Counts == JobCounts{} }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		s := stats(t, m)
+		return s.Totals.Completed+s.Totals.Failed == 3 && s.Counts == JobCounts{}
+	}, time.Second, time.Millisecond)
 	s = stats(t, m)
 	assert.Equal(t, JobTotals{Submitted: 3, Completed: 2, Failed: 1}, s.Totals, "completed counts successful jobs, as redisq")
 }
@@ -213,12 +216,15 @@ func TestMemQueueNameTakeover(t *testing.T) {
 	assert.True(t, listed)
 }
 
-// Acknowledging storage keeps its own counts: no in-memory inspector.
+// Acknowledging storage is shared storage: WithQueue binds it durable (JSON
+// jobs, its own counts), with no in-memory inspector.
 func TestMemQueueSkipsAckStorage(t *testing.T) {
 	w := NewWorker(func(Job[int]) {})
 	defer w.Stop()
 	q := w.WithQueue(ackMemQueue{queues.NewQueue[any]()})
-	assert.Nil(t, q.(*queue[int]).totals)
+	d, ok := q.(*durableQueue[int, struct{}, EnqueuedJob, EnqueuedGroupJob])
+	require.True(t, ok)
+	assert.Nil(t, d.totals)
 }
 
 type ackMemQueue struct{ *queues.Queue[any] }

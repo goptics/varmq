@@ -1,6 +1,6 @@
 module github.com/goptics/varmq/examples/sqlite-persistent
 
-go 1.24.2
+go 1.27
 
 require (
 	github.com/goptics/sqliteq v0.3.0

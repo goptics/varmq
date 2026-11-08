@@ -108,13 +108,23 @@ func (l *Log[T]) Close() {
 // stores nothing and returns 0 when the log is closed, no cursor is open, or
 // the log is bounded and its slowest cursor already has limit unread items.
 func (l *Log[T]) Append(item T) int {
+	return l.append(item, false)
+}
+
+// AppendForce is Append past the bound: it stores item even when the log is
+// full. Workflow promotion uses it, since a promoted task can't wait.
+func (l *Log[T]) AppendForce(item T) int {
+	return l.append(item, true)
+}
+
+func (l *Log[T]) append(item T, force bool) int {
 	if l.limit.Load() != 0 {
 		l.mx.Lock()
 		defer l.mx.Unlock()
 
 		// closed is read under the lock so an Append that waited for it
 		// observes a Close made meanwhile.
-		if l.closed.Load() || len(l.open) == 0 || l.full() {
+		if l.closed.Load() || len(l.open) == 0 || !force && l.full() {
 			return 0
 		}
 	}

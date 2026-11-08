@@ -85,6 +85,16 @@ func (q *Queue[T]) Enqueue(item any) bool {
 // It holds only the lock of id's shard across the Append, so adds of
 // different ids rarely wait on each other or on a Dequeue.
 func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
+	return q.enqueueOnce(item, id, false)
+}
+
+// EnqueueOnceForce is EnqueueOnce past the capacity: it stores item even
+// when the queue is full. Workflow promotion uses it.
+func (q *Queue[T]) EnqueueOnceForce(item any, id string) bool {
+	return q.enqueueOnce(item, id, true)
+}
+
+func (q *Queue[T]) enqueueOnce(item any, id string, force bool) bool {
 	typedItem, ok := item.(T)
 	if !ok {
 		return false
@@ -102,7 +112,13 @@ func (q *Queue[T]) EnqueueOnce(item any, id string) bool {
 		return false
 	}
 
-	if q.log.Append(typedItem) == 0 {
+	var n int
+	if force {
+		n = q.log.AppendForce(typedItem)
+	} else {
+		n = q.log.Append(typedItem)
+	}
+	if n == 0 {
 		sh.ids.remove(id)
 		return false
 	}

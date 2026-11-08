@@ -17,14 +17,15 @@ func (i idItem) ID() string { return string(i) }
 
 // dedupStore drives Queue and PriorityQueue through one set of tests.
 type dedupStore struct {
-	once    func(item idItem) bool // EnqueueOnce under the item's own id
-	plain   func(item idItem) bool
-	dequeue func() (any, bool)
-	purge   func()
-	close   func()
-	setCap  func(int)
-	held    func() int // ids in the set
-	len     func() int
+	once      func(item idItem) bool // EnqueueOnce under the item's own id
+	plain     func(item idItem) bool
+	forceOnce func(item idItem) bool // EnqueueOnceForce under the item's own id
+	dequeue   func() (any, bool)
+	purge     func()
+	close     func()
+	setCap    func(int)
+	held      func() int // ids in the set
+	len       func() int
 }
 
 func dedupStores() map[string]func() dedupStore {
@@ -32,12 +33,13 @@ func dedupStores() map[string]func() dedupStore {
 		"queue": func() dedupStore {
 			q := NewQueue[idItem]()
 			return dedupStore{
-				once:    func(i idItem) bool { return q.EnqueueOnce(i, string(i)) },
-				plain:   func(i idItem) bool { return q.Enqueue(i) },
-				dequeue: q.Dequeue,
-				purge:   q.Purge,
-				close:   func() { _ = q.Close() },
-				setCap:  q.SetCapacity,
+				once:      func(i idItem) bool { return q.EnqueueOnce(i, string(i)) },
+				plain:     func(i idItem) bool { return q.Enqueue(i) },
+				forceOnce: func(i idItem) bool { return q.EnqueueOnceForce(i, string(i)) },
+				dequeue:   q.Dequeue,
+				purge:     q.Purge,
+				close:     func() { _ = q.Close() },
+				setCap:    q.SetCapacity,
 				held: func() int {
 					if ids := q.ids.Load(); ids != nil {
 						return ids.len()
@@ -50,12 +52,13 @@ func dedupStores() map[string]func() dedupStore {
 		"priority": func() dedupStore {
 			q := NewPriorityQueue[idItem]()
 			return dedupStore{
-				once:    func(i idItem) bool { return q.EnqueueOnce(i, 0, string(i)) },
-				plain:   func(i idItem) bool { return q.Enqueue(i, 0) },
-				dequeue: q.Dequeue,
-				purge:   q.Purge,
-				close:   func() { _ = q.Close() },
-				setCap:  q.SetCapacity,
+				once:      func(i idItem) bool { return q.EnqueueOnce(i, 0, string(i)) },
+				plain:     func(i idItem) bool { return q.Enqueue(i, 0) },
+				forceOnce: func(i idItem) bool { return q.EnqueueOnceForce(i, 0, string(i)) },
+				dequeue:   q.Dequeue,
+				purge:     q.Purge,
+				close:     func() { _ = q.Close() },
+				setCap:    q.SetCapacity,
 				held: func() int {
 					q.mx.RLock()
 					defer q.mx.RUnlock()
@@ -64,6 +67,27 @@ func dedupStores() map[string]func() dedupStore {
 				len: q.Len,
 			}
 		},
+	}
+}
+
+// The force add skips the capacity only: a repeat id and a closed queue
+// still refuse, and a queue forced past its capacity stays full.
+func TestEnqueueOnceForce(t *testing.T) {
+	for name, mk := range dedupStores() {
+		t.Run(name, func(t *testing.T) {
+			s := mk()
+			s.setCap(1)
+			assert.True(t, s.plain("a"))
+			assert.False(t, s.plain("b"), "full")
+			assert.True(t, s.forceOnce("b"), "force skips the capacity")
+			assert.True(t, s.forceOnce("c"))
+			assert.False(t, s.forceOnce("c"), "repeat id")
+			assert.Equal(t, 3, s.len())
+			assert.False(t, s.plain("x"), "past the capacity: still full")
+
+			s.close()
+			assert.False(t, s.forceOnce("e"), "closed")
+		})
 	}
 }
 

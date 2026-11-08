@@ -15,9 +15,10 @@ type persistentPriorityQueue[T any] struct {
 	poke func() // the source's ready hint; nil unless the storage pops in batches
 }
 
-func newPersistentPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+func newPersistentPriorityQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
+	w.watchCancels(pq)
 
 	return &persistentPriorityQueue[T]{priorityQueue: &priorityQueue[T]{
 		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
@@ -43,4 +44,11 @@ func (q *persistentPriorityQueue[T]) Add(data T, priority int, configs ...JobCon
 	q.w.notifyToPullNextJobs()
 
 	return true
+}
+
+// WorkflowItem refuses: a deprecated handle is no workflow target (it
+// would otherwise promote the embedded in-memory queue's). Bind the storage
+// with WithQueue / WithPriorityQueue.
+func (q *persistentPriorityQueue[T]) WorkflowItem(T) (WorkflowItem, error) {
+	return WorkflowItem{}, errDeprecatedTarget
 }

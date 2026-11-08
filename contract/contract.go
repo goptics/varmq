@@ -17,6 +17,8 @@ const (
 	JobProcessing JobState = "processing" // handed out, no outcome yet
 	JobCompleted  JobState = "completed"  // acknowledged
 	JobFailed     JobState = "failed"     // rejected
+	JobWaiting    JobState = "waiting"    // workflow task, a dependency is unfinished
+	JobCancelled  JobState = "cancelled"  // workflow task, cancelled before it ran
 )
 
 // JobCounts is how many jobs a queue holds in each Job State right now.

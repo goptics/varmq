@@ -1,6 +1,9 @@
 package varmq
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // waitRecheck is how often Wait and WaitUntilIdle re-check while the worker
 // runs no job. See waitForChange.
@@ -29,23 +32,39 @@ func (w *worker[T, JobType]) releaseWaiters(processing uint32) {
 	}
 }
 
-func (w *worker[T, JobType]) Wait() {
+func (w *worker[T, JobType]) Wait() { _ = w.WaitContext(context.Background()) }
+
+// WaitContext is Wait that gives up when ctx ends: ctx's end wakes the
+// waiters, and the loop sees ctx.Err().
+func (w *worker[T, JobType]) WaitContext(ctx context.Context) error {
+	if ctx.Done() != nil {
+		stop := context.AfterFunc(ctx, func() {
+			w.mx.Lock()
+			w.waiters.Broadcast()
+			w.mx.Unlock()
+		})
+		defer stop()
+	}
+
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		s := w.status.Load()
 		switch s {
 		case running, idle:
 			if w.NumPending() == 0 && w.curProcessing.Load() == 0 {
-				return
+				return nil
 			}
 		case paused, stopped, pausing, stopping:
 			if w.curProcessing.Load() == 0 {
-				return
+				return nil
 			}
 		default:
-			return
+			return nil
 		}
 		w.waitForChange()
 	}

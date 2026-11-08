@@ -179,9 +179,31 @@ type (
 	JobError       = contract.JobError
 	QueueInspector = contract.QueueInspector
 
+	JobOutcome            = contract.JobOutcome
+	OutcomeWatcher        = contract.OutcomeWatcher
+	ResultAcknowledgeable = contract.ResultAcknowledgeable
+	JobCanceller          = contract.JobCanceller
+	CancelNotifier        = contract.CancelNotifier
+	CancelAcknowledgeable = contract.CancelAcknowledgeable
+
 	InstanceRecord   = contract.InstanceRecord
 	InstanceWorker   = contract.InstanceWorker
 	InstanceRegistry = contract.InstanceRegistry
+
+	Outcome                 = contract.Outcome
+	WorkflowState           = contract.WorkflowState
+	WorkflowPlan            = contract.WorkflowPlan
+	TaskPlan                = contract.TaskPlan
+	UndoPlan                = contract.UndoPlan
+	TaskEnd                 = contract.TaskEnd
+	TaskRecord              = contract.TaskRecord
+	WorkflowRecord          = contract.WorkflowRecord
+	Scoped                  = contract.Scoped
+	WorkflowStore           = contract.WorkflowStore
+	WorkflowAcknowledgeable = contract.WorkflowAcknowledgeable
+	WorkflowInspector       = contract.WorkflowInspector
+	WorkflowKey             = contract.WorkflowKey
+	WorkflowKeyLister       = contract.WorkflowKeyLister
 )
 
 const (
@@ -189,4 +211,28 @@ const (
 	JobProcessing = contract.JobProcessing
 	JobCompleted  = contract.JobCompleted
 	JobFailed     = contract.JobFailed
+	JobWaiting    = contract.JobWaiting
+	JobCancelled  = contract.JobCancelled
+
+	OutcomeCompleted = contract.OutcomeCompleted
+	OutcomeFailed    = contract.OutcomeFailed
+	OutcomeCancelled = contract.OutcomeCancelled
+
+	WorkflowRunning            = contract.WorkflowRunning
+	WorkflowCompleted          = contract.WorkflowCompleted
+	WorkflowFailed             = contract.WorkflowFailed
+	WorkflowCompensating       = contract.WorkflowCompensating
+	WorkflowCompensated        = contract.WorkflowCompensated
+	WorkflowCompensationFailed = contract.WorkflowCompensationFailed
+	WorkflowCancelled          = contract.WorkflowCancelled
+)
+
+// Workflow errors, from the contract module.
+var (
+	ErrWorkflowExists   = contract.ErrWorkflowExists
+	ErrWorkflowNotFound = contract.ErrWorkflowNotFound
+	ErrNoResult         = contract.ErrNoResult
+	ErrDepFailed        = contract.ErrDepFailed
+	ErrResultTooLarge   = contract.ErrResultTooLarge
+	ErrScopeMismatch    = contract.ErrScopeMismatch
 )

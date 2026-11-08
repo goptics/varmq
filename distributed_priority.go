@@ -13,6 +13,7 @@ type distributedPriorityQueue[T any] struct {
 	config queueConfig
 }
 
+// Deprecated: use NewPriorityQueue.
 func NewDistributedPriorityQueue[T any](internalQueue IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
 	cfg := loadQueueConfigs(configs...)
 

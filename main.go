@@ -31,9 +31,9 @@ func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 
 		// Track failed if panic occurred
 		if panicErr != nil {
-			ij.fail(panicErr.Error())
+			err := ij.endFailed(panicErr)
 			w.metrics.incFailed()
-			w.sendError(panicErr)
+			w.sendError(err)
 		} else {
 			ij.succeed()
 			w.metrics.incSuccessful()
@@ -47,7 +47,7 @@ func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 // This is useful for operations where you only care about success/failure status.
 // If concurrency in config is not provided, it defaults to 1.
 // and if concurrency is less than 1, it defaults to number of CPU cores.
-// Unlike NewWorker, it can't be bound to distributed or persistent queue.
+// WithQueue binds shared storage too; there Add's job learns its outcome from whichever process runs it.
 // Parameters:
 //   - wf: Worker function that processes items and returns only error
 //   - config: Optional configuration parameters (concurrency, idle worker ratio, etc.)
@@ -72,7 +72,7 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 
 		// send error if any
 		if err := utils.SelectError(panicErr, err); err != nil {
-			ij.fail(err.Error())
+			err = ij.endFailed(err)
 			ij.sendError(err)
 			w.sendError(err)
 			w.metrics.incFailed()
@@ -88,7 +88,7 @@ func NewErrWorker[T any](wf func(j Job[T]) error, config ...any) IErrWorkerBinde
 // NewResultWorker creates a worker for operations that return a result value and error.
 // If concurrency in config is not provided, it defaults to 1.
 // and if concurrency is less than 1, it defaults to number of CPU cores.
-// Unlike NewWorker, it can't be bound to distributed or persistent queue.
+// WithQueue binds shared storage too; there Add's job learns its outcome from whichever process runs it.
 // Parameters:
 //   - wf: Worker function that processes items and returns a result and error
 //   - config: Optional configuration parameters (concurrency, idle worker ratio, etc.)
@@ -115,16 +115,18 @@ func NewResultWorker[T, R any](wf func(j Job[T]) (R, error), config ...any) IRes
 			}
 		})
 
-		// send error if any
-		if err := utils.SelectError(panicErr, err); err != nil {
-			ij.fail(err.Error())
-			ij.sendError(err)
-			w.sendError(err)
-			w.metrics.incFailed()
-		} else {
-			ij.succeed()
-			w.metrics.incSuccessful()
+		// send error if any; a result that fails to encode fails the run
+		err = utils.SelectError(panicErr, err)
+		if err == nil {
+			if err = ij.succeedResult(); err == nil {
+				w.metrics.incSuccessful()
+				return
+			}
 		}
+		err = ij.endFailed(err)
+		ij.sendError(err)
+		w.sendError(err)
+		w.metrics.incFailed()
 	}, config...)
 
 	return newResultQueues(w)

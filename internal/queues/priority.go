@@ -101,7 +101,7 @@ func (q *PriorityQueue[T]) values() []any {
 // Enqueue pushes a new item with the given priority.
 // Time complexity: O(log n)
 func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
-	return q.enqueue(item, priority, "")
+	return q.enqueue(item, priority, "", false)
 }
 
 // EnqueueOnce pushes item, which must return id from its ID method, unless
@@ -109,11 +109,18 @@ func (q *PriorityQueue[T]) Enqueue(item any, priority int) bool {
 // where Enqueue would. The id is free again once Dequeue or Purge takes the
 // item.
 func (q *PriorityQueue[T]) EnqueueOnce(item any, priority int, id string) bool {
-	return q.enqueue(item, priority, id)
+	return q.enqueue(item, priority, id, false)
 }
 
-// enqueue pushes item, once per id when id is not empty.
-func (q *PriorityQueue[T]) enqueue(item any, priority int, id string) bool {
+// EnqueueOnceForce is EnqueueOnce past the capacity: it pushes item even
+// when the queue is full. Workflow promotion uses it.
+func (q *PriorityQueue[T]) EnqueueOnceForce(item any, priority int, id string) bool {
+	return q.enqueue(item, priority, id, true)
+}
+
+// enqueue pushes item, once per id when id is not empty; force skips the
+// capacity.
+func (q *PriorityQueue[T]) enqueue(item any, priority int, id string, force bool) bool {
 	typedValue, ok := item.(T)
 
 	if !ok {
@@ -129,7 +136,7 @@ func (q *PriorityQueue[T]) enqueue(item any, priority int, id string) bool {
 		return false
 	}
 
-	if q.capacity > 0 && q.internal.Len() == q.capacity {
+	if !force && q.capacity > 0 && q.internal.Len() >= q.capacity {
 		q.mx.Unlock()
 		return false
 	}

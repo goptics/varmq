@@ -54,9 +54,15 @@ type worker[T any, JobType iJob[T]] struct {
 	// status is read before every job, so it sits apart from the per-batch
 	// counters above. The park fields share its line: they change only on a
 	// stop or pause and while parked jobs are handed out again.
-	status       atomic.Uint32
-	nParked      atomic.Int64 // len of all parked batches, read without parkMx
-	parkMx       sync.Mutex
+	status  atomic.Uint32
+	nParked atomic.Int64 // len of all parked batches, read without parkMx
+	parkMx  sync.Mutex
+	// running lists jobs by storage and ID while they run, only when
+	// cancelWatch is on: a storage's cancel request (CancelNotifier) finds
+	// them there. Guarded by runMu; nil until the first.
+	running      map[runKey][]JobType
+	runMu        sync.Mutex
+	cancelWatch  atomic.Bool
 	parked       []parkedBatch[JobType] // unstarted jobs set aside by Stop or Pause
 	parkUnsorted bool                   // parked gained a batch since unpark last sorted it by Seq
 	hookOnce     sync.Once
@@ -75,6 +81,12 @@ type worker[T any, JobType iJob[T]] struct {
 	// parkHeld is set while a parked batch may be held (its queue paused):
 	// by park, and by a queue's pause hook. pending scans only then.
 	parkHeld atomic.Bool
+	// pokers holds the queuePoker of each bound source with a Queue ID, by
+	// source; localPokers holds them weakly.
+	pokers sync.Map
+	// mk builds the job kind this worker runs from a stored envelope. Last,
+	// so the hot fields keep their offsets.
+	mk func(data T, c jobConfigs) JobType
 }
 
 // Worker represents a worker that processes Jobs.
@@ -248,6 +260,8 @@ type Worker interface {
 	// Use this when you only care that work is done, regardless of final status.
 	// Use WaitUntilIdle() when you specifically need the Idle state.
 	Wait()
+	// WaitContext is Wait that gives up when ctx ends: ctx.Err() then.
+	WaitContext(ctx context.Context) error
 	// WaitUntilIdle blocks until the worker reaches Idle status with no pending jobs.
 	//
 	// Unlike Wait(), which returns as soon as all in-flight jobs complete and the
@@ -333,6 +347,7 @@ func newWorker[T any](wf func(j iJob[T]), configs ...any) *worker[T, iJob[T]] {
 	w := &worker[T, iJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iJob[T] { return newJob(d, c) },
 		pool:            pool.New[iJob[T]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
@@ -358,6 +373,7 @@ func newErrWorker[T any](wf func(j iErrorJob[T]), configs ...any) *worker[T, iEr
 	w := &worker[T, iErrorJob[T]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iErrorJob[T] { return newErrorJob(d, c) },
 		pool:            pool.New[iErrorJob[T]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),
@@ -383,6 +399,7 @@ func newResultWorker[T, R any](wf func(j iResultJob[T, R]), configs ...any) *wor
 	w := &worker[T, iResultJob[T, R]]{
 		concurrency:     atomic.Uint32{},
 		workerFunc:      wf,
+		mk:              func(d T, c jobConfigs) iResultJob[T, R] { return newResultJob[T, R](d, c) },
 		pool:            pool.New[iResultJob[T, R]](poolChanCap),
 		metrics:         newMetrics(),
 		eventLoopSignal: make(chan struct{}, eventLoopSignalCap),

@@ -45,6 +45,7 @@
 - **Concurrency control**: resize the pool at runtime, pause, resume, restart.
 - **Multi queue binding**: one worker, many queues, a pluggable selection strategy.
 - **Topic fan-out**: publish once, every subscribed worker gets its own job.
+- **Workflows**: a DAG of jobs over queues with typed results, `Always` and saga `Undo`.
 - **REST API**: inspect and control workers over HTTP.
 - **Extensible**: plug in your own storage by implementing [`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) or [`IDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedQueue).
 
@@ -128,14 +129,48 @@ queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // queued
 queue.Add(userID, varmq.WithJobId("refresh:"+userID)) // nil, false: one is already waiting
 ```
 
-### Persistent and Distributed Queues
+### Shared Storage (Redis, SQLite)
 
-Plug in a storage adapter to keep jobs across restarts or share them between instances:
+Same `WithQueue` / `WithPriorityQueue`. Storage that acknowledges (`IAcknowledgeable`) is detected: jobs go out as JSON, survive restarts when the storage persists them, and any process bound to the same queue runs them. Storage that notifies (`ISubscribable`, e.g. redisq) wakes idle workers at once; other storage is polled.
 
 ```go
-queue := worker.WithPersistentQueue(persistentAdapter)   // any IPersistentQueue
-queue := worker.WithDistributedQueue(distributedAdapter) // any IDistributedQueue
+rq := redisq.New(url)
+
+// consumer process
+w := varmq.NewResultWorker(func(j varmq.Job[int]) (string, error) { ... })
+w.WithQueue(rq.NewQueue("thumbs"))
+
+// producer process: no worker
+q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs")) // NewQueue / NewErrQueue for Worker / ErrWorker jobs
+job, _ := q.Add(64)
+s, err := job.Result() // waits, whichever process ran it
+
+// any process, by ID
+j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / OpenErrJob for the other workers
+s, err = j.Result()
 ```
+
+Needs the redisq release that implements `redis-storage.md` 1.7.0 (`WatchOutcome`, `AcknowledgeResult`, `CancelJob`). Older redisq, v1.5.1 included, lacks `Reject` and does not compile with this varmq (its queue does not satisfy `IPersistentQueue`).
+
+On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it (sqliteq, custom) gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
+
+### Cancel a Job
+
+`job.Cancel()` works on every in-memory handle, and on a shared one when the storage can cancel (redisq; custom storage: `JobCanceller`, plus `CancelNotifier` to reach running jobs and `CancelAcknowledgeable` to finish them cancelled). Other storage gives `ErrCancelUnsupported`. A job not started never runs. A running job has its context cancelled; it stops if the worker watches `j.Context()`:
+
+```go
+w := varmq.NewErrWorker(func(j varmq.Job[Img]) error {
+	return resize(j.Context(), j.Data()) // returns once cancelled
+})
+q := w.WithQueue(rq.NewQueue("imgs"))
+
+job, _ := q.Add(img)
+job.Cancel()                                             // or, from any process:
+varmq.OpenErrJob(rq.NewQueue("imgs"), job.ID()).Cancel() // by the job's ID
+errors.Is(job.Err(), varmq.ErrJobCancelled)              // true, unless it finished first
+```
+
+A workflow task waiting in its queue is stopped with `Workflow.Cancel`; `Cancel` by ID reaches a running one.
 
 Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
 
@@ -143,7 +178,10 @@ When the adapter deduplicates pushes (`EnqueueOnce`, e.g. redisq), give each job
 
 ```go
 id := uuid.NewString() // once, so a retry carries the same id
-for !queue.Add(data, varmq.WithJobId(id)) {
+for {
+	if _, ok := queue.Add(data, varmq.WithJobId(id)); ok {
+		break
+	}
 	// back off and retry
 }
 ```
@@ -259,6 +297,30 @@ if job, ok := queue.Add("error"); ok {
 
 ↗️ **[Run it on Playground](https://go.dev/play/p/nKnAyQfkxou)**
 
+### Workflows
+
+A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails or is cancelled (`WithUndoOnCancel(false)` opts out). Needs Go 1.27.
+
+```go
+wf := varmq.NewWorkflow(varmq.NewWorkflowStore(), varmq.WithWorkflowID("upload-1"))
+up := wf.Add("upload", uploadQ, "photo.png")
+s := wf.Add("thumb-s", thumbQ, 64).After(up)
+l := wf.Add("thumb-l", thumbQ, 512).After(up)
+wf.Add("email", mailQ, "ann@example.com").
+	After(s, l).
+	Always().
+	Undo(unsendQ, "ann@example.com")
+
+wf.Submit(ctx)            // idempotent per ID
+rec, _ := wf.WaitContext(ctx) // or wf.Wait(); rec.State: completed, failed, compensated, ...
+
+// in a worker: read a dependency's result
+var src string
+varmq.TaskOf(j).Result("upload", &src)
+```
+
+Cancel with `wf.Cancel(ctx)`; `varmq.OpenWorkflow(store, id)` reaches a workflow from any process on the same store, and its `Cancel` follows the workflow's `WithUndoOnCancel`. Runnable example: [`examples/workflow`](./examples/workflow). Storage rules: [spec §6.9](./spec/redis-storage.md#69-submit-a-workflow-since-150).
+
 ### Function Helpers
 
 Submit functions directly, like `Submit()` in [pond](https://github.com/alitto/pond) or [ants](https://github.com/panjf2000/ants). Use `Func()` with `NewWorker`, `ErrFunc()` with `NewErrWorker` and `ResultFunc[R]()` with `NewResultWorker`.
@@ -299,8 +361,9 @@ worker.TunePool(8) // change concurrency on the fly
 worker.Restart()   // stop and start again, keeping pending jobs
 worker.Stop()      // graceful stop
 
-worker.Wait()          // block until no job is running or pending
-worker.WaitUntilIdle() // block until the worker is Idle (never returns while paused or stopped)
+worker.Wait()           // block until no job is running or pending
+worker.WaitContext(ctx) // the same, until ctx ends (ctx.Err() then); jobs and groups have it too
+worker.WaitUntilIdle()  // block until the worker is Idle (never returns while paused or stopped)
 ```
 
 `Status()` reports the state (`Running`, `Idle`, `Paused`, `Stopped`, ...). `PauseAndWait`, `StopAndWait`, `WaitUntilPaused` and `WaitUntilStopped` block until a state is reached.
@@ -322,6 +385,8 @@ http.ListenAndServe(":8080", mux)
 | `GET`    | `/workers/{name}`                         | Get worker details + metrics |
 | `PATCH`  | `/workers/{name}/actions/{action}`        | Pause, resume, stop, restart |
 | `PATCH`  | `/workers/{name}/config/concurrency/{n}`  | Adjust concurrency           |
+| `GET`    | `/workflows`, `/workflows/{id}`           | List and read workflows      |
+| `PATCH`  | `/workflows/{id}/actions/cancel`          | Cancel a workflow            |
 
 > [!Warning]
 > The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before exposing to untrusted networks.

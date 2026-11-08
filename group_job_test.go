@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -582,5 +583,40 @@ func isClosed[V any](ch <-chan V) bool {
 		return !ok
 	default:
 		return false
+	}
+}
+
+func TestGroupWaitContext(t *testing.T) {
+	release := make(chan struct{})
+	block := func() { <-release }
+
+	w := NewWorker(func(Job[int]) { block() })
+	ew := NewErrWorker(func(Job[int]) error { block(); return nil })
+	rw := NewResultWorker(func(Job[int]) (int, error) { block(); return 0, nil })
+	defer w.Stop()
+	defer ew.Stop()
+	defer rw.Stop()
+	q, eq, rq := w.BindQueue(), ew.BindQueue(), rw.BindQueue()
+	groups := map[string]Awaitable{
+		"group":        q.AddAll([]Item[int]{{Data: 1}, {Data: 2}}),
+		"err group":    eq.AddAll([]Item[int]{{Data: 1}}),
+		"result group": rq.AddAll([]Item[int]{{Data: 1}}),
+	}
+
+	for name, g := range groups {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		assert.ErrorIs(t, g.WaitContext(ctx), context.DeadlineExceeded, name)
+		cancel()
+		ended, stop := context.WithCancel(context.Background())
+		stop()
+		assert.ErrorIs(t, g.WaitContext(ended), context.Canceled, name+": ended ctx")
+	}
+
+	close(release)
+	for name, g := range groups {
+		if d, ok := g.(Drainer); ok {
+			d.Drain()
+		}
+		assert.NoError(t, g.WaitContext(context.Background()), name)
 	}
 }

@@ -1,5 +1,10 @@
 package varmq
 
+import "fmt"
+
+// errDeprecatedTarget: deprecated handles are no workflow targets.
+var errDeprecatedTarget = fmt.Errorf("%w: deprecated queue handle; bind with WithQueue", ErrScopeMismatch)
+
 // PersistentQueue is an interface that extends Queue to support persistent job operations
 type PersistentQueue[T any] interface {
 	IExternalBaseQueue
@@ -19,9 +24,10 @@ type persistentQueue[T any] struct {
 
 // newPersistentQueue creates a new persistent queue with the given worker and internal queue
 // The worker's queue is set to the provided persistent queue implementation
-func newPersistentQueue[T any](w *worker[T, iJob[T]], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+func newPersistentQueue[T any, JobType iJob[T]](w *worker[T, JobType], pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
 	c := loadQueueConfigs(configs...)
 	poke := pokeOf(w.bind(pq, c.priority))
+	w.watchCancels(pq)
 
 	return &persistentQueue[T]{queue: &queue[T]{
 		externalBaseQueue: newExternalQueue(pq, w, c, nil), // never batches: nothing waits in a buffer
@@ -49,4 +55,11 @@ func (q *persistentQueue[T]) Add(data T, configs ...JobConfigFunc) bool {
 	q.w.notifyToPullNextJobs()
 
 	return true
+}
+
+// WorkflowItem refuses: a deprecated handle is no workflow target (it
+// would otherwise promote the embedded in-memory queue's). Bind the storage
+// with WithQueue / WithPriorityQueue.
+func (q *persistentQueue[T]) WorkflowItem(T) (WorkflowItem, error) {
+	return WorkflowItem{}, errDeprecatedTarget
 }

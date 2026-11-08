@@ -2,8 +2,29 @@ package varmq
 
 import "github.com/goptics/varmq/internal/queues"
 
+// durableBinder is IWorkerBinder's four deprecated durable binders.
+type durableBinder[T any, J iJob[T]] struct {
+	*worker[T, J]
+}
+
+func (d durableBinder[T, J]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
+	return newPersistentQueue(d.worker, pq, configs...)
+}
+
+func (d durableBinder[T, J]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
+	return newPersistentPriorityQueue(d.worker, pq, configs...)
+}
+
+func (d durableBinder[T, J]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+	return bindDistributed(d.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
+}
+
+func (d durableBinder[T, J]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
+	return bindDistributed(d.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
+}
+
 type workerBinder[T any] struct {
-	*worker[T, iJob[T]]
+	durableBinder[T, iJob[T]]
 }
 
 // IWorkerBinder is the base interface for binding standard workers to different queue types.
@@ -44,6 +65,10 @@ type IWorkerBinder[T any] interface {
 	// Example usage:
 	//   customQueue := NewCustomQueue() // satisfies IQueue interface
 	//   queue := worker.WithQueue(customQueue)
+	//
+	// Shared storage (redisq, sqliteq: IAcknowledgeable) is detected: jobs go
+	// out as JSON, an ISubscribable one wakes the worker on enqueue, and Add's
+	// job learns its outcome from whichever process runs it.
 	WithQueue(q IQueue, configs ...QueueConfigFunc) Queue[T]
 
 	// BindPriorityQueue binds the worker to a standard PriorityQueue implementation.
@@ -92,6 +117,9 @@ type IWorkerBinder[T any] interface {
 	//
 	// Example usage:
 	//   persistentQueue := worker.WithPersistentQueue(redisQueue)
+	//
+	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
+	// and distributed storage.
 	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
 
 	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
@@ -108,6 +136,9 @@ type IWorkerBinder[T any] interface {
 	//
 	// Example usage:
 	//   persistentPriorityQueue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
+	//
+	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
+	// and distributed storage.
 	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
 
 	// WithDistributedQueue binds the worker to a DistributedQueue implementation.
@@ -127,6 +158,9 @@ type IWorkerBinder[T any] interface {
 	//   dq := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
 	//   distributedQueue := voidWorker.WithDistributedQueue(dq)
 	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
+	//
+	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
+	// and distributed storage.
 	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
 
 	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue implementation.
@@ -149,6 +183,9 @@ type IWorkerBinder[T any] interface {
 	//   priorityQueue := NewDistributedPriorityQueue() // satisfies IDistributedPriorityQueue interface, might be backed by Redis or other systems
 	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
 	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
+	//
+	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
+	// and distributed storage.
 	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
 
 	// WithTopic subscribes the worker to a Topic. The subscription reads the
@@ -180,9 +217,7 @@ type IWorkerBinder[T any] interface {
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
 	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
 	// This works because workerBinder implements all methods of IVoidWorkerBinder
-	return &workerBinder[T]{
-		worker: worker,
-	}
+	return &workerBinder[T]{durableBinder[T, iJob[T]]{worker}}
 }
 
 // handleQueueSubscription processes notifications from distributed queues
@@ -204,6 +239,9 @@ func (wb *workerBinder[T]) BindQueue(configs ...QueueConfigFunc) Queue[T] {
 // WithQueue binds an existing queue implementation to the worker
 // It returns a Queue interface to interact with the queue
 func (wb *workerBinder[T]) WithQueue(q IQueue, configs ...QueueConfigFunc) Queue[T] {
+	if _, ok := q.(IAcknowledgeable); ok {
+		return &durableQueue[T, struct{}, EnqueuedJob, EnqueuedGroupJob]{bindDurable[T, struct{}](wb.worker, q, configs)}
+	}
 	return newQueue(wb.worker, q, configs...)
 }
 
@@ -212,40 +250,38 @@ func (wb *workerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) Priorit
 }
 
 func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) PriorityQueue[T] {
+	if _, ok := pq.(IAcknowledgeable); ok {
+		return &durablePriorityQueue[T, struct{}, EnqueuedJob, EnqueuedGroupJob]{bindDurable[T, struct{}](wb.worker, pq, configs)}
+	}
 	return newPriorityQueue(wb.worker, pq, configs...)
 }
 
-func (wb *workerBinder[T]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
-	return newPersistentQueue(wb.worker, pq, configs...)
-}
-
-func (wb *workerBinder[T]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
-	return newPersistentPriorityQueue(wb.worker, pq, configs...)
-}
-
-func (wb *workerBinder[T]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
+// bindDistributed binds w to dq, wakes w on dq's notifications, and returns
+// the producer handle h. Shared by every worker kind.
+func bindDistributed[T any, JobType iJob[T], H any](w *worker[T, JobType], dq interface {
+	IBaseQueue
+	ISubscribable
+}, h H, configs []QueueConfigFunc) H {
 	c := loadQueueConfigs(configs...)
-	h := NewDistributedQueue[T](dq, configs...)
-	wb.subscribe(dq, wb.bind(dq, c.priority))
+	subscribeQueue(w, dq, w.bind(dq, c.priority))
+	w.watchCancels(dq)
 
 	return h
 }
 
-func (wb *workerBinder[T]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
-	c := loadQueueConfigs(configs...)
-	h := NewDistributedPriorityQueue[T](dpq, configs...)
-	wb.subscribe(dpq, wb.bind(dpq, c.priority))
-
-	return h
-}
-
-// subscribe forwards q's notifications to the worker. For a batch source,
+// subscribeQueue forwards q's notifications to w. For a batch source,
 // an "enqueued" also pokes its ready hint, and wake-ups replace the persistent
-// resync.
-func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
-	bs, ok := src.(*batchAckSource[T, iJob[T]])
+// resync. One wake after Subscribe catches an enqueue that landed between
+// the bind's first (empty) pop and Subscribe.
+func subscribeQueue[T any, JobType iJob[T]](w *worker[T, JobType], q ISubscribable, src source[JobType]) {
+	bs, ok := src.(*batchAckSource[T, JobType])
 	if !ok {
-		q.Subscribe(wb.handleQueueSubscription)
+		q.Subscribe(func(action string) {
+			if action == "enqueued" {
+				w.notifyToPullNextJobs()
+			}
+		})
+		w.notifyToPullNextJobs()
 		return
 	}
 
@@ -253,9 +289,11 @@ func (wb *workerBinder[T]) subscribe(q ISubscribable, src source[iJob[T]]) {
 	q.Subscribe(func(action string) {
 		if action == "enqueued" {
 			bs.poke()
+			w.notifyToPullNextJobs()
 		}
-		wb.handleQueueSubscription(action)
 	})
+	bs.poke()
+	w.notifyToPullNextJobs()
 }
 
 func (wb *workerBinder[T]) WithTopic(t Topic[T], configs ...TopicConfigFunc) Subscription[T] {
@@ -339,9 +377,7 @@ type IErrWorkerBinder[T any] interface {
 }
 
 func newErrQueues[T any](worker *worker[T, iErrorJob[T]]) IErrWorkerBinder[T] {
-	return &errWorkerBinder[T]{
-		worker: worker,
-	}
+	return &errWorkerBinder[T]{worker}
 }
 
 func (ewb *errWorkerBinder[T]) BindQueue(configs ...QueueConfigFunc) ErrQueue[T] {
@@ -349,6 +385,9 @@ func (ewb *errWorkerBinder[T]) BindQueue(configs ...QueueConfigFunc) ErrQueue[T]
 }
 
 func (ewb *errWorkerBinder[T]) WithQueue(q IQueue, configs ...QueueConfigFunc) ErrQueue[T] {
+	if _, ok := q.(IAcknowledgeable); ok {
+		return &durableQueue[T, struct{}, EnqueuedErrJob, EnqueuedErrGroupJob]{bindDurable[T, struct{}](ewb.worker, q, configs)}
+	}
 	return newErrorQueue(ewb.worker, q, configs...)
 }
 
@@ -357,6 +396,9 @@ func (ewb *errWorkerBinder[T]) BindPriorityQueue(configs ...QueueConfigFunc) Err
 }
 
 func (ewb *errWorkerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ErrPriorityQueue[T] {
+	if _, ok := pq.(IAcknowledgeable); ok {
+		return &durablePriorityQueue[T, struct{}, EnqueuedErrJob, EnqueuedErrGroupJob]{bindDurable[T, struct{}](ewb.worker, pq, configs)}
+	}
 	return newErrorPriorityQueue(ewb.worker, pq, configs...)
 }
 
@@ -437,9 +479,7 @@ type IResultWorkerBinder[T, R any] interface {
 }
 
 func newResultQueues[T, R any](worker *worker[T, iResultJob[T, R]]) IResultWorkerBinder[T, R] {
-	return &resultWorkerBinder[T, R]{
-		worker: worker,
-	}
+	return &resultWorkerBinder[T, R]{worker}
 }
 
 func (rwb *resultWorkerBinder[T, R]) BindQueue(configs ...QueueConfigFunc) ResultQueue[T, R] {
@@ -447,6 +487,9 @@ func (rwb *resultWorkerBinder[T, R]) BindQueue(configs ...QueueConfigFunc) Resul
 }
 
 func (rwb *resultWorkerBinder[T, R]) WithQueue(q IQueue, configs ...QueueConfigFunc) ResultQueue[T, R] {
+	if _, ok := q.(IAcknowledgeable); ok {
+		return &durableQueue[T, R, EnqueuedResultJob[R], EnqueuedResultGroupJob[R]]{bindDurable[T, R](rwb.worker, q, configs)}
+	}
 	return newResultQueue(rwb.worker, q, configs...)
 }
 
@@ -455,5 +498,8 @@ func (rwb *resultWorkerBinder[T, R]) BindPriorityQueue(configs ...QueueConfigFun
 }
 
 func (rwb *resultWorkerBinder[T, R]) WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) ResultPriorityQueue[T, R] {
+	if _, ok := pq.(IAcknowledgeable); ok {
+		return &durablePriorityQueue[T, R, EnqueuedResultJob[R], EnqueuedResultGroupJob[R]]{bindDurable[T, R](rwb.worker, pq, configs)}
+	}
 	return newResultPriorityQueue(rwb.worker, pq, configs...)
 }

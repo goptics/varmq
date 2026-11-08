@@ -1,6 +1,6 @@
 module github.com/goptics/varmq/examples/redis-persistent
 
-go 1.26.0
+go 1.27
 
 require (
 	github.com/goptics/redisq v1.5.1
