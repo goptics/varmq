@@ -150,6 +150,8 @@ j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / O
 s, err = j.Result()
 ```
 
+Needs redisq after v1.5.1 (one queue kind, `WatchOutcome`, `AcknowledgeResult`, `CancelJob`); with v1.5.1 handles report `ErrDetached` and `Cancel` gives `ErrCancelUnsupported`.
+
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`, redisq); a failed job's `Err` is a `*varmq.RemoteError` (text only), a result over 64 KiB is dropped (`ErrNoResult`). Storage without it gives `ErrDetached`. A job added without an id gets a random one, so its outcome can be matched.
 
 ### Cancel a Job

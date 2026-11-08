@@ -3,8 +3,6 @@ package varmq
 import (
 	"context"
 
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/goptics/varmq/contract"
@@ -159,7 +157,8 @@ func decodeOutcome[R any](o JobOutcome, err error) (R, error) {
 	if len(o.Result) == 0 {
 		return r, ErrNoResult
 	}
-	return r, json.Unmarshal(o.Result, &r)
+	err = json.Unmarshal(o.Result, &r) // before the return: its operands' order is unspecified
+	return r, err
 }
 
 // OpenJob is the handle of a Worker's job id on s, from any process (a
@@ -178,15 +177,6 @@ func OpenErrJob(s OutcomeWatcher, id string) EnqueuedErrJob {
 // OpenResultJob is OpenJob for a ResultWorker's job: Result decodes its R.
 func OpenResultJob[R any](s OutcomeWatcher, id string) EnqueuedResultJob[R] {
 	return watchRemote[R](s, id, nil)
-}
-
-// newRemoteID is a job ID for a durable job added without one, so its
-// outcome can be matched. Random, not a counter: a counter restarts with the
-// process and would match an old record.
-func newRemoteID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go 1.24+)
-	return hex.EncodeToString(b[:])
 }
 
 // remoteGroup is AddAll's handle on shared storage: one watched job per
@@ -211,11 +201,8 @@ func (g *remoteGroup[R]) track(j *remoteJob[R]) {
 	go func() {
 		defer g.wg.Done()
 		r, err := j.Result()
-		if errors.Is(err, ErrNoResult) {
-			err = nil
-		}
 		g.n.Add(-1)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrNoResult) { // no result is no failure
 			g.errs <- err
 		}
 		g.results <- Result[R]{JobId: j.id, Data: r, Err: err}

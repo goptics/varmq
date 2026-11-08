@@ -193,11 +193,11 @@ func TestWithQueueSharedResultWorker(t *testing.T) {
 	defer w.Stop()
 
 	q := w.WithQueue(s)
-	j, ok := q.Add(1 << 53) // past float64: the JSON is kept, not re-encoded
+	j, ok := q.Add(1<<53 + 1) // not a float64: the JSON is kept, not re-encoded
 	require.True(t, ok)
 	r, err := j.Result()
 	require.NoError(t, err)
-	assert.Equal(t, int64(1<<54), r.N)
+	assert.Equal(t, int64(1<<54+2), r.N)
 }
 
 func TestWithPriorityQueueSharedGroup(t *testing.T) {
@@ -407,4 +407,27 @@ func TestInMemoryWaitContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	assert.NoError(t, j.WaitContext(ctx))
+}
+
+func TestCloseDetachesHandles(t *testing.T) {
+	q := NewErrQueue[int](newSharedStore())
+	j, ok := q.Add(1) // no consumer: it would wait for good
+	require.True(t, ok)
+	require.NoError(t, q.Close())
+	assert.ErrorIs(t, j.Err(), ErrDetached)
+}
+
+func TestResultGroupKeepsErrNoResult(t *testing.T) {
+	s := resultless{newSharedStore()} // storage keeps no results
+	w := NewResultWorker(func(Job[int]) (int, error) { return 1, nil })
+	defer w.Stop()
+
+	g := w.WithQueue(s).AddAll([]Item[int]{{Data: 1}, {Data: 2}})
+	n := 0
+	for r := range g.Results() {
+		n++
+		assert.ErrorIs(t, r.Err, ErrNoResult, "the result is gone, not zero")
+	}
+	assert.Equal(t, 2, n)
+
 }

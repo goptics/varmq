@@ -1,6 +1,9 @@
 package varmq
 
-import "sync"
+import (
+	"crypto/rand"
+	"sync"
+)
 
 // Durable handles: what WithQueue and WithPriorityQueue return for
 // acknowledgeable storage (redisq, sqliteq, custom), and what NewQueue and
@@ -18,7 +21,10 @@ type durableBase[T, R any] struct {
 	s    IBaseQueue // IPersistentQueue or IPersistentPriorityQueue
 	poke func()     // a batch source's ready hint; nil otherwise
 	cfg  func() configs
-	live *sync.Map // *remoteJob -> struct{}: handles not ended yet, for Purge
+	live *sync.Map // *remoteJob -> struct{}: handles not ended yet, for Purge and Close
+	// mu orders Add (read) against Purge and Close (write), so an Add
+	// never lands between the storage's drop and the handles' detach.
+	mu *sync.RWMutex
 }
 
 // bindDurable binds w to s: woken by notifications when s is ISubscribable,
@@ -37,6 +43,7 @@ func bindDurable[T, R any, J iJob[T]](w *worker[T, J], s IBaseQueue, configs []Q
 		poke:              pokeOf(src),
 		cfg:               w.configs,
 		live:              &sync.Map{},
+		mu:                &sync.RWMutex{},
 	}
 }
 
@@ -47,6 +54,7 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 		s:                 s,
 		cfg:               newConfig,
 		live:              &sync.Map{},
+		mu:                &sync.RWMutex{},
 	}
 }
 
@@ -55,7 +63,9 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []byte, onceID string) bool) (*remoteJob[R], bool) {
 	c := loadJobConfigs(d.cfg(), configs...)
 	if _, ok := d.s.(OutcomeWatcher); ok && c.Id == "" {
-		c.Id = newRemoteID()
+		// Random, not a counter: a counter restarts with the process and
+		// would match an old record.
+		c.Id = rand.Text()
 	}
 
 	j := newJob(data, c)
@@ -76,6 +86,8 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 			d.live.Delete(rj)
 		}
 	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	if !c.given {
 		watch()
 	}
@@ -105,7 +117,23 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 // ponytail: storage does not say which jobs it dropped, so running jobs'
 // handles detach too; per-ID purge if that matters.
 func (d durableBase[T, R]) Purge() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.externalBaseQueue.Purge()
+	d.detachLive()
+}
+
+// Close closes the storage and detaches the live job handles: a closed
+// storage drops its outcome watches, so their Wait would block for good.
+func (d durableBase[T, R]) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	err := d.externalBaseQueue.Close()
+	d.detachLive()
+	return err
+}
+
+func (d durableBase[T, R]) detachLive() {
 	d.live.Range(func(k, _ any) bool {
 		_ = k.(*remoteJob[R]).Close()
 		return true
@@ -139,8 +167,7 @@ func (q *durableQueue[T, R, H, G]) push(val []byte, id string) bool {
 func (q *durableQueue[T, R, H, G]) Add(data T, configs ...JobConfigFunc) (H, bool) {
 	j, ok := q.add(data, configs, q.push)
 	if !ok {
-		var zero H
-		return zero, false
+		return *new(H), false
 	}
 	return any(j).(H), true
 }
@@ -166,8 +193,7 @@ func (q *durablePriorityQueue[T, R, H, G]) push(val []byte, prio int, id string)
 func (q *durablePriorityQueue[T, R, H, G]) Add(data T, priority int, configs ...JobConfigFunc) (H, bool) {
 	j, ok := q.add(data, configs, func(val []byte, id string) bool { return q.push(val, priority, id) })
 	if !ok {
-		var zero H
-		return zero, false
+		return *new(H), false
 	}
 	return any(j).(H), true
 }

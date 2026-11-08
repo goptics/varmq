@@ -247,13 +247,10 @@ type runKey struct {
 	id string
 }
 
-// trackRun lists j while it runs, when this worker watches a storage's
-// cancel requests and j came from shared storage with an ID. It returns
+// trackRun lists j while it runs, when j came from shared storage with an
+// ID; the run loop calls it only while this worker watches cancel requests. It returns
 // the key to untrack; zero when j is not tracked.
 func (w *worker[T, JobType]) trackRun(j JobType) runKey {
-	if !w.cancelWatch.Load() {
-		return runKey{}
-	}
 	q := j.ackStorage()
 	id := j.ID()
 	if q == nil || id == "" || !reflect.TypeOf(q).Comparable() { // a map key must be comparable
