@@ -129,43 +129,29 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 	return s, nil
 }
 
-// Jobs lists pending jobs in hand-out order; other states hold none in
-// memory, so their pages are empty. A priority queue pages without sorting
-// (Page). Only waiting jobs count: a closed one still in the queue is
-// skipped and offset counts past it, and a page fills up to limit, so a
-// short page means the end (one that starts mid-read is dropped and the
-// next fills its slot).
-// ponytail: a page copies the whole FIFO queue (Values), or pops the first
-// offset+limit (more past closed jobs) of a priority one; a paged cursor
-// read if in-memory queues of millions get inspected often.
+// Jobs lists pending jobs in hand-out order (a priority queue's Values
+// is sorted so); other states hold none in memory, so their pages are
+// empty. Only waiting jobs count: a closed one still in the queue is
+// skipped and offset counts past it, and the page fills up to limit from
+// one copy of the queue, so a short page means the end of that copy (one
+// that starts mid-read is dropped and the next fills its slot).
+// ponytail: one copy per page (Values), sorted for a priority queue,
+// O(n log n): fine for the admin route; a paged cursor read if in-memory
+// queues of millions get inspected often.
 func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
 	out := []JobRecord{}
-	if state != JobPending {
+	if state != JobPending || offset < 0 || limit < 1 || offset >= m.q.Len() { // before copying the queue
 		return out, nil
 	}
 
-	n := m.q.Len()
-	if offset < 0 || limit < 1 || offset >= n { // before copying the queue; offset+limit can't overflow now
-		return out, nil
-	}
-	p, paged := m.q.(interface{ Page(offset, limit int) []any })
-	for want := offset + limit; ; want = min(2*want, n) {
-		var items []any
-		if paged {
-			items = p.Page(0, want)
-		} else {
-			items = m.q.Values()
-		}
-		out = pageWaiting(out[:0], items, offset, limit)
-		// full, or every item read: done
-		if len(out) == limit || !paged || len(items) < want || want >= n {
-			return out, nil
-		}
-	}
+	return pageWaiting(out, m.q.Values(), offset, limit), nil
 }
 
 // pageWaiting appends the records of items' waiting entries, skipping the
-// first offset of them, until out holds limit.
+// first offset of them, until out holds limit. A varmq job is kept only if
+// it waits both before and after its data is read (once): one closed,
+// started or ended is not pending. The read can still meet a job that
+// starts mid-read (see Job). Other stored items are kept as they are.
 func pageWaiting(out []JobRecord, items []any, offset, limit int) []JobRecord {
 	for _, v := range items {
 		if len(out) == limit {
@@ -178,7 +164,9 @@ func pageWaiting(out []JobRecord, items []any, offset, limit int) []JobRecord {
 			offset--
 			continue
 		}
-		out = appendPending(out, v)
+		if r := pendingRecord(v); waitingItem(v) {
+			out = append(out, r)
+		}
 	}
 	return out
 }
@@ -341,21 +329,6 @@ func waiting(s status) bool { return s == created || s == queued }
 func waitingItem(v any) bool {
 	j, ok := v.(interface{ phase() status })
 	return !ok || waiting(j.phase())
-}
-
-// appendPending appends stored item v's pending record. A varmq job is
-// left out unless it waits both before and after its read: one closed,
-// started or ended since the queue was read is not pending. The read can
-// still meet a job that starts mid-read (see Job).
-func appendPending(out []JobRecord, v any) []JobRecord {
-	if !waitingItem(v) {
-		return out
-	}
-	r := pendingRecord(v)
-	if !waitingItem(v) {
-		return out
-	}
-	return append(out, r)
 }
 
 // CancelJob is the JobCanceller of an in-memory queue: Cancel on each job
