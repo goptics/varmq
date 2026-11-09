@@ -40,8 +40,9 @@ type sourceManager[JobType any] interface {
 	add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType]
 	remove(src source[JobType]) sourceManager[JobType]
 	count() int
-	// each calls fn with every bound source and its bind priority, in bind
-	// order. REST reads only; not on the job path.
+	// each calls fn with every bound source and its bind priority, in the
+	// order the strategy walks them: priority, ties in bind order. REST
+	// reads only; not on the job path.
 	each(fn func(src source[JobType], priority int))
 }
 

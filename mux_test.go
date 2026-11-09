@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1908,7 +1907,8 @@ func TestMuxGetWorkerSources(t *testing.T) {
 		w := newWorker(func(j iJob[int]) {}, WithName("src-one"))
 		defer w.Stop()
 		id := memOf(t, newQueues(w).BindQueue()).QueueID()
-		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue", Priority: math.MaxInt}}, sources("src-one"), "default priority math.MaxInt")
+		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue"}}, sources("src-one"))
+		assert.JSONEq(t, `[{"queue_id":"`+id+`","kind":"queue"}]`, string(getWorkerRaw(t, server, "src-one")["sources"]), "default priority (math.MaxInt): omitted")
 	})
 
 	t.Run("priorities in bind order", func(t *testing.T) {
@@ -1927,10 +1927,10 @@ func TestMuxGetWorkerSources(t *testing.T) {
 		var src []workerSource
 		require.NoError(t, json.Unmarshal(got["sources"], &src))
 		assert.Equal(t, []workerSource{
-			{QueueID: low, Kind: "queue", Priority: 5},
-			{QueueID: "z:src-prio", Kind: "queue", Priority: 1},
-			{QueueID: "", Kind: "queue", Priority: 3},
-		}, src, "bind order, not priority order")
+			{QueueID: "z:src-prio", Kind: "queue", Priority: new(1)},
+			{QueueID: "", Kind: "queue", Priority: new(3)},
+			{QueueID: low, Kind: "queue", Priority: new(5)},
+		}, src, "pick order: priority, not bind order")
 	})
 
 	t.Run("two handles on one storage", func(t *testing.T) {
@@ -1942,11 +1942,13 @@ func TestMuxGetWorkerSources(t *testing.T) {
 		b := memOf(t, wb.WithQueue(q)).QueueID()
 		other := memOf(t, wb.BindQueue()).QueueID()
 		first := min(a, b)
+		zero := memOf(t, wb.BindQueue(WithQueuePriority(0))).QueueID()
 		assert.Equal(t, []workerSource{
-			{QueueID: first, Kind: "queue", Priority: math.MaxInt},
-			{QueueID: first, Kind: "queue", Priority: math.MaxInt},
-			{QueueID: other, Kind: "queue", Priority: math.MaxInt},
-		}, sources("src-twice"), "the smaller ID of the storage's handles")
+			{QueueID: zero, Kind: "queue", Priority: new(0)},
+			{QueueID: first, Kind: "queue"},
+			{QueueID: first, Kind: "queue"},
+			{QueueID: other, Kind: "queue"},
+		}, sources("src-twice"), "the smaller ID of the storage's handles; explicit 0 sent, ties in bind order")
 	})
 
 	t.Run("topic, then unsubscribed", func(t *testing.T) {
@@ -1958,12 +1960,12 @@ func TestMuxGetWorkerSources(t *testing.T) {
 
 		assert.JSONEq(t, `"round_robin"`, string(getWorkerRaw(t, server, "src-topic")["strategy"]))
 		assert.Equal(t, []workerSource{
-			{QueueID: id, Kind: "queue", Priority: 2},
-			{QueueID: "", Kind: "topic", Priority: 1},
+			{QueueID: "", Kind: "topic", Priority: new(1)},
+			{QueueID: id, Kind: "queue", Priority: new(2)},
 		}, sources("src-topic"))
 
 		sub.Unsubscribe()
-		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue", Priority: 2}}, sources("src-topic"))
+		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue", Priority: new(2)}}, sources("src-topic"))
 	})
 
 	t.Run("strategy names", func(t *testing.T) {

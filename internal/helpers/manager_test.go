@@ -327,8 +327,8 @@ func TestManagerEach(t *testing.T) {
 		got = append(got, it.id)
 		prios = append(prios, p)
 	})
-	assert.Equal(t, []string{"a", "b", "c"}, got, "registration order, not priority order")
-	assert.Equal(t, []int{5, 1, 5}, prios)
+	assert.Equal(t, []string{"b", "a", "c"}, got, "priority order, ties in registration order")
+	assert.Equal(t, []int{1, 5, 5}, prios)
 
 	m.UnregisterItem(a)
 	got = nil

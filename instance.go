@@ -1,6 +1,7 @@
 package varmq
 
 import (
+	"math"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -97,13 +98,16 @@ func (w *worker[T, JobType]) listedQueueIDs() []string {
 	return ids
 }
 
-// boundSources is the worker's bound sources in bind order, for
-// GET /workers/{name}. A queue's ID is the one GET /queues lists, "" if it
-// has none; a topic subscription has none.
+// boundSources is the worker's bound sources in pick order (priority, ties
+// in bind order), for GET /workers/{name}. A queue's ID is the one
+// GET /queues lists, "" if it has none; a topic subscription has none.
 func (w *worker[T, JobType]) boundSources() []workerSource {
 	out := []workerSource{}
 	w.manager().each(func(src source[JobType], priority int) {
-		s := workerSource{Kind: "topic", Priority: priority}
+		s := workerSource{Kind: "topic"}
+		if priority != math.MaxInt {
+			s.Priority = &priority
+		}
 		if qb, ok := src.(queueBacked); ok {
 			s.Kind = "queue"
 			s.QueueID = w.queueIDOf(qb.storage())

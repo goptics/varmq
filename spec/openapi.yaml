@@ -714,8 +714,9 @@ components:
               type: array
               description: |
                 Since 1.5.0. The queues and topic subscriptions the worker
-                pulls from, in bind order. Empty when it binds none. Absent
-                from older servers.
+                pulls from, in pick order: by `priority`, lowest first, then
+                no priority set; ties in bind order. Empty when it binds none.
+                Absent from older servers.
               items: { $ref: "#/components/schemas/WorkerSource" }
             metrics:
               type: object
@@ -731,7 +732,7 @@ components:
 
     WorkerSource:
       type: object
-      required: [queue_id, kind, priority]
+      required: [queue_id, kind]
       properties:
         queue_id:
           type: string
@@ -748,9 +749,9 @@ components:
           description: |
             The priority given at bind (`WithQueuePriority`,
             `WithTopicPriority`). Lower picks first under the `priority`
-            strategy; ties keep bind order. Without one it is the largest
-            int64, 9223372036854775807, the lowest priority. Other
-            strategies ignore it.
+            strategy; ties keep bind order. Other strategies ignore it.
+            Absent: no priority set (lowest), as is one set to the largest
+            int64.
 
     JobState:
       type: string

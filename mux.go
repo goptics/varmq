@@ -124,8 +124,9 @@ type workerSource struct {
 	// Kind is "queue" or "topic".
 	Kind string `json:"kind"`
 	// Priority is the bind priority (WithQueuePriority, WithTopicPriority):
-	// lower picks first under the Priority strategy; default math.MaxInt.
-	Priority int `json:"priority"`
+	// lower picks first under the Priority strategy. nil (omitted) when it
+	// is math.MaxInt, the default: JSON clients in JS cannot hold 2^63-1.
+	Priority *int `json:"priority,omitempty"`
 }
 
 // summarizeWorker is w's workerSummary.

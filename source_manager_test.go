@@ -137,7 +137,8 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 	assert.Nil(t, prio.purgeGen(), "batch of one")
 }
 
-// each walks the bound sources in bind order, whichever manager is current.
+// each walks the bound sources in pick order (priority, ties in bind order),
+// whichever manager is current.
 func TestSourceManagerEach(t *testing.T) {
 	type bound struct {
 		src      source[iJob[string]]
@@ -156,9 +157,9 @@ func TestSourceManagerEach(t *testing.T) {
 	m = m.add(a, 4, Priority)
 	assert.Equal(t, []bound{{a, 4}}, list(m), "direct")
 
-	m = m.add(b, 1, Priority).add(c, 2, Priority)
-	assert.Equal(t, []bound{{a, 4}, {b, 1}, {c, 2}}, list(m), "strategy: bind order")
+	m = m.add(b, 1, Priority).add(c, 4, Priority)
+	assert.Equal(t, []bound{{b, 1}, {a, 4}, {c, 4}}, list(m), "strategy: priority, ties in bind order")
 
 	m = m.remove(b).remove(a)
-	assert.Equal(t, []bound{{c, 2}}, list(m), "back to direct")
+	assert.Equal(t, []bound{{c, 4}}, list(m), "back to direct")
 }
