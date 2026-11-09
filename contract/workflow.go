@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"sync"
 )
 
 // Outcome is how a workflow task ended.
@@ -112,23 +113,17 @@ type WorkflowStore interface {
 	// DepResult returns the stored result of the task's dependency.
 	DepResult(ctx context.Context, workflowID, task string) ([]byte, error)
 	Record(ctx context.Context, id string) (WorkflowRecord, error)
-}
-
-// WorkflowAcknowledgeable is a queue storage that can finish workflow tasks.
-type WorkflowAcknowledgeable interface {
-	Scoped
-	// WorkflowStore is the store of this storage's scope. With none it MUST
-	// return a nil interface, never a typed nil (a nil *T in the interface):
-	// varmq registers any non-nil value and calls its methods.
-	WorkflowStore() WorkflowStore
-	// FinishTask records the outcome and returns the IDs of the queues it
-	// pushed into, so varmq pokes its local consumers of them. A re-finish
-	// of a task that already ended (a lost reply, a redelivery) changes
-	// nothing and returns every push-target queue ID (all task and undo
-	// queues of the workflow), so a wake lost with the first reply is not
-	// lost for good. A workflow that is gone (expired) settles the item and
-	// returns ok with no IDs: false would redeliver it forever.
-	FinishTask(ackID string, e TaskEnd) (pushed []string, ok bool)
+	// FinishTask settles the task's job (ackID on the queue queueID), records
+	// the outcome and pushes what it releases, in one atomic step (or, for
+	// storage that can't, one that redelivery and Runnable make safe). It
+	// returns the IDs of the queues it pushed into, so varmq pokes its local
+	// consumers of them. A re-finish of a task that already ended (a lost
+	// reply, a redelivery) changes nothing and returns every push-target
+	// queue ID (all task and undo queues of the workflow), so a wake lost with
+	// the first reply is not lost for good. A workflow that is gone (expired)
+	// settles the item and returns ok with no IDs: false would redeliver it
+	// forever.
+	FinishTask(queueID, ackID string, e TaskEnd) (pushed []string, ok bool)
 }
 
 // WorkflowInspector lists workflows.
@@ -158,4 +153,58 @@ var (
 	ErrDepFailed        = errors.New("varmq: dependency failed")
 	ErrResultTooLarge   = errors.New("varmq: task result too large")
 	ErrScopeMismatch    = errors.New("varmq: queues are in different storage scopes")
+	ErrScopeRegistered  = errors.New("varmq: a workflow store is already registered for this scope")
 )
+
+// Durable workflow stores of this process, by ScopeID. A queue names only its
+// scope (Scoped); varmq finds the store of a task's queue here. Storage
+// registers its store when it is made (redisq.NewWorkflowStore, ...), so a
+// process that only runs workers needs that one call. In-memory stores share
+// one scope ID but not state, so varmq keeps them itself; they don't register.
+// ponytail: one process-wide map; nothing scopes it per test but Unregister.
+var (
+	storesMu sync.RWMutex
+	stores   = map[string]WorkflowStore{}
+)
+
+// RegisterWorkflowStore makes s the store of its scope. Registering s again
+// is a no-op; another store for the same scope is ErrScopeRegistered.
+func RegisterWorkflowStore(s WorkflowStore) error {
+	storesMu.Lock()
+	defer storesMu.Unlock()
+	scope := s.ScopeID()
+	if cur, ok := stores[scope]; ok && cur != s {
+		return ErrScopeRegistered
+	}
+	stores[scope] = s
+	return nil
+}
+
+// UnregisterWorkflowStore removes s, if it is the registered store of its
+// scope (a closed store).
+func UnregisterWorkflowStore(s WorkflowStore) {
+	storesMu.Lock()
+	defer storesMu.Unlock()
+	if cur, ok := stores[s.ScopeID()]; ok && cur == s {
+		delete(stores, s.ScopeID())
+	}
+}
+
+// LookupWorkflowStore returns the store registered for scope.
+func LookupWorkflowStore(scope string) (WorkflowStore, bool) {
+	storesMu.RLock()
+	defer storesMu.RUnlock()
+	s, ok := stores[scope]
+	return s, ok
+}
+
+// WorkflowStores returns every registered store, in no set order.
+func WorkflowStores() []WorkflowStore {
+	storesMu.RLock()
+	defer storesMu.RUnlock()
+	out := make([]WorkflowStore, 0, len(stores))
+	for _, s := range stores {
+		out = append(out, s)
+	}
+	return out
+}

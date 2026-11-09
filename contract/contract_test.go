@@ -1,7 +1,9 @@
 package contract
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -57,5 +59,48 @@ func TestWorkflowRecordJSON(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("state %s: got %+v want %+v", s, got, want)
 		}
+	}
+}
+
+type fakeStore struct{ scope string }
+
+func (f *fakeStore) ScopeID() string                                              { return f.scope }
+func (f *fakeStore) Submit(context.Context, WorkflowPlan) error                   { return nil }
+func (f *fakeStore) Cancel(context.Context, string, *bool) error                  { return nil }
+func (f *fakeStore) Runnable(context.Context, string, string, bool) (bool, error) { return true, nil }
+func (f *fakeStore) DepResult(context.Context, string, string) ([]byte, error)    { return nil, nil }
+func (f *fakeStore) Record(context.Context, string) (WorkflowRecord, error) {
+	return WorkflowRecord{}, nil
+}
+func (f *fakeStore) FinishTask(string, string, TaskEnd) ([]string, bool) { return nil, true }
+
+// One store per scope: re-registering it is fine, another one for the scope
+// is refused, and only the registered store can unregister the scope.
+func TestWorkflowStoreRegistry(t *testing.T) {
+	a, b := &fakeStore{"test:a"}, &fakeStore{"test:a"}
+	if err := RegisterWorkflowStore(a); err != nil {
+		t.Fatal(err)
+	}
+	defer UnregisterWorkflowStore(a)
+	if err := RegisterWorkflowStore(a); err != nil {
+		t.Fatalf("re-register: %v", err)
+	}
+	if err := RegisterWorkflowStore(b); !errors.Is(err, ErrScopeRegistered) {
+		t.Fatalf("second store: %v, want ErrScopeRegistered", err)
+	}
+	UnregisterWorkflowStore(b) // not the registered one: no-op
+	if s, ok := LookupWorkflowStore("test:a"); !ok || s != a {
+		t.Fatalf("lookup = %v, %v", s, ok)
+	}
+	found := false
+	for _, s := range WorkflowStores() {
+		found = found || s == a
+	}
+	if !found {
+		t.Fatal("WorkflowStores misses a")
+	}
+	UnregisterWorkflowStore(a)
+	if _, ok := LookupWorkflowStore("test:a"); ok {
+		t.Fatal("still registered after Unregister")
 	}
 }
