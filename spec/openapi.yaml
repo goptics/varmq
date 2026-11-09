@@ -269,7 +269,9 @@ paths:
         Records carry `payload` (null over 64 KiB or when it does not
         encode), `finished_at`, `attempts` (0 for a job cancelled before it
         ran, else 1), the error (cut at 64 KiB), and a result job's `result` (left out over
-        64 KiB); no `enqueued_at` or `started_at`.
+        64 KiB; none for a group member); no `enqueued_at` or `started_at`.
+        Cancelled means cancelled by ID or `Cancel`: a job closed or purged
+        while it waits, or a task its cancelled workflow skips, is not kept.
       responses:
         "200":
           description: The jobs; an empty array past the end.

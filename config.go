@@ -588,7 +588,10 @@ const maxEndedJobs = 200
 //
 // A record holds the payload and a result worker's R as JSON, each
 // dropped (payload null, no result) over 64 KiB, and the error cut at
-// 64 KiB, so n bounds the memory.
+// 64 KiB, so n bounds the memory. An AddAll result member keeps no R.
+// Cancelled means Cancel (or the cancel route): a job closed or purged
+// while it waits, or a workflow task its cancelled workflow skips, is not
+// kept.
 //
 // Parameters:
 //   - n: records to keep, clamped to 0..200. 0 keeps none.
