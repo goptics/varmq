@@ -5,7 +5,6 @@ import (
 	"math"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -336,21 +335,13 @@ func TestManagerEach(t *testing.T) {
 	m.Each(func(it *testItem, _ int) { got = append(got, it.id) })
 	assert.Equal(t, []string{"b", "c"}, got)
 
-	// fn runs on a copy, lock released: it may change the manager.
-	done := make(chan []string)
-	go func() {
-		var seen []string
-		m.Each(func(it *testItem, _ int) {
-			seen = append(seen, it.id)
-			m.UnregisterItem(it)
-			m.Register(&testItem{id: "n" + it.id}, 9)
-		})
-		done <- seen
-	}()
-	select {
-	case seen := <-done:
-		assert.Equal(t, []string{"b", "c"}, seen, "the snapshot taken before fn ran")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Each holds its lock while fn runs")
-	}
+	// fn runs on a copy, lock released: it may change the manager (a held
+	// lock deadlocks here; the test timeout catches it).
+	var seen []string
+	m.Each(func(it *testItem, _ int) {
+		seen = append(seen, it.id)
+		m.UnregisterItem(it)
+		m.Register(&testItem{id: "n" + it.id}, 9)
+	})
+	assert.Equal(t, []string{"b", "c"}, seen, "the snapshot taken before fn ran")
 }
