@@ -87,14 +87,11 @@ func DefaultMinIdleWorkerRatio(percentage uint8) {
 //
 // Default: A no-op generator that returns an empty string (no job ID).
 //
-// A persistent or distributed Add on storage that deduplicates by job id
-// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
-// window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts). In-memory queues
-// do not check generated ids. WithQueue / WithPriorityQueue on shared
-// storage do not dedupe generated ids but key outcomes by them: a repeated
-// id makes the new job's handle report the earlier job's outcome, so keep
-// them globally unique there too.
+// In-memory queues do not check generated ids. WithQueue / WithPriorityQueue
+// on shared storage do not dedupe generated ids but key outcomes by them: a
+// repeated id makes the new job's handle report the earlier job's outcome,
+// so keep them globally unique (a UUID or nanoid, never a business key or a
+// counter that restarts).
 func DefaultJobIdGenerator(fn func() string) {
 	if fn == nil {
 		return
@@ -300,14 +297,11 @@ func WithAutoRun(run bool) ConfigFunc {
 // WithJobIdGenerator sets the job ID generator function for the worker.
 // If not set there wouldn't be any job id
 //
-// A persistent or distributed Add on storage that deduplicates by job id
-// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
-// window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts). In-memory queues
-// do not check generated ids. WithQueue / WithPriorityQueue on shared
-// storage do not dedupe generated ids but key outcomes by them: a repeated
-// id makes the new job's handle report the earlier job's outcome, so keep
-// them globally unique there too.
+// In-memory queues do not check generated ids. WithQueue / WithPriorityQueue
+// on shared storage do not dedupe generated ids but key outcomes by them: a
+// repeated id makes the new job's handle report the earlier job's outcome,
+// so keep them globally unique (a UUID or nanoid, never a business key or a
+// counter that restarts).
 func WithJobIdGenerator(fn func() string) ConfigFunc {
 	return func(c *configs) {
 		if fn == nil {
@@ -439,11 +433,8 @@ func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
 
 // WithJobId sets the job ID for the job.
 //
-// A persistent or distributed Add on storage that deduplicates by job id
-// (EnqueueOnce, such as redisq) stores nothing for an id it saw within its
-// window and still returns true, so ids must be globally unique (a UUID or
-// nanoid, never a business key or a counter that restarts). An in-memory Add
-// returns false while a job with the same id is in the queue.
+// An in-memory Add returns false while a job with the same id is in the
+// queue. Shared storage dedupes by job id (EnqueueOnce): see its docs.
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
 		if id == "" {

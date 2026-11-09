@@ -248,10 +248,6 @@ type externalBaseQueue struct {
 }
 
 type IExternalBaseQueue interface {
-	// Deprecated: Use Queue's Len() method instead for a more idiomatic approach.
-	// This method will be removed in an upcoming release.
-	NumPending() int
-
 	// Len returns the number of jobs in the queue. Jobs a worker has already
 	// taken into a batch but not started are not in the queue; the worker's
 	// NumPending counts them.
@@ -322,10 +318,6 @@ func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purge *pu
 
 func (eq *externalBaseQueue) IsFull() bool {
 	return eq.config.capacity > 0 && eq.q.Len() >= eq.config.capacity
-}
-
-func (eq *externalBaseQueue) NumPending() int {
-	return eq.q.Len()
 }
 
 func (eq *externalBaseQueue) Len() int {

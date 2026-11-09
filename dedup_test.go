@@ -103,25 +103,25 @@ func TestAddWithIdUsesEnqueueOnce(t *testing.T) {
 	}{
 		{"persistent", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistQueue{MockDistributedQueue: mocks.NewMockDistributedQueue()}
-			q := NewWorker(noop).WithPersistentQueue(s)
+			q := NewWorker(noop).WithQueue(s)
 			t.Cleanup(func() { q.Worker().Stop() })
-			return func(id string) bool { return q.Add("x", WithJobId(id)) }, &s.log
+			return func(id string) bool { return addOk(q.Add("x", WithJobId(id))) }, &s.log
 		}},
 		{"persistent priority", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistPrioQueue{MockDistributedPriorityQueue: mocks.NewMockDistributedPriorityQueue()}
-			q := NewWorker(noop).WithPersistentPriorityQueue(s)
+			q := NewWorker(noop).WithPriorityQueue(s)
 			t.Cleanup(func() { q.Worker().Stop() })
-			return func(id string) bool { return q.Add("x", 3, WithJobId(id)) }, &s.log
+			return func(id string) bool { return addOk(q.Add("x", 3, WithJobId(id))) }, &s.log
 		}},
 		{"distributed", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistQueue{MockDistributedQueue: mocks.NewMockDistributedQueue()}
-			q := NewDistributedQueue[string](s)
-			return func(id string) bool { return q.Add("x", WithJobId(id)) }, &s.log
+			q := NewQueue[string](s)
+			return func(id string) bool { return addOk(q.Add("x", WithJobId(id))) }, &s.log
 		}},
 		{"distributed priority", func(t *testing.T) (func(string) bool, *dedupLog) {
 			s := &dedupDistPrioQueue{MockDistributedPriorityQueue: mocks.NewMockDistributedPriorityQueue()}
-			q := NewDistributedPriorityQueue[string](s)
-			return func(id string) bool { return q.Add("x", 3, WithJobId(id)) }, &s.log
+			q := NewPriorityQueue[string](s)
+			return func(id string) bool { return addOk(q.Add("x", 3, WithJobId(id))) }, &s.log
 		}},
 	}
 
@@ -368,27 +368,27 @@ func TestMocksDoNotDeduplicate(t *testing.T) {
 	}{
 		{"persistent", func(t *testing.T) (func(string) bool, func(), *int) {
 			s := mocks.NewMockPersistentQueue()
-			q := NewWorker(noop, WithAutoRun(false)).WithPersistentQueue(s)
-			return func(id string) bool { return q.Add("x", WithJobId(id)) }, func() { s.ShouldFailEnqueue = true }, new(int)
+			q := NewWorker(noop, WithAutoRun(false)).WithQueue(s)
+			return func(id string) bool { return addOk(q.Add("x", WithJobId(id))) }, func() { s.ShouldFailEnqueue = true }, new(int)
 		}},
 		{"persistent priority", func(t *testing.T) (func(string) bool, func(), *int) {
 			s := mocks.NewMockPersistentPriorityQueue()
-			q := NewWorker(noop, WithAutoRun(false)).WithPersistentPriorityQueue(s)
-			return func(id string) bool { return q.Add("x", 1, WithJobId(id)) }, func() { s.ShouldFailEnqueue = true }, new(int)
+			q := NewWorker(noop, WithAutoRun(false)).WithPriorityQueue(s)
+			return func(id string) bool { return addOk(q.Add("x", 1, WithJobId(id))) }, func() { s.ShouldFailEnqueue = true }, new(int)
 		}},
 		{"distributed", func(t *testing.T) (func(string) bool, func(), *int) {
 			s := mocks.NewMockDistributedQueue()
 			n := new(int)
 			s.Subscribe(func(string) { *n++ })
-			q := NewDistributedQueue[string](s)
-			return func(id string) bool { return q.Add("x", WithJobId(id)) }, func() { s.ShouldFailEnqueue = true }, n
+			q := NewQueue[string](s)
+			return func(id string) bool { return addOk(q.Add("x", WithJobId(id))) }, func() { s.ShouldFailEnqueue = true }, n
 		}},
 		{"distributed priority", func(t *testing.T) (func(string) bool, func(), *int) {
 			s := mocks.NewMockDistributedPriorityQueue()
 			n := new(int)
 			s.Subscribe(func(string) { *n++ })
-			q := NewDistributedPriorityQueue[string](s)
-			return func(id string) bool { return q.Add("x", 1, WithJobId(id)) }, func() { s.ShouldFailEnqueue = true }, n
+			q := NewPriorityQueue[string](s)
+			return func(id string) bool { return addOk(q.Add("x", 1, WithJobId(id))) }, func() { s.ShouldFailEnqueue = true }, n
 		}},
 	}
 
@@ -420,30 +420,15 @@ func (q *rejectDistPrioQueue) EnqueueOnce(any, int, string) bool { return false 
 // An Add whose EnqueueOnce the storage rejects reports failure.
 func TestAddWithIdFailsWhenEnqueueOnceFails(t *testing.T) {
 	noop := func(Job[string]) {}
-	p := NewWorker(noop).WithPersistentQueue(&rejectDistQueue{mocks.NewMockDistributedQueue()})
+	p := NewWorker(noop).WithQueue(&rejectDistQueue{mocks.NewMockDistributedQueue()})
 	defer p.Worker().Stop()
-	pp := NewWorker(noop).WithPersistentPriorityQueue(&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
+	pp := NewWorker(noop).WithPriorityQueue(&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
 	defer pp.Worker().Stop()
-	d := NewDistributedQueue[string](&rejectDistQueue{mocks.NewMockDistributedQueue()})
-	dp := NewDistributedPriorityQueue[string](&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
+	d := NewQueue[string](&rejectDistQueue{mocks.NewMockDistributedQueue()})
+	dp := NewPriorityQueue[string](&rejectDistPrioQueue{mocks.NewMockDistributedPriorityQueue()})
 
-	assert.False(t, p.Add("x", WithJobId("a")), "persistent")
-	assert.False(t, pp.Add("x", 1, WithJobId("a")), "persistent priority")
-	assert.False(t, d.Add("x", WithJobId("a")), "distributed")
-	assert.False(t, dp.Add("x", 1, WithJobId("a")), "distributed priority")
-}
-
-// Persistent and distributed Adds check generated ids too: they guard the
-// storage client's re-send of a push, which repeats the id.
-func TestGeneratedIdUsesEnqueueOnceOnStorage(t *testing.T) {
-	s := &dedupDistQueue{MockDistributedQueue: mocks.NewMockDistributedQueue()}
-	q := NewWorker(func(Job[string]) {}, WithAutoRun(false), WithJobIdGenerator(func() string { return "g1" })).WithPersistentQueue(s)
-
-	assert.True(t, q.Add("x"))
-	assert.True(t, q.Add("x"))
-
-	s.log.mu.Lock()
-	defer s.log.mu.Unlock()
-	assert.Equal(t, []string{"g1", "g1"}, s.log.onceID)
-	assert.Equal(t, 1, s.log.stored)
+	assert.False(t, addOk(p.Add("x", WithJobId("a"))), "persistent")
+	assert.False(t, addOk(pp.Add("x", 1, WithJobId("a"))), "persistent priority")
+	assert.False(t, addOk(d.Add("x", WithJobId("a"))), "distributed")
+	assert.False(t, addOk(dp.Add("x", 1, WithJobId("a"))), "distributed priority")
 }

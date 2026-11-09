@@ -2,29 +2,8 @@ package varmq
 
 import "github.com/goptics/varmq/internal/queues"
 
-// durableBinder is IWorkerBinder's four deprecated durable binders.
-type durableBinder[T any, J iJob[T]] struct {
-	*worker[T, J]
-}
-
-func (d durableBinder[T, J]) WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T] {
-	return newPersistentQueue(d.worker, pq, configs...)
-}
-
-func (d durableBinder[T, J]) WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T] {
-	return newPersistentPriorityQueue(d.worker, pq, configs...)
-}
-
-func (d durableBinder[T, J]) WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T] {
-	return bindDistributed(d.worker, dq, NewDistributedQueue[T](dq, configs...), configs)
-}
-
-func (d durableBinder[T, J]) WithDistributedPriorityQueue(dpq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T] {
-	return bindDistributed(d.worker, dpq, NewDistributedPriorityQueue[T](dpq, configs...), configs)
-}
-
 type workerBinder[T any] struct {
-	durableBinder[T, iJob[T]]
+	*worker[T, iJob[T]]
 }
 
 // IWorkerBinder is the base interface for binding standard workers to different queue types.
@@ -103,91 +82,6 @@ type IWorkerBinder[T any] interface {
 	//   priorityQueue := worker.WithPriorityQueue(customPriorityQueue)
 	WithPriorityQueue(pq IPriorityQueue, configs ...QueueConfigFunc) PriorityQueue[T]
 
-	// WithPersistentQueue binds the worker to a PersistentQueue.
-	// PersistentQueue provides durability guarantees for jobs, ensuring they are not lost
-	// even in the event of application crashes or restarts. This is useful for critical
-	// workloads where job completion must be guaranteed.
-	//
-	// Parameters:
-	//   - pq IPersistentQueue: A queue implementation that provides persistence capabilities.
-	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
-	//
-	// Returns:
-	//   - PersistentQueue[T, any]: A persistent queue that ensures jobs are not lost and processes them with the worker.
-	//
-	// Example usage:
-	//   persistentQueue := worker.WithPersistentQueue(redisQueue)
-	//
-	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
-	// and distributed storage.
-	WithPersistentQueue(pq IPersistentQueue, configs ...QueueConfigFunc) PersistentQueue[T]
-
-	// WithPersistentPriorityQueue binds the worker to a PersistentPriorityQueue.
-	// This combines the benefits of persistence with priority-based processing. Jobs are
-	// both durable and processed according to their priority values.
-	//
-	// Parameters:
-	//   - pq IPersistentPriorityQueue: A priority queue implementation that provides persistence capabilities.
-	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
-	//
-	// Returns:
-	//   - PersistentPriorityQueue[T, any]: A persistent priority queue that processes jobs based on priority
-	//     while ensuring they are not lost, using this worker for processing.
-	//
-	// Example usage:
-	//   persistentPriorityQueue := worker.WithPersistentPriorityQueue(persistentPriorityQueue)
-	//
-	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
-	// and distributed storage.
-	WithPersistentPriorityQueue(pq IPersistentPriorityQueue, configs ...QueueConfigFunc) PersistentPriorityQueue[T]
-
-	// WithDistributedQueue binds the worker to a DistributedQueue implementation.
-	// Distributed queues allow job processing to be spread across multiple instances or processes,
-	// enabling horizontal scaling of workers. Since void workers don't need to return results,
-	// they are perfect for distributed processing scenarios.
-	//
-	// Parameters:
-	//   - dq IDistributedQueue: A distributed queue implementation that satisfies the IDistributedQueue interface.
-	//     This could be backed by Redis or any other distributed messaging system.
-	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
-	//
-	// Returns:
-	//   - DistributedQueue[T, any]: A distributed queue that can distribute jobs across multiple workers or instances.
-	//
-	// Example usage:
-	//   dq := NewDistributedQueue() // satisfies IDistributedQueue interface, might be backed by Redis or other systems
-	//   distributedQueue := voidWorker.WithDistributedQueue(dq)
-	//   distributedQueue.Add(data) // This job can be processed by any worker instance listening to this queue
-	//
-	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
-	// and distributed storage.
-	WithDistributedQueue(dq IDistributedQueue, configs ...QueueConfigFunc) DistributedQueue[T]
-
-	// WithDistributedPriorityQueue binds the worker to a DistributedPriorityQueue implementation.
-	// This combines distributed processing with priority-based job ordering. Jobs are distributed
-	// across multiple instances but processed according to priority within each instance.
-	// This is ideal for scenarios where some jobs are more urgent than others, but still need
-	// to be processed in a distributed manner.
-	//
-	// Parameters:
-	//   - dq IDistributedPriorityQueue: A distributed priority queue implementation that satisfies
-	//     the IDistributedPriorityQueue interface. This could be backed by Redis or other
-	//     distributed messaging systems that support priority-based message ordering.
-	//   - configs ...QueueConfigFunc: Optional configuration functions to customize the queue behavior.
-	//
-	// Returns:
-	//   - DistributedPriorityQueue[T, any]: A distributed priority queue that can distribute jobs
-	//     across multiple workers while maintaining priority ordering.
-	//
-	// Example usage:
-	//   priorityQueue := NewDistributedPriorityQueue() // satisfies IDistributedPriorityQueue interface, might be backed by Redis or other systems
-	//   distributedPriorityQueue := voidWorker.WithDistributedPriorityQueue(priorityQueue)
-	//   distributedPriorityQueue.Add(data, -1) // This job will be processed with higher priority
-	//
-	// Deprecated: use WithQueue or WithPriorityQueue; they detect persistent
-	// and distributed storage.
-	WithDistributedPriorityQueue(dq IDistributedPriorityQueue, configs ...QueueConfigFunc) DistributedPriorityQueue[T]
-
 	// WithTopic subscribes the worker to a Topic. The subscription reads the
 	// topic's shared log through its own cursor and is registered with the
 	// worker as a job source, like a bound queue. Every payload published
@@ -217,17 +111,7 @@ type IWorkerBinder[T any] interface {
 func newQueues[T any](worker *worker[T, iJob[T]]) IWorkerBinder[T] {
 	// We can return the same workerBinder type but with the IVoidWorkerBinder interface
 	// This works because workerBinder implements all methods of IVoidWorkerBinder
-	return &workerBinder[T]{durableBinder[T, iJob[T]]{worker}}
-}
-
-// handleQueueSubscription processes notifications from distributed queues
-// When a job is enqueued in a distributed queue, this handler is called with the "enqueued" action
-// It then notifies the worker to pull and process the new job
-func (wb *workerBinder[T]) handleQueueSubscription(action string) {
-	switch action {
-	case "enqueued":
-		wb.worker.notifyToPullNextJobs()
-	}
+	return &workerBinder[T]{worker}
 }
 
 // BindQueue creates and binds a new standard queue to the worker
@@ -254,19 +138,6 @@ func (wb *workerBinder[T]) WithPriorityQueue(pq IPriorityQueue, configs ...Queue
 		return &durablePriorityQueue[T, struct{}, EnqueuedJob, EnqueuedGroupJob]{bindDurable[T, struct{}](wb.worker, pq, configs)}
 	}
 	return newPriorityQueue(wb.worker, pq, configs...)
-}
-
-// bindDistributed binds w to dq, wakes w on dq's notifications, and returns
-// the producer handle h. Shared by every worker kind.
-func bindDistributed[T any, JobType iJob[T], H any](w *worker[T, JobType], dq interface {
-	IBaseQueue
-	ISubscribable
-}, h H, configs []QueueConfigFunc) H {
-	c := loadQueueConfigs(configs...)
-	subscribeQueue(w, dq, w.bind(dq, c.priority))
-	w.watchCancels(dq)
-
-	return h
 }
 
 // subscribeQueue forwards q's notifications to w. For a batch source,
