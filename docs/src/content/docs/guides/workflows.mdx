@@ -163,7 +163,9 @@ On this handle, `Cancel`, `Status`, `Wait` and `WaitContext` work. `Submit` retu
 
 A workflow's queues must all be in the scope of its store. The scope of the in-memory store is the in-memory queues of your process. A task on a queue in another scope makes `Submit` return an error that wraps [`ErrScopeMismatch`](https://pkg.go.dev/github.com/goptics/varmq#ErrScopeMismatch).
 
-VarMQ itself has only the in-memory store. For a workflow that continues after a restart, or that spans processes, the queue storage must keep the workflow state. Such storage implements [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable). redisq v1.6.0 does, and sqliteq does not yet. Its `WorkflowStore()` returns a [`WorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowStore). Pass that store to `NewWorkflow` and `OpenWorkflow`. Bind its queues with `WithQueue` or `WithPriorityQueue`. A producer handle from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue) can be a task's queue too. A shared-storage queue without that support makes `Submit` return `ErrScopeMismatch`.
+For a workflow that continues after a restart, or that spans processes, the storage keeps the workflow state in a [`WorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowStore). Each adapter has its own store constructor: `redisq.NewWorkflowStore` and `sqliteq.NewWorkflowStore`. Pass that store to `NewWorkflow` and `OpenWorkflow`. Bind its queues with `WithQueue` or `WithPriorityQueue`. A producer handle from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue) can be a task's queue too.
+
+**Every process that runs tasks must create the store.** The store registers itself by its scope, and a worker finds it by the scope of the queue it takes a task from. A worker in a process without that store does not run the task. It reports `varmq: no workflow store for scope …`, at most once a minute for each scope, on [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) and to the error handler, and leaves the job for another try.
 
 <details>
 <summary>Details</summary>
@@ -171,23 +173,30 @@ VarMQ itself has only the in-memory store. For a workflow that continues after a
 - `Submit` builds a plan of the tasks and a SHA-256 hash of its shape. The store compares hashes to decide between "same workflow again" and `ErrWorkflowExists`.
 - `Wait` and `WaitContext` read the store every 50 ms.
 - Before a worker runs a task, it asks the store whether the task may still start (`WorkflowStore.Runnable`). That check cancels queued tasks after a cancel or a fail-fast failure.
-- On shared storage, a task ends through `WorkflowAcknowledgeable.FinishTask`. A task can run more than once there, for example after a crash before its end was recorded. Write task functions so that a second run does no harm.
-- Two durable stores with the same `ScopeID` share state, so one workflow can use the queues of both.
-- `GET /workflows` lists the stores that also implement [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector). The in-memory store does.
+- On shared storage, a task ends through the store's `FinishTask`, with the ID of the queue the job came from. A task can run more than once there, for example after a crash before its end was recorded. Write task functions so that a second run does no harm.
+- A process can register one adapter store per scope. A second `NewWorkflowStore` for the same scope returns `ErrScopeRegistered` from the `contract` module, until you close the first.
+- Job IDs that start with `wf:` belong to workflow tasks. A plain `Add` with such an ID returns `false`.
+- `GET /workflows` lists the registered stores that also implement [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector). The in-memory store does.
 
 </details>
 
 ### Workflows on Redis
 
-redisq v1.6.0 keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`WorkflowStore()`](https://pkg.go.dev/github.com/goptics/redisq#Queue.WorkflowStore) on any queue returns the store for that Redis server and namespace.
+redisq v1.6.0 keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`redisq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/redisq#NewWorkflowStore) makes the store for the client's Redis server, database and namespace.
 
 ```go
 qs := redisq.New("redis://localhost:6375")
 defer qs.Close()
 
+store, err := redisq.NewWorkflowStore(qs)
+if err != nil {
+	return err
+}
+defer store.Close()
+
 upload, thumb := qs.NewQueue("upload"), qs.NewPriorityQueue("thumb")
 
-wf := varmq.NewWorkflow(upload.WorkflowStore(), varmq.WithWorkflowID("upload-1"))
+wf := varmq.NewWorkflow(store, varmq.WithWorkflowID("upload-1"))
 up := wf.Add("upload", varmq.NewResultQueue[string, string](upload), "photo.png")
 wf.Add("thumb", varmq.NewResultPriorityQueue[int, string](thumb), 64).After(up)
 if err := wf.Submit(ctx); err != nil {
@@ -196,24 +205,66 @@ if err := wf.Submit(ctx); err != nil {
 rec, err := wf.WaitContext(ctx)
 ```
 
-The process that submits needs no worker. Workers in any process run the tasks. Each one binds the same redisq queue with `WithQueue` or `WithPriorityQueue`:
+The process that submits needs no worker. Workers in any process run the tasks. Each of those processes creates the store too, and binds the same redisq queue:
 
 ```go
+store, err := redisq.NewWorkflowStore(qs) // registers the store for this Redis scope
+if err != nil {
+	return err
+}
+defer store.Close()
+
 w := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) {
 	return "s3://bucket/" + j.Data(), nil
 })
-w.WithQueue(upload)
+w.WithQueue(qs.NewQueue("upload"))
 ```
 
-- **The workflow survives a restart.** Redis keeps its state. So `OpenWorkflow(upload.WorkflowStore(), "upload-1")` works in any process that uses the same Redis server and namespace.
+- **The workflow survives a restart.** Redis keeps its state. So `OpenWorkflow(store, "upload-1")` works in any process that uses the same Redis server, database and namespace.
 - **A task ends in one step.** One script records the end of a task and queues the tasks that wait for it. So a crash never leaves a workflow between the two.
-- **Set the store on `redisq.New`.** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowResultLimit) sets the largest task result, 64 KiB by default. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowRetention) sets how long an ended workflow is kept, 7 days by default.
+- **Store options go to `NewWorkflowStore`.** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowResultLimit) sets the largest task result, 64 KiB by default. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowRetention) sets how long an ended workflow is kept, 7 days by default.
+- **Closing.** `store.Close` unregisters the store and leaves the client open. Closing the client also closes its store.
+- **One Redis credential per scope in a process,** with the same ACL user and TLS settings. The scope is the address, database and namespace. The registered store ends the tasks of every client of that scope over its own connection.
 - **Every process that runs a task must use redisq v1.6.0 or newer.**
 - **Do not call `SetExpiration` on a queue that carries tasks.** `Submit` refuses such a queue.
 - **Redis Cluster is not supported** for workflows.
 - **Protect write access to Redis.** Anyone who can add jobs to a task's queue can add a copy of a task.
 
-The redisq repository has [`examples/workflow`](https://github.com/goptics/redisq/tree/main/examples/workflow), which runs one workflow across three processes. sqliteq has no workflow store yet. A task on a sqliteq queue makes `Submit` return `ErrScopeMismatch`.
+The redisq repository has [`examples/workflow`](https://github.com/goptics/redisq/tree/main/examples/workflow), which runs one workflow across three processes.
+
+### Workflows on SQLite
+
+sqliteq v0.4.0 keeps workflows in SQLite. [`sqliteq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/sqliteq#NewWorkflowStore) makes the store for the client's root.
+
+```go
+qs, err := sqliteq.New("data")
+if err != nil {
+	return err
+}
+defer qs.Close()
+
+store, err := sqliteq.NewWorkflowStore(qs)
+if err != nil {
+	return err
+}
+defer store.Close()
+
+reserve, _ := qs.NewQueue("reserve")
+charge, _ := qs.NewQueue("charge")
+
+wf := varmq.NewWorkflow(store)
+r := wf.Add("reserve", varmq.NewResultQueue[string, string](reserve), "sku-1")
+wf.Add("charge", varmq.NewErrQueue[int](charge), 100).After(r)
+err = wf.Submit(ctx)
+```
+
+- **Where the state lives.** By default, the store keeps workflows in their own file, `__sqliteq_workflows.db`, next to the queue files. With [`WithSingleFile`](https://pkg.go.dev/github.com/goptics/sqliteq#WithSingleFile), it uses tables in that one file.
+- **How a task ends.** With one file per queue, a task's end and the tasks it releases cannot share one transaction. The store writes the released tasks to an outbox in the same transaction as the end. Then it pushes each released task at once. A loop pushes any rows that are left, when the store opens and every second after that. A task can be pushed twice, and the pre-run check skips a copy whose task already ended. With `WithSingleFile`, the end, the pushes and the acknowledgement are one transaction.
+- **After a crash.** A task that the loop pushes starts at the worker's next poll, because the loop cannot wake workers.
+- **Options:** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/sqliteq#WithWorkflowResultLimit) and [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/sqliteq#WithWorkflowRetention), with the same defaults as redisq.
+- **Closing.** Close the store before the client. Closing the client does not close the store.
+- **One process.** sqliteq queues serve one process, so a workflow on SQLite runs in one process too. It survives a restart of that process.
+- **Protect the files.** Anyone who can write the queue files or `__sqliteq_workflows.db` can add or end tasks, and anyone who can read them sees task data and results. Give the folder to the service user only.
 
 For the errors that workflow calls return, see [errors](/guides/errors/#returned-by-calls-you-make).
 
