@@ -125,6 +125,9 @@ type ackExt struct {
 const remoteResultLimit = 64 << 10
 
 // taskTag names the workflow task a job runs. store is nil until bound.
+// missingStore: a durable task (scope set) with no store to finish it.
+func (t *taskTag) missingStore() bool { return t.store == nil && t.scope != "" }
+
 type taskTag struct {
 	wf, task string
 	undo     bool // the task's undo job, not the task
@@ -220,8 +223,10 @@ func newJob[T any](data T, configs jobConfigs) *job[T] {
 
 // setAck records the storage and ack id Close acknowledges with. An empty id
 // means there is nothing to acknowledge, so nothing is stored. A workflow
-// tag parseToJob set is kept, bound to the workflow store registered for q's scope; nothing else of
-// the old ack is (a stale reason would reject the job).
+// tag parseToJob set is kept, bound to the workflow store registered for q's
+// scope; nothing else of the old ack is (a stale reason would reject the job).
+// A durable task with no store, or on storage with no Queue ID, has none:
+// see taskTag.missingStore.
 // ponytail: one 32-byte allocation per acked job; that path already pays
 // json.Unmarshal, so this is not pooled.
 func (j *job[T]) setAck(q IAcknowledgeable, id string) {
@@ -234,7 +239,9 @@ func (j *job[T]) setAck(q IAcknowledgeable, id string) {
 		tag := *old.ext.task
 		if sc, ok := q.(Scoped); ok {
 			tag.scope = sc.ScopeID()
-			tag.store, _ = contract.LookupWorkflowStore(tag.scope)
+			if qi, has := q.(QueueInspector); has && qi.QueueID() != "" {
+				tag.store, _ = contract.LookupWorkflowStore(tag.scope)
+			}
 		}
 		ref.ext = &ackExt{task: &tag}
 	}
@@ -593,7 +600,7 @@ func (j *job[T]) acknowledge() error {
 
 	// A scoped durable task with no store is never acked: it stays for
 	// redelivery (the worker reported the missing store).
-	if task != nil && task.store == nil && task.scope != "" {
+	if task != nil && task.missingStore() {
 		return nil
 	}
 

@@ -42,10 +42,16 @@ func registerMemWorkflowStore(m *memWorkflowStore) {
 	memWorkflows.Store(fmt.Sprintf("%s#%p", m.ScopeID(), m), weak.Make(m))
 }
 
-// workflowStores is every registered durable store plus the in-memory ones
+// workflowStores is every registered durable store (in-memory stores must
+// not be registered with contract) plus the in-memory ones
 // still alive; the entry of a collected in-memory store is removed.
 func workflowStores() []WorkflowStore {
-	out := contract.WorkflowStores()
+	var out []WorkflowStore
+	for _, s := range contract.WorkflowStores() {
+		if _, mem := s.(*memWorkflowStore); !mem { // listed below, once
+			out = append(out, s)
+		}
+	}
 	memWorkflows.Range(func(k, v any) bool {
 		if m := v.(weak.Pointer[memWorkflowStore]).Value(); m != nil {
 			out = append(out, m)
@@ -133,8 +139,10 @@ func summarizeWorker(w Worker) workerSummary {
 // Handler sets [InstanceHeader] on every response, including the 404 and 405
 // replies ServeMux generates itself for unknown paths or methods.
 //
-// The PATCH routes change state and have no auth: protect Handler. The
-// worker routes act on this process only, but PATCH /queues/{id}/actions
+// GET /workflows serves every workflow store registered in the process, a
+// producer-only process included, and PATCH /workflows/{id}/actions/cancel
+// cancels in any of them. The PATCH routes change state and have no auth:
+// protect Handler. The worker routes act on this process only, but PATCH /queues/{id}/actions
 // pauses a shared queue for every process that consumes it, and the pause
 // outlives restarts. PATCH /queues/{id}/jobs/{jobId}/actions/cancel on
 // shared storage also reaches every consumer process: it marks the ID for
@@ -151,7 +159,7 @@ func Handler(prefix string) http.Handler {
 
 // NewServerMux returns a new [http.ServeMux] with all the REST API routes configured.
 // The returned mux has no path prefix, so it can be used directly or mounted
-// under any prefix using [Handler].
+// under any prefix using [Handler]. Its routes have no auth: see [Handler].
 func NewServerMux() *http.ServeMux {
 	served.Store(true) // in-memory runs are tracked for the job routes from now on
 	mux := http.NewServeMux()

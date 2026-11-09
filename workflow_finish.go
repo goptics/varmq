@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"weak"
 )
 
@@ -44,13 +45,15 @@ func (w *worker[T, JobType]) runnable(j JobType) bool {
 	if t == nil {
 		return true
 	}
-	if t.store == nil {
-		if t.scope == "" { // in-memory, never submitted
-			return true
+	if t.missingStore() {
+		// Never run it unchecked. The pool holds it.
+		if noStoreDue(t.scope) {
+			w.sendError(fmt.Errorf("varmq: no workflow store for scope %s: create the storage's workflow store (for example redisq.NewWorkflowStore)", t.scope))
 		}
-		// Durable task, no store: never run it unchecked. The pool holds it.
-		w.sendError(fmt.Errorf("varmq: no workflow store for scope %s: create the storage's workflow store (for example redisq.NewWorkflowStore)", t.scope))
 		return false
+	}
+	if t.store == nil { // in-memory, never submitted
+		return true
 	}
 
 	ok, err := t.store.Runnable(context.Background(), t.wf, t.task, t.undo)
@@ -63,6 +66,34 @@ func (w *worker[T, JobType]) runnable(j JobType) bool {
 	}
 
 	return ok
+}
+
+// noStoreEvery is how often one scope's missing store is reported.
+const noStoreEvery = time.Minute
+
+// noStoreSeen is when each scope's missing store was last reported.
+var noStoreSeen sync.Map // scope → time.Time
+
+// noStoreDue reports whether the missing store of scope is due for an error:
+// once per scope per noStoreEvery, so a misconfigured worker does not flood
+// Errs() and the handler.
+func noStoreDue(scope string) bool {
+	now := time.Now()
+	for {
+		prev, loaded := noStoreSeen.Load(scope)
+		if !loaded {
+			if _, raced := noStoreSeen.LoadOrStore(scope, now); !raced {
+				return true
+			}
+			continue
+		}
+		if now.Sub(prev.(time.Time)) < noStoreEvery {
+			return false
+		}
+		if noStoreSeen.CompareAndSwap(scope, prev, now) {
+			return true
+		}
+	}
 }
 
 // queuePoker wakes one worker bound to a queue: its source's ready hint,

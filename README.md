@@ -319,7 +319,7 @@ if job, ok := queue.Add("error"); ok {
 
 ### Workflows
 
-A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails or is cancelled (`WithUndoOnCancel(false)` opts out). Needs Go 1.27.
+A workflow is a DAG of jobs over queues. A task is queued the moment its last dependency ends, in the same atomic storage step. `Always()` runs a task even if a dependency failed. `Undo` registers a compensation, run in reverse order if the workflow fails or is cancelled (`WithUndoOnCancel(false)` opts out). Needs Go 1.27. Every process that runs tasks on shared storage creates the adapter's workflow store first (for example `redisq.NewWorkflowStore`); a task with no store for its scope is not run and not acked.
 
 ```go
 wf := varmq.NewWorkflow(varmq.NewWorkflowStore(), varmq.WithWorkflowID("upload-1"))

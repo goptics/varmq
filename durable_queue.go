@@ -63,6 +63,9 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 // given ID dedupes.
 func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []byte, onceID string) bool) (*remoteJob[R], bool) {
 	c := loadJobConfigs(d.cfg(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	_, ow := d.s.(OutcomeWatcher)
 	_, jc := d.s.(JobCanceller)
 	if (ow || jc) && c.Id == "" {

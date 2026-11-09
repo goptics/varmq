@@ -2991,21 +2991,125 @@ func TestMuxWorkflowsListRegisteredStore(t *testing.T) {
 	assert.Equal(t, "r1", recs[0].ID)
 }
 
-// TestRegisterWorkflowStoreScopeTaken: one store per scope; the same store
-// again is a no-op, and a closed store's scope is free.
-func TestRegisterWorkflowStoreScopeTaken(t *testing.T) {
+// ackCountBatch is batch storage that counts the acks it gets.
+type ackCountBatch struct {
+	*batchTestQueue
+	wfStorage
+	acks atomic.Int32
+}
+
+func (q *ackCountBatch) Acknowledge(string) bool { q.acks.Add(1); return true }
+
+// TestWorkflowNoStoreBatchPath: on batch storage too, a task with no store
+// is not run, reported and not acked.
+func TestWorkflowNoStoreBatchPath(t *testing.T) {
 	resetWorkflowStores(t)
-	a := &fakeWorkflowStore{scope: "dup:1"}
-	b := &fakeWorkflowStore{scope: "dup:1"}
-	require.NoError(t, contract.RegisterWorkflowStore(a))
-	require.NoError(t, contract.RegisterWorkflowStore(a))
-	assert.ErrorIs(t, contract.RegisterWorkflowStore(b), contract.ErrScopeRegistered)
+	q := &ackCountBatch{batchTestQueue: &batchTestQueue{}, wfStorage: wfStorage{"q-nb", "nostore:b"}}
+	var ran atomic.Int32
+	w := NewWorker(func(Job[int]) { ran.Add(1) })
+	defer w.Stop()
+	defer queueRegistry.Delete("q-nb")
+	require.True(t, q.Enqueue(taskBytes(t, "nb", "a", 1)))
+	w.WithQueue(q)
 
-	contract.UnregisterWorkflowStore(b) // not the registered one: no-op
-	got, ok := contract.LookupWorkflowStore("dup:1")
-	require.True(t, ok)
-	assert.Same(t, a, got)
+	select {
+	case err := <-w.Errs():
+		assert.ErrorContains(t, err, "no workflow store for scope nostore:b")
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing store never reported")
+	}
+	w.WaitUntilIdle()
+	assert.Zero(t, ran.Load())
+	assert.Zero(t, q.acks.Load(), "not acked")
+}
 
-	contract.UnregisterWorkflowStore(a)
-	require.NoError(t, contract.RegisterWorkflowStore(b))
+// scopeOnly is Scoped storage with no QueueInspector.
+type scopeOnly struct {
+	*mocks.MockPersistentQueue
+	scope string
+}
+
+func (s scopeOnly) ScopeID() string { return s.scope }
+
+// TestWorkflowCloseWithoutStore: closing a waiting durable task never acks
+// it when its scope has no store, or its storage has no Queue ID.
+func TestWorkflowCloseWithoutStore(t *testing.T) {
+	resetWorkflowStores(t)
+	useStore(t, fakeWFStore{scope: "closed:1"}) // a store exists, but no Queue ID
+
+	for name, mk := range map[string]func(*mocks.MockPersistentQueue) IAcknowledgeable{
+		"no store": func(m *mocks.MockPersistentQueue) IAcknowledgeable {
+			return struct {
+				*mocks.MockPersistentQueue
+				wfStorage
+			}{m, wfStorage{"q-c", "nostore:c"}}
+		},
+		"no queue ID": func(m *mocks.MockPersistentQueue) IAcknowledgeable {
+			return scopeOnly{m, "closed:1"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := mocks.NewMockPersistentQueue()
+			j := newJob(1, jobConfigs{Id: "wf:c:a"})
+			j.setTask(taskTag{wf: "c", task: "a"})
+			j.setAck(mk(m), "ack1")
+			require.NoError(t, j.Close())
+			assert.Empty(t, m.Acked())
+			assert.Empty(t, m.Rejected())
+		})
+	}
+}
+
+// capQueue records the capacity the binder sets.
+type capQueue struct {
+	*mocks.MockPersistentQueue
+	cap int
+}
+
+func (q *capQueue) SetCapacity(n int) { q.cap = n }
+
+// TestWithQueueCapacityDurable: a durable WithQueue handle passes
+// WithQueueCapacity to storage that is a CapacitySetter.
+func TestWithQueueCapacityDurable(t *testing.T) {
+	s := &capQueue{MockPersistentQueue: mocks.NewMockPersistentQueue()}
+	w := NewWorker(func(Job[int]) {})
+	defer w.Stop()
+	w.WithQueue(s, WithQueueCapacity(3))
+	assert.Equal(t, 3, s.cap)
+}
+
+// TestNoStoreErrorRateLimited: one scope's missing store is reported once
+// per interval.
+func TestNoStoreErrorRateLimited(t *testing.T) {
+	noStoreSeen.Delete("rl:1")
+	defer noStoreSeen.Delete("rl:1")
+	assert.True(t, noStoreDue("rl:1"))
+	assert.False(t, noStoreDue("rl:1"))
+	assert.True(t, noStoreDue("rl:2"), "another scope")
+	noStoreSeen.Delete("rl:2")
+	noStoreSeen.Store("rl:1", time.Now().Add(-2*noStoreEvery))
+	assert.True(t, noStoreDue("rl:1"), "due again")
+}
+
+// TestReservedWorkflowJobID: a plain Add may not use the "wf:" id prefix.
+func TestReservedWorkflowJobID(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	_, ok := q.Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "memory queue")
+	_, ok = q.Add(1, WithJobId("wfx"))
+	assert.True(t, ok, "other ids are fine")
+
+	pq := w.BindPriorityQueue()
+	_, ok = pq.Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "priority queue")
+
+	g := NewWorker(func(Job[int]) {}, WithAutoRun(false), WithJobIdGenerator(func() string { return "wf:gen" }))
+	_, ok = g.BindQueue().Add(1)
+	assert.False(t, ok, "generated id")
+
+	s := mocks.NewMockPersistentQueue()
+	_, ok = NewQueue[int](s).Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "durable producer")
+	assert.Zero(t, s.Len())
 }

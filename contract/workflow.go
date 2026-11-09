@@ -154,6 +154,7 @@ var (
 	ErrResultTooLarge   = errors.New("varmq: task result too large")
 	ErrScopeMismatch    = errors.New("varmq: queues are in different storage scopes")
 	ErrScopeRegistered  = errors.New("varmq: a workflow store is already registered for this scope")
+	ErrInvalidStore     = errors.New("varmq: workflow store is nil or has an empty scope")
 )
 
 // Durable workflow stores of this process, by ScopeID. A queue names only its
@@ -168,11 +169,19 @@ var (
 )
 
 // RegisterWorkflowStore makes s the store of its scope. Registering s again
-// is a no-op; another store for the same scope is ErrScopeRegistered.
+// is a no-op; another store for the same scope is ErrScopeRegistered. A nil
+// store or an empty ScopeID is ErrInvalidStore. s must be comparable: pass a
+// pointer.
 func RegisterWorkflowStore(s WorkflowStore) error {
+	if s == nil {
+		return ErrInvalidStore
+	}
+	scope := s.ScopeID()
+	if scope == "" {
+		return ErrInvalidStore
+	}
 	storesMu.Lock()
 	defer storesMu.Unlock()
-	scope := s.ScopeID()
 	if cur, ok := stores[scope]; ok && cur != s {
 		return ErrScopeRegistered
 	}

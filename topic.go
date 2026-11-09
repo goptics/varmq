@@ -222,7 +222,7 @@ func (s *subscription[T]) Purge() {
 }
 
 // topicView adapts a log cursor to IBaseQueue so subscription can embed
-// externalBaseQueue (Len, NumPending, IsFull); subscription overrides Purge
+// externalBaseQueue (Len, IsFull); subscription overrides Purge
 // and Close. The scheduler reads jobs via topicSource on the same cursor.
 type topicView[T any] struct {
 	cursor *topics.Cursor[T]

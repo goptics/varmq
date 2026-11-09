@@ -35,6 +35,9 @@ func newPriorityQueue[T any](w *worker[T, iJob[T]], pq IPriorityQueue, configs .
 
 func (q *priorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -109,6 +112,9 @@ func newResultPriorityQueue[T, R any](w *worker[T, iResultJob[T, R]], pq IPriori
 
 func (q *resultPriorityQueue[T, R]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newResultJob[T, R](data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -183,6 +189,9 @@ func newErrorPriorityQueue[T any](w *worker[T, iErrorJob[T]], pq IPriorityQueue,
 
 func (q *errorPriorityQueue[T]) Add(data T, priority int, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newErrorJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)

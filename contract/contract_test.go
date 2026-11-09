@@ -104,3 +104,13 @@ func TestWorkflowStoreRegistry(t *testing.T) {
 		t.Fatal("still registered after Unregister")
 	}
 }
+
+// A nil store or an empty scope is refused.
+func TestRegisterWorkflowStoreInvalid(t *testing.T) {
+	if err := RegisterWorkflowStore(nil); !errors.Is(err, ErrInvalidStore) {
+		t.Fatalf("nil: %v, want ErrInvalidStore", err)
+	}
+	if err := RegisterWorkflowStore(&fakeStore{}); !errors.Is(err, ErrInvalidStore) {
+		t.Fatalf("empty scope: %v, want ErrInvalidStore", err)
+	}
+}

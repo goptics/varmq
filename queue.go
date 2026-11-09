@@ -53,6 +53,9 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -127,6 +130,9 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newErrorJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -200,6 +206,9 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newResultJob[T, R](data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)

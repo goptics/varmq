@@ -1406,7 +1406,7 @@ func TestMuxJobIDEscaping(t *testing.T) {
 		return rr
 	}
 
-	for _, id := range []string{"a/b", "a%b", "a b", "wf:x:y", "a//b", "a/../b", "a/./b", "/a", "a/", "a?b#c"} {
+	for _, id := range []string{"a/b", "a%b", "a b", "w:x:y", "a//b", "a/../b", "a/./b", "/a", "a/", "a?b#c"} {
 		t.Run(id, func(t *testing.T) {
 			j, ok := q.Add(1, WithJobId(id))
 			require.True(t, ok)

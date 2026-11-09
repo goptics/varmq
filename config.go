@@ -295,7 +295,8 @@ func WithAutoRun(run bool) ConfigFunc {
 }
 
 // WithJobIdGenerator sets the job ID generator function for the worker.
-// If not set there wouldn't be any job id
+// If not set there wouldn't be any job id. An Add whose generated id starts
+// with "wf:" (reserved for workflow tasks) returns false.
 //
 // In-memory queues do not check generated ids. WithQueue / WithPriorityQueue
 // on shared storage do not dedupe generated ids but key outcomes by them: a
@@ -433,8 +434,9 @@ func applyJobConfigs(c jobConfigs, config []JobConfigFunc) jobConfigs {
 
 // WithJobId sets the job ID for the job.
 //
-// An in-memory Add returns false while a job with the same id is in the
-// queue. Shared storage dedupes by job id (EnqueueOnce): see its docs.
+// The "wf:" prefix is reserved for workflow tasks: an Add with such an id
+// returns false. An in-memory Add returns false while a job with the same id
+// is in the queue. Shared storage dedupes by job id (EnqueueOnce): see its docs.
 func WithJobId(id string) JobConfigFunc {
 	return func(c *jobConfigs) {
 		if id == "" {
