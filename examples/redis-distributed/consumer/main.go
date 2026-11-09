@@ -16,7 +16,7 @@ func main() {
 
 	redisQueue := redisq.New("redis://localhost:6375")
 	defer redisQueue.Close()
-	rq := redisQueue.NewDistributedQueue("distributed_queue")
+	rq := redisQueue.NewQueue("distributed_queue")
 	defer rq.Close()
 	defer rq.Listen()
 
@@ -28,8 +28,8 @@ func main() {
 		fmt.Printf("Scraped url: %s, id: %s\n", url, id)
 	}, 5)
 
-	// Using redisq adapter (you can use any adapter that implements IDistributedQueue)
-	q := w.WithDistributedQueue(rq)
+	// any storage that implements varmq.IQueue works here; redisq also wakes idle workers
+	q := w.WithQueue(rq)
 
 	fmt.Println("pending jobs:", q.Len())
 	fmt.Println("listening...")

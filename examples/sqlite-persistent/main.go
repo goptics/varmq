@@ -16,7 +16,7 @@ func main() {
 		panic(err)
 	}
 
-	// Create a persistent queue with optional configuration
+	// Create a queue stored in the SQLite file
 	persistentQueue, err := sdb.NewQueue("test")
 
 	if err != nil {
@@ -30,8 +30,8 @@ func main() {
 		fmt.Printf("Processed: %s\n", j.Data())
 	})
 
-	// Bind the worker to the persistent queue
-	queue := worker.WithPersistentQueue(persistentQueue)
+	// Bind the worker to the SQLite queue
+	queue := worker.WithQueue(persistentQueue)
 	defer worker.Wait()
 
 	for i := range 10 {

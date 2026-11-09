@@ -15,15 +15,15 @@ func main() {
 	pq := rdb.NewQueue("persistent_queue")
 	defer pq.Close()
 
-	// bind with persistent queue
+	// bind to shared storage
 	w := varmq.NewWorker(func(j varmq.Job[int]) {
 		fmt.Printf("Processing: %d\n", j.Data())
 		time.Sleep(1 * time.Second)
 		fmt.Println("Processed: ", j.Data())
 	})
 
-	// Using redisq adapter (you can use any adapter that implements IPersistentQueue)
-	q := w.WithPersistentQueue(pq)
+	// any storage that implements varmq.IQueue works here
+	q := w.WithQueue(pq)
 	start := time.Now()
 	defer func() {
 		fmt.Println("Time taken:", time.Since(start).Microseconds(), "ms")
