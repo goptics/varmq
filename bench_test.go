@@ -198,6 +198,25 @@ func BenchmarkAddWithId(b *testing.B) {
 		})
 	})
 
+	// ParallelTracked keeping the last 200 ended jobs (WithEndedJobs):
+	// a record per job, its payload as JSON.
+	b.Run("ParallelKept", func(b *testing.B) {
+		NewServerMux()
+		worker := NewWorker(task, WithName("bench-kept"), runtime.GOMAXPROCS(0))
+		q := worker.BindQueue(WithEndedJobs(200))
+		defer worker.StopAndWait()
+
+		var n atomic.Uint64
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				job, _ := q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+				job.Wait()
+			}
+		})
+	})
+
 	b.Run("Repeat", func(b *testing.B) {
 		worker := NewWorker(task, WithAutoRun(false))
 		q := worker.BindQueue()

@@ -1982,3 +1982,22 @@ func TestEndedJobsWorkflowTask(t *testing.T) {
 	assert.Equal(t, ErrResultTooLarge.Error(), rec.Errors[0].Error)
 	assert.Nil(t, rec.Result)
 }
+
+// Off (WithEndedJobs 0, the default), a job's end allocates nothing more:
+// keep is one field load. On, it builds a record.
+func TestEndedJobsOffAllocsNothing(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	j := newJob(1, jobConfigs{Id: "a"})
+	j.countedBy(m)
+	end := func() {
+		j.succeed()
+		m.keep(j, JobFailed, "x", nil) // fail and endFailed: their own alloc (fail's &reason) predates keep
+		m.keep(j, JobCancelled, "", nil)
+	}
+	assert.Zero(t, testing.AllocsPerRun(100, end), "off")
+	m.endedN = 1
+	assert.Positive(t, testing.AllocsPerRun(100, end), "on")
+}
