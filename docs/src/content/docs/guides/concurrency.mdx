@@ -55,7 +55,7 @@ Move the limit in the scene below and watch the goroutines. The slider calls `Tu
 
 ## Changing the limit with TunePool
 
-`TunePool` changes the limit of an active worker, one that is `Idle` or `Running`. It returns at once, and the new limit applies to the next job the worker hands out. A value below 1 means one per CPU, as above.
+`TunePool` changes the limit of an active worker, one that is `Idle` or `Running`. It returns at once, and the new limit applies to the next job the worker gives out. A value below 1 means one per CPU, as above.
 
 ```go
 if err := worker.TunePool(8); err != nil {
@@ -114,3 +114,5 @@ Send a burst below and watch what each setting leaves in the pool.
 <IdleScene />
 
 Idle goroutines let the next burst of jobs start without the cost of starting goroutines. Each one holds a goroutine's memory. [`DefaultMinIdleWorkerRatio`](https://pkg.go.dev/github.com/goptics/varmq#DefaultMinIdleWorkerRatio) and [`DefaultIdleWorkerExpiryDuration`](https://pkg.go.dev/github.com/goptics/varmq#DefaultIdleWorkerExpiryDuration) set both for workers created after the call. [Configuration](/guides/configuration/) lists every option and its default.
+
+Next: [Adding many jobs](/guides/adding-many/).

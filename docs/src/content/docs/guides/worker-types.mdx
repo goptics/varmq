@@ -52,7 +52,7 @@ When the function returns a non-nil error, `Result` returns that error and the z
 
 ## What a handle has
 
-Every handle has [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status), [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed), `Wait()` and [`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close). The error and result handles add `Err()` or `Result()`, and a [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain) method.
+Every handle has [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), [`Status()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status), [`IsClosed()`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed), `Wait()`, `WaitContext()`, [`Close()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) and [`Cancel()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Cancel). The error and result handles add `Err()` or `Result()`, and a [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain) method.
 
 `Drain` does nothing on a single job. It exists for the group handles that [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns ([adding many jobs](/guides/adding-many/)). So `Err` and `Result` give the same answer whether or not you call it.
 
@@ -64,12 +64,12 @@ Each constructor returns a binder that holds the binding methods: [`IWorkerBinde
 |---|---|---|---|
 | [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue) and [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) return | [`Queue[T]`](https://pkg.go.dev/github.com/goptics/varmq#Queue) | [`ErrQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#ErrQueue) | [`ResultQueue[T, R]`](https://pkg.go.dev/github.com/goptics/varmq#ResultQueue) |
 | [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue) and [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) return | [`PriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue) | [`ErrPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#ErrPriorityQueue) | [`ResultPriorityQueue[T, R]`](https://pkg.go.dev/github.com/goptics/varmq#ResultPriorityQueue) |
-| [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue), [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue), [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue) | yes | no | no |
+| Shared storage, such as redisq or sqliteq, through `WithQueue` and `WithPriorityQueue` | yes | yes | yes |
 | [`WithTopic`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithTopic) | yes | no | no |
 
-An error or result worker binds in-memory queues only. For a persistent queue, a distributed queue or a topic, use `NewWorker`.
+Every worker type can bind shared storage. A topic needs `NewWorker`.
 
-The handles in this guide are what an in-memory queue's `Add` returns. On a persistent or distributed queue, `Add` returns only a `bool`, `false` when the storage refused the job. There is no job handle, so there is nothing to `Wait` on or to read an outcome from.
+On shared storage, `Add` returns the same handles. The outcome comes back from the process that ran the job. [Jobs in other processes](/concepts/jobs/#jobs-in-other-processes) covers the differences.
 
 ## What follows the function
 
@@ -78,3 +78,5 @@ All three constructors take the same trailing arguments, `config ...any`: an `in
 ```go
 worker := varmq.NewResultWorker(parse, 4, "parser", varmq.WithAutoRun(false))
 ```
+
+Next: [Queues](/guides/queues/).

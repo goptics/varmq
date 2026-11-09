@@ -42,24 +42,18 @@ Do not call `Wait`, `WaitUntilIdle` or the combined calls below on a worker from
 
 ### Waiting with a timeout
 
-`Wait` and the other wait calls take no context and no timeout. To give up after a time, run the call in a goroutine and select on it:
+[`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitContext) is `Wait` with a context. It returns `nil` when `Wait` would return, or the context's error when the context ends first:
 
 ```go
-done := make(chan struct{})
-go func() {
-	worker.Wait()
-	close(done)
-}()
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
 
-select {
-case <-done:
-	// Wait returned; on a paused or stopped worker, jobs can still be pending
-case <-time.After(30 * time.Second):
-	// gave up; the goroutine still waits until the work is done
+if err := worker.WaitContext(ctx); err != nil {
+	// gave up; the jobs still run
 }
 ```
 
-The goroutine keeps waiting after the timeout. It ends when the worker drains, pauses or stops. Each call that times out leaves one goroutine waiting, so do not retry the timeout in a loop while the worker stays busy. When `Wait` returns, check `NumPending` and the status before you assume every job ran.
+Giving up does not stop the worker or its jobs. When `WaitContext` returns `nil`, check `NumPending` and the status before you assume every job ran. A job handle has its own [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.WaitContext). The other wait calls on this page take no context.
 
 ## Waiting for a state
 
@@ -95,7 +89,9 @@ The pause pair works the same way. `WaitAndPause` lets the work finish before it
 
 Two methods on [`Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) count the work in flight:
 
-- [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the number of jobs that have not started. It counts the jobs waiting in the bound queues and the jobs a goroutine has taken into a batch but not started. It also counts the jobs parked by a pause or stop. A queue's own [`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) counts only the first group. A job you closed while it waited still counts until the worker reaches it. While a goroutine works through a batch, the batch's finished jobs still count until the whole batch ends. So during a run, it can be too high. It is exact once the worker is idle, paused or stopped.
+- [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) is the number of jobs that have not started. It counts the jobs waiting in the bound queues, and the jobs taken into a batch or parked. During a run it can read too high. It is exact once the worker is idle, paused or stopped. [Lifecycle](/concepts/lifecycle/#what-happens-to-jobs) explains how it differs from a queue's `Len()`.
 - [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) is the number of jobs running right now. It is at most the [concurrency](/guides/concurrency/) limit, except for a while after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers it.
 
 Each is read on its own, so the two together are not a snapshot of one moment. They suit a progress display or a backpressure check. To know that the work is finished, use `Wait`. For counters over the worker's lifetime, see [metrics](/guides/metrics/).
+
+Next: [Errors](/guides/errors/).

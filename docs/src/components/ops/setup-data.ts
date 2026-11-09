@@ -38,52 +38,41 @@ export const redisSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'varmq’s version is the release these pages describe.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq@v1.6.0' }],
 	},
 	{
 		title: 'Create a queue and bind it',
-		text: `<a href="${pkg}/redisq#New"><code>redisq.New</code></a> takes a Redis URL and returns a <a href="${pkg}/redisq#Queues"><code>Queues</code></a> value. It panics when the URL does not parse. Each queue takes a key, which names it in Redis. Pick the kind of queue.`,
+		text: `<a href="${pkg}/redisq#New"><code>redisq.New</code></a> takes a Redis URL and returns a <a href="${pkg}/redisq#Queues"><code>Queues</code></a> value. It panics when the URL does not parse. Each queue takes a key, which names it in Redis. Pick the order.`,
 		code: [
 			{
-				label: 'Persistent',
+				label: 'First in, first out',
 				lang: 'go',
 				file: 'main.go',
 				code:
 					'rdb := redisq.New("redis://localhost:6375")\ndefer rdb.Close()\n\n' +
-					'pq := rdb.NewQueue("persistent_queue")\ndefer pq.Close()\n\n' +
-					'queue := worker.WithPersistentQueue(pq)',
-				note: 'First in, first out, on a Redis list. One process keeps its jobs across a restart.',
+					'rq := rdb.NewQueue("jobs")\ndefer rq.Close()\n\n' +
+					'queue := worker.WithQueue(rq)',
+				note: 'First in, first out, on a Redis list. Jobs survive a restart. Several processes can consume one queue, and each job goes to one of them.',
 			},
 			{
-				label: 'Persistent priority',
+				label: 'Lowest number first',
 				lang: 'go',
 				file: 'main.go',
 				code:
 					'rdb := redisq.New("redis://localhost:6375")\ndefer rdb.Close()\n\n' +
-					'pq := rdb.NewPriorityQueue("persistent_priority_queue")\ndefer pq.Close()\n\n' +
-					'queue := worker.WithPersistentPriorityQueue(pq)\nqueue.Add("alert", 1) // a lower number runs first',
+					'rq := rdb.NewPriorityQueue("priority_jobs")\ndefer rq.Close()\n\n' +
+					'queue := worker.WithPriorityQueue(rq)\nqueue.Add("alert", 1) // a lower number runs first',
 				note: 'Lowest number first, on a sorted set.',
 			},
 			{
-				label: 'Distributed',
+				label: 'Producer only',
 				lang: 'go',
 				file: 'main.go',
 				code:
 					'rdb := redisq.New("redis://localhost:6375")\ndefer rdb.Close()\n\n' +
-					'dq := rdb.NewDistributedQueue("distributed_queue")\ndefer dq.Close()\n\n' +
-					'queue := worker.WithDistributedQueue(dq)\n\n' +
-					'// or, in a process that only adds jobs:\n// producer := varmq.NewDistributedQueue[string](dq)',
-				note: 'Several processes consume one queue, and each job goes to one of them. Adding a job wakes an idle consumer.',
-			},
-			{
-				label: 'Distributed priority',
-				lang: 'go',
-				file: 'main.go',
-				code:
-					'rdb := redisq.New("redis://localhost:6375")\ndefer rdb.Close()\n\n' +
-					'dq := rdb.NewDistributedPriorityQueue("distributed_priority_queue")\ndefer dq.Close()\n\n' +
-					'queue := worker.WithDistributedPriorityQueue(dq)',
-				note: 'Lowest number first, plus wake-ups for idle consumers.',
+					'rq := rdb.NewQueue("jobs")\ndefer rq.Close()\n\n' +
+					'producer := varmq.NewQueue[string](rq)\njob, _ := producer.Add("job 1")',
+				note: 'A process that only adds jobs. Adding a job wakes an idle consumer in another process.',
 			},
 		],
 	},
@@ -93,7 +82,7 @@ export const sqliteSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'sqliteq uses <a href="https://github.com/mattn/go-sqlite3">mattn/go-sqlite3</a>, which is built with cgo, so building needs <code>CGO_ENABLED=1</code> and a C compiler.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq@v0.4.0' }],
 	},
 	{
 		title: 'Open the store',
@@ -114,13 +103,13 @@ export const sqliteSetup: SetupStep[] = [
 				label: 'First in, first out',
 				lang: 'go',
 				file: 'main.go',
-				code: 'pq, err := sdb.NewQueue("jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithPersistentQueue(pq)',
+				code: 'pq, err := sdb.NewQueue("jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithQueue(pq)',
 			},
 			{
 				label: 'Lowest number first',
 				lang: 'go',
 				file: 'main.go',
-				code: 'pq, err := sdb.NewPriorityQueue("priority_jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithPersistentPriorityQueue(pq)\nqueue.Add("alert", 1) // a lower number runs first',
+				code: 'pq, err := sdb.NewPriorityQueue("priority_jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithPriorityQueue(pq)\nqueue.Add("alert", 1) // a lower number runs first',
 			},
 		],
 	},

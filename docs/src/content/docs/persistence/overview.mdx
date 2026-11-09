@@ -1,35 +1,39 @@
 ---
 title: Persistence and distribution
-description: "Persistent and distributed queues, when a job is acknowledged, and what VarMQ guarantees about delivery."
+description: "Queues in shared storage, when a job is acknowledged, and what VarMQ guarantees about delivery."
 sidebar:
   label: Overview
 ---
 
 import AckScene from '../../../components/ops/AckScene.astro';
 
-An in-memory queue is gone when the process exits. A persistent or distributed queue keeps its jobs in storage outside the process, behind a storage adapter. VarMQ has no adapter of its own. The two that exist are separate modules: [redisq](https://github.com/goptics/redisq) for Redis and [sqliteq](https://github.com/goptics/sqliteq) for SQLite.
+An in-memory queue is gone when the process exits. A queue in shared storage keeps its jobs outside the process, behind a storage adapter. VarMQ has no adapter of its own. The two that exist are separate modules: [redisq](https://github.com/goptics/redisq) for Redis and [sqliteq](https://github.com/goptics/sqliteq) for SQLite.
 
-This page covers what the two kinds of queue do in VarMQ. [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) show the setup and what each adapter does with a job that was not finished. [Adapters](/persistence/adapters/) lists the interfaces, for reading an adapter or writing one.
+This page covers what such a queue does in VarMQ. [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) show the setup and what each adapter does with a job that was not finished. [Adapters](/persistence/adapters/) lists the interfaces, for reading an adapter or writing one.
 
 ## Pick an adapter
 
-- **[Redis](/persistence/redis/) (redisq)**: use it when several processes share one queue, which is a distributed queue. It also gives persistent queues, with a Redis server to run.
-- **[SQLite](/persistence/sqlite/) (sqliteq)**: use it for one process with no server to run. It gives persistent queues only.
+- **[Redis](/persistence/redis/) (redisq)**: use it when several processes share one queue. It needs a Redis server.
+- **[SQLite](/persistence/sqlite/) (sqliteq)**: use it for one process with no server to run.
 
-| Queue kind | redisq | sqliteq |
+| Feature | redisq | sqliteq |
 |---|---|---|
-| Persistent queue and persistent priority queue | yes | yes |
-| Distributed queue and distributed priority queue | yes, on the `NewDistributed...` queues | no |
+| FIFO and priority queues, kept across a restart | yes | yes |
+| Several processes share one queue | yes | no |
 | Store a retried `Add` once ([`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce)) | yes | yes |
+| [Job outcome](/concepts/jobs/#jobs-in-other-processes) and [cancel](/concepts/jobs/#cancelling-a-job) | yes | yes |
+| [Queue pause](/guides/queues/#pausing-a-queue) | yes | yes |
+| Job records for the [REST API](/operations/rest-api/#queues-and-jobs) | yes, but no one-job read | yes, but no one-job read |
+| [Workflows](/guides/workflows/) | yes | no |
 
-[Adapters](/persistence/adapters/#what-redisq-and-sqliteq-implement) has the full list of interfaces.
+[Installation](/start/installation/#versions) says which adapter versions have these features. [Adapters](/persistence/adapters/#what-redisq-and-sqliteq-implement) has the full list of interfaces.
 
 ## Guarantees at a glance
 
 | Question | Answer |
 |---|---|
 | How often does a job run? | At least once with redisq and sqliteq. A custom adapter decides, and it can lose a job: see [what this guarantees](#what-this-guarantees). A job can run twice, so write the job function so that a second run is safe. |
-| Does VarMQ retry a failed job? | No. A job that fails or panics is acknowledged like any other. To acknowledge a job is to tell the storage that the job is done, so the storage forgets it. |
+| Does VarMQ retry a failed job? | No. A job that fails or panics is rejected, which ends it like an acknowledgement. To acknowledge a job is to tell the storage that the job is done, so the storage forgets it. |
 | In what order do jobs leave storage? | In the order the adapter gives: first in, first out, or lowest priority number first. |
 | Is a repeated `Add` stored once? | Only with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) and an adapter whose [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) checks IDs. redisq and sqliteq do. |
 
@@ -37,29 +41,32 @@ This page covers what the two kinds of queue do in VarMQ. [Redis](/persistence/r
 
 ## Persistent or distributed
 
-You bind both kinds to a worker the way you bind an in-memory queue. Only a plain worker from [`NewWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewWorker) can bind them. An error worker or a result worker binds in-memory queues only.
+You bind shared storage the way you bind your own queue: with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue). A plain worker, an error worker and a result worker can all bind it. VarMQ sees that the storage implements [`IAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable), and treats it as shared storage.
 
-| | Persistent | Distributed |
-|---|---|---|
-| Bind with | [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue), [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) | [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue) |
-| The storage must implement | [`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue), [`IPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentPriorityQueue) | [`IDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedQueue), [`IDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedPriorityQueue): the persistent ones plus [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) |
-| You get back | [`PersistentQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue) or [`PersistentPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PersistentPriorityQueue), which has [`Worker()`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue.Worker) | [`DistributedQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#DistributedQueue) or [`DistributedPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#DistributedPriorityQueue), which has no `Worker()` |
-| Jobs survive a restart | as long as the storage keeps them | as long as the storage keeps them |
-| The worker learns of new jobs | from its own process, plus a check once a second in some cases | from its own process, and from the storage |
-| A process that only adds jobs | not provided | [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) and [`NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedPriorityQueue) wrap the storage with no worker |
+```go
+queue := worker.WithQueue(rq) // rq from redisq or sqliteq
+job, ok := queue.Add("job 1")
+```
 
-The row about learning of new jobs is the one that decides which to use. A persistent worker pulls when something in its own process signals it: an [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue.Add), a start or resume, or one of its own jobs finishing. Sometimes redisq or sqliteq is the worker's only source. Then the worker also checks the storage once a second, while it is active and last found the storage empty. So it finds a job that another process added within about a second. With another source bound as well, nothing signals the worker when another process adds a job. So it may not look until one of those signals happens. [Adapters](/persistence/adapters/#ibatchacknowledgeable) has the details. Use a persistent queue when one process wants its jobs to survive a restart.
+A process that only adds jobs uses [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue). It needs no worker. For the jobs of an error or result worker, use [`NewErrQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrQueue) or [`NewResultQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultQueue), so the handle has `Err` or `Result`. Earlier releases had other binding methods for this storage. They are deprecated, and their API reference names the call to use.
 
-A distributed queue adds [`Subscribe`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe). The worker subscribes when you bind the queue, and the adapter calls the worker back with the action `"enqueued"` when a job is added. That wakes the worker to pull. It is how several processes can consume one queue, with each job going to one of them. [Adapters](/persistence/adapters/#isubscribable) has the rest of the contract.
+The worker learns of new jobs in one of two ways:
+
+- **Storage with [`Subscribe`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe)**, such as redisq, calls the worker back when any process adds a job. That wakes the worker to pull. It is how several processes can consume one queue, with each job going to one of them. Such storage is also called a distributed queue.
+- **Storage without it**, such as sqliteq, is a persistent queue. The worker pulls when something in its own process signals it: an `Add`, a start or resume, or one of its own jobs finishing.
+
+Sometimes storage without `Subscribe` is the worker's only source. Then the worker also checks the storage once a second, while it is active and last found the storage empty. So it finds a job that another process added within about a second. With another source bound as well, it may not look until one of the signals above happens. [Adapters](/persistence/adapters/#ibatchacknowledgeable) has the details.
 
 ## What is stored
 
-VarMQ stores each job as JSON, in the shape `{"id":"","status":"Created","data":"job-1"}`. `data` is what you passed to `Add`. That has two consequences:
+VarMQ stores each job as JSON, in the shape `{"id":"…","status":"Created","data":"job-1","enqueued_at":1794229533324}`. `data` is what you passed to `Add`. `enqueued_at` is the time of the `Add`, in Unix milliseconds. That has two consequences:
 
 - **The payload type has to work with `encoding/json`.** `Add` returns `false` when JSON encoding fails, for example for a function. So you cannot use [function helpers](/guides/function-helpers/) here.
 - **Producers and consumers have to agree on the type.** A consumer decodes the stored JSON into its own `T`. Bytes that do not decode are reported as [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob) on [`Errs()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Errs) and to the [error handler](/guides/errors/#the-error-handler). The worker does not acknowledge such a job, so the adapter decides what happens to it next.
 
-`Add` on these queues returns only a `bool`. It is `false` when the encoding fails or when the storage refuses the job, for example because the queue was closed. There is no job handle, so there is nothing to [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) on and no [`Err`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob.Err) or [`Result`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob.Result) to read, and there is no [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll). [Worker types](/guides/worker-types/#which-queues-each-worker-can-bind) has the table.
+`Add` returns a job handle and a `bool`. The `bool` is `false` when the encoding fails, or when the storage refuses the job, for example because the queue was closed. [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) works too.
+
+The job handle learns how the job ended when the storage reports outcomes. redisq and sqliteq do. [Jobs in other processes](/concepts/jobs/#jobs-in-other-processes) covers `Wait`, `Err`, `Result` and the errors they return. When you give a job no ID, VarMQ makes a random one, so the outcome and a cancel can find the job. It does this when the storage reports outcomes or cancels jobs.
 
 The handle's [`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) asks the storage, so it counts the jobs waiting there, including jobs another process added. [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) reaches the storage only if the adapter implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). Neither redisq nor sqliteq does. With them `Add` is not refused, and [`IsFull`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) only compares `Len` with the number you passed.
 
@@ -69,11 +76,12 @@ An in-memory job is done when its function returns. A job in storage needs one m
 
 1. When the worker has a free slot, it takes a job with [`DequeueWithAckId`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.DequeueWithAckId). Some queues are the worker's only source and implement [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable), as redisq and sqliteq do. For such a queue, the worker takes a job for each free slot in one [`DequeueBatchWithAckIds`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable.DequeueBatchWithAckIds) call instead. The storage gives each job together with an acknowledgement ID. It keeps its own record that the job is out.
 2. The job's function runs.
-3. When the function returns, the worker closes the job, and closing it reports the outcome with that ID: [`Acknowledge`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Acknowledge) when the job succeeded, [`Reject`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Reject) with the error text when it failed. The storage can now forget the job, or keep a record of it.
+3. When the function returns, the worker closes the job. Closing it reports the outcome with that ID: [`Acknowledge`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Acknowledge) when the job succeeded, [`Reject`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.Reject) with the error text when it failed. A cancelled job is reported as cancelled, when the storage supports it. The storage can now forget the job, or keep a record of it.
 
-Three details about step 3:
+Four details about step 3:
 
 - **A failed or panicking job is rejected.** VarMQ recovers a panic, counts the job as failed and reports the panic. Then it calls `Reject`, which removes the job from storage like `Acknowledge` does. The job does not run again, unless `Reject` fails: then the storage can give it out again (see [what this guarantees](#what-this-guarantees)). Nothing in VarMQ retries a job, so every failure is final.
+- **A cancelled job is never retried either.** It ends as cancelled. [Cancelling a job](/concepts/jobs/#cancelling-a-job) covers it.
 - **A job whose acknowledgement fails is reported.** If `Acknowledge` or `Reject` returns `false`, the worker sends [`ErrAcknowledgeJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrAcknowledgeJob) to `Errs()` and the handler. The job's function has already run.
 - **Taken jobs run.** A worker with these queues takes one job per free slot and starts it. A [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) or [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) does not park a job the worker already took. The job is unacknowledged, and after a long wait a visibility timeout could give it to another consumer. A visibility timeout is the time some storage, such as redisq, waits for an acknowledgement. After that time, the storage gives the job out again. See [shutting down](#shutting-down).
 
@@ -97,7 +105,7 @@ After a restart, jobs from the earlier run are still in storage. Bind the queue 
 
 ```go
 worker := varmq.NewWorker(process, varmq.WithAutoRun(false))
-queue := worker.WithPersistentQueue(pq)
+queue := worker.WithQueue(rq)
 worker.Start()
 ```
 
@@ -116,14 +124,20 @@ Close things in this order, so that every running job can acknowledge:
 
 With `defer`, the order is the reverse of the calls. Defer the `Queues` close first, then the queue close. The programs on [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) do this.
 
+## Pausing
+
+A [queue pause](/guides/queues/#pausing-a-queue) on shared storage is kept in the storage. Every process that takes from the queue stops, and the pause survives a restart. Storage that cannot pause returns [`ErrPauseUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrPauseUnsupported).
+
 ## Metrics
 
-[Metrics](/guides/metrics/) describes the four counters for in-memory queues. For these queues, keep three things in mind.
+[Metrics](/guides/metrics/) describes the three counters of a worker. For these queues, note three things.
 
-- **[`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) on a persistent queue counts this process's accepted `Add` calls.** It does not count a job that was already in storage. It also does not count a job that another process added. It still counts in [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) when this worker runs it, so `Completed` can be higher than `Submitted`.
-- **The counters of a worker on a distributed queue may differ from what you expect.** `Submitted` in particular. These docs do not cover how a distributed queue's counters count yet.
-- **[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) asks the storage.** It is the number of jobs waiting there, plus jobs the worker has taken and not yet started. The queue handle's `Len` leaves out the second kind. Each call is a call to the storage.
+- **Each worker counts the jobs it ran.** A job that another process ran counts in that process. So the counters of one process do not add up to the queue's work.
+- **The queue counts the jobs it received.** Read `totals.submitted` from [`GET /queues`](/operations/rest-api/#queues-and-jobs). It counts jobs that every process added.
+- **[`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) asks the storage.** It is the number of jobs waiting there, plus jobs the worker has taken and not yet started. Each call is a call to the storage. A paused queue's jobs do not count.
 
 ## Topics
 
-[Topics](/guides/topics/) are in-memory only. To share jobs between processes, use a distributed queue.
+[Topics](/guides/topics/) are in-memory only. To share jobs between processes, use shared storage such as redisq.
+
+Next: [Redis](/persistence/redis/).

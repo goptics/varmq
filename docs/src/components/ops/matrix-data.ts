@@ -46,7 +46,7 @@ export const ROWS: Row[] = [
 		'API',
 		[Y, N, Y, Y, N, ['No', 2], N],
 		{
-			text: 'Only on in-memory queues. On a persistent or distributed queue, Add returns a bool and no job handle, so there is nothing to Wait on and no Err or Result to read.',
+			text: 'On shared storage too: the job handle learns the outcome from the process that ran the job.',
 			href: '/guides/worker-types/#which-queues-each-worker-can-bind',
 			source: 'Worker types',
 		},
@@ -56,7 +56,7 @@ export const ROWS: Row[] = [
 		'API',
 		[Y, N, Y, Y, N, Y, N],
 		{
-			text: 'Only on in-memory queues. A persistent or distributed queue has no AddAll.',
+			text: 'AddAll works on in-memory queues and on shared storage.',
 			href: '/persistence/overview/#what-is-stored',
 			source: 'Persistence overview',
 		},

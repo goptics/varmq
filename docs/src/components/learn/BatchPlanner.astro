@@ -140,7 +140,7 @@ const presets = [
 				c === 1
 					? 'A lone goroutine runs jobs in queue order anyway, so the hand-off-gap rule does not apply.'
 					: ms === 0
-						? 'No job has been timed yet, so the budget is 1: the worker hands out one job at a time until the first batch finishes.'
+						? 'No job has been timed yet, so the budget is 1: the worker gives out one job at a time until the first batch finishes.'
 						: winner === 'budget'
 							? `With ${fmt(c)} goroutines and ${ms >= 1000 ? ms / 1000 + ' s' : ms >= 1 ? ms + ' ms' : ms * 1000 + ' µs'} jobs, a hand-off every 32 µs needs ${fmt(budget)} job${budget === 1 ? '' : 's'} per batch.`
 							: winner === 'even'

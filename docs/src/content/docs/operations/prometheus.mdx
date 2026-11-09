@@ -5,13 +5,13 @@ description: "Export the counters and gauges of a worker to Prometheus, with a p
 
 import MetricsScene from '../../../components/ops/MetricsScene.astro';
 
-VarMQ imports no metrics library. A worker exposes what Prometheus needs as plain methods: how many jobs are running and waiting, and four counters of what has happened. You wrap those methods in collectors from the [Prometheus Go client](https://github.com/prometheus/client_golang). Its [`GaugeFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeFunc) and [`CounterFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#CounterFunc) call a function each time Prometheus scrapes, so nothing of yours has to poll the worker.
+VarMQ imports no metrics library. A worker exposes what Prometheus needs as plain methods: how many jobs are running and waiting, and three counters of what has happened. You wrap those methods in collectors from the [Prometheus Go client](https://github.com/prometheus/client_golang). Its [`GaugeFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeFunc) and [`CounterFunc`](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#CounterFunc) call a function each time Prometheus scrapes, so nothing of yours has to poll the worker.
 
 A longer version of the program below is in [`examples/prometheus`](https://github.com/goptics/varmq/tree/main/examples/prometheus).
 
 ## A worker with metrics
 
-The program below runs a worker with concurrency 10, registers eight collectors for it, and serves them at `/metrics`. It adds 1000 jobs that each take 100 milliseconds.
+The program below runs a worker with concurrency 10, registers seven collectors for it, and serves them at `/metrics`. It adds 1000 jobs that each take 100 milliseconds.
 
 ```go collapse={1-14}
 package main
@@ -72,7 +72,6 @@ func registerMetrics(w varmq.Worker, namespace string) {
 	gauge("workers_idle", "Idle goroutines in the pool", w.NumIdleWorkers)
 	gauge("jobs_waiting", "Jobs not started yet; can read high while batches run", w.NumPending)
 
-	counter("submitted_total", "Jobs the queue accepted", m.Submitted)
 	counter("completed_total", "Jobs whose function has returned", m.Completed)
 	counter("successful_total", "Jobs that returned without an error or a panic", m.Successful)
 	counter("failed_total", "Jobs that returned an error or panicked", m.Failed)
@@ -101,7 +100,6 @@ func registerMetrics(w varmq.Worker, namespace string) {
    ```
    foo_worker_completed_total 190
    foo_worker_failed_total 0
-   foo_worker_submitted_total 1000
    foo_worker_successful_total 190
    foo_worker_jobs_waiting 800
    foo_worker_workers_concurrency 10
@@ -125,12 +123,11 @@ With the namespace `foo_worker`, each name starts with `foo_worker_`. The scene 
 | `workers_concurrency` | gauge | [`NumConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumConcurrency) | the concurrency limit |
 | `workers_idle` | gauge | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) | idle goroutines in the pool |
 | `jobs_waiting` | gauge | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) | jobs that have not started. While a batch runs it can read high: see [waiting](/guides/waiting/#numpending-and-numprocessing) |
-| `submitted_total` | counter | [`Submitted`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Submitted) | jobs the queue accepted |
 | `completed_total` | counter | [`Completed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Completed) | jobs whose function has returned |
 | `successful_total` | counter | [`Successful`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Successful) | jobs that returned without an error or a panic |
 | `failed_total` | counter | [`Failed`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Failed) | jobs that returned an error or panicked |
 
-The four counters are the four of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics). [Metrics](/guides/metrics/) explains what each counts. [Waiting](/guides/waiting/) explains what `NumPending` and `NumProcessing` count.
+The three counters are the three of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics). A worker does not count the jobs its queues receive. Each queue counts them: read `totals.submitted` from [`GET /queues`](/operations/rest-api/#queues-and-jobs). [Metrics](/guides/metrics/) explains what each counts. [Waiting](/guides/waiting/) explains what `NumPending` and `NumProcessing` count.
 
 ## Queries to start with
 
@@ -142,17 +139,17 @@ These use the namespace `foo_worker`. Change it to the namespace you pass to eac
 | What share of finished jobs fail? | `rate(foo_worker_failed_total[5m]) / rate(foo_worker_completed_total[5m])` |
 | How full is the pool? (1 means every slot runs a job) | `foo_worker_workers_processing / foo_worker_workers_concurrency` |
 | How large is the backlog? | `foo_worker_jobs_waiting` |
-| Do jobs arrive faster than they finish? | `rate(foo_worker_submitted_total[5m]) - rate(foo_worker_completed_total[5m])` |
+| Does the backlog grow? | `deriv(foo_worker_jobs_waiting[5m]) > 0` |
 
-The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row is above 0 while jobs arrive faster than they finish. On a persistent queue it can mislead. `Submitted` counts only this process's `Add` calls, so it does not count a job that another process added. `Completed` can then be higher than `Submitted`. On a distributed queue the counters may differ from what you expect. [The overview](/persistence/overview/#metrics) says what each counter counts there.
+The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row shows the trend of the backlog. It is true while jobs arrive faster than they finish. A batch's finished jobs stay in `jobs_waiting` until the batch ends, so it can also read true for a short time. On shared storage, each process counts only the jobs it ran. [The overview](/persistence/overview/#metrics) says more.
 
 ## What to watch for
 
-- **The reads are not one snapshot.** A scrape reads eight values at slightly different moments, and a job can finish between two of them. A set read while jobs run can be off by a few. [Metrics](/guides/metrics/#reading-them) says more.
+- **The reads are not one snapshot.** A scrape reads seven values at slightly different moments, and a job can finish between two of them. A set read while jobs run can be off by a few. [Metrics](/guides/metrics/#reading-them) says more.
 - **The counters start at zero when the worker is created.** They are totals. Use `rate()` or `increase()` in Prometheus to see how many jobs ran in a period. A restart of the process zeroes them, and Prometheus functions such as `rate()` read a drop as a counter reset.
-- **[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) makes a counter fall.** It zeroes the four counters, and Prometheus reads that as a reset, like a restart. Do not call it on a worker you export unless you want that.
+- **[`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) makes a counter fall.** It zeroes the three counters, and Prometheus reads that as a reset, like a restart. Do not call it on a worker you export unless you want that.
 - **One namespace for each worker.** `MustRegister` panics when a collector with the same metric name is registered twice, with `duplicate metrics collector registration attempted`. Register each worker under its own namespace.
-- **A worker on a persistent or distributed queue asks its storage.** `NumPending` reads the length from Redis or SQLite. So every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics).
+- **A worker on shared storage asks its storage.** `NumPending` reads the length from Redis or SQLite. So every scrape makes that call. For the counters of such a worker, see [the overview](/persistence/overview/#metrics).
 
 ## Scraping it
 
@@ -166,3 +163,5 @@ scrape_configs:
 ```
 
 Prometheus scrapes `/metrics` by default, which is where the program serves them. If you serve VarMQ's [REST API](/operations/rest-api/) as well, it can sit on the same server: mount it with `http.Handle("/varmq/", varmq.Handler("/varmq"))` next to the metrics route. The REST API lists only named workers, so give the worker a name. The REST API returns the same worker numbers as JSON, which suits a dashboard, and Prometheus suits history and alerts.
+
+Next: [Troubleshooting](/operations/troubleshooting/).

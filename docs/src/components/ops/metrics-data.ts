@@ -1,15 +1,14 @@
-// The eight collectors of the Prometheus example (examples/prometheus) and the numbers of its run.
+// The seven collectors of the Prometheus example (examples/prometheus) and the numbers of its run.
 //
 // sample() reproduces a real run of that program on varmq: a worker with concurrency 10, 1000 jobs
 // that each sleep 100 ms. A scratch Go program read NumPending, NumProcessing, NumIdleWorkers and the
-// four counters every 500 ms. Completed was 40, 90, 140, ... 990 at 0.5 s, 1.0 s, 1.5 s, ... 10.0 s,
+// three counters every 500 ms. Completed was 40, 90, 140, ... 990 at 0.5 s, 1.0 s, 1.5 s, ... 10.0 s,
 // then 1000 with the worker Idle and one idle goroutine. 10 * floor(10 t) - 10 fits all of them.
 
 export interface Sample {
 	completed: number;
 	successful: number;
 	failed: number;
-	submitted: number;
 	waiting: number;
 	processing: number;
 	concurrency: number;
@@ -26,7 +25,6 @@ export function sample(t: number, restartAt: number | null): Sample {
 		completed,
 		successful: completed,
 		failed: 0,
-		submitted: 1000,
 		waiting: Math.max(0, 1000 - completed - processing),
 		processing,
 		concurrency: 10,
@@ -79,17 +77,6 @@ export const METRICS: Metric[] = [
 		],
 	},
 	{
-		key: 'submitted',
-		name: 'submitted_total',
-		type: 'counter',
-		help: 'Jobs the queue accepted',
-		from: 'Metrics().Submitted',
-		href: doc + 'Metrics.Submitted',
-		meaning: 'Jobs the queue accepted. The program adds all 1000 at once, so this reads 1000 from the first scrape.',
-		watch: 'On a persistent queue it counts this process’s accepted Add calls only. A distributed queue’s count may differ from what you expect.',
-		queries: [{ q: 'rate(foo_worker_submitted_total[5m])', says: 'Jobs accepted per second. Compare it with the completed rate: if it is higher for long, the queue grows.' }],
-	},
-	{
 		key: 'successful',
 		name: 'successful_total',
 		type: 'counter',
@@ -107,7 +94,7 @@ export const METRICS: Metric[] = [
 		from: 'Worker.NumPending',
 		href: doc + 'Worker.NumPending',
 		meaning: 'Jobs that have not started: they wait in the queue, or a goroutine took them in a batch and has not started them.',
-		watch: 'It is a gauge. It goes up and down. On a persistent or distributed queue, each scrape calls the storage.',
+		watch: 'It is a gauge. It goes up and down. On shared storage, each scrape calls the storage.',
 		queries: [
 			{ q: 'foo_worker_jobs_waiting', says: 'The backlog now.' },
 			{ q: 'avg_over_time(foo_worker_jobs_waiting[5m]) > 500', says: 'True when the backlog averaged above 500 jobs for 5 minutes. Pick your own limit.' },

@@ -21,7 +21,7 @@ function init(root: HTMLElement) {
 
 	function bestCall(c: Caps) {
 		const best = [...BINDINGS].reverse().find((b) => b.test(c) && b.name.startsWith('With'));
-		return best ? `worker.${best.name}(${best.name.includes('Distributed') ? 'dq' : 'pq'})` : 'worker.With…(pq)   // pick the parts your type has';
+		return best ? `worker.${best.name}(q)` : 'worker.With…(q)   // pick the parts your type has';
 	}
 
 	function render() {
@@ -45,7 +45,7 @@ function init(root: HTMLElement) {
 			h('p', { class: 'amap__h2', text: 'The worker' }),
 			h('ul', { class: 'amap__p-list' }, ...def.worker.map((t) => h('li', { text: t }))),
 			def.by.length
-				? h('p', { class: 'amap__by' }, 'Implemented by ', ...def.by.flatMap((b, i) => [i ? ', ' : '', h('code', { text: b })]), def.id === 'ISubscribable' || def.id.startsWith('IDistributed') ? ' (on its NewDistributed queues)' : '')
+				? h('p', { class: 'amap__by' }, 'Implemented by ', ...def.by.flatMap((b, i) => [i ? ', ' : '', h('code', { text: b })]), '')
 				: h('p', { class: 'amap__by', text: 'Neither redisq nor sqliteq implements it.' }),
 			def.kind !== 'base' && !on ? h('p', { class: 'amap__hint', text: 'Your type does not have it yet. It is off.' }) : null,
 		];

@@ -1,6 +1,6 @@
 ---
 title: Queues
-description: FIFO and priority queues, how to bound one with a capacity, what Add returns when a queue is full, and Len, Purge and Close.
+description: FIFO and priority queues, capacity, what Add returns when a queue is full, Len, Purge and Close, and pausing a queue.
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
@@ -42,7 +42,7 @@ Each queue below has its own worker. Add jobs to both queues, then start the wor
 
 **A lower number runs first.** Among the jobs that are waiting, priority 1 goes before priority 10, whatever order they were added in. Priorities can be negative. Jobs with the same priority run in the order they were added.
 
-**Priority orders waiting jobs only.** A job that is already running is not interrupted. A worker takes one job at a time from a priority queue. So a high-priority job added later does not wait behind jobs already handed out in a batch. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches.
+**Priority orders waiting jobs only.** A job that is already running is not interrupted. A worker takes one job at a time from a priority queue. So a high-priority job added later does not wait behind jobs already given out in a batch. [How it works](/concepts/how-it-works/#batched-dispatch) explains batches.
 
 An [`Item`](https://pkg.go.dev/github.com/goptics/varmq#Item) in [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) carries its own priority. See [adding many jobs](/guides/adding-many/).
 
@@ -74,7 +74,7 @@ These three work on the queue handle that `Bind...` returns.
 
 **[`Len()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len)** is the number of jobs waiting in the queue.
 
-- It leaves out a job a worker has taken into a batch, and a job the worker parked when you paused or stopped it. The worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts those.
+- It leaves out a job a worker has taken into a batch or parked. [Lifecycle](/concepts/lifecycle/#what-happens-to-jobs) explains how this differs from the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending).
 - A job you closed while it waited still counts until the worker reaches it. See [closing a queued job](/concepts/jobs/#closing-a-queued-job).
 - The queue handle also has a [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.NumPending) method. It is deprecated: use `Len`.
 
@@ -91,12 +91,34 @@ These three work on the queue handle that `Bind...` returns.
 
 `Purge` empties the queue and closes both jobs, so their status reads `Closed`. After `Close`, `Add` refuses `d`, but `c`, added before the queue closed, still runs once the worker starts.
 
+## Pausing a queue
+
+[`Pause()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Pause) stops every worker from taking jobs from the queue, until [`Resume()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Resume). [`IsPaused()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsPaused) reports the state.
+
+```go
+queue := worker.BindQueue()
+queue.Pause()
+queue.Add("waits") // the queue takes the job, but no worker starts it
+queue.Resume()     // the worker starts it now
+```
+
+- **Adds still work.** The queue takes new jobs while it is paused. They wait until `Resume`.
+- **Running jobs finish.** A pause stops new jobs only.
+- **Other sources continue.** A worker with several queues still takes jobs from the others.
+- **A paused queue's jobs are not pending.** The worker's `Wait` and `WaitUntilIdle` return without them.
+- **On shared storage, the pause is in the storage.** Every process that takes from the queue stops, and the pause survives a restart.
+- **The storage must support it.** Without that support, `Pause` and `Resume` return [`ErrPauseUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrPauseUnsupported). The in-memory queues support it.
+
+A queue pause is not a worker pause. [`Worker.Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) pauses one worker in this process, and all of its sources. A worker takes a job only when neither is paused. The [REST API](/operations/rest-api/#queues-and-jobs) can pause and resume a queue too.
+
 ## Your own queue
 
-[`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) and [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) bind a queue you wrote, instead of an in-memory one. It has to implement [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) or [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue).
+[`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) and [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) bind a queue you wrote, instead of an in-memory one. They also bind shared storage such as redisq or sqliteq: see [persistence](/persistence/overview/). The queue has to implement [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) or [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue).
 
 The worker calls [`Enqueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue) when you call `Add` without a job ID, and [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) when the job has an ID. It calls [`Dequeue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Dequeue) when it has a free slot. The items are the jobs themselves, so store them and return them unchanged. `Purge` uses [`Values`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Values) to find the jobs to close, so `Values` has to return what is in the queue.
 
 The worker batches a queue passed to `WithQueue` like the built-in FIFO queue, so it can take several jobs at once. The exception is a queue that also implements [`IAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable). A queue passed to `WithPriorityQueue` is handled like the built-in priority queue, one job at a time.
 
-One optional interface adds behaviour: `CapacitySetter`, above, for `WithQueueCapacity`. [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce), part of `IQueue` and `IPriorityQueue`, does the [job ID](/guides/job-ids/) checks. [Adapters](/persistence/adapters/) lists every queue interface. For queues that survive a restart or are shared between processes, see [persistence](/persistence/overview/).
+Optional interfaces add behaviour, such as `CapacitySetter`, above, for `WithQueueCapacity`, and [`QueuePauser`](https://pkg.go.dev/github.com/goptics/varmq#QueuePauser) for a queue pause. [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce), part of `IQueue` and `IPriorityQueue`, does the [job ID](/guides/job-ids/) checks. [Adapters](/persistence/adapters/) lists every queue interface. For queues that survive a restart or are shared between processes, see [persistence](/persistence/overview/).
+
+Next: [Waiting](/guides/waiting/).

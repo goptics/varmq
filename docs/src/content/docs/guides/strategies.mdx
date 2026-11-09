@@ -33,7 +33,7 @@ A few rules hold for all four:
 
 - **Empty sources are skipped.** A strategy only chooses among sources that have a job waiting.
 - **The strategy is fixed when the worker is created.** There is no call to change it later.
-- **It decides every job.** With two or more sources bound, the worker hands out one job at a time. It picks the source again each time, from the source lengths at that moment. [How it works](/concepts/how-it-works/#batched-dispatch) explains why it does not batch in this case. With a single source there is nothing to choose.
+- **It decides every job.** With two or more sources bound, the worker gives out one job at a time. It picks the source again each time, from the source lengths at that moment. [How it works](/concepts/how-it-works/#batched-dispatch) explains why it does not batch in this case. With a single source there is nothing to choose.
 - **The zero value of `Strategy` is `RoundRobin`, not the default.** A worker created without `WithStrategy` uses `Priority`.
 
 ## Priority: the default
@@ -80,3 +80,5 @@ The queues start with 2 alerts, 1 report and 3 emails. `MaxLen` takes an email f
 ## What priority does under the other strategies
 
 `RoundRobin`, `MaxLen` and `MinLen` do not choose by rank. They still go through the list in rank order. So a rank sets the order of the `RoundRobin` turns. It also sets which source wins a tie in `MaxLen` and `MinLen`. If you give no ranks, the list is the bind order.
+
+Next: [Topics](/guides/topics/).

@@ -86,3 +86,5 @@ worker.WithTopic(orders, varmq.WithTopicPriority(1)) // read orders before other
 ```
 
 With the default [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority) strategy, a worker with a topic subscription ranked 1 and a queue without a rank takes the payloads first. If the two have the same rank, the one bound first goes first. [Strategies](/guides/strategies/#what-priority-does-under-the-other-strategies) covers what priority does under the other three.
+
+Next: [Workflows](/guides/workflows/).

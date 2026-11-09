@@ -1,0 +1,220 @@
+---
+title: Workflows
+description: "Run jobs on several queues in a set order, pass results between them, and undo finished work when a later step fails."
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+A workflow is a set of tasks with dependencies. Each task is one job on a queue that you bound to a worker. VarMQ queues a task when every task it depends on has ended. Use a workflow when one job needs the output of another, or when finished work must be undone after a later failure.
+
+**Workflows need Go 1.27.** [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Add) and [`Undo`](https://pkg.go.dev/github.com/goptics/varmq#Task.Undo) are generic methods, and Go supports those from 1.27.
+
+## A first workflow
+
+You need three things: a store, a workflow and its tasks.
+
+1. Create a store with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore). It keeps the state of each workflow in memory.
+2. Create a [`Workflow`](https://pkg.go.dev/github.com/goptics/varmq#Workflow) with [`NewWorkflow`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflow).
+3. Add the tasks, then call [`Submit`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Submit).
+4. Call [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Wait) or [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.WaitContext) to block until the workflow ends.
+
+<GoPlay example="workflows-dag" />
+
+`upload` runs first. The two thumbnail tasks start after it, on a worker with concurrency 2, so they can run at the same time. `email` starts only after both have completed. Each thumbnail task reads the result of `upload`, and `email` reads both thumbnail results. The `email` task has no result, because it runs on an error worker.
+
+## Tasks and dependencies
+
+`wf.Add(name, queue, data)` adds a task and returns its [`*Task`](https://pkg.go.dev/github.com/goptics/varmq#Task). The task is one job with `data` on `queue`. The compiler checks that `data` has the job type of the queue.
+
+- A task name uses only `A-Z`, `a-z`, `0-9`, `_`, `.` and `-`, with 1 to 64 characters. It must be unique in the workflow.
+- The task's job ID is `wf:<workflow ID>:<task name>`. You see it as `j.ID()` in the worker function.
+- Every `Task` method returns the same `*Task`, so you can chain the calls.
+
+| Method | What it does |
+|---|---|
+| [`After(deps...)`](https://pkg.go.dev/github.com/goptics/varmq#Task.After) | The task waits until each task in `deps` has ended. |
+| [`Always()`](https://pkg.go.dev/github.com/goptics/varmq#Task.Always) | The task runs even when a dependency failed or was cancelled. |
+| [`Priority(p)`](https://pkg.go.dev/github.com/goptics/varmq#Task.Priority) | The task's job gets priority `p`. Only for a priority queue. |
+| [`Undo(queue, data)`](https://pkg.go.dev/github.com/goptics/varmq#Task.Undo) | A job that undoes the task. See [undo](#undo). |
+
+A dependency must be a task of the same workflow, added before the task that waits for it. So the order of your `Add` calls is a valid run order, and a workflow cannot have a cycle. A task with no dependencies starts at `Submit`.
+
+### When a dependency fails
+
+By default, a task is cancelled when one of its dependencies fails or is cancelled. Its own dependents are then cancelled too, and so on. A task with `Always` runs anyway. In its worker, [`Failed(dep)`](https://pkg.go.dev/github.com/goptics/varmq#TaskContext.Failed) tells you which dependency failed.
+
+A failed task does not fail the workflow when it has dependents and all of them use `Always`. Those tasks handle the failure. Any other failed task makes the workflow end as `failed`.
+
+Without other options, tasks on other branches still run after a failure. [`WithFailFast()`](https://pkg.go.dev/github.com/goptics/varmq#WithFailFast) changes that. At the first failure that makes the workflow fail, every waiting task is cancelled. Queued tasks that have not started are cancelled too. The failed task's own `Always` dependents still run.
+
+### Which queues a task can use
+
+A task can use a queue handle that [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue), [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue), [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) returns. These handles implement [`TaskQueue`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue), whose [`WorkflowItem`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue.WorkflowItem) method turns task data into a job. You do not call it yourself. Each handle must also be in the scope of the workflow's store: see [workflows across processes](#workflows-across-processes). [Queues](/guides/queues/) covers how to bind a queue.
+
+The deprecated binding methods for shared storage return handles that a task cannot use. Passing one to `Add` does not compile. Bind that storage with `WithQueue` or `WithPriorityQueue` instead. A topic subscription cannot be a task's queue either.
+
+A built-in in-memory queue takes a task's job even when the queue is full. A custom queue bound with `WithQueue` can refuse it. The task then fails with the reason `queue refused promotion`.
+
+## Passing results between tasks
+
+Only a task on a [result worker](/guides/worker-types/) leaves a result. VarMQ stores the value the worker function returns as JSON. A task on a plain or error worker leaves no result.
+
+In the worker function, [`TaskOf(j)`](https://pkg.go.dev/github.com/goptics/varmq#TaskOf) returns the [`*TaskContext`](https://pkg.go.dev/github.com/goptics/varmq#TaskContext) of the job. It is `nil` when the job is not a workflow task. It has the workflow ID, the task name and these methods:
+
+- [`Result(dep, &v)`](https://pkg.go.dev/github.com/goptics/varmq#TaskContext.Result) reads the result of the dependency `dep` into `v`.
+- `Failed(dep)` reports whether the dependency `dep` failed or was cancelled.
+
+`Result` returns [`ErrDepFailed`](https://pkg.go.dev/github.com/goptics/varmq#ErrDepFailed) when `dep` failed or was cancelled. It returns [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) when `dep` is not a dependency of this task, or left no result.
+
+A result is limited to 64 KiB. A bigger result fails the task with [`ErrResultTooLarge`](https://pkg.go.dev/github.com/goptics/varmq#ErrResultTooLarge). To change the limit, pass [`WithResultLimit`](https://pkg.go.dev/github.com/goptics/varmq#WithResultLimit) to `NewWorkflowStore`. For a large output, store the data somewhere else and return its key.
+
+A result that cannot be encoded as JSON fails the task. Task data that cannot be encoded as JSON makes `Submit` fail.
+
+## Submitting and waiting
+
+`Submit(ctx)` checks the whole workflow, stores it and queues the tasks that have no dependencies. It returns every mistake that you made while you added tasks, joined in one error. For example, it reports a duplicate task name or a dependency from another workflow. A `Submit` that fails leaves the workflow unsubmitted, so you can call it again, for example after a store error. A mistake in the tasks stays in the workflow, so build a new workflow to fix it.
+
+Each workflow has an ID. [`WithWorkflowID`](https://pkg.go.dev/github.com/goptics/varmq#WithWorkflowID) sets it, and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.ID) returns it. Without the option, VarMQ makes a random one. A second `Submit` with the same ID and the same tasks returns `nil` and changes nothing. With the same ID and different tasks, it returns [`ErrWorkflowExists`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowExists).
+
+After a successful `Submit`, you cannot change the workflow. A later `Add` or `Task` method does nothing, and the next `Submit` returns [`ErrWorkflowSubmitted`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowSubmitted).
+
+To follow a workflow, use one of these:
+
+- `Wait()` blocks until the workflow is in a final state.
+- `WaitContext(ctx)` does the same, but returns `ctx.Err()` when `ctx` ends.
+- [`Status(ctx)`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Status) returns the current state and does not block.
+
+All three return a [`WorkflowRecord`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowRecord). It has the workflow's `State` and one [`TaskRecord`](https://pkg.go.dev/github.com/goptics/varmq#TaskRecord) per task, in `Add` order. A task record has the task's `State`, the `Reason` it failed, its `ResultSize` and the record of its `Undo`.
+
+## Workflow states
+
+| State | Final | Meaning |
+|---|---|---|
+| `running` | no | Tasks are waiting, queued or running. |
+| `completed` | yes | Every task ended, and no failure made the workflow fail. |
+| `failed` | yes | A task failed, and no completed task had an undo. |
+| `compensating` | no | The undo jobs are running. |
+| `compensated` | yes | Every undo job completed. |
+| `compensation_failed` | yes | One or more undo jobs failed. |
+| `cancelled` | yes | You cancelled the workflow, and no undo job ran. |
+
+The state is a [`WorkflowState`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowState). Its Go constants are [`WorkflowRunning`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowRunning), [`WorkflowCompleted`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompleted), [`WorkflowFailed`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowFailed), [`WorkflowCompensating`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensating), [`WorkflowCompensated`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensated), [`WorkflowCompensationFailed`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensationFailed) and [`WorkflowCancelled`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCancelled).
+
+A task's `State` is `waiting` while a dependency has not ended, and `pending` once its job is queued. It ends as `completed`, `failed` or `cancelled`. The in-memory store shows a running task as `pending`.
+
+## Undo
+
+`Undo(queue, data)` gives a task a second job that reverses its work, such as a refund for a payment. The undo job runs only if its task completed and the workflow then fails. It also runs after a cancel, unless you turned that off: see [cancelling a workflow](#cancelling-a-workflow).
+
+<GoPlay example="workflows-undo" />
+
+`charge` fails, so the workflow fails. `reserve` completed and has an undo, so VarMQ queues `release stock`. `label` completed too, but it has no undo, so nothing undoes it. The workflow ends as `compensated`.
+
+How undo jobs run:
+
+- They run in reverse order. An undo job waits until the undo jobs of all completed tasks that depend on its task have ended. Tasks without an undo are skipped.
+- A failed undo job does not stop the others. The workflow then ends as `compensation_failed`.
+- A task can have one undo job. A second `Undo` call makes `Submit` fail.
+- The undo job's ID is the task's job ID with `:undo` added. On a priority queue, it gets priority 0.
+- In the undo job's worker, `TaskOf(j).Undo` is `true`. `Result` can read the result of the task itself, for example a payment ID to refund.
+- An undo job's own result is not kept.
+
+The task record shows an undo as `waiting` until an undo phase reaches it. In a `completed` workflow, the undo stays `waiting`, because it never runs.
+
+## Cancelling a workflow
+
+[`Cancel(ctx)`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Cancel) stops a workflow:
+
+```go
+if err := wf.Cancel(ctx); err != nil {
+	return err
+}
+rec, err := wf.Wait() // returns when the workflow has ended
+```
+
+What happens to each task:
+
+- A waiting task is cancelled at once.
+- A queued task stays in its queue. When a worker takes it, the task ends as `cancelled` with the reason `workflow cancelled`, and its function does not run.
+- A running task finishes.
+
+The workflow ends only when no task is queued or running. A paused or stopped worker keeps its queued tasks, so `Wait` blocks until that worker takes them.
+
+By default, the undo jobs of the completed tasks then run, and the workflow ends as `compensated` or `compensation_failed`. When no completed task has an undo, it ends as `cancelled`. Pass [`WithUndoOnCancel(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithUndoOnCancel) to `NewWorkflow` to skip the undo jobs on a cancel. A failure still runs them.
+
+The store keeps the `WithUndoOnCancel` value with the workflow. So a cancel from any handle follows it. `Cancel` on a workflow that has ended does nothing and returns `nil`.
+
+Cancelling one task's job is not a workflow cancel: see [cancelling a job](/concepts/jobs/#cancelling-a-job). The task ends as `cancelled`, and the workflow handles it like a failed task. On shared storage, a cancel does not stop a task that still waits: cancel the workflow instead. A [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) of a queue has the same effect on the tasks in it.
+
+The REST API lists workflows, shows one and cancels one, with `?undo=false` to skip the undo jobs: see [workflows](/operations/rest-api/#workflows).
+
+## Workflows across processes
+
+[`OpenWorkflow(store, id)`](https://pkg.go.dev/github.com/goptics/varmq#OpenWorkflow) returns a handle to a workflow that was submitted before. Use it where you do not have the `*Workflow` that `NewWorkflow` returned, for example in an HTTP handler.
+
+```go
+h := varmq.OpenWorkflow(store, "order-1")
+rec, err := h.Status(ctx)
+```
+
+On this handle, `Cancel`, `Status`, `Wait` and `WaitContext` work. `Submit` returns `ErrWorkflowSubmitted`. If the store does not have the ID, `Cancel`, `Status`, `Wait` and `WaitContext` return [`ErrWorkflowNotFound`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowNotFound).
+
+**The store from `NewWorkflowStore` is in-memory only.** It lives in your process, and it loses every workflow when the process exits. Each call to `NewWorkflowStore` makes a separate store. So `OpenWorkflow` finds a workflow only in the same process, with the same store. The store keeps an ended workflow for 7 days. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithWorkflowRetention) changes that.
+
+A workflow's queues must all be in the scope of its store. The scope of the in-memory store is the in-memory queues of your process. A task on a queue in another scope makes `Submit` return an error that wraps [`ErrScopeMismatch`](https://pkg.go.dev/github.com/goptics/varmq#ErrScopeMismatch).
+
+VarMQ itself has only the in-memory store. For a workflow that continues after a restart, or that spans processes, the queue storage must keep the workflow state. Such storage implements [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable). redisq v1.6.0 does, and sqliteq does not yet. Its `WorkflowStore()` returns a [`WorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowStore). Pass that store to `NewWorkflow` and `OpenWorkflow`. Bind its queues with `WithQueue` or `WithPriorityQueue`. A producer handle from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue) can be a task's queue too. A shared-storage queue without that support makes `Submit` return `ErrScopeMismatch`.
+
+<details>
+<summary>Details</summary>
+
+- `Submit` builds a plan of the tasks and a SHA-256 hash of its shape. The store compares hashes to decide between "same workflow again" and `ErrWorkflowExists`.
+- `Wait` and `WaitContext` read the store every 50 ms.
+- Before a worker runs a task, it asks the store whether the task may still start (`WorkflowStore.Runnable`). That check cancels queued tasks after a cancel or a fail-fast failure.
+- On shared storage, a task ends through `WorkflowAcknowledgeable.FinishTask`. A task can run more than once there, for example after a crash before its end was recorded. Write task functions so that a second run does no harm.
+- Two durable stores with the same `ScopeID` share state, so one workflow can use the queues of both.
+- `GET /workflows` lists the stores that also implement [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector). The in-memory store does.
+
+</details>
+
+### Workflows on Redis
+
+redisq v1.6.0 keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`WorkflowStore()`](https://pkg.go.dev/github.com/goptics/redisq#Queue.WorkflowStore) on any queue returns the store for that Redis server and namespace.
+
+```go
+qs := redisq.New("redis://localhost:6375")
+defer qs.Close()
+
+upload, thumb := qs.NewQueue("upload"), qs.NewPriorityQueue("thumb")
+
+wf := varmq.NewWorkflow(upload.WorkflowStore(), varmq.WithWorkflowID("upload-1"))
+up := wf.Add("upload", varmq.NewResultQueue[string, string](upload), "photo.png")
+wf.Add("thumb", varmq.NewResultPriorityQueue[int, string](thumb), 64).After(up)
+if err := wf.Submit(ctx); err != nil {
+	return err
+}
+rec, err := wf.WaitContext(ctx)
+```
+
+The process that submits needs no worker. Workers in any process run the tasks. Each one binds the same redisq queue with `WithQueue` or `WithPriorityQueue`:
+
+```go
+w := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) {
+	return "s3://bucket/" + j.Data(), nil
+})
+w.WithQueue(upload)
+```
+
+- **The workflow survives a restart.** Redis keeps its state. So `OpenWorkflow(upload.WorkflowStore(), "upload-1")` works in any process that uses the same Redis server and namespace.
+- **A task ends in one step.** One script records the end of a task and queues the tasks that wait for it. So a crash never leaves a workflow between the two.
+- **Set the store on `redisq.New`.** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowResultLimit) sets the largest task result, 64 KiB by default. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowRetention) sets how long an ended workflow is kept, 7 days by default.
+- **Every process that runs a task must use redisq v1.6.0 or newer.**
+- **Do not call `SetExpiration` on a queue that carries tasks.** `Submit` refuses such a queue.
+- **Redis Cluster is not supported** for workflows.
+- **Protect write access to Redis.** Anyone who can add jobs to a task's queue can add a copy of a task.
+
+The redisq repository has [`examples/workflow`](https://github.com/goptics/redisq/tree/main/examples/workflow), which runs one workflow across three processes. sqliteq has no workflow store yet. A task on a sqliteq queue makes `Submit` return `ErrScopeMismatch`.
+
+For the errors that workflow calls return, see [errors](/guides/errors/#returned-by-calls-you-make).
+
+Next: [Context](/guides/context/).

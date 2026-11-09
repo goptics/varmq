@@ -14,7 +14,7 @@ const describe =
 const cols = ['FIFO queue', 'Priority queue', 'Either'];
 ---
 
-<Scene id="amap" title="Interface map" call="worker.WithPersistentQueue(pq)" describe={describe}>
+<Scene id="amap" title="Interface map" call="worker.WithQueue(q)" describe={describe}>
 	<div class="amap" data-amap>
 		<div class="amap__grid">
 			{cols.map((c, i) => <div class="amap__col" style={`grid-column:${i + 1};grid-row:1`}>{c}</div>)}

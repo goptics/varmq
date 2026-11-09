@@ -43,7 +43,7 @@ pq, err := sdb.NewQueue("jobs")
 if err != nil {
 	panic(err)
 }
-queue := worker.WithPersistentQueue(pq)`,
+queue := worker.WithQueue(pq)`,
 		href: '/persistence/sqlite/',
 		more: 'SQLite guide',
 	},
@@ -51,17 +51,17 @@ queue := worker.WithPersistentQueue(pq)`,
 		key: 'redis',
 		label: 'Redis',
 		icon: LOGOS['r-store'].d,
-		text: 'redisq keeps jobs in Redis. A persistent queue lets one process keep its jobs across a restart. A distributed queue lets several processes consume one queue, and each job goes to one of them.',
+		text: 'redisq keeps jobs in Redis, so they survive a restart. Several processes can share one queue, and each job goes to one of them.',
 		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
 		file: 'main.go',
 		code: `rdb := redisq.New("redis://localhost:6375")
 defer rdb.Close()
 
-pq := rdb.NewQueue("persistent_queue")
-queue := worker.WithPersistentQueue(pq)
+rq := rdb.NewQueue("jobs")
+queue := worker.WithQueue(rq)
 
-// several processes: rdb.NewDistributedQueue(name)
-// with worker.WithDistributedQueue`,
+// a process that only adds jobs:
+// varmq.NewQueue[string](rdb.NewQueue("jobs"))`,
 		href: '/persistence/redis/',
 		more: 'Redis guide',
 	},

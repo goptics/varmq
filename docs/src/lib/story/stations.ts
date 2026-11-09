@@ -128,7 +128,7 @@ topic.Publish(2)`,
 pq, _ := sdb.NewQueue("jobs")
 
 worker := varmq.NewWorker(process, 2)
-queue := worker.WithPersistentQueue(pq)
+queue := worker.WithQueue(pq)
 
 queue.Add("job 1")
 queue.Add("job 2")`,
@@ -137,31 +137,31 @@ queue.Add("job 2")`,
 	},
 	{
 		code: `rdb := redisq.New("redis://localhost:6379")
-dq := rdb.NewDistributedQueue("jobs")
+dq := rdb.NewQueue("jobs")
 
 // program A adds
-producer := varmq.NewDistributedQueue[string](dq)
+producer := varmq.NewQueue[string](dq)
 producer.Add("job 1")
 
 // programs B and C run the jobs
 worker := varmq.NewWorker(process, 2)
-worker.WithDistributedQueue(dq)`,
+worker.WithQueue(dq)`,
 		lines: [[1, 2], [5, 6], [], [10], [9, 10]],
 		phone: {
 			code: `rdb := redisq.New(
 	"redis://localhost:6379",
 )
-dq := rdb.NewDistributedQueue("jobs")
+dq := rdb.NewQueue("jobs")
 
 // program A adds
-q := varmq.NewDistributedQueue[string](
+q := varmq.NewQueue[string](
 	dq,
 )
 q.Add("job 1")
 
 // programs B and C run the jobs
 worker := varmq.NewWorker(process, 2)
-worker.WithDistributedQueue(dq)`,
+worker.WithQueue(dq)`,
 			lines: [[1, 2, 3, 4], [7, 8, 9, 10], [], [14], [13, 14]],
 		},
 		source: { label: 'the Redis page', href: 'https://varmq.goptics.org/persistence/redis/' },
@@ -181,21 +181,10 @@ worker.Restart()`,
 	{
 		code: `worker := varmq.NewWorker(process)
 
-worker.BindQueue()              // memory
-worker.WithPersistentQueue(pq)  // SQLite
-worker.WithDistributedQueue(dq) // Redis`,
+worker.BindQueue()   // memory
+worker.WithQueue(pq) // SQLite
+worker.WithQueue(dq) // Redis`,
 		lines: [[1, 3, 4, 5]],
-		phone: {
-			code: `worker := varmq.NewWorker(process)
-
-// memory
-worker.BindQueue()
-// SQLite
-worker.WithPersistentQueue(pq)
-// Redis
-worker.WithDistributedQueue(dq)`,
-			lines: [[1, 3, 4, 5, 6, 7, 8]],
-		},
 		source: { label: 'workers-and-queues', href: `${EXAMPLES}/workers-and-queues` },
 	},
 ];
