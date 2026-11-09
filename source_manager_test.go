@@ -138,7 +138,7 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 	assert.Nil(t, prio.purgeGen(), "batch of one")
 }
 
-// each walks the bound sources in pick order (priority, ties in bind order),
+// each walks the bound sources sorted by priority (ties in bind order),
 // whichever manager is current.
 func TestSourceManagerEach(t *testing.T) {
 	type bound struct {

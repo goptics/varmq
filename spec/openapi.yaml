@@ -709,14 +709,16 @@ components:
                 with one source, where it changes nothing. Absent from older
                 servers, and when the server cannot tell; a client MUST accept
                 a value it does not know.
-              enum: [priority, round_robin, max_len, min_len]
             sources:
               type: array
               description: |
                 Since 1.5.0. The queues and topic subscriptions the worker
-                pulls from, in pick order: by `priority`, lowest first, then
-                no priority set; ties in bind order. Empty when it binds none.
-                Absent from older servers.
+                pulls from, sorted by `priority`: lowest first, then no
+                priority set; ties in bind order. This is the list the strategy
+                picks from, not the order it picks: `priority` takes the first
+                with a job, `max_len` and `min_len` pick by length (equal
+                lengths go to the earlier entry), `round_robin` rotates over
+                it. Empty when it binds none. Absent from older servers.
               items: { $ref: "#/components/schemas/WorkerSource" }
             metrics:
               type: object
@@ -749,9 +751,11 @@ components:
           description: |
             The priority given at bind (`WithQueuePriority`,
             `WithTopicPriority`). Lower picks first under the `priority`
-            strategy; ties keep bind order. Other strategies ignore it.
-            Absent: no priority set (lowest), as is one set to the largest
-            int64.
+            strategy; ties keep bind order. `max_len` and `min_len` give
+            equal lengths to the lower priority; `round_robin` rotates in
+            this order. Absent: no priority set (lowest), as is one set to
+            Go's `int` maximum (`math.MaxInt`: 2^63-1 on 64-bit servers,
+            2^31-1 on 32-bit).
 
     JobState:
       type: string

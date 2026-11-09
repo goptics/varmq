@@ -98,8 +98,8 @@ func (w *worker[T, JobType]) listedQueueIDs() []string {
 	return ids
 }
 
-// boundSources is the worker's bound sources in pick order (priority, ties
-// in bind order), for GET /workers/{name}. A queue's ID is the one
+// boundSources is the worker's bound sources sorted by priority (ties in
+// bind order), the list its strategy picks from, for GET /workers/{name}. A queue's ID is the one
 // GET /queues lists, "" if it has none; a topic subscription has none.
 func (w *worker[T, JobType]) boundSources() []workerSource {
 	out := []workerSource{}

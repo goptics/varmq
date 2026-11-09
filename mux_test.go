@@ -1925,7 +1925,7 @@ func TestMuxGetWorkerSources(t *testing.T) {
 		assert.JSONEq(t, `[{"queue_id":"`+id+`","kind":"queue"}]`, string(getWorkerRaw(t, server, "src-one")["sources"]), "default priority (math.MaxInt): omitted")
 	})
 
-	t.Run("priorities in pick order", func(t *testing.T) {
+	t.Run("priorities in priority order", func(t *testing.T) {
 		w := newWorker(func(j iJob[int]) {}, WithName("src-prio"), WithStrategy(Priority))
 		defer w.Stop()
 		wb := newQueues(w)
@@ -1942,7 +1942,7 @@ func TestMuxGetWorkerSources(t *testing.T) {
 			{QueueID: "z:src-prio", Kind: "queue", Priority: new(1)},
 			{QueueID: "", Kind: "queue", Priority: new(3)},
 			{QueueID: low, Kind: "queue", Priority: new(5)},
-		}, src, "pick order: priority, not bind order")
+		}, src, "priority order, not bind order")
 	})
 
 	t.Run("two handles on one storage", func(t *testing.T) {
