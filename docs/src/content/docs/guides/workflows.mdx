@@ -14,7 +14,7 @@ A workflow is a set of tasks with dependencies. Each task is one job on a queue 
 You need three things: a store, a workflow and its tasks.
 
 1. Create a store with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore). It keeps the state of each workflow in memory.
-2. Create a workflow with [`NewWorkflow`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflow).
+2. Create a [`Workflow`](https://pkg.go.dev/github.com/goptics/varmq#Workflow) with [`NewWorkflow`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflow).
 3. Add the tasks, then call [`Submit`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Submit).
 4. Call [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Wait) or [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.WaitContext) to block until the workflow ends.
 
@@ -49,7 +49,7 @@ Without other options, tasks on other branches still run after a failure. [`With
 
 ### Which queues a task can use
 
-A task can use a queue handle that [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue), [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue), [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) returns. Each handle must also be in the scope of the workflow's store: see [workflows across processes](#workflows-across-processes). [Queues](/guides/queues/) covers how to bind a queue.
+A task can use a queue handle that [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue), [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue), [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) returns. These handles implement [`TaskQueue`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue), whose [`WorkflowItem`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue.WorkflowItem) method turns task data into a job. You do not call it yourself. Each handle must also be in the scope of the workflow's store: see [workflows across processes](#workflows-across-processes). [Queues](/guides/queues/) covers how to bind a queue.
 
 The deprecated binding methods for shared storage return handles that a task cannot use. Passing one to `Add` does not compile. Bind that storage with `WithQueue` or `WithPriorityQueue` instead. A topic subscription cannot be a task's queue either.
 
@@ -97,6 +97,8 @@ All three return a [`WorkflowRecord`](https://pkg.go.dev/github.com/goptics/varm
 | `compensated` | yes | Every undo job completed. |
 | `compensation_failed` | yes | One or more undo jobs failed. |
 | `cancelled` | yes | You cancelled the workflow, and no undo job ran. |
+
+The state is a [`WorkflowState`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowState). Its Go constants are [`WorkflowRunning`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowRunning), [`WorkflowCompleted`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompleted), [`WorkflowFailed`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowFailed), [`WorkflowCompensating`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensating), [`WorkflowCompensated`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensated), [`WorkflowCompensationFailed`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCompensationFailed) and [`WorkflowCancelled`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCancelled).
 
 A task's `State` is `waiting` while a dependency has not ended, and `pending` once its job is queued. It ends as `completed`, `failed` or `cancelled`. The in-memory store shows a running task as `pending`.
 

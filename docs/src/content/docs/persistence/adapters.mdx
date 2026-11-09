@@ -146,6 +146,14 @@ Each interface below adds one feature. VarMQ checks for it on the storage value,
 | [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector) | `Workflows(ctx, state, offset, limit)`, `ScopeID()` | on a workflow store: the store's workflows in [`GET /workflows`](/operations/rest-api/#workflows). |
 | [`InstanceRegistry`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRegistry) | `ReportInstance`, `RemoveInstance`, `Instances` | a record of each process, its workers and their queues, for dashboards. VarMQ supplies the record. |
 
+The types these methods use are in the `contract` module too.
+
+- **Outcomes:** `WatchOutcome` reports a [`JobOutcome`](https://pkg.go.dev/github.com/goptics/varmq#JobOutcome).
+- **Instances:** a record is an [`InstanceRecord`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRecord), with one [`InstanceWorker`](https://pkg.go.dev/github.com/goptics/varmq#InstanceWorker) per worker.
+- **Scopes:** `ScopeID` comes from [`Scoped`](https://pkg.go.dev/github.com/goptics/varmq#Scoped). Stores and queues with the same scope can share workflows.
+- **Workflows:** `Submit` takes a [`WorkflowPlan`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowPlan), with a [`TaskPlan`](https://pkg.go.dev/github.com/goptics/varmq#TaskPlan) per task and an [`UndoPlan`](https://pkg.go.dev/github.com/goptics/varmq#UndoPlan) per undo job. `FinishTask` takes a [`TaskEnd`](https://pkg.go.dev/github.com/goptics/varmq#TaskEnd). Its [`Outcome`](https://pkg.go.dev/github.com/goptics/varmq#Outcome) is [`OutcomeCompleted`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCompleted), [`OutcomeFailed`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeFailed) or [`OutcomeCancelled`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCancelled).
+- **Listing workflows:** a store that implements [`WorkflowKeyLister`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowKeyLister) lists [`WorkflowKey`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowKey) values. Then `GET /workflows` reads a full record only for the workflows on its page.
+
 <details>
 <summary>Details</summary>
 

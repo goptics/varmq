@@ -23,7 +23,7 @@ queue := worker.BindQueue()
 worker.WaitUntilStopped() // the jobs already running finish first
 ```
 
-The [`context-worker` example](https://github.com/goptics/varmq/blob/v1.10.0/examples/context-worker/main.go) in the repository shows a worker with concurrency 10 and three-second jobs that stops on Ctrl+C. The jobs that are running finish, and the ones still waiting do not start.
+The [`context-worker` example](https://github.com/goptics/varmq/blob/main/examples/context-worker/main.go) in the repository shows a worker with concurrency 10 and three-second jobs that stops on Ctrl+C. The jobs that are running finish, and the ones still waiting do not start.
 
 With `WithContext`, a cancel leaves the queued jobs in the queue. To finish every queued job on SIGTERM, do not tie the worker to the signal context. Wait for the signal, then call [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop):
 

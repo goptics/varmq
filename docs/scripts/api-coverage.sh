@@ -17,21 +17,28 @@ docs=docs/src/content/docs
 
 # One "name<TAB>label" line per exported identifier, read from `go doc -all`:
 # funcs, types, single const/var lines, every name in a const or var group
-# (go doc -short collapses those), and the methods of each interface.
+# (go doc -short collapses those), and the methods of each interface. A name
+# whose doc says Deprecated: is skipped: the site shows only the current API.
 # go doc does not fetch modules, so download the pinned one first.
 wanted() {
   (cd docs/examples && go mod download "$pkg" && go doc -all "$pkg") | awk -F'\t' '
-    /^func [A-Z]/      { split($0, a, /[ (\[]/); print a[2] "\t" a[2]; next }
-    /^type [A-Z]/      { split($0, a, /[ \[]/);  print a[2] "\t" a[2]
+    function flush() { if (pend != "" && !dep) print pend; pend = ""; dep = 0 }
+    /^func [A-Z]/      { flush(); split($0, a, /[ (\[]/); pend = a[2] "\t" a[2]; next }
+    /^type [A-Z]/      { flush(); split($0, a, /[ \[]/);  pend = a[2] "\t" a[2]
                          iface = ($0 ~ / interface \{$/) ? a[2] : ""; next }
-    /^(const|var) [A-Z]/ { split($0, a, /[ ,]/); print a[2] "\t" a[2]; next }
-    /^(const|var) \($/ { group = 1; next }
+    /^(const|var) [A-Z]/ { flush(); split($0, a, /[ ,]/); pend = a[2] "\t" a[2]; next }
+    /^(const|var) \($/ { flush(); group = 1; next }
     /^\)$/             { group = 0; next }
     /^}$/              { iface = ""; next }
+    /^    Deprecated:/ { dep = 1; next }
+    /^\t\/\/ Deprecated:/ { mdep = 1; next }
     group && /^\t[A-Z]/ { split($0, a, /[ \t]/); print a[2] "\t" a[2]; next }
     iface != "" && /^\t[A-Z][A-Za-z0-9_]*\(/ {
-      split($0, a, /[\t(]/); print a[2] "\t" iface "." a[2]
-    }'
+      split($0, a, /[\t(]/); if (!mdep) print a[2] "\t" iface "." a[2]; mdep = 0
+    }
+    END { flush() }' |
+    # ponytail: handles only the deprecated binders return; drop once their types say Deprecated: too.
+    grep -vE '^(PersistentQueue|PersistentPriorityQueue|DistributedQueue|DistributedPriorityQueue)[[:space:]]'
 }
 
 # Every name the docs mention, one per line. awk drops fenced blocks first.
