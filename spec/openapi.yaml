@@ -257,8 +257,19 @@ paths:
 
         `cancelled` since 1.4.0. Storage that keeps cancelled records with
         its failed ones (redisq, spec redis-storage.md 6.14) lists them under
-        `failed` too, with `state` `cancelled`; storage that keeps none, such
-        as an in-memory queue, returns an empty page.
+        `failed` too, with `state` `cancelled`; storage that keeps none
+        returns an empty page.
+
+        An in-memory queue keeps no ended jobs by default: its `completed`,
+        `failed` and `cancelled` pages are empty. Bound with
+        `WithEndedJobs(n)` (n up to 200), it keeps the records of its last n
+        ended jobs with an ID, all states in one ring, oldest dropped, while
+        its worker is listed and the REST handler exists. It lists each
+        under its own state only: `failed` leaves cancelled jobs out.
+        Records carry `payload` (null over 64 KiB or when it does not
+        encode), `finished_at`, `attempts` (0 for a job cancelled before it
+        ran, else 1), the error, and a result job's `result` (left out over
+        64 KiB); no `enqueued_at` or `started_at`.
       responses:
         "200":
           description: The jobs; an empty array past the end.
@@ -291,9 +302,10 @@ paths:
         its `QueueInspector` is also a `varmq.JobReader`); else 501. An
         in-memory queue finds a waiting job (`pending`) or a running one
         (`processing`, `attempts` 1, no times, `payload` null: its worker
-        may change the data while it runs); it keeps no ended jobs, so a
-        job that completed, failed or was cancelled is 404, and so is a job
-        without an ID, and one cancelled or closed while it waits. A
+        may change the data while it runs), else its newest kept ended
+        record (see `listJobs`: none by default). Without one, a job that
+        completed, failed or was cancelled is 404, and so is a job without
+        an ID, and one cancelled or closed while it waits. A
         waiting job's data is read without stopping it from starting: a job
         that starts while its data is being read can be read while its
         worker writes `Data()`, so don't mutate `Data()` in place if you use
@@ -375,7 +387,7 @@ paths:
         "404":
           description: |
             No queue with this ID (`queue not found`), or, for an in-memory
-            queue, no waiting or running job with this ID (`job not found`):
+            queue, no waiting, running or kept job with this ID (`job not found`):
             as for `GET`, a job taken into a batch behind a running job, or
             parked by a worker Pause or Stop, is 404 and still runs.
           headers:
@@ -387,8 +399,9 @@ paths:
           description: |
             The job already ended: completed, failed or cancelled
             (`varmq: job already ended`). For an in-memory queue: a job
-            cancelled or closed that still waits in the queue; once a
-            worker drops it, it is 404.
+            cancelled or closed that still waits in the queue, or one with
+            a kept ended record (`listJobs`); else, once a worker drops
+            it, it is 404.
           headers:
             X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
           content:
@@ -720,7 +733,9 @@ components:
           description: |
             Jobs the queue holds in each state now. `completed` and `failed`
             count the Job Records storage still keeps, which retention bounds,
-            not every job that ever finished.
+            not every job that ever finished. An in-memory queue counts its
+            kept records (`listJobs`; 0 by default), cancelled ones in
+            neither.
           required: [pending, processing, completed, failed]
           properties:
             pending:
