@@ -438,7 +438,7 @@ func TestJobCloseEdgeCases(t *testing.T) {
 
 		mockQueue := mocks.NewMockPersistentQueue()
 		worker := newWorker(workerFunc)
-		queue := newPersistentQueue(worker, mockQueue)
+		queue := (&workerBinder[string]{worker}).WithQueue(mockQueue)
 		queue.Add("test")
 		worker.Wait()
 	})
@@ -760,10 +760,10 @@ func TestJobOutcome(t *testing.T) {
 				panic("boom")
 			}
 		})
-		q := w.WithPersistentQueue(mockQueue)
+		q := w.WithQueue(mockQueue)
 
-		require.True(t, q.Add("ok"))
-		require.True(t, q.Add("bad"))
+		require.True(t, addOk(q.Add("ok")))
+		require.True(t, addOk(q.Add("bad")))
 		w.Wait()
 		w.Stop()
 
@@ -1197,20 +1197,20 @@ func blockOnCancel(started chan<- string) func(j Job[int]) {
 	}
 }
 
-func TestRemoteCancelReachesDeprecatedBinders(t *testing.T) {
+func TestRemoteCancelReachesDurableBinders(t *testing.T) {
 	type adder = func(id string) bool
 	binds := map[string]func(IWorkerBinder[int], *cancelStore) adder{
 		"persistent": func(b IWorkerBinder[int], s *cancelStore) adder {
-			q := b.WithPersistentQueue(s)
-			return func(id string) bool { return q.Add(1, WithJobId(id)) }
+			q := b.WithQueue(s)
+			return func(id string) bool { return addOk(q.Add(1, WithJobId(id))) }
 		},
 		"persistent priority": func(b IWorkerBinder[int], s *cancelStore) adder {
-			q := b.WithPersistentPriorityQueue(cancelPrio{s})
-			return func(id string) bool { return q.Add(1, 0, WithJobId(id)) }
+			q := b.WithPriorityQueue(cancelPrio{s})
+			return func(id string) bool { return addOk(q.Add(1, 0, WithJobId(id))) }
 		},
-		"distributed": func(b IWorkerBinder[int], s *cancelStore) adder {
-			b.WithDistributedQueue(s)
-			return func(id string) bool { return NewDistributedQueue[int](s).Add(1, WithJobId(id)) }
+		"producer": func(b IWorkerBinder[int], s *cancelStore) adder {
+			b.WithQueue(s)
+			return func(id string) bool { return addOk(NewQueue[int](s).Add(1, WithJobId(id))) }
 		},
 	}
 	for name, bind := range binds {

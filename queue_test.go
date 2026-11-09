@@ -1585,7 +1585,7 @@ func TestQueuePause(t *testing.T) {
 	defer w.Stop()
 
 	fifo, prio := w.BindQueue(), w.BindPriorityQueue()
-	pq := w.WithPersistentQueue(mocks.NewMockPersistentQueue()) // acknowledging storage: the ack path
+	pq := w.WithQueue(mocks.NewMockPersistentQueue()) // acknowledging storage: the ack path
 	for name, c := range map[string]struct {
 		IExternalBaseQueue
 		add func(int)
@@ -1752,21 +1752,21 @@ func TestQueuePauseUnsupported(t *testing.T) {
 	w := NewWorker(func(Job[int]) {})
 	defer w.Stop()
 	// Embedding an interface hides the mocks' in-memory pause.
-	q := w.WithPersistentQueue(struct{ IPersistentQueue }{mocks.NewMockPersistentQueue()})
+	q := w.WithQueue(struct{ IPersistentQueue }{mocks.NewMockPersistentQueue()})
 	assert.ErrorIs(t, q.Pause(), ErrPauseUnsupported)
 	assert.ErrorIs(t, q.Resume(), ErrPauseUnsupported)
 	assert.False(t, q.IsPaused())
 
-	dq := NewDistributedQueue[int](struct{ IDistributedQueue }{mocks.NewMockDistributedQueue()})
+	dq := NewQueue[int](struct{ IPersistentQueue }{mocks.NewMockPersistentQueue()})
 	assert.ErrorIs(t, dq.Pause(), ErrPauseUnsupported)
-	dpq := NewDistributedPriorityQueue[int](struct{ IDistributedPriorityQueue }{mocks.NewMockDistributedPriorityQueue()})
+	dpq := NewPriorityQueue[int](struct{ IPersistentPriorityQueue }{mocks.NewMockPersistentPriorityQueue()})
 	assert.ErrorIs(t, dpq.Resume(), ErrPauseUnsupported)
 
-	pausable := NewDistributedQueue[int](mocks.NewMockDistributedQueue())
-	require.NoError(t, pausable.Pause(), "a distributed handle forwards to its storage")
+	pausable := NewQueue[int](mocks.NewMockPersistentQueue())
+	require.NoError(t, pausable.Pause(), "a producer handle forwards to its storage")
 	assert.True(t, pausable.IsPaused())
 	require.NoError(t, pausable.Resume())
-	pprio := NewDistributedPriorityQueue[int](mocks.NewMockDistributedPriorityQueue())
+	pprio := NewPriorityQueue[int](mocks.NewMockPersistentPriorityQueue())
 	require.NoError(t, pprio.Pause())
 	assert.True(t, pprio.IsPaused())
 	require.NoError(t, pprio.Resume())

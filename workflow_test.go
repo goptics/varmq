@@ -18,6 +18,7 @@ import (
 	"time"
 	"weak"
 
+	"github.com/goptics/varmq/contract"
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
@@ -39,19 +40,25 @@ func (fakeWFStore) DepResult(context.Context, string, string) ([]byte, error) {
 func (fakeWFStore) Record(context.Context, string) (WorkflowRecord, error) {
 	return WorkflowRecord{}, ErrWorkflowNotFound
 }
+func (fakeWFStore) FinishTask(string, string, TaskEnd) ([]string, bool) { return nil, true }
+
+// useStore registers st for its scope until the test ends.
+func useStore(t *testing.T, st WorkflowStore) {
+	t.Helper()
+	require.NoError(t, contract.RegisterWorkflowStore(st))
+	t.Cleanup(func() { contract.UnregisterWorkflowStore(st) })
+}
 
 func memStore() fakeWFStore { return fakeWFStore{scope: "memory:" + InstanceID} }
 
-// wfStorage makes a mock storage workflow-capable: scoped, inspectable,
-// WorkflowAcknowledgeable.
+// wfStorage makes a mock storage workflow-capable: scoped and inspectable.
+// Its store is the one registered for its scope (useStore).
 type wfStorage struct {
 	id, scope string
 }
 
-func (s wfStorage) ScopeID() string                           { return s.scope }
-func (s wfStorage) QueueID() string                           { return s.id }
-func (s wfStorage) WorkflowStore() WorkflowStore              { return fakeWFStore{scope: s.scope} }
-func (wfStorage) FinishTask(string, TaskEnd) ([]string, bool) { return nil, false }
+func (s wfStorage) ScopeID() string { return s.scope }
+func (s wfStorage) QueueID() string { return s.id }
 func (wfStorage) QueueStats(context.Context) (QueueStats, error) {
 	return QueueStats{}, nil
 }
@@ -68,11 +75,6 @@ type wfDistributedPrio struct {
 	*mocks.MockDistributedPriorityQueue
 	wfStorage
 }
-
-// noStorePersistent is workflow storage whose WorkflowStore is nil.
-type noStorePersistent struct{ wfPersistent }
-
-func (noStorePersistent) WorkflowStore() WorkflowStore { return nil }
 
 func newWFPersistent(id, scope string) wfPersistent {
 	return wfPersistent{mocks.NewMockPersistentQueue(), wfStorage{id, scope}}
@@ -263,15 +265,6 @@ func TestWorkflowBuilder(t *testing.T) {
 			require.NoError(t, err, name)
 			assert.True(t, c.kind(v), "%s: item %T", name, v)
 		}
-
-		// deprecated handles are no targets, even past the type system
-		type target interface {
-			WorkflowItem(int) (WorkflowItem, error)
-		}
-		_, err := any(dw.WithPersistentQueue(newWFPersistent("a", "redis://x"))).(target).WorkflowItem(1)
-		assert.ErrorIs(t, err, ErrScopeMismatch)
-		_, err = any(dw.WithPersistentPriorityQueue(pp)).(target).WorkflowItem(1)
-		assert.ErrorIs(t, err, ErrScopeMismatch)
 	})
 
 	planErr := func(t *testing.T, wf *Workflow) error {
@@ -350,16 +343,6 @@ func TestWorkflowBuilder(t *testing.T) {
 		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
 		wf.Add("a", pq, 1)
 		assert.ErrorIs(t, planErr(t, wf), ErrScopeMismatch)
-	})
-
-	t.Run("durable storage with no workflow store", func(t *testing.T) {
-		pw := NewWorker(func(Job[int]) {}, WithAutoRun(false))
-		pq := pw.WithQueue(noStorePersistent{newWFPersistent("q1", "redis://x")})
-		wf := NewWorkflow(fakeWFStore{scope: "redis://x"})
-		wf.Add("a", pq, 1)
-		err := planErr(t, wf)
-		assert.ErrorIs(t, err, ErrScopeMismatch)
-		assert.ErrorContains(t, err, "storage has no workflow store")
 	})
 
 	t.Run("nil queue", func(t *testing.T) {
@@ -520,8 +503,6 @@ type pokeStorage struct {
 	wfStorage
 }
 
-func (pokeStorage) FinishTask(string, TaskEnd) ([]string, bool) { return nil, true }
-
 // pushStore pushes roots at Submit and every undo at Cancel straight into
 // their storage, as a store's script does, leaving the wake to varmq.
 type pushStore struct {
@@ -579,6 +560,7 @@ func TestWorkflowPokesLocal(t *testing.T) {
 			uw.WaitUntilIdle()
 
 			store := &pushStore{fakeWFStore: fakeWFStore{scope: "s"}}
+			useStore(t, store)
 			wf := NewWorkflow(store, WithWorkflowID("pk"))
 			wf.Add("a", th, 1).Undo(uh, 10)
 			require.NoError(t, wf.Submit(ctx))
@@ -622,7 +604,9 @@ func TestWorkflowPokesLocalOnSubmitError(t *testing.T) {
 	th := tw.WithQueue(tq)
 	tw.WaitUntilIdle()
 
-	wf := NewWorkflow(lostReplyStore{&pushStore{fakeWFStore: fakeWFStore{scope: "s"}}}, WithWorkflowID("lr"))
+	lost := lostReplyStore{&pushStore{fakeWFStore: fakeWFStore{scope: "s"}}}
+	useStore(t, lost)
+	wf := NewWorkflow(lost, WithWorkflowID("lr"))
 	wf.Add("a", th, 1)
 	require.EqualError(t, wf.Submit(context.Background()), "reply lost")
 	assert.False(t, wf.submitted, "retryable")
@@ -2271,7 +2255,7 @@ type crashState struct {
 	ends    []TaskEnd // every FinishTask's end
 }
 
-// crashStorage is a durable, workflow-acknowledging mock queue.
+// crashStorage is a durable mock queue; crashStore (scope "s") is its store.
 type crashStorage struct {
 	*mocks.MockPersistentQueue
 	wfStorage
@@ -2292,9 +2276,7 @@ func (c crashStore) Runnable(_ context.Context, _, task string, undo bool) (bool
 	return c.st.s.runnable(task, undo), nil
 }
 
-func (c crashStorage) WorkflowStore() WorkflowStore { return crashStore{memStore(), c.st} }
-
-func (c crashStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) {
+func (c crashStore) FinishTask(_, _ string, e TaskEnd) ([]string, bool) {
 	st := c.st
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -2369,6 +2351,7 @@ func TestWorkflowCrashRerun(t *testing.T) {
 				}
 				return true, false
 			}
+			useStore(t, crashStore{fakeWFStore{scope: "s"}, st})
 			aStorage := crashStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-a", "s"}, st}
 			bStorage := crashStorage{st.bQueue, wfStorage{"q-b", "s"}, st}
 
@@ -2423,6 +2406,7 @@ func TestWorkflowPreRunError(t *testing.T) {
 			plan := WorkflowPlan{ID: "cr", Tasks: []TaskPlan{{Name: "a"}}}
 			ws, _ := newWFState(plan)
 			st := &crashState{s: ws, runErr: tc.err, lose: func(int) (bool, bool) { return true, false }}
+			useStore(t, crashStore{fakeWFStore{scope: "s"}, st})
 			storage := crashStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-a", "s"}, st}
 
 			var runs atomic.Int32
@@ -2570,18 +2554,20 @@ func (r *endRec) get() map[string]TaskEnd {
 type endStorage struct {
 	*mocks.MockPersistentQueue
 	wfStorage
+}
+
+// endStore (scope "s") records the ends.
+type endStore struct {
+	fakeWFStore
 	rec *endRec
 }
 
-func (s endStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) { return s.rec.finish(e) }
+func (s endStore) FinishTask(_, _ string, e TaskEnd) ([]string, bool) { return s.rec.finish(e) }
 
 type endBatchStorage struct {
 	*batchTestQueue
 	wfStorage
-	rec *endRec
 }
-
-func (s endBatchStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) { return s.rec.finish(e) }
 
 // TestWorkflowDurableEnds: result and error workers on durable storage, one
 // job or a batch per pop, report each task's Outcome, Reason and Result (R
@@ -2589,14 +2575,14 @@ func (s endBatchStorage) FinishTask(_ string, e TaskEnd) ([]string, bool) { retu
 func TestWorkflowDurableEnds(t *testing.T) {
 	type storage interface {
 		IPersistentQueue
-		WorkflowAcknowledgeable
+		Scoped
 	}
 	sources := map[string]func(*endRec) storage{
 		"single": func(r *endRec) storage {
-			return endStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-e", "s"}, r}
+			return endStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-e", "s"}}
 		},
 		"batch": func(r *endRec) storage {
-			s := endBatchStorage{&batchTestQueue{}, wfStorage{"q-e", "s"}, r}
+			s := endBatchStorage{&batchTestQueue{}, wfStorage{"q-e", "s"}}
 			var _ IBatchAcknowledgeable = s
 			return s
 		},
@@ -2625,6 +2611,7 @@ func TestWorkflowDurableEnds(t *testing.T) {
 		for wName, bind := range workers {
 			t.Run(sName+"/"+wName, func(t *testing.T) {
 				rec := &endRec{ends: map[string]TaskEnd{}}
+				useStore(t, endStore{fakeWFStore{scope: "s"}, rec})
 				s := newStorage(rec)
 				require.True(t, s.Enqueue(taskBytes(t, "e2e", "ok", 1)))
 				require.True(t, s.Enqueue(taskBytes(t, "e2e", "bad", 2)))
@@ -2735,7 +2722,7 @@ func TestTaskContextErrors(t *testing.T) {
 func TestLocalPokers(t *testing.T) {
 	w := NewWorker(func(Job[int]) {}).(*workerBinder[int])
 	defer w.Stop()
-	src := w.bind(endBatchStorage{&batchTestQueue{}, wfStorage{"q-pokers", "s"}, &endRec{ends: map[string]TaskEnd{}}}, 0)
+	src := w.bind(endBatchStorage{&batchTestQueue{}, wfStorage{"q-pokers", "s"}}, 0)
 	defer queueRegistry.Delete("q-pokers")
 
 	b, ok := src.(*batchAckSource[int, iJob[int]])
@@ -2820,16 +2807,16 @@ func TestWorkflowResultNotJSON(t *testing.T) {
 	assert.Contains(t, r.Tasks[0].Reason, "varmq: task result: json: unsupported type")
 }
 
-// skipStorage is durable storage whose store stops every task and that
-// refuses every FinishTask (wfStorage's).
+// skipStorage is durable storage; its store (notRunnable, scope "s") stops
+// every task and refuses every FinishTask.
 type skipStorage struct {
 	*mocks.MockPersistentQueue
 	wfStorage
 }
 
-func (skipStorage) WorkflowStore() WorkflowStore { return notRunnable{fakeWFStore{scope: "s"}} }
-
 type notRunnable struct{ fakeWFStore }
+
+func (notRunnable) FinishTask(string, string, TaskEnd) ([]string, bool) { return nil, false }
 
 func (notRunnable) Runnable(context.Context, string, string, bool) (bool, error) {
 	return false, nil
@@ -2848,6 +2835,7 @@ func TestWorkflowSkipAckFails(t *testing.T) {
 	}))
 	defer w.Stop()
 
+	useStore(t, notRunnable{fakeWFStore{scope: "s"}})
 	s := skipStorage{mocks.NewMockPersistentQueue(), wfStorage{"q-skip", "s"}}
 	defer queueRegistry.Delete("q-skip")
 	require.True(t, s.Enqueue(taskBytes(t, "sk", "a", 1)))
@@ -2873,10 +2861,9 @@ func (c cancelThenFail) Cancel(ctx context.Context, id string, undo *bool) error
 
 // TestMuxWorkflowCancelReadFails: a read failing after the cancel is 503.
 func TestMuxWorkflowCancelReadFails(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
-	registerWorkflowStore(cancelThenFail{&fakeWorkflowStore{scope: "ctf", recs: []WorkflowRecord{{ID: "c1"}}}})
+	useStore(t, cancelThenFail{&fakeWorkflowStore{scope: "ctf", recs: []WorkflowRecord{{ID: "c1"}}}})
 	rr := httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/workflows/c1/actions/cancel", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
@@ -2895,4 +2882,265 @@ func TestMemPlanCheckUndo(t *testing.T) {
 	err = s.Submit(context.Background(), p)
 	assert.ErrorIs(t, err, ErrScopeMismatch)
 	assert.ErrorContains(t, err, `task "a undo"`)
+}
+
+// ackStore is a store (scope "s") that records every FinishTask.
+type ackStore struct {
+	fakeWFStore
+	mu  sync.Mutex
+	got [][2]string // queueID, ackID per call
+	end []TaskEnd
+}
+
+func (s *ackStore) FinishTask(queueID, ackID string, e TaskEnd) ([]string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.got = append(s.got, [2]string{queueID, ackID})
+	s.end = append(s.end, e)
+	return nil, true
+}
+
+// TestWorkflowStoreLookupByScope: a durable task finds the store registered
+// for its queue's scope, runs, and ends through that store, not the queue.
+func TestWorkflowStoreLookupByScope(t *testing.T) {
+	st := &ackStore{fakeWFStore: fakeWFStore{scope: "s"}}
+	useStore(t, st)
+	q := mocks.NewMockPersistentQueue()
+	s := struct {
+		*mocks.MockPersistentQueue
+		wfStorage
+	}{q, wfStorage{"q-ls", "s"}}
+	var ran atomic.Int32
+	w := NewWorker(func(Job[int]) { ran.Add(1) })
+	defer w.Stop()
+	require.True(t, s.Enqueue(taskBytes(t, "ls", "a", 1)))
+	w.WithQueue(s)
+
+	require.Eventually(t, func() bool {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return len(st.got) == 1
+	}, 5*time.Second, time.Millisecond)
+	assert.Equal(t, int32(1), ran.Load())
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	assert.Equal(t, "q-ls", st.got[0][0], "the queue ID")
+	assert.NotEmpty(t, st.got[0][1], "the ack ID")
+	assert.Equal(t, TaskEnd{Workflow: "ls", Task: "a", Outcome: OutcomeCompleted}, st.end[0])
+	assert.Empty(t, q.Acked(), "the queue is not asked to ack: the store settles the job")
+}
+
+// TestWorkflowNoStoreForScope: a durable task whose scope has no registered
+// store is not run and not acked; the error names the scope. Once the store
+// is registered, a redelivery runs.
+func TestWorkflowNoStoreForScope(t *testing.T) {
+	resetWorkflowStores(t)
+	errs := make(chan error, 4)
+	var ran atomic.Int32
+	w := NewWorker(func(Job[int]) { ran.Add(1) }, WithErrHandler(func(_ Worker, err error) {
+		select {
+		case errs <- err:
+		default:
+		}
+	}))
+	defer w.Stop()
+	q := mocks.NewMockPersistentQueue()
+	s := struct {
+		*mocks.MockPersistentQueue
+		wfStorage
+	}{q, wfStorage{"q-ns", "nostore:1"}}
+	defer queueRegistry.Delete("q-ns")
+	require.True(t, s.Enqueue(taskBytes(t, "ns", "a", 1)))
+	w.WithQueue(s)
+
+	select {
+	case err := <-errs:
+		assert.ErrorContains(t, err, "varmq: no workflow store for scope nostore:1: create the storage's workflow store")
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing store never reported")
+	}
+	w.WaitUntilIdle()
+	assert.Zero(t, ran.Load(), "never ran")
+	assert.Empty(t, q.Acked(), "not acked: stays for redelivery")
+	assert.Empty(t, q.Rejected())
+
+	st := &ackStore{fakeWFStore: fakeWFStore{scope: "nostore:1"}}
+	useStore(t, st)
+	require.True(t, s.Enqueue(taskBytes(t, "ns", "a", 1))) // redelivery
+	w.notifyToPullNextJobs()
+	require.Eventually(t, func() bool { return ran.Load() == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return len(st.got) == 1
+	}, 5*time.Second, time.Millisecond)
+}
+
+// TestMuxWorkflowsListRegisteredStore: GET /workflows lists a store a
+// storage registered, with no queue bound.
+func TestMuxWorkflowsListRegisteredStore(t *testing.T) {
+	resetWorkflowStores(t)
+	useStore(t, &fakeWorkflowStore{scope: "reg:1", recs: []WorkflowRecord{{ID: "r1", CreatedAt: 1}}})
+
+	rr := httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var recs []WorkflowRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, "r1", recs[0].ID)
+}
+
+// ackCountBatch is batch storage that counts the acks it gets.
+type ackCountBatch struct {
+	*batchTestQueue
+	wfStorage
+	acks atomic.Int32
+}
+
+func (q *ackCountBatch) Acknowledge(string) bool { q.acks.Add(1); return true }
+
+// TestWorkflowNoStoreBatchPath: on batch storage too, a task with no store
+// is not run, reported and not acked.
+func TestWorkflowNoStoreBatchPath(t *testing.T) {
+	resetWorkflowStores(t)
+	q := &ackCountBatch{batchTestQueue: &batchTestQueue{}, wfStorage: wfStorage{"q-nb", "nostore:b"}}
+	var ran atomic.Int32
+	w := NewWorker(func(Job[int]) { ran.Add(1) })
+	defer w.Stop()
+	defer queueRegistry.Delete("q-nb")
+	require.True(t, q.Enqueue(taskBytes(t, "nb", "a", 1)))
+	w.WithQueue(q)
+
+	select {
+	case err := <-w.Errs():
+		assert.ErrorContains(t, err, "no workflow store for scope nostore:b")
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing store never reported")
+	}
+	w.WaitUntilIdle()
+	assert.Zero(t, ran.Load())
+	assert.Zero(t, q.acks.Load(), "not acked")
+}
+
+// scopeOnly is Scoped storage with no QueueInspector.
+type scopeOnly struct {
+	*mocks.MockPersistentQueue
+	scope string
+}
+
+func (s scopeOnly) ScopeID() string { return s.scope }
+
+// TestWorkflowCloseWithoutStore: closing a waiting durable task never acks
+// it when its scope has no store, or its storage has no Queue ID.
+func TestWorkflowCloseWithoutStore(t *testing.T) {
+	resetWorkflowStores(t)
+	useStore(t, fakeWFStore{scope: "closed:1"}) // a store exists, but no Queue ID
+
+	for name, mk := range map[string]func(*mocks.MockPersistentQueue) IAcknowledgeable{
+		"no store": func(m *mocks.MockPersistentQueue) IAcknowledgeable {
+			return struct {
+				*mocks.MockPersistentQueue
+				wfStorage
+			}{m, wfStorage{"q-c", "nostore:c"}}
+		},
+		"no queue ID": func(m *mocks.MockPersistentQueue) IAcknowledgeable {
+			return scopeOnly{m, "closed:1"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := mocks.NewMockPersistentQueue()
+			j := newJob(1, jobConfigs{Id: "wf:c:a"})
+			j.setTask(taskTag{wf: "c", task: "a"})
+			j.setAck(mk(m), "ack1")
+			require.NoError(t, j.Close())
+			assert.Empty(t, m.Acked())
+			assert.Empty(t, m.Rejected())
+		})
+	}
+}
+
+// capQueue records the capacity the binder sets.
+type capQueue struct {
+	*mocks.MockPersistentQueue
+	cap int
+}
+
+func (q *capQueue) SetCapacity(n int) { q.cap = n }
+
+// TestWithQueueCapacityDurable: a durable WithQueue handle passes
+// WithQueueCapacity to storage that is a CapacitySetter.
+func TestWithQueueCapacityDurable(t *testing.T) {
+	s := &capQueue{MockPersistentQueue: mocks.NewMockPersistentQueue()}
+	w := NewWorker(func(Job[int]) {})
+	defer w.Stop()
+	w.WithQueue(s, WithQueueCapacity(3))
+	assert.Equal(t, 3, s.cap)
+}
+
+// TestNoStoreErrorRateLimited: one scope's missing store is reported once
+// per interval.
+func TestNoStoreErrorRateLimited(t *testing.T) {
+	noStoreSeen.Delete("rl:1")
+	defer noStoreSeen.Delete("rl:1")
+	assert.True(t, noStoreDue("rl:1"))
+	assert.False(t, noStoreDue("rl:1"))
+	assert.True(t, noStoreDue("rl:2"), "another scope")
+	noStoreSeen.Delete("rl:2")
+	noStoreSeen.Store("rl:1", time.Now().Add(-2*noStoreEvery))
+	assert.True(t, noStoreDue("rl:1"), "due again")
+}
+
+// TestReservedWorkflowJobID: a plain Add may not use the "wf:" id prefix.
+func TestReservedWorkflowJobID(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	_, ok := q.Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "memory queue")
+	_, ok = q.Add(1, WithJobId("wfx"))
+	assert.True(t, ok, "other ids are fine")
+
+	pq := w.BindPriorityQueue()
+	_, ok = pq.Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "priority queue")
+
+	g := NewWorker(func(Job[int]) {}, WithAutoRun(false), WithJobIdGenerator(func() string { return "wf:gen" }))
+	_, ok = g.BindQueue().Add(1)
+	assert.False(t, ok, "generated id")
+
+	s := mocks.NewMockPersistentQueue()
+	_, ok = NewQueue[int](s).Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "durable producer")
+	assert.Zero(t, s.Len())
+}
+
+// TestReservedWorkflowJobIDVariants: the err and result handles refuse the
+// "wf:" id prefix too, in FIFO and priority storage.
+func TestReservedWorkflowJobIDVariants(t *testing.T) {
+	ew := NewErrWorker(func(Job[int]) error { return nil }, WithAutoRun(false))
+	_, ok := ew.BindQueue().Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "err queue")
+	_, ok = ew.BindPriorityQueue().Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "err priority queue")
+
+	rw := NewResultWorker(func(Job[int]) (int, error) { return 0, nil }, WithAutoRun(false))
+	_, ok = rw.BindQueue().Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "result queue")
+	_, ok = rw.BindPriorityQueue().Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "result priority queue")
+}
+
+// TestRunnableUnsubmittedMemoryTag: an in-memory task tag with no store
+// (never submitted) runs with no check; the memory store's FinishTask
+// settles a task end.
+func TestRunnableUnsubmittedMemoryTag(t *testing.T) {
+	w := newWorker(func(iJob[int]) {})
+	defer w.Stop()
+	j := newJob(1, jobConfigs{Id: "wf:u:a"})
+	j.setTask(taskTag{wf: "u", task: "a"})
+	assert.True(t, w.runnable(iJob[int](j)))
+
+	s, _ := newMemStore(t)
+	_, ok := s.FinishTask("", "", TaskEnd{Workflow: "nope", Task: "a", Outcome: OutcomeCompleted})
+	assert.False(t, ok, "unknown workflow")
 }

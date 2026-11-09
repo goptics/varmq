@@ -1,6 +1,6 @@
 # VarMQ Redis storage
 
-**Version 1.7.0**
+**Version 1.8.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.8.0**: FinishTask (section 6.10) is an operation of the workflow store, not of the queue: the caller passes the queue ID and the ack ID of the item. A store registers itself by scope, so a queue only names its scope, and a consumer finds the store by that scope. No key, script or item changes: nothing from 1.7.0 changes for the data in Redis.
 - **1.7.0**: job cancel (section 6.14): sorted set `<base>:cancelled`, control message `cancel:<job id>`, record and outcome state `cancelled`. Nothing from 1.6.0 changes while the set is absent.
 - **1.6.0**: job outcome (section 6.13): channel `<base>:done:<job id>`, Acknowledge with a result, Job Record field `result`. Nothing from 1.5.0 changes for a reader that ignores them. redisq offers only distributed queues (every enqueue wakes idle consumers); the plain behaviour stays valid for other implementations.
 - **1.5.0**: workflows (sections 6.9 to 6.12, 7.3): keys `wf:<id>` and `wf:index`, envelope fields `wf`, `task` and `undo`, Purge cancels the workflow tasks it removes. 1.4.0 is reserved for retries (separate change). Nothing from 1.3.0 changes for a job without `wf`.
@@ -321,7 +322,9 @@ A caller MUST write the envelope of a task with `status` `Created`, and with `wf
 
 A consumer that takes an item whose envelope has `wf` MUST finish it with this operation, not with Acknowledge or Reject (section 6.3, 6.4). It settles the item as they do and applies the outcome to the workflow in the same script, so no moment exists where a task has ended and its dependents are neither waiting nor queued.
 
-Input: the ack ID and a task end: workflow, task, `undo`, outcome (`completed`, `failed` or `cancelled`), reason, result bytes; and the result limit (default 65536 bytes) and retention (default 7 days) of the store.
+The operation belongs to the workflow store, which a process makes for the storage and registers by scope. A consumer finds the store of the scope of the queue the item came from, and calls it with that queue's Queue ID and the ack ID. A consumer that has no store for the scope MUST NOT run the item and MUST NOT settle it: the item stays pending and is redelivered, and the consumer SHOULD report the missing store.
+
+Input: the Queue ID of the queue the item came from, the ack ID and a task end: workflow, task, `undo`, outcome (`completed`, `failed` or `cancelled`), reason, result bytes; and the result limit (default 65536 bytes) and retention (default 7 days) of the store.
 
 The caller reads the static `t:` fields of the workflow before the script (`t:` never changes after Submit, so a caller MAY cache them) and passes in `KEYS`, in this order:
 
@@ -524,4 +527,5 @@ A record is **live** when its score is at least `now - 3 × interval_ms`, with n
 - 1.5.0 adds keys and envelope fields, and changes how a workflow task finishes. A pre-1.5.0 consumer does not know `wf`: it settles a workflow task with plain Acknowledge or Reject, so the task ends in its queue but nothing is promoted, the workflow waits for it forever, and the pre-run check (section 6.12) is skipped. Every consumer of a queue that carries workflow tasks MUST run a workflow-aware implementation and a storage on 1.5.0; a producer MUST NOT Submit a workflow unless it has checked that every queue involved is served that way. A job without `wf` is unchanged by 1.5.0. A pre-1.5.0 Purge does not cancel workflow tasks, so it leaves their workflow running. A workflow hash and index entry are not part of any queue, so an older Purge does not touch them.
 - 1.6.0 adds a channel and a record field. A pre-1.6.0 consumer publishes no outcome and writes no `result`. A waiter on a job it finishes sees the end only through the record, and gets no result.
 - 1.7.0 adds a key, a control message and a pop rule. A pre-1.7.0 consumer ignores `<base>:cancelled`, so it still hands out and runs a cancelled job. A cancel is reliable only once every consumer of the queue runs 1.7.0.
+- 1.8.0 changes no data. A consumer process that has no workflow store registered for the scope of a queue holds that queue's workflow items unacked and reports an error. Every consumer process of a workflow queue MUST create the store.
 - A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.

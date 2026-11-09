@@ -148,20 +148,17 @@ func resultTaskJob[T, R any](data T) func(string) (any, *job[T]) {
 }
 
 // durableWorkflowItem is a WorkflowItem of shared (acknowledgeable)
-// storage, which must finish workflow tasks itself.
+// storage: it must name its queue and scope; its store is found by scope.
 func durableWorkflowItem[T any](storage any, priority bool, data T) (WorkflowItem, error) {
 	qi, inspectable := storage.(QueueInspector)
-	wa, ok := storage.(WorkflowAcknowledgeable)
-	if !ok || !inspectable {
+	sc, scoped := storage.(Scoped)
+	if !scoped || !inspectable {
 		name := fmt.Sprintf("%T", storage)
 		if inspectable {
 			name = qi.QueueID()
 		}
 
 		return WorkflowItem{}, fmt.Errorf("%w: queue %s can't take workflow tasks", ErrScopeMismatch, name)
-	}
-	if wa.WorkflowStore() == nil { // its tasks would skip the pre-run check
-		return WorkflowItem{}, fmt.Errorf("%w: queue %s: storage has no workflow store", ErrScopeMismatch, qi.QueueID())
 	}
 
 	build := func(jobID string, tag taskTag) (any, error) {
@@ -171,7 +168,7 @@ func durableWorkflowItem[T any](storage any, priority bool, data T) (WorkflowIte
 	}
 
 	return WorkflowItem{
-		target: taskTarget{queueID: qi.QueueID(), queue: storage, scope: wa.ScopeID(), priority: priority},
+		target: taskTarget{queueID: qi.QueueID(), queue: storage, scope: sc.ScopeID(), priority: priority},
 		build:  build,
 	}, nil
 }

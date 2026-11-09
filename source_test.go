@@ -926,13 +926,13 @@ func TestBatchSourceNoLenProbes(t *testing.T) {
 	var wg sync.WaitGroup
 	wb := NewWorker(func(Job[string]) { wg.Done() }, WithConcurrency(4))
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	const n = 500
 	wg.Add(n)
 	for i := range n {
-		require.True(t, pq.Add(fmt.Sprint(i)))
+		require.True(t, addOk(pq.Add(fmt.Sprint(i))))
 	}
 	wg.Wait()
 
@@ -948,23 +948,23 @@ func TestBatchSourceAddThenWait(t *testing.T) {
 	}{
 		{"persistent", func(wb IWorkerBinder[string]) (*batchTestQueue, func(string) bool) {
 			q := &batchTestQueue{}
-			pq := wb.WithPersistentQueue(q)
-			return q, func(s string) bool { return pq.Add(s) }
+			pq := wb.WithQueue(q)
+			return q, func(s string) bool { return addOk(pq.Add(s)) }
 		}},
 		{"persistent priority", func(wb IWorkerBinder[string]) (*batchTestQueue, func(string) bool) {
 			q := &batchTestPrioQueue{&batchTestQueue{}}
-			pq := wb.WithPersistentPriorityQueue(q)
-			return q.batchTestQueue, func(s string) bool { return pq.Add(s, 1) }
+			pq := wb.WithPriorityQueue(q)
+			return q.batchTestQueue, func(s string) bool { return addOk(pq.Add(s, 1)) }
 		}},
 		{"distributed", func(wb IWorkerBinder[string]) (*batchTestQueue, func(string) bool) {
 			q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
-			dq := wb.WithDistributedQueue(q)
-			return q.batchTestQueue, func(s string) bool { return dq.Add(s) }
+			dq := wb.WithQueue(q)
+			return q.batchTestQueue, func(s string) bool { return addOk(dq.Add(s)) }
 		}},
 		{"distributed priority", func(wb IWorkerBinder[string]) (*batchTestQueue, func(string) bool) {
 			q := &batchTestDistPrioQueue{&batchTestDistQueue{batchTestQueue: &batchTestQueue{}}}
-			dq := wb.WithDistributedPriorityQueue(q)
-			return q.batchTestQueue, func(s string) bool { return dq.Add(s, 1) }
+			dq := wb.WithPriorityQueue(q)
+			return q.batchTestQueue, func(s string) bool { return addOk(dq.Add(s, 1)) }
 		}},
 	}
 	for _, c := range cases {
@@ -994,11 +994,11 @@ func TestBatchSourceErrorNoSpin(t *testing.T) {
 	var errs atomic.Int64
 	wb := NewWorker(r.run, WithErrHandler(func(Worker, error) { errs.Add(1) }))
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	q.fail.Store(true)
-	require.True(t, pq.Add("a"))
+	require.True(t, addOk(pq.Add("a")))
 	time.Sleep(200 * time.Millisecond)
 	assert.EqualValues(t, 2, q.pops.Load(), "one pop for the add, no retries")
 	assert.EqualValues(t, 1, errs.Load())
@@ -1021,7 +1021,7 @@ func TestBatchSourceClosedNoSpin(t *testing.T) {
 	var errs atomic.Int64
 	wb := NewWorker(func(Job[string]) {}, WithErrHandler(func(Worker, error) { errs.Add(1) }))
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 
 	time.Sleep(1500 * time.Millisecond) // past one resync
 	assert.EqualValues(t, 1, q.pops.Load())
@@ -1035,7 +1035,7 @@ func TestBatchSourceResync(t *testing.T) {
 	var r recorder
 	wb := NewWorker(r.run)
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	time.Sleep(1200 * time.Millisecond) // one resync finds the queue empty and re-arms
@@ -1055,7 +1055,7 @@ func TestBatchSourceDistributedWake(t *testing.T) {
 	var r recorder
 	wb := NewWorker(r.run)
 	defer wb.Stop()
-	wb.WithDistributedQueue(q)
+	wb.WithQueue(q)
 	waitPops(t, q.batchTestQueue, 1)
 
 	q.push(jobBytes(t, "a")) // stored by another process
@@ -1070,7 +1070,7 @@ func TestBatchSourceNumPendingExact(t *testing.T) {
 	q := &batchTestQueue{}
 	wb := NewWorker(func(Job[string]) {})
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	waitPops(t, q, 1)
 	require.NoError(t, wb.Pause())
 
@@ -1089,7 +1089,7 @@ func TestBatchSourceStepDown(t *testing.T) {
 	wb := NewWorker(r.run)
 	defer wb.Stop()
 	w := internalWorker(wb)
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	topic := NewTopic[string]()
@@ -1113,7 +1113,7 @@ func TestBatchSourceBindPopsExisting(t *testing.T) {
 	wb := NewWorker(r.run)
 	defer wb.Stop()
 	time.Sleep(20 * time.Millisecond) // the worker's start signal is long consumed
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.Eventually(t, func() bool { return r.has("old") }, 500*time.Millisecond, time.Millisecond)
 }
 
@@ -1127,7 +1127,7 @@ func TestBatchSourceSkipsClosedJob(t *testing.T) {
 	var r recorder
 	wb := NewWorker(r.run)
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.Eventually(t, func() bool { return r.has("next") }, 500*time.Millisecond, time.Millisecond)
 	assert.False(t, r.has("closed"))
 }
@@ -1169,12 +1169,12 @@ func TestBatchSourceEmptyPopWithItemsLeft(t *testing.T) {
 	q := &heldQueue{batchTestQueue: &batchTestQueue{}}
 	var r recorder
 	wb := NewWorker(r.run)
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q.batchTestQueue, 1)
 
 	q.hold.Store(true)
 	before := q.pops.Load()
-	require.True(t, pq.Add("delayed"))
+	require.True(t, addOk(pq.Add("delayed")))
 	time.Sleep(100 * time.Millisecond)
 	assert.Less(t, q.pops.Load()-before, int64(5))
 
@@ -1182,7 +1182,7 @@ func TestBatchSourceEmptyPopWithItemsLeft(t *testing.T) {
 	require.Eventually(t, func() bool { return r.has("delayed") }, 1500*time.Millisecond, 10*time.Millisecond)
 
 	q.hold.Store(true)
-	require.True(t, pq.Add("held"))
+	require.True(t, addOk(pq.Add("held")))
 	done := make(chan struct{})
 	go func() { wb.StopAndWait(); close(done) }()
 	select {
@@ -1191,20 +1191,6 @@ func TestBatchSourceEmptyPopWithItemsLeft(t *testing.T) {
 		q.hold.Store(false)
 		t.Fatal("StopAndWait hangs")
 	}
-}
-
-// A distributed adapter bound as a persistent queue is not subscribed, so it
-// gets the persistent resync.
-func TestBatchSourcePersistentBindingOfSubscribable(t *testing.T) {
-	t.Parallel()
-	q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
-	var r recorder
-	wb := NewWorker(r.run)
-	defer wb.Stop()
-	wb.WithPersistentQueue(q)
-	waitPops(t, q.batchTestQueue, 1)
-	q.push(jobBytes(t, "behind"))
-	require.Eventually(t, func() bool { return r.has("behind") }, 1500*time.Millisecond, 10*time.Millisecond)
 }
 
 // The resync probes only while it is needed: never for a distributed source,
@@ -1224,7 +1210,7 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		q := &batchTestDistQueue{batchTestQueue: &batchTestQueue{}}
 		wb := NewWorker(func(Job[string]) {})
 		defer wb.Stop()
-		wb.WithDistributedQueue(q)
+		wb.WithQueue(q)
 		waitPops(t, q.batchTestQueue, 1)
 		idle(t, q.batchTestQueue, "wake-ups replace the resync")
 	})
@@ -1234,7 +1220,7 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		q := &batchTestQueue{}
 		wb := NewWorker(func(Job[string]) {})
 		defer wb.Stop()
-		wb.WithPersistentQueue(q)
+		wb.WithQueue(q)
 		waitPops(t, q, 1) // dry: a resync is pending
 		wb.WithTopic(NewTopic[string]())
 		before := q.lens.Load()
@@ -1253,10 +1239,10 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		})
 		defer wb.Stop()
 		defer close(release)
-		pq := wb.WithPersistentQueue(q)
+		pq := wb.WithQueue(q)
 		waitPops(t, q, 1)
-		require.True(t, pq.Add("slow"))
-		require.True(t, pq.Add("x")) // waits behind slow: the hint reads 1
+		require.True(t, addOk(pq.Add("slow")))
+		require.True(t, addOk(pq.Add("x"))) // waits behind slow: the hint reads 1
 		before := q.lens.Load()
 		time.Sleep(1300 * time.Millisecond) // the pending resync fires
 		assert.Equal(t, before, q.lens.Load(), "the hint already says ready")
@@ -1267,7 +1253,7 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		q := &batchTestQueue{}
 		wb := NewWorker(func(Job[string]) {})
 		defer wb.Stop()
-		wb.WithPersistentQueue(q)
+		wb.WithQueue(q)
 		waitPops(t, q, 1)
 		require.NoError(t, wb.Pause())
 		idle(t, q, "no probes while paused")
@@ -1277,7 +1263,7 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		t.Parallel()
 		q := &batchTestQueue{}
 		wb := NewWorker(func(Job[string]) {})
-		wb.WithPersistentQueue(q)
+		wb.WithQueue(q)
 		waitPops(t, q, 1)
 		require.NoError(t, wb.StopAndWait())
 		idle(t, q, "no probes after Stop")
@@ -1289,7 +1275,7 @@ func TestBatchSourceResyncProbes(t *testing.T) {
 		wb := NewWorker(func(Job[string]) {})
 		defer wb.Stop()
 		w := internalWorker(wb)
-		wb.WithPersistentQueue(q)
+		wb.WithQueue(q)
 		waitPops(t, q, 1)
 		for range 50 {
 			w.notifyToPullNextJobs() // each wake-up reads the hint as 0
@@ -1314,7 +1300,7 @@ func TestBatchSourceBadItemReported(t *testing.T) {
 		}
 	}))
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.Eventually(t, func() bool { return r.has("ok") }, time.Second, time.Millisecond)
 	assert.EqualValues(t, 1, errs.Load())
 }
@@ -1349,12 +1335,12 @@ func TestBatchSourcePokeAfterEnqueue(t *testing.T) {
 		bind func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool
 	}{
 		{"persistent", func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool {
-			pq := wb.WithPersistentQueue(q)
-			return func(s string) bool { return pq.Add(s) }
+			pq := wb.WithQueue(q)
+			return func(s string) bool { return addOk(pq.Add(s)) }
 		}},
 		{"persistent priority", func(wb IWorkerBinder[string], q *slowEnqQueue) func(string) bool {
-			pq := wb.WithPersistentPriorityQueue(&slowEnqPrioQueue{q})
-			return func(s string) bool { return pq.Add(s, 1) }
+			pq := wb.WithPriorityQueue(&slowEnqPrioQueue{q})
+			return func(s string) bool { return addOk(pq.Add(s, 1)) }
 		}},
 	}
 	for _, c := range cases {
@@ -1426,7 +1412,7 @@ func TestBatchSourceNumPendingCountsParked(t *testing.T) {
 	require.NoError(t, wb.Start()) // one batch of 10
 	<-started                      // the first job runs: the whole batch was taken
 	require.NoError(t, wb.Pause()) // the rest of the batch parks once the running job ends
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	sub.Unsubscribe()
 	_, isCredit := w.manager().(*creditManager[iJob[string]])
 	require.True(t, isCredit)
@@ -1484,7 +1470,7 @@ func TestQueuePauseCreditPath(t *testing.T) {
 	var ran atomic.Int64
 	w := NewWorker(func(Job[int]) { ran.Add(1) }, 4)
 	defer w.Stop()
-	q := w.WithPersistentQueue(s)
+	q := w.WithQueue(s)
 	_, credit := w.(*workerBinder[int]).manager().(*creditManager[iJob[int]])
 	require.True(t, credit, "sole batch source: credit path")
 

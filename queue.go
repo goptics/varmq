@@ -53,6 +53,9 @@ func newQueue[T any](w *worker[T, iJob[T]], q IQueue, configs ...QueueConfigFunc
 
 func (q *queue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -127,6 +130,9 @@ func newErrorQueue[T any](w *worker[T, iErrorJob[T]], q IQueue, configs ...Queue
 
 func (q *errorQueue[T]) Add(data T, configs ...JobConfigFunc) (EnqueuedErrJob, bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newErrorJob(data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -200,6 +206,9 @@ func newResultQueue[T, R any](w *worker[T, iResultJob[T, R]], q IQueue, configs 
 
 func (q *resultQueue[T, R]) Add(data T, configs ...JobConfigFunc) (EnqueuedResultJob[R], bool) {
 	c := loadJobConfigs(q.w.configs(), configs...)
+	if reservedID(c.Id) {
+		return nil, false
+	}
 	j := newResultJob[T, R](data, c)
 	j.countedBy(q.totals)
 	q.totals.added(1)
@@ -248,10 +257,6 @@ type externalBaseQueue struct {
 }
 
 type IExternalBaseQueue interface {
-	// Deprecated: Use Queue's Len() method instead for a more idiomatic approach.
-	// This method will be removed in an upcoming release.
-	NumPending() int
-
 	// Len returns the number of jobs in the queue. Jobs a worker has already
 	// taken into a batch but not started are not in the queue; the worker's
 	// NumPending counts them.
@@ -322,10 +327,6 @@ func newExternalQueue(q IBaseQueue, worker Worker, config queueConfig, purge *pu
 
 func (eq *externalBaseQueue) IsFull() bool {
 	return eq.config.capacity > 0 && eq.q.Len() >= eq.config.capacity
-}
-
-func (eq *externalBaseQueue) NumPending() int {
-	return eq.q.Len()
 }
 
 func (eq *externalBaseQueue) Len() int {

@@ -41,7 +41,7 @@ func TestCreditPopsForFreeSlots(t *testing.T) {
 		done.Add(1)
 	}, WithConcurrency(conc), WithAutoRun(false))
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.NoError(t, wb.Start()) // after the bind: no signal reaches the loop before the batch source
 
 	require.Eventually(t, func() bool { return done.Load() == n }, 10*time.Second, time.Millisecond)
@@ -57,13 +57,13 @@ func TestCreditReservedDuringPop(t *testing.T) {
 	var r recorder
 	wb := NewWorker(r.run)
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	release := make(chan struct{})
 	block := func() { <-release }
 	q.duringPop.Store(&block)
-	require.True(t, pq.Add("a"))
+	require.True(t, addOk(pq.Add("a")))
 	require.Eventually(t, func() bool { return q.pops.Load() == 2 }, time.Second, time.Millisecond)
 
 	waited := make(chan struct{})
@@ -86,13 +86,13 @@ func TestCreditPauseDuringPop(t *testing.T) {
 	wb := NewWorker(r.run, WithConcurrency(4))
 	defer wb.Stop()
 	w := internalWorker(wb)
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	release := make(chan struct{})
 	block := func() { <-release }
 	q.duringPop.Store(&block)
-	require.True(t, pq.Add("a"))
+	require.True(t, addOk(pq.Add("a")))
 	require.Eventually(t, func() bool { return q.pops.Load() == 2 }, time.Second, time.Millisecond)
 
 	require.NoError(t, wb.Pause())
@@ -102,7 +102,7 @@ func TestCreditPauseDuringPop(t *testing.T) {
 	assert.True(t, r.has("a"), "the popped job ran")
 
 	pops := q.pops.Load()
-	require.True(t, pq.Add("b"))
+	require.True(t, addOk(pq.Add("b")))
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, pops, q.pops.Load(), "no pop while paused")
 	assert.False(t, r.has("b"))
@@ -134,7 +134,7 @@ func TestCreditTunePoolShrink(t *testing.T) {
 		done.Add(1)
 	}, WithConcurrency(6))
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 
 	require.Eventually(t, func() bool { return g.cur.Load() == 6 }, time.Second, time.Millisecond)
 	require.NoError(t, wb.TunePool(2))
@@ -161,7 +161,7 @@ func TestCreditSecondSourceMidDrain(t *testing.T) {
 		mu.Unlock()
 	})
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(order) >= 3 }, time.Second, time.Millisecond)
 
 	mq := wb.BindQueue(WithQueuePriority(-1))
@@ -199,7 +199,7 @@ func TestCreditTunePoolDuringPop(t *testing.T) {
 		ran.Add(1)
 	}, WithConcurrency(n))
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	shrink := func() { require.NoError(t, wb.TunePool(1)) }
@@ -207,9 +207,9 @@ func TestCreditTunePoolDuringPop(t *testing.T) {
 	for i := range n - 1 {
 		q.push(jobBytes(t, fmt.Sprint("first", i)))
 	}
-	require.True(t, pq.Add("first-x")) // the pop takes all n
+	require.True(t, addOk(pq.Add("first-x"))) // the pop takes all n
 	for i := range 10 {
-		require.True(t, pq.Add(fmt.Sprint("later", i)))
+		require.True(t, addOk(pq.Add(fmt.Sprint("later", i))))
 	}
 	require.Eventually(t, func() bool { return ran.Load() == n+10 }, 5*time.Second, time.Millisecond)
 	assert.LessOrEqual(t, later.max.Load(), int64(1), "later pops respect the new limit")
@@ -223,7 +223,7 @@ func TestCreditTunePoolThenPauseDuringPop(t *testing.T) {
 	wb := NewWorker(r.run, WithConcurrency(4))
 	defer wb.Stop()
 	w := internalWorker(wb)
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	during := func() {
@@ -234,7 +234,7 @@ func TestCreditTunePoolThenPauseDuringPop(t *testing.T) {
 	for _, v := range []string{"a", "b", "c"} {
 		q.push(jobBytes(t, v))
 	}
-	require.True(t, pq.Add("d"))
+	require.True(t, addOk(pq.Add("d")))
 	wb.WaitUntilPaused()
 	assert.Equal(t, 4, r.count(), "every popped job ran")
 	assert.Zero(t, w.nParked.Load())
@@ -247,14 +247,14 @@ func TestCreditNumPendingDuringPop(t *testing.T) {
 	q := &batchTestQueue{}
 	wb := NewWorker(func(Job[string]) {}, WithConcurrency(8))
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	release := make(chan struct{})
 	var during atomic.Int64
 	block := func() { during.Store(int64(wb.NumPending())); <-release }
 	q.duringPop.Store(&block)
-	require.True(t, pq.Add("a"))
+	require.True(t, addOk(pq.Add("a")))
 	require.Eventually(t, func() bool { return q.pops.Load() == 2 }, time.Second, time.Millisecond)
 	time.Sleep(10 * time.Millisecond)
 	assert.LessOrEqual(t, int64(wb.NumPending()), int64(1), "not the whole credit of 8")
@@ -273,7 +273,7 @@ func TestCreditPauseStress(t *testing.T) {
 		time.Sleep(20 * time.Microsecond)
 	}, WithConcurrency(4))
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 
 	stop := make(chan struct{})
@@ -356,7 +356,7 @@ func TestCreditCap(t *testing.T) {
 	wb := NewWorker(func(Job[string]) { g.enter(); <-release; g.leave() }, WithConcurrency(conc), WithAutoRun(false))
 	defer wb.Stop()
 	defer close(release)
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	require.NoError(t, wb.Start())
 
 	require.Eventually(t, func() bool { return g.cur.Load() == conc }, time.Second, time.Millisecond, "every slot fills")
@@ -369,11 +369,11 @@ func TestCreditNoPopWhileDry(t *testing.T) {
 	q := &batchTestQueue{}
 	wb := NewWorker(func(Job[string]) {})
 	defer wb.Stop()
-	pq := wb.WithPersistentQueue(q)
+	pq := wb.WithQueue(q)
 	waitPops(t, q, 1)
 	const n = 10
 	for i := range n {
-		require.True(t, pq.Add(fmt.Sprint(i)))
+		require.True(t, addOk(pq.Add(fmt.Sprint(i))))
 		wb.Wait()
 		time.Sleep(5 * time.Millisecond) // the job's end signal is handled
 	}
@@ -391,7 +391,7 @@ func TestCreditReusesPool(t *testing.T) {
 	var done atomic.Int64
 	wb := NewWorker(func(Job[string]) { time.Sleep(100 * time.Microsecond); done.Add(1) }, WithConcurrency(conc))
 	defer wb.Stop()
-	wb.WithPersistentQueue(q)
+	wb.WithQueue(q)
 	maxIdle := 0
 	for done.Load() < n {
 		maxIdle = max(maxIdle, wb.NumIdleWorkers())
@@ -412,3 +412,6 @@ func TestReleaseWaitersSeesLateReserve(t *testing.T) {
 	w.mx.Unlock()
 	assert.Equal(t, running, w.status.Load())
 }
+
+// addOk is the bool of an Add's (job, ok).
+func addOk[J any](_ J, ok bool) bool { return ok }

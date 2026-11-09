@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"weak"
 )
 
@@ -32,15 +33,26 @@ func finishMemTask(ext *ackExt) {
 }
 
 // runnable is the pre-run check: false when j's workflow says its task may
-// not start (cancelled, ended, or gone: ErrWorkflowNotFound). A plain job,
-// or a tag with no store, runs with no I/O. Any other store error runs the
+// not start (cancelled, ended, or gone: ErrWorkflowNotFound), or a durable
+// task has no registered store (reported; held, not acked). A plain job, or
+// an in-memory tag with no store, runs with no I/O. Any other store error runs the
 // task: it is at-least-once anyway, and a store that can't answer could not
 // finish it either.
 // ponytail: context.Background, not the worker's: Stop cancels that while
 // the first job of a batch still runs; a hung store hangs the ack too.
 func (w *worker[T, JobType]) runnable(j JobType) bool {
 	t := j.taskTag()
-	if t == nil || t.store == nil {
+	if t == nil {
+		return true
+	}
+	if t.missingStore() {
+		// Never run it unchecked. The pool holds it.
+		if noStoreDue(t.scope) {
+			w.sendError(fmt.Errorf("varmq: no workflow store for scope %s: create the storage's workflow store (for example redisq.NewWorkflowStore)", t.scope))
+		}
+		return false
+	}
+	if t.store == nil { // in-memory, never submitted
 		return true
 	}
 
@@ -54,6 +66,34 @@ func (w *worker[T, JobType]) runnable(j JobType) bool {
 	}
 
 	return ok
+}
+
+// noStoreEvery is how often one scope's missing store is reported.
+const noStoreEvery = time.Minute
+
+// noStoreSeen is when each scope's missing store was last reported.
+var noStoreSeen sync.Map // scope → time.Time
+
+// noStoreDue reports whether the missing store of scope is due for an error:
+// once per scope per noStoreEvery, so a misconfigured worker does not flood
+// Errs() and the handler.
+func noStoreDue(scope string) bool {
+	now := time.Now()
+	for {
+		prev, loaded := noStoreSeen.Load(scope)
+		if !loaded {
+			if _, raced := noStoreSeen.LoadOrStore(scope, now); !raced {
+				return true
+			}
+			continue
+		}
+		if now.Sub(prev.(time.Time)) < noStoreEvery {
+			return false
+		}
+		if noStoreSeen.CompareAndSwap(scope, prev, now) {
+			return true
+		}
+	}
 }
 
 // queuePoker wakes one worker bound to a queue: its source's ready hint,

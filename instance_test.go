@@ -22,9 +22,9 @@ func TestInstanceRecord(t *testing.T) {
 
 	w := NewWorker(func(Job[string]) {}, WithName("emails"), WithConcurrency(3))
 	defer w.Stop()
-	w.WithPersistentQueue(&inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "redisq:prio:{emails}"})
-	w.WithPersistentQueue(mocks.NewMockPersistentQueue()) // no Queue ID, left out
-	w.BindQueue()                                         // in-memory: not readable by other processes, left out
+	w.WithQueue(&inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "redisq:prio:{emails}"})
+	w.WithQueue(mocks.NewMockPersistentQueue()) // no Queue ID, left out
+	w.BindQueue()                               // in-memory: not readable by other processes, left out
 	w.BindPriorityQueue()
 
 	r, ok := contract.InstanceSnapshot() // init registered instanceRecord

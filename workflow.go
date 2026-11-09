@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -198,7 +199,13 @@ func validWorkflowID(id string) bool { return validName(id, 128) && id != "index
 func validTaskName(name string) bool { return validName(name, 64) }
 
 // taskJobID is a task's job ID; its undo's adds ":undo".
-func taskJobID(wf, task string) string { return "wf:" + wf + ":" + task }
+func taskJobID(wf, task string) string { return wfIDPrefix + wf + ":" + task }
+
+// wfIDPrefix starts every workflow task job ID; plain Adds may not use it.
+const wfIDPrefix = "wf:"
+
+// reservedID reports whether a plain job's id is in the workflow namespace.
+func reservedID(id string) bool { return strings.HasPrefix(id, wfIDPrefix) }
 
 // plan validates the workflow and builds what the store submits. Items are
 // built now, so a durable envelope's enqueued_at is the Submit time.

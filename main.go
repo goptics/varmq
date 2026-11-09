@@ -20,8 +20,6 @@ import (
 //	}, 4) // 4 concurrent workers
 //	queue := worker.BindQueue() // Bind to standard queue
 //	priorityQueue := worker.BindPriorityQueue() // Bind to priority queue
-//	persistentQueue := worker.BindPersistentQueue(myPersistentQueue) // Bind to persistent queue
-//	distQueue := worker.BindDistributedQueue(myDistributedQueue) // Bind to distributed queue
 func NewWorker[T any](wf func(j Job[T]), config ...any) IWorkerBinder[T] {
 	var w *worker[T, iJob[T]]
 	w = newWorker(func(ij iJob[T]) {

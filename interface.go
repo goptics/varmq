@@ -191,20 +191,19 @@ type (
 	InstanceWorker   = contract.InstanceWorker
 	InstanceRegistry = contract.InstanceRegistry
 
-	Outcome                 = contract.Outcome
-	WorkflowState           = contract.WorkflowState
-	WorkflowPlan            = contract.WorkflowPlan
-	TaskPlan                = contract.TaskPlan
-	UndoPlan                = contract.UndoPlan
-	TaskEnd                 = contract.TaskEnd
-	TaskRecord              = contract.TaskRecord
-	WorkflowRecord          = contract.WorkflowRecord
-	Scoped                  = contract.Scoped
-	WorkflowStore           = contract.WorkflowStore
-	WorkflowAcknowledgeable = contract.WorkflowAcknowledgeable
-	WorkflowInspector       = contract.WorkflowInspector
-	WorkflowKey             = contract.WorkflowKey
-	WorkflowKeyLister       = contract.WorkflowKeyLister
+	Outcome           = contract.Outcome
+	WorkflowState     = contract.WorkflowState
+	WorkflowPlan      = contract.WorkflowPlan
+	TaskPlan          = contract.TaskPlan
+	UndoPlan          = contract.UndoPlan
+	TaskEnd           = contract.TaskEnd
+	TaskRecord        = contract.TaskRecord
+	WorkflowRecord    = contract.WorkflowRecord
+	Scoped            = contract.Scoped
+	WorkflowStore     = contract.WorkflowStore
+	WorkflowInspector = contract.WorkflowInspector
+	WorkflowKey       = contract.WorkflowKey
+	WorkflowKeyLister = contract.WorkflowKeyLister
 )
 
 const (
