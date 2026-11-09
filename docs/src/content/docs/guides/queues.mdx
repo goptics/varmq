@@ -76,7 +76,6 @@ These three work on the queue handle that `Bind...` returns.
 
 - It leaves out a job a worker has taken into a batch or parked. [Lifecycle](/concepts/lifecycle/#what-happens-to-jobs) explains how this differs from the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending).
 - A job you closed while it waited still counts until the worker reaches it. See [closing a queued job](/concepts/jobs/#closing-a-queued-job).
-- The queue handle also has a [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.NumPending) method. It is deprecated: use `Len`.
 
 **[`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge)** removes every job that has not started and closes each one.
 

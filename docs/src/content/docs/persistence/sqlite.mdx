@@ -175,13 +175,14 @@ The scene below shows the table of a queue named `jobs`. Take a job, then kill t
 - **It also puts back jobs that are still running.** sqliteq does not know which process took a row. Another process that opens a queue on the same file returns the first process's running jobs to `pending`, and they run twice. To avoid that, use one process for each database file.
 - **[`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) counts `pending` rows only.** A job that is `processing` is counted by the worker's [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing), not by `Len`.
 
-## Pause, outcome and cancel
+## Pause, outcome, cancel and workflows
 
-sqliteq v0.4.0 supports these VarMQ features. It does not support [workflows](/guides/workflows/) yet.
+sqliteq v0.4.0 supports these VarMQ features. Each guide has the details.
 
 - **[Queue pause](/guides/queues/#pausing-a-queue):** the pause is kept in the file, so it survives a restart.
 - **[Job outcome](/concepts/jobs/#jobs-in-other-processes):** a job handle learns how the job ended, with a result worker's result.
 - **[Cancel](/concepts/jobs/#cancelling-a-job):** a cancel reaches the job, whether it waits or runs.
+- **[Workflows](/guides/workflows/#workflows-on-sqlite):** `sqliteq.NewWorkflowStore` keeps workflows in SQLite, so they survive a restart.
 
 ## Other details
 

@@ -303,7 +303,7 @@ redisq v1.6.0 supports these VarMQ features. Each guide has the details.
 - **[Queue pause](/guides/queues/#pausing-a-queue):** the pause is kept in Redis, so every process stops taking jobs, and it survives a restart.
 - **[Job outcome](/concepts/jobs/#jobs-in-other-processes):** a producer's job handle learns how the job ended, with a result worker's result.
 - **[Cancel](/concepts/jobs/#cancelling-a-job):** a cancel reaches the job in whichever process holds it.
-- **[Workflows](/guides/workflows/):** tasks can run on redisq queues, with the workflow kept in Redis.
+- **[Workflows](/guides/workflows/#workflows-on-redis):** `redisq.NewWorkflowStore` keeps workflows in Redis. Every process that runs tasks creates it.
 
 ## Batches
 
