@@ -3,7 +3,7 @@ export const PLAYGROUND = 'https://play.golang.org';
 export type PlayEvent = { Message: string; Kind: 'stdout' | 'stderr'; Delay: number }; // Delay in ns
 export type CompileResult = { Errors: string; Events: PlayEvent[] | null; Status?: number };
 export type OutKind = 'stdout' | 'stderr' | 'error' | 'system';
-export type Pins = { go: string; varmq: string };
+export type Pins = { go: string; varmq: string; contract?: string };
 
 /** Read the `go` directive and the varmq version out of a go.mod. */
 export function pins(goMod: string): Pins {
@@ -12,12 +12,15 @@ export function pins(goMod: string): Pins {
 	// Matches both `require github.com/goptics/varmq vX` and the block-form line.
 	const varmq = /github\.com\/goptics\/varmq[ \t]+(v\S+)/.exec(goMod)?.[1];
 	if (!varmq) throw new Error('varmq require not found in go.mod');
-	return { go, varmq };
+	// varmq's own contract require can lag its code (it builds with a replace), so pin the contract too when given.
+	const contract = /github\.com\/goptics\/varmq\/contract[ \t]+(v\S+)/.exec(goMod)?.[1];
+	return contract ? { go, varmq, contract } : { go, varmq };
 }
 
 /** The playground takes a txtar archive: the program followed by its go.mod. */
 export function requestBody(source: string, p: Pins): string {
-	return `${source}\n-- go.mod --\nmodule play.ground\n\ngo ${p.go}\n\nrequire github.com/goptics/varmq ${p.varmq}\n`;
+	const contract = p.contract ? `require github.com/goptics/varmq/contract ${p.contract}\n` : '';
+	return `${source}\n-- go.mod --\nmodule play.ground\n\ngo ${p.go}\n\nrequire github.com/goptics/varmq ${p.varmq}\n${contract}`;
 }
 
 async function ok(res: Response): Promise<Response> {
