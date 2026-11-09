@@ -7,7 +7,7 @@ import AdapterMap from '../../../components/ops/AdapterMap.astro';
 
 A storage adapter is a type that implements some of VarMQ's queue interfaces. redisq and sqliteq are adapters. A type of your own can also be one. VarMQ decides what a queue can do by the interfaces its value implements. It checks them with a type assertion when you bind the queue or add a job. If an interface is not implemented, its behaviour is off. This is not an error. This page lists them all, from [`IBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue) to the small job interfaces. They are all in the `varmq` package.
 
-For using redisq or sqliteq, read [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) instead. [The overview](/persistence/overview/) covers what persistent and distributed queues do.
+For using redisq or sqliteq, read [Redis](/persistence/redis/) and [SQLite](/persistence/sqlite/) instead. [The overview](/persistence/overview/) covers what shared storage does.
 
 The map below shows how the interfaces fit together. Press a part to say that your type has it, and the boxes that combine parts switch on. Press a box to read what it adds, what the worker calls on it and when. The start-from buttons load redisq and sqliteq as the table at the end of the page describes them.
 
@@ -17,16 +17,13 @@ The map below shows how the interfaces fit together. Press a part to say that yo
 
 | You call | Storage must implement | You get |
 |---|---|---|
-| [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) | [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) | [`Queue[T]`](https://pkg.go.dev/github.com/goptics/varmq#Queue) |
-| [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) | [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) | [`PriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue) |
-| [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue) | [`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) | [`PersistentQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue) |
-| [`WithPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentPriorityQueue) | [`IPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentPriorityQueue) | [`PersistentPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PersistentPriorityQueue) |
-| [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue) | [`IDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedQueue) | [`DistributedQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#DistributedQueue) |
-| [`WithDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedPriorityQueue) | [`IDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IDistributedPriorityQueue) | [`DistributedPriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#DistributedPriorityQueue) |
-| [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue), no worker | `IDistributedQueue` | `DistributedQueue[T]` |
-| [`NewDistributedPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedPriorityQueue), no worker | `IDistributedPriorityQueue` | `DistributedPriorityQueue[T]` |
+| [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) | [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) | [`Queue[T]`](https://pkg.go.dev/github.com/goptics/varmq#Queue). With [`IAcknowledgeable`](#iacknowledgeable) too, VarMQ treats the queue as shared storage. |
+| [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) | [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) | [`PriorityQueue[T]`](https://pkg.go.dev/github.com/goptics/varmq#PriorityQueue), shared in the same way |
+| [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue), [`NewErrQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrQueue) or [`NewResultQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultQueue), no worker | [`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) | [`ProducerQueue[T, J]`](https://pkg.go.dev/github.com/goptics/varmq#ProducerQueue), whose `Add` returns a job handle |
+| [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue), [`NewErrPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrPriorityQueue) or [`NewResultPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultPriorityQueue), no worker | [`IPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentPriorityQueue) | [`ProducerPriorityQueue[T, J]`](https://pkg.go.dev/github.com/goptics/varmq#ProducerPriorityQueue) |
+| Deprecated: [`WithPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPersistentQueue), `WithPersistentPriorityQueue`, [`WithDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithDistributedQueue), `WithDistributedPriorityQueue`, [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) and `NewDistributedPriorityQueue` | the persistent or distributed interfaces | older handles whose `Add` returns only a `bool`. They cannot be workflow targets. Use the calls above. |
 
-Queues store values of type `any`. An in-memory queue, and one you bind with `WithQueue` or `WithPriorityQueue`, stores the job values VarMQ creates. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#PersistentQueue.Add) on a persistent or distributed queue encodes the job as JSON and passes the `[]byte` to [`Enqueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue). What the storage gives back has to be that `[]byte`, or a job value. Anything else is reported as [`ErrFailedToCastJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToCastJob), and bytes that do not decode are [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob).
+Queues store values of type `any`. An in-memory queue, and one you bind with `WithQueue` or `WithPriorityQueue`, stores the job values VarMQ creates. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) on shared storage encodes the job as JSON and passes the `[]byte` to [`Enqueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue). What the storage gives back has to be that `[]byte`, or a job value. Anything else is reported as [`ErrFailedToCastJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrFailedToCastJob), and bytes that do not decode are [`ErrParseJob`](https://pkg.go.dev/github.com/goptics/varmq#ErrParseJob).
 
 What the worker assumes of any queue:
 
@@ -42,19 +39,19 @@ The root of every queue. Every queue you give to VarMQ has these five methods:
 
 | Method | The worker calls it |
 |---|---|
-| [`Len() int`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Len) | Whenever it decides whether there is work: before it pulls a job, for [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending), for [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait), and for the `MaxLen` and `MinLen` [strategies](/guides/strategies/). On a persistent or distributed queue each call is a call to the storage. |
+| [`Len() int`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Len) | Whenever it decides whether there is work: before it pulls a job, for [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending), for [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Wait), and for the `MaxLen` and `MinLen` [strategies](/guides/strategies/). On shared storage each call is a call to the storage. |
 | [`Dequeue() (any, bool)`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Dequeue) | Once for each job it takes from a queue that does not acknowledge. It does not call it on a queue that is [`IAcknowledgeable`](#iacknowledgeable), which it reads with [`DequeueWithAckId`](https://pkg.go.dev/github.com/goptics/varmq#IAcknowledgeable.DequeueWithAckId). |
-| [`Values() []any`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Values) | Only when you call [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) on the handle. VarMQ reads what is in the queue, clears it, then closes every value that implements [`io.Closer`](https://pkg.go.dev/io#Closer), which is how a purged job comes to read `Closed`. |
+| [`Values() []any`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Values) | Only when you call [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) on the handle. VarMQ reads what is in the queue and clears it. Then it closes every value that implements [`io.Closer`](https://pkg.go.dev/io#Closer), so a purged job reads `Closed`. |
 | [`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) | When you call `Purge` on the handle, as above. |
 | [`Close() error`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Close) | When you call `Close` on the handle. |
 
-On a handle from `WithDistributedQueue` or `NewDistributedQueue`, `Len`, `Purge` and `Close` are the adapter's own methods, called directly. VarMQ adds nothing around them, and `Purge` closes no jobs.
+On shared storage, `Purge` cannot close the jobs it drops, because they live in the storage. Instead, the handle stops waiting on the jobs it added: their `Err` returns [`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached).
 
 ### `IQueue` and `IPriorityQueue`
 
 [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) adds [`Enqueue(item any) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.Enqueue) and [`EnqueueOnce(item any, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) to `IBaseQueue`. [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue) adds [`Enqueue(item any, priority int) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.Enqueue) and [`EnqueueOnce(item any, priority int, id string) bool`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue.EnqueueOnce).
 
-The handle's `Add` calls `Enqueue` once for each job, or [`EnqueueOnce`](#enqueueonce) when the job has an ID. `true` means the item is stored, or, on persistent or distributed storage, that a job with the same ID already was. `false` makes `Add` return `false`.
+The handle's `Add` calls `Enqueue` once for each job, or [`EnqueueOnce`](#enqueueonce) when the job has an ID. `true` means the item is stored, or, on shared storage, that a job with the same ID already was. `false` makes `Add` return `false`.
 
 The priority is the number the caller passed to `Add`. VarMQ does not order the queue. The worker takes whatever `Dequeue` returns next. So a priority queue has to give out the lowest number first itself. For the built-in queues, and for redisq and sqliteq, a lower number comes first.
 
@@ -86,7 +83,7 @@ When the storage implements it and is the worker's only bound source, the worker
 - **`err` is a failure.** The worker reports it and pulls again on the next sign of work.
 - **An item that does not decode is reported and not acknowledged.** The worker sends the error and leaves the item to the storage.
 
-Signals matter because the worker does not probe the storage on its own after a short or failed call. A persistent queue is signalled by the process's own `Add` calls. Also, a worker that last saw the storage empty checks `Len` once a second. It does this while the worker is active and this is its only source. A distributed queue is signalled by [`Subscribe`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe). An adapter can implement both [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) and this interface. Such an adapter has to send `"enqueued"` for items that no `Enqueue` announced:
+Signals matter because the worker does not probe the storage on its own after a short or failed call. Storage without `Subscribe` is signalled by the process's own `Add` calls. Also, a worker that last saw the storage empty checks `Len` once a second. It does this while the worker is active and this is its only source. Storage with [`Subscribe`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe) is signalled by it. An adapter can implement both [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) and this interface. Such an adapter has to send `"enqueued"` for items that no `Enqueue` announced:
 
 - items a visibility timeout put back
 - items another client added
@@ -104,16 +101,13 @@ Binding a storage that implements it also signals the worker, because the storag
 
 Earlier releases had it in the optional `IDedupQueue` and `IDedupPriorityQueue` interfaces. Those are removed, so move the method onto your queue type as it is.
 
-`Add` calls it, in place of `Enqueue`, for a job whose ID is not empty. Which IDs count depends on the queue:
+`Add` calls it, in place of `Enqueue`, for a job with an ID you gave, with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) or [`Item.ID`](https://pkg.go.dev/github.com/goptics/varmq#Item). A generated ID does not count. [Job IDs](/guides/job-ids/#shared-storage) says how long shared storage keeps an ID, and what `Add` returns for a repeat.
 
-- **On a persistent or distributed queue,** every ID counts, including one from a generator. Such storage keeps an ID for a window it sets. It returns `true` for a repeat too. So `Add` returns `true`, but the job is stored once. A persistent `Add` counts the repeat as submitted. That makes a retried `Add` safe after a lost reply. Use IDs that are unique across everything you add, such as a UUID, and not a business key or a counter that restarts.
-- **On an in-memory queue bound with `WithQueue`,** only an ID you gave, with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) or [`Item.ID`](https://pkg.go.dev/github.com/goptics/varmq#Item), counts. The storage keeps an ID while its item is in the queue, until `Dequeue` or `Purge` takes it. A repeat returns `false`, and `Add` returns that, because a job that was not stored would not finish. See [job IDs](/guides/job-ids/#deduplicating).
-
-A producer made with `NewDistributedQueue` has no worker. The worker's [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) does not reach it. It uses an ID you pass with `WithJobId`, or the one [`DefaultJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#DefaultJobIdGenerator) sets.
+A producer made with `NewQueue` has no worker. The worker's [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) does not reach it. It uses an ID you pass with `WithJobId`, or the one [`DefaultJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#DefaultJobIdGenerator) sets. With neither, it makes a random ID when the storage reports outcomes or cancels jobs.
 
 ### `IPersistentQueue` and `IPersistentPriorityQueue`
 
-[`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) is `IQueue` plus `IAcknowledgeable`, and [`IPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentPriorityQueue) is `IPriorityQueue` plus `IAcknowledgeable`. They add no methods. They are what `WithPersistentQueue` and `WithPersistentPriorityQueue` ask for.
+[`IPersistentQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentQueue) is `IQueue` plus `IAcknowledgeable`, and [`IPersistentPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPersistentPriorityQueue) is `IPriorityQueue` plus `IAcknowledgeable`. They add no methods. `NewQueue` and `NewPriorityQueue` ask for them, and `WithQueue` and `WithPriorityQueue` detect them.
 
 Binding one wraps it so that `Add` writes JSON and the worker reads with `DequeueWithAckId`, or with `DequeueBatchWithAckIds` when the storage implements it. The worker takes one job per free slot. [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) and [`Stop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Stop) do not park a job it already took.
 
@@ -121,9 +115,7 @@ Binding one wraps it so that `Add` writes JSON and the worker reads with `Dequeu
 
 [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) has one method, [`Subscribe(func(action string))`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe). It is what makes a queue distributed.
 
-`WithDistributedQueue` and `WithDistributedPriorityQueue` call `Subscribe` once, while binding, and pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull, and it also feeds the worker's counters. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewDistributedQueue` does not call `Subscribe`, because it has no worker.
-
-For the counters of a worker on a persistent or distributed queue, see [the overview](/persistence/overview/#metrics). [Metrics](/guides/metrics/) covers in-memory queues.
+`WithQueue` and `WithPriorityQueue` call `Subscribe` once, while binding, when the storage implements it. They pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewQueue` does not call `Subscribe`, because it has no worker.
 
 ### `IDistributedQueue` and `IDistributedPriorityQueue`
 
@@ -135,13 +127,40 @@ For the counters of a worker on a persistent or distributed queue, see [the over
 
 Without it, [`IsFull`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) on the handle compares `Len` with the number, and `Add` is not refused. [Queues](/guides/queues/#capacity) covers capacity.
 
+### Optional interfaces
+
+Each interface below adds one feature. VarMQ checks for it on the storage value, and turns the feature off when it is missing. Most come from the `contract` module, which an adapter can import without VarMQ. The `varmq` package has an alias for each.
+
+| Interface | Methods | Adds |
+|---|---|---|
+| [`IPurgeValuesQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPurgeValuesQueue) | `PurgeValues() []any` | `Purge` empties the queue in one atomic step. |
+| [`QueuePauser`](https://pkg.go.dev/github.com/goptics/varmq#QueuePauser) | `Pause() error`, `Resume() error`, `Paused() bool` | a [queue pause](/guides/queues/#pausing-a-queue) kept in the storage. Without it, `Pause` returns `ErrPauseUnsupported`. |
+| [`PauseNotifier`](https://pkg.go.dev/github.com/goptics/varmq#PauseNotifier) | `OnPauseChange(fn func(paused bool)) (cancel func())` | a worker starts at once after a `Resume` in another process. |
+| [`OutcomeWatcher`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeWatcher) | `WatchOutcome(id string, fn func(JobOutcome)) (cancel func())` | job handles learn how a job ended. Without it, `Err` returns `ErrDetached`. |
+| [`ResultAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#ResultAcknowledgeable) | `AcknowledgeResult(ackID string, result []byte) bool` | a result worker's result reaches the handle that added the job. |
+| [`JobCanceller`](https://pkg.go.dev/github.com/goptics/varmq#JobCanceller) | `CancelJob(id string) error` | [`Cancel`](/concepts/jobs/#cancelling-a-job) and the REST cancel route. Without it, `Cancel` returns `ErrCancelUnsupported`. |
+| [`CancelNotifier`](https://pkg.go.dev/github.com/goptics/varmq#CancelNotifier) | `OnCancel(fn func(jobID string)) (stop func())` | a cancel from any process reaches the job while it runs. |
+| [`CancelAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#CancelAcknowledgeable) | `AcknowledgeCancelled(ackID, reason string) bool` | a cancelled job is recorded as cancelled. Without it, VarMQ calls `Reject`. |
+| [`QueueInspector`](https://pkg.go.dev/github.com/goptics/varmq#QueueInspector) | `QueueID()`, `QueueStats(ctx)`, `Jobs(ctx, state, offset, limit)` | the queue's counts and job records, for [`GET /queues`](/operations/rest-api/#queues-and-jobs). |
+| [`JobReader`](https://pkg.go.dev/github.com/goptics/varmq#JobReader) | `Job(ctx, id) (JobRecord, error)` | the REST route that reads one job. Without it, the route answers 501. |
+| [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable) | `WorkflowStore()`, `FinishTask(ackID, end)`, `ScopeID()` | [workflow](/guides/workflows/) tasks on this storage. |
+| [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector) | `Workflows(ctx, state, offset, limit)`, `ScopeID()` | on a workflow store: the store's workflows in [`GET /workflows`](/operations/rest-api/#workflows). |
+| [`InstanceRegistry`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRegistry) | `ReportInstance`, `RemoveInstance`, `Instances` | a record of each process, its workers and their queues, for dashboards. VarMQ supplies the record. |
+
+<details>
+<summary>Details</summary>
+
+The [storage specification](https://github.com/goptics/varmq/blob/main/spec/redis-storage.md) gives the exact rules for each method, such as how long a cancel mark lasts. The comments on each interface in the [API reference](https://pkg.go.dev/github.com/goptics/varmq/contract) say the same in short form.
+
+</details>
+
 ## The handle and the job interfaces
 
 The rest of the interfaces are not for adapters to implement. They describe what VarMQ gives you. They are listed here because they sit next to the queue interfaces in the API reference.
 
 ### [`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue)
 
-[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge` and `Close`, and a deprecated `NumPending` that does what `Len` does. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
+[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge`, `Close`, `Pause`, `Resume`, `IsPaused` and `Worker`. It also has a deprecated `NumPending` that does what `Len` does. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
 
 ### Job interfaces
 
@@ -151,19 +170,30 @@ The job interfaces are small pieces that the job and group handles are built fro
 |---|---|---|
 | [`Identifiable`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable) | [`ID() string`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID), empty when no ID was set | [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job), the argument of the worker function, and every job handle |
 | [`StatusProvider`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider) | [`IsClosed() bool`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.IsClosed) and [`Status() string`](https://pkg.go.dev/github.com/goptics/varmq#StatusProvider.Status) | every job handle. The worker calls `IsClosed` on each job it takes from a queue and skips a closed one. |
-| [`Awaitable`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable) | [`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait), which blocks until the job is closed, or for a group until every job in it has ended | every job handle, and the group handles |
+| [`Awaitable`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable) | [`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait), which blocks until the job is closed, or for a group until every job in it has ended. [`WaitContext(ctx)`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.WaitContext) also gives up when `ctx` ends. | every job handle, and the group handles |
 | [`Drainer`](https://pkg.go.dev/github.com/goptics/varmq#Drainer) | [`Drain()`](https://pkg.go.dev/github.com/goptics/varmq#Drainer.Drain), which discards the results or errors a group's channel still holds. A single job has no channel, so it does nothing there. | error and result job handles, and error and result group handles |
 | [`PendingTracker`](https://pkg.go.dev/github.com/goptics/varmq#PendingTracker) | [`NumPending() int`](https://pkg.go.dev/github.com/goptics/varmq#PendingTracker.NumPending), the number of pending jobs in a group | the handles [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) returns |
 
-They belong to the in-memory queues. A persistent or distributed `Add` returns only a `bool`, so none of these reaches you from it. In the worker function of a persistent queue, `Job[T]` is still the argument, and its `ID()` returns the `id` stored in the JSON. [Jobs](/concepts/jobs/) and [worker types](/guides/worker-types/) cover the handles.
+The handles of shared storage have them too. In the worker function, `Job[T]` is the argument for every queue, and on shared storage its `ID()` returns the `id` stored in the JSON. [Jobs](/concepts/jobs/) and [worker types](/guides/worker-types/) cover the handles.
 
 ## What redisq and sqliteq implement
+
+The table is for redisq v1.6.0 and sqliteq v0.4.0. [Installation](/start/installation/#versions) has the versions.
 
 | Interface | redisq | sqliteq |
 |---|---|---|
 | `IBaseQueue`, `IQueue`, `IPriorityQueue`, `IAcknowledgeable` | yes | yes |
 | `IPersistentQueue`, `IPersistentPriorityQueue` | yes | yes |
-| `ISubscribable`, `IDistributedQueue`, `IDistributedPriorityQueue` | yes, on the `NewDistributed...` queues | no |
+| `ISubscribable`, `IDistributedQueue`, `IDistributedPriorityQueue` | yes | no |
 | `IBatchAcknowledgeable` | yes | yes |
 | `EnqueueOnce` checks job IDs | yes | yes |
-| `CapacitySetter` | no | no |
+| `QueuePauser`, `PauseNotifier` | yes | yes |
+| `OutcomeWatcher`, `ResultAcknowledgeable` | yes | yes |
+| `JobCanceller`, `CancelNotifier`, `CancelAcknowledgeable` | yes | yes |
+| `QueueInspector` | yes | yes |
+| `JobReader` | no | no |
+| `WorkflowAcknowledgeable` | yes | no |
+| `InstanceRegistry` | yes, on its `Queues` value | no |
+| `CapacitySetter`, `IPurgeValuesQueue` | no | no |
+
+Next: [REST API](/operations/rest-api/).

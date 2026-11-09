@@ -16,7 +16,7 @@ const { id = 'bind' } = Astro.props;
 	tag="simulation"
 	class="learn"
 	call={'worker := varmq.NewWorker(process, 2)\nemails := worker.BindQueue()\nreports := worker.BindQueue()'}
-	describe="One worker with a concurrency limit of 2 and two or three queues bound to it, each with three jobs. Press Play to watch the worker hand out the jobs one at a time: the strategy picks the queue for each free goroutine, and at most two jobs run at once, whichever queue they came from. Priority takes from the queue bound first while it has jobs. RoundRobin takes one job from each queue in turn and skips empty queues. Goroutine blocks appear when they start and disappear when they exit."
+	describe="One worker with a concurrency limit of 2 and two or three queues bound to it, each with three jobs. Press Play to watch the worker give out the jobs one at a time: the strategy picks the queue for each free goroutine, and at most two jobs run at once, whichever queue they came from. Priority takes from the queue bound first while it has jobs. RoundRobin takes one job from each queue in turn and skips empty queues. Goroutine blocks appear when they start and disappear when they exit."
 >
 	<dl class="sframe__stats" slot="stats">
 		<div><dt>busy</dt><dd data-stat="busy">0 of 2</dd></div>

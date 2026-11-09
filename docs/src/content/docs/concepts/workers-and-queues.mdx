@@ -24,20 +24,17 @@ queue.Add("hello")
 |---|---|
 | `BindQueue` | a new in-memory FIFO queue |
 | `BindPriorityQueue` | a new in-memory priority queue |
-| `WithQueue`, `WithPriorityQueue` | your own `IQueue` or `IPriorityQueue` implementation |
-| `WithPersistentQueue`, `WithDistributedQueue` | a storage adapter, such as redisq or sqliteq |
-| `WithPersistentPriorityQueue`, `WithDistributedPriorityQueue` | a storage adapter's priority queue |
+| `WithQueue`, `WithPriorityQueue` | your own `IQueue` or `IPriorityQueue` implementation, or shared storage such as redisq or sqliteq |
 | `WithTopic` | a subscription to a topic, which you publish to instead of adding |
 
 ### Which queue to bind
 
 - **FIFO in-memory queue** (`BindQueue`): jobs leave the queue in the order you add them. The queue lives only while the process runs. See [Queues](/guides/queues/).
 - **Priority queue** (`BindPriorityQueue`): each job has an `int` priority, and a lower number runs first. See [Queues](/guides/queues/#fifo-and-priority-queues).
-- **Persistent queue** (`WithPersistentQueue`): one process wants its jobs to survive a restart. See [Persistence and distribution](/persistence/overview/).
-- **Distributed queue** (`WithDistributedQueue`): workers in several processes share one queue, and each job goes to one of them. See [Persistence and distribution](/persistence/overview/#persistent-or-distributed).
+- **Shared storage** (`WithQueue` with redisq or sqliteq): jobs survive a restart. With redisq, workers in several processes share one queue, and each job goes to one of them. See [Persistence and distribution](/persistence/overview/#persistent-or-distributed).
 - **Topic** (`WithTopic`): every subscribed worker must get its own job for each payload. Topics are in-memory only. See [Topics](/guides/topics/).
 
-A process that only adds jobs does not need a worker. [`NewDistributedQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewDistributedQueue) wraps a distributed queue's storage with no worker bound to it.
+A process that only adds jobs does not need a worker. [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) wraps shared storage with no worker bound to it.
 
 ## One worker, several queues
 
@@ -53,7 +50,7 @@ The worker has concurrency 2 and two queues: `emails`, bound first, and `reports
 
 When a slot frees up, the worker's strategy picks which queue the next job comes from. The default strategy, [`Priority`](https://pkg.go.dev/github.com/goptics/varmq#Priority), takes the queue with the lowest priority number. Queues bound without [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) tie, and a tie goes to the queue bound first, which is why every email starts before any report. [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy) switches to `RoundRobin`, `MaxLen` or `MinLen`.
 
-With more than one queue bound, the worker hands out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may hand a goroutine several waiting jobs together.
+With more than one queue bound, the worker gives out jobs one at a time, so the strategy decides every single job. A worker with a single in-memory queue may give a goroutine several waiting jobs together.
 
 ## A queue belongs to one worker
 
@@ -62,6 +59,6 @@ Each queue is bound to the worker that created it, and [`Worker()`](https://pkg.
 To get jobs to more than one worker, use a different source:
 
 - **Every worker gets every job:** publish to a [`Topic`](https://pkg.go.dev/github.com/goptics/varmq#Topic) and subscribe each worker with `WithTopic`. Topics are in-memory only.
-- **Workers in several processes share the jobs:** bind each one to the same distributed queue with `WithDistributedQueue`. Each job goes to one of them.
+- **Workers in several processes share the jobs:** bind each one to the same redisq queue with `WithQueue`. Each job goes to one of them.
 
 Next: [jobs](/concepts/jobs/).

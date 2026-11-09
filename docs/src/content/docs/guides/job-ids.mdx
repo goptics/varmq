@@ -70,6 +70,15 @@ Closing a job with its handle's [`Close`](https://pkg.go.dev/github.com/goptics/
 
 `Add` also returns `false` for a full queue and for a closed one, and it does not say which of the three it was. See [queues](/guides/queues/).
 
-### Persistent and distributed queues
+### Shared storage
 
-Persistent and distributed queues do not work this way. Storage whose `EnqueueOnce` checks IDs keeps an ID for a window that the storage itself sets. `Add` returns `true` for a repeat, but the storage keeps the job only once. IDs there must be unique across everything you add. Use something like a UUID, not a counter that restarts. The `IQueue.EnqueueOnce` documentation has the details.
+Shared storage, such as redisq or sqliteq, checks IDs differently.
+
+- **Only an ID you gave counts,** as on an in-memory queue. A generated ID is not checked.
+- **The storage keeps an ID for a window it sets,** not only while the job waits. So the ID can still count after the job has run.
+- **A repeat returns `true`.** `Add` returns `true`, but the storage keeps the job only once. So a retried `Add` after a lost reply is safe.
+- **IDs must be unique across everything you add.** Use something like a UUID, not a business key or a counter that restarts.
+
+Storage whose `EnqueueOnce` only calls `Enqueue` stores the repeat. The [`IQueue.EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) documentation has the details.
+
+Next: [Strategies](/guides/strategies/).

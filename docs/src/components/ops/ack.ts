@@ -162,7 +162,7 @@ function init(root: HTMLElement) {
 		if (btn('step').disabled) return;
 		s.stage += 1;
 		if (s.stage === 1) {
-			s.msg = persistent() ? 'The storage hands out job 7 with ack-7 and marks it taken.' : 'The worker takes job 7 from memory. Nothing outside the process records it.';
+			s.msg = persistent() ? 'The storage gives out job 7 with ack-7 and marks it taken.' : 'The worker takes job 7 from memory. Nothing outside the process records it.';
 		} else if (s.stage === 2) {
 			s.started += 1;
 			s.msg = s.started >= 2 ? 'Job 7 runs a second time.' : 'Your function runs job 7.';

@@ -43,7 +43,7 @@ export const BASE: NodeDef = {
 	on: () => true,
 	enable: () => {},
 	methods: ['Len() int', 'Dequeue() (any, bool)', 'Values() []any', 'Purge()', 'Close() error'],
-	adds: 'The root of every queue. Every queue you hand to VarMQ has these five methods.',
+	adds: 'The root of every queue. Every queue you give to VarMQ has these five methods.',
 	worker: [
 		'Len: whenever it decides whether there is work. On a persistent or distributed queue each call is a call to the storage.',
 		'Dequeue: once for each job it takes from a queue that does not acknowledge.',
@@ -87,7 +87,7 @@ export const NODES: NodeDef[] = [
 		adds: 'Adds Enqueue and EnqueueOnce with a priority to IBaseQueue. A type has one Enqueue, so it is a FIFO queue or a priority queue, not both.',
 		worker: [
 			'The priority is the number the caller passed to Add. VarMQ does not order the queue.',
-			'The worker takes whatever Dequeue returns next, so a priority queue has to hand out the lowest number first itself.',
+			'The worker takes whatever Dequeue returns next, so a priority queue has to give out the lowest number first itself.',
 		],
 		bind: 'WithPriorityQueue',
 		by: ['redisq', 'sqliteq'],
@@ -106,7 +106,7 @@ export const NODES: NodeDef[] = [
 			c.batch = false;
 		},
 		methods: ['DequeueWithAckId() (any, bool, string)', 'Acknowledge(ackID string) bool'],
-		adds: 'The interface that makes a queue persistent. The storage hands out a job with an acknowledgement ID and learns when the job is done.',
+		adds: 'The interface that makes a queue persistent. The storage gives out a job with an acknowledgement ID and learns when the job is done.',
 		worker: [
 			'DequeueWithAckId: once for each job it takes, when a slot is free and Len is above 0.',
 			'Acknowledge: once for each job, with its ID, when the function has returned and the worker closes the job. An empty ID means nothing to acknowledge.',
@@ -129,7 +129,7 @@ export const NODES: NodeDef[] = [
 		methods: ['Subscribe(func(action string))'],
 		adds: 'What makes a queue distributed. The storage can call the worker back when something happens.',
 		worker: [
-			'WithDistributedQueue calls Subscribe once, while binding, and passes the worker’s handler.',
+			'WithQueue and WithPriorityQueue call Subscribe once, while binding, and pass the worker’s handler.',
 			'The worker acts on one action: "enqueued" wakes it to pull. Any other action is ignored.',
 			'There is no way to unsubscribe. varmq’s handler does not block, so the adapter can call it from any goroutine.',
 		],
@@ -152,7 +152,7 @@ export const NODES: NodeDef[] = [
 			'Binding wraps it so that Add writes JSON and the worker reads with DequeueWithAckId, or with DequeueBatchWithAckIds when the storage has it.',
 			'The worker takes one job per free slot. Pause and Stop do not park a job it already took.',
 		],
-		bind: 'WithPersistentQueue',
+		bind: 'WithQueue',
 		by: ['redisq', 'sqliteq'],
 	},
 	{
@@ -169,7 +169,7 @@ export const NODES: NodeDef[] = [
 		methods: [],
 		adds: 'IPriorityQueue plus IAcknowledgeable. No methods of its own.',
 		worker: ['The same as IPersistentQueue, with the priority passed to Add.'],
-		bind: 'WithPersistentPriorityQueue',
+		bind: 'WithPriorityQueue',
 		by: ['redisq', 'sqliteq'],
 	},
 	{
@@ -188,9 +188,9 @@ export const NODES: NodeDef[] = [
 		adds: 'IPersistentQueue plus ISubscribable. No methods of its own.',
 		worker: [
 			'A distributed queue lets several processes consume one queue. Each job goes to one of them.',
-			'NewDistributedQueue wraps the same storage with no worker, for a process that only adds jobs.',
+			'NewQueue wraps shared storage with no worker, for a process that only adds jobs.',
 		],
-		bind: 'WithDistributedQueue',
+		bind: 'WithQueue',
 		by: ['redisq'],
 	},
 	{
@@ -208,7 +208,7 @@ export const NODES: NodeDef[] = [
 		methods: [],
 		adds: 'IPersistentPriorityQueue plus ISubscribable. No methods of its own.',
 		worker: ['The same as IDistributedQueue, with the priority passed to Add.'],
-		bind: 'WithDistributedPriorityQueue',
+		bind: 'WithPriorityQueue',
 		by: ['redisq'],
 	},
 	{
@@ -229,8 +229,8 @@ export const NODES: NodeDef[] = [
 		adds: 'Optional addition to IAcknowledgeable, for storage that can take many jobs in one call.',
 		worker: [
 			'When the storage is the worker’s only source, one call per wake-up takes as many jobs as there are free slots, at most 64. The worker does not call Len between jobs.',
-			'Bound as a persistent queue, while it is the active worker’s only source and the worker last found it empty, the worker checks Len once a second. That is how it finds jobs another process added.',
-			'Every job a call took starts, even if a pause or a stop arrives. The jobs are unacknowledged, and holding them could let a visibility timeout hand them to another consumer.',
+			'Without Subscribe, while it is the active worker’s only source and the worker last found it empty, the worker checks Len once a second. That is how it finds jobs another process added.',
+			'Every job a call took starts, even if a pause or a stop arrives. The jobs are unacknowledged, and holding them could let a visibility timeout give them to another consumer.',
 			'Binding it signals the worker, because the storage may already hold jobs and no Add will announce them.',
 		],
 		by: ['redisq', 'sqliteq'],
@@ -261,12 +261,8 @@ export const NODES: NodeDef[] = [
 export const BINDINGS: { name: string; needs: string[]; test: (c: Caps) => boolean; get: string }[] = [
 	{ name: 'WithQueue', needs: ['IQueue'], test: (c) => c.fifo, get: 'Queue[T]' },
 	{ name: 'WithPriorityQueue', needs: ['IPriorityQueue'], test: (c) => c.prio, get: 'PriorityQueue[T]' },
-	{ name: 'WithPersistentQueue', needs: ['IQueue', 'IAcknowledgeable'], test: (c) => c.fifo && c.ack, get: 'PersistentQueue[T]' },
-	{ name: 'WithPersistentPriorityQueue', needs: ['IPriorityQueue', 'IAcknowledgeable'], test: (c) => c.prio && c.ack, get: 'PersistentPriorityQueue[T]' },
-	{ name: 'WithDistributedQueue', needs: ['IQueue', 'IAcknowledgeable', 'ISubscribable'], test: (c) => c.fifo && c.ack && c.sub, get: 'DistributedQueue[T]' },
-	{ name: 'WithDistributedPriorityQueue', needs: ['IPriorityQueue', 'IAcknowledgeable', 'ISubscribable'], test: (c) => c.prio && c.ack && c.sub, get: 'DistributedPriorityQueue[T]' },
-	{ name: 'NewDistributedQueue', needs: ['IQueue', 'IAcknowledgeable', 'ISubscribable'], test: (c) => c.fifo && c.ack && c.sub, get: 'DistributedQueue[T], no worker' },
-	{ name: 'NewDistributedPriorityQueue', needs: ['IPriorityQueue', 'IAcknowledgeable', 'ISubscribable'], test: (c) => c.prio && c.ack && c.sub, get: 'DistributedPriorityQueue[T], no worker' },
+	{ name: 'NewQueue', needs: ['IQueue', 'IAcknowledgeable'], test: (c) => c.fifo && c.ack, get: 'ProducerQueue[T, EnqueuedJob], no worker' },
+	{ name: 'NewPriorityQueue', needs: ['IPriorityQueue', 'IAcknowledgeable'], test: (c) => c.prio && c.ack, get: 'ProducerPriorityQueue[T, EnqueuedJob], no worker' },
 ];
 
 /** What varmq does with a type that has these parts. */
@@ -279,8 +275,8 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 			text: !enqueue
 				? 'There is no Enqueue yet, so a job cannot get in.'
 				: c.prio
-					? 'Lowest number first, but only if your storage hands jobs out that way. VarMQ does not order the queue.'
-					: 'First in, first out, as your storage hands jobs out.',
+					? 'Lowest number first, but only if your storage gives jobs out that way. VarMQ does not order the queue.'
+					: 'First in, first out, as your storage gives jobs out.',
 		},
 		{
 			label: 'Job ID',
@@ -288,7 +284,7 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 			text: !enqueue
 				? 'There is no EnqueueOnce yet, so a job cannot get in.'
 				: c.ack
-					? 'Add calls EnqueueOnce for a job with an ID. Persistent storage keeps an ID for a window it sets, so a retried Add stores the job once. redisq and sqliteq do.'
+					? 'Add calls EnqueueOnce for a job with an ID. Shared storage keeps an ID for a window it sets, so a retried Add stores the job once. redisq and sqliteq do.'
 					: 'Add calls EnqueueOnce for a job you gave an ID. Your storage decides whether a repeat is refused.',
 		},
 		{
@@ -313,7 +309,7 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 			label: 'Wake-ups',
 			on: c.sub || (c.ack && c.batch),
 			text: c.sub
-				? 'WithDistributedQueue calls Subscribe once. The adapter’s "enqueued" wakes the worker to pull.'
+				? 'WithQueue calls Subscribe once. The adapter’s "enqueued" wakes the worker to pull.'
 				: c.ack && c.batch
 					? 'The worker learns of jobs from its own process: an Add, a start or resume, or one of its jobs finishing. While it is active, this storage is its only source and it last found it empty, it also checks Len once a second, so it finds jobs another process added.'
 					: c.ack
@@ -331,8 +327,7 @@ export function behaviours(c: Caps): { label: string; text: string; on: boolean 
 }
 
 export const PRESETS: { key: string; label: string; caps: Caps }[] = [
-	{ key: 'redis-p', label: 'redisq persistent', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true } },
-	{ key: 'redis-d', label: 'redisq distributed', caps: { ...NO_CAPS, fifo: true, ack: true, sub: true, batch: true } },
+	{ key: 'redis', label: 'redisq', caps: { ...NO_CAPS, fifo: true, ack: true, sub: true, batch: true } },
 	{ key: 'sqlite', label: 'sqliteq', caps: { ...NO_CAPS, fifo: true, ack: true, batch: true } },
 	{ key: 'clear', label: 'Clear', caps: { ...NO_CAPS } },
 ];
