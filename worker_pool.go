@@ -128,9 +128,7 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			if !w.runnable(j) {
 				// No store: leave it unacked (acknowledge skips it).
 				if t := j.taskTag(); t != nil && t.missingStore() {
-					if err := j.Close(); err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
-						w.sendError(err)
-					}
+					_ = j.Close() // fails only if the user closed it meanwhile
 					run.add(j.memTotals(), -1)
 					continue
 				}

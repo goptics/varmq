@@ -3113,3 +3113,34 @@ func TestReservedWorkflowJobID(t *testing.T) {
 	assert.False(t, ok, "durable producer")
 	assert.Zero(t, s.Len())
 }
+
+// TestReservedWorkflowJobIDVariants: the err and result handles refuse the
+// "wf:" id prefix too, in FIFO and priority storage.
+func TestReservedWorkflowJobIDVariants(t *testing.T) {
+	ew := NewErrWorker(func(Job[int]) error { return nil }, WithAutoRun(false))
+	_, ok := ew.BindQueue().Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "err queue")
+	_, ok = ew.BindPriorityQueue().Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "err priority queue")
+
+	rw := NewResultWorker(func(Job[int]) (int, error) { return 0, nil }, WithAutoRun(false))
+	_, ok = rw.BindQueue().Add(1, WithJobId("wf:x:a"))
+	assert.False(t, ok, "result queue")
+	_, ok = rw.BindPriorityQueue().Add(1, 0, WithJobId("wf:x:a"))
+	assert.False(t, ok, "result priority queue")
+}
+
+// TestRunnableUnsubmittedMemoryTag: an in-memory task tag with no store
+// (never submitted) runs with no check; the memory store's FinishTask
+// settles a task end.
+func TestRunnableUnsubmittedMemoryTag(t *testing.T) {
+	w := newWorker(func(iJob[int]) {})
+	defer w.Stop()
+	j := newJob(1, jobConfigs{Id: "wf:u:a"})
+	j.setTask(taskTag{wf: "u", task: "a"})
+	assert.True(t, w.runnable(iJob[int](j)))
+
+	s, _ := newMemStore(t)
+	_, ok := s.FinishTask("", "", TaskEnd{Workflow: "nope", Task: "a", Outcome: OutcomeCompleted})
+	assert.False(t, ok, "unknown workflow")
+}
