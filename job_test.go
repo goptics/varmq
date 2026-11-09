@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2044,4 +2045,114 @@ func TestEndedJobsResultEncodedOnlyWhenKept(t *testing.T) {
 	assert.Zero(t, marshalCount.Load(), "nothing kept, nothing encoded")
 	run(t, "ended-enc-kept", 5, WithJobId("k"))
 	assert.EqualValues(t, 1, marshalCount.Load(), "kept: R encoded once")
+}
+
+// Offsets count records of the asked state only; the newest record of a
+// reused ID wins.
+func TestEndedJobsMixedStates(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-mixed", 10)
+	for _, d := range []struct {
+		id string
+		v  int
+	}{{"c1", 1}, {"f1", -1}, {"c2", 2}, {"f2", -2}, {"c3", 3}} {
+		j, _ := q.Add(d.v, WithJobId(d.id))
+		j.Wait()
+	}
+	assert.Equal(t, []string{"c2", "c1"}, pageIDs(t, m, JobCompleted, 1, 10))
+	assert.Equal(t, []string{"f1"}, pageIDs(t, m, JobFailed, 1, 10))
+	assert.Equal(t, []string{"c1"}, pageIDs(t, m, JobCompleted, 2, 1))
+
+	ok, _ := q.Add(1, WithJobId("x"))
+	ok.Wait()
+	bad, _ := q.Add(-1, WithJobId("x"))
+	bad.Wait()
+	rec, err := m.Job(context.Background(), "x")
+	require.NoError(t, err)
+	assert.Equal(t, JobFailed, rec.State, "newest record of x")
+}
+
+// A job closed or purged while it waits is not kept: not cancelled by ID.
+func TestEndedJobsCloseAndPurgeNotKept(t *testing.T) {
+	w, q, m := keptJobs(t, "ended-close", 10)
+	require.NoError(t, w.PauseAndWait())
+	cl, _ := q.Add(1, WithJobId("cl"))
+	require.NoError(t, cl.Close())
+	q.Add(2, WithJobId("pu"))
+	q.Purge()
+	require.NoError(t, w.Resume())
+	require.NoError(t, w.WaitContext(context.Background()))
+	for _, id := range []string{"cl", "pu"} {
+		_, err := m.Job(context.Background(), id)
+		assert.ErrorIs(t, err, ErrJobNotFound, id)
+	}
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCancelled, 0, 10))
+}
+
+// Payload and result are kept up to exactly 64 KiB of JSON.
+func TestEndedJobsCapBoundaries(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{endedN: 5, q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	ctx := context.Background()
+	for id, n := range map[string]int{"in": 64<<10 - 2, "out": 64<<10 - 1} { // + 2 quotes
+		j := newJob(strings.Repeat("x", n), jobConfigs{Id: id})
+		j.countedBy(m)
+		m.keep(j, JobCompleted, "", []byte(strings.Repeat("1", n+2)))
+	}
+	in, err := m.Job(ctx, "in")
+	require.NoError(t, err)
+	assert.Len(t, in.Payload, 64<<10)
+	assert.Len(t, in.Result, 64<<10)
+	out, err := m.Job(ctx, "out")
+	require.NoError(t, err)
+	assert.Equal(t, json.RawMessage("null"), out.Payload)
+	assert.Nil(t, out.Result)
+}
+
+// Records are written while pages, reads and stats run: endMu guards the
+// ring (go test -race).
+func TestEndedJobsConcurrent(t *testing.T) {
+	NewServerMux()
+	w := NewErrWorker(func(j Job[int]) error {
+		if j.Data()%3 == 0 {
+			return errors.New("boom")
+		}
+		return nil
+	}, WithName("ended-concurrent"), 8)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(16))
+	m := memOf(t, q)
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	for range 3 {
+		readers.Go(func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				for _, st := range []JobState{JobCompleted, JobFailed, JobCancelled} {
+					recs, err := m.Jobs(ctx, st, 0, 16)
+					assert.NoError(t, err)
+					for i := 1; i < len(recs); i++ {
+						assert.LessOrEqual(t, recs[i].FinishedAt, recs[i-1].FinishedAt, "newest first")
+					}
+				}
+				_, _ = m.Job(ctx, "7")
+				_ = m.CancelJob("8")
+				_ = stats(t, m)
+			}
+		})
+	}
+	for i := range 500 {
+		q.Add(i, WithJobId(strconv.Itoa(i)))
+	}
+	require.NoError(t, w.WaitContext(ctx))
+	close(done)
+	readers.Wait()
+	assert.Len(t, m.ended, 16)
 }
