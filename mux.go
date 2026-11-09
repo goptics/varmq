@@ -116,6 +116,18 @@ type workerSummary struct {
 	QueueIDs []string `json:"queue_ids"`
 }
 
+// workerSource is one source a worker pulls from, in GET /workers/{name}.
+type workerSource struct {
+	// QueueID is the GET /queues ID, "" when the source has none (a topic
+	// subscription, or storage with no Queue ID).
+	QueueID string `json:"queue_id"`
+	// Kind is "queue" or "topic".
+	Kind string `json:"kind"`
+	// Priority is the bind priority (WithQueuePriority, WithTopicPriority):
+	// lower picks first under the Priority strategy; default math.MaxInt.
+	Priority int `json:"priority"`
+}
+
 // summarizeWorker is w's workerSummary.
 func summarizeWorker(w Worker) workerSummary {
 	s := workerSummary{
@@ -246,13 +258,24 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 	metrics := worker.Metrics()
 	details := struct {
 		workerSummary
-		Metrics struct {
+		// Strategy is omitted for a Worker that is not varmq's: unknown.
+		Strategy string         `json:"strategy,omitempty"`
+		Sources  []workerSource `json:"sources"`
+		Metrics  struct {
 			Completed  uint64 `json:"completed"`
 			Successful uint64 `json:"successful"`
 			Failed     uint64 `json:"failed"`
 		} `json:"metrics"`
 	}{
 		workerSummary: summarizeWorker(worker),
+		Sources:       []workerSource{},
+	}
+	if p, ok := worker.(interface {
+		strategyName() string
+		boundSources() []workerSource
+	}); ok {
+		details.Strategy = p.strategyName()
+		details.Sources = p.boundSources()
 	}
 
 	details.Metrics.Completed = metrics.Completed()

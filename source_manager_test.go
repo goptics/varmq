@@ -136,3 +136,29 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 	prio := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any](), batch: 1}
 	assert.Nil(t, prio.purgeGen(), "batch of one")
 }
+
+// each walks the bound sources in bind order, whichever manager is current.
+func TestSourceManagerEach(t *testing.T) {
+	type bound struct {
+		src      source[iJob[string]]
+		priority int
+	}
+	list := func(m sourceManager[iJob[string]]) []bound {
+		var got []bound
+		m.each(func(src source[iJob[string]], p int) { got = append(got, bound{src, p}) })
+		return got
+	}
+
+	a, b, c := newTestSource(), newTestSource(), newTestSource()
+	m := newSourceManager[iJob[string]]()
+	assert.Empty(t, list(m), "empty")
+
+	m = m.add(a, 4, Priority)
+	assert.Equal(t, []bound{{a, 4}}, list(m), "direct")
+
+	m = m.add(b, 1, Priority).add(c, 2, Priority)
+	assert.Equal(t, []bound{{a, 4}, {b, 1}, {c, 2}}, list(m), "strategy: bind order")
+
+	m = m.remove(b).remove(a)
+	assert.Equal(t, []bound{{c, 2}}, list(m), "back to direct")
+}
