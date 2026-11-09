@@ -48,7 +48,7 @@ queue := worker.WithQueue(rq) // rq from redisq or sqliteq
 job, ok := queue.Add("job 1")
 ```
 
-A process that only adds jobs uses [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue). It needs no worker. For the jobs of an error or result worker, use [`NewErrQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrQueue) or [`NewResultQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultQueue), so the handle has `Err` or `Result`. Earlier releases had other binding methods for this storage. They are deprecated: see [adapters](/persistence/adapters/#what-you-pass-and-what-you-get).
+A process that only adds jobs uses [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue) or [`NewPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewPriorityQueue). It needs no worker. For the jobs of an error or result worker, use [`NewErrQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrQueue) or [`NewResultQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultQueue), so the handle has `Err` or `Result`. Earlier releases had other binding methods for this storage. They are deprecated, and their API reference names the call to use.
 
 The worker learns of new jobs in one of two ways:
 
