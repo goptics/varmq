@@ -101,7 +101,7 @@ Binding a storage that implements it also signals the worker, because the storag
 
 Earlier releases had it in the optional `IDedupQueue` and `IDedupPriorityQueue` interfaces. Those are removed, so move the method onto your queue type as it is.
 
-`Add` calls it, in place of `Enqueue`, for a job with an ID you gave, with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) or [`Item.ID`](https://pkg.go.dev/github.com/goptics/varmq#Item). A generated ID does not count. [Job IDs](/guides/job-ids/#shared-storage) says how long shared storage keeps an ID, and what `Add` returns for a repeat.
+`Add` calls it, in place of `Enqueue`, for a job with an ID you gave, with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) or [`Item.ID`](https://pkg.go.dev/github.com/goptics/varmq#Item). A generated ID does not count. [Job IDs](/guides/job-ids/#persistent-and-distributed-queues) says how long shared storage keeps an ID, and what `Add` returns for a repeat.
 
 A producer made with `NewQueue` has no worker. The worker's [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) does not reach it. It uses an ID you pass with `WithJobId`, or the one [`DefaultJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#DefaultJobIdGenerator) sets. With neither, it makes a random ID when the storage reports outcomes or cancels jobs.
 

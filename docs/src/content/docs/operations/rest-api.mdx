@@ -6,7 +6,7 @@ description: "Inspect and control workers, queues, jobs and workflows over HTTP.
 VarMQ ships an HTTP handler that lets you look at your workers, queues, jobs and workflows, and control them from outside the process. It serves JSON. It lists only workers that have a name, and the queues they take from.
 
 :::caution
-The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. They can also read job payloads, cancel jobs, and pause a shared queue for every process. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
+The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. They can read job payloads, results and errors, cancel jobs, and pause a shared queue for every process. They can also cancel a workflow, which runs its undo jobs by default. Put authentication and rate limits in front of it, with middleware or a reverse proxy. Listening on loopback alone does not stop a browser on the same host, so check the `Host` header or require a token.
 :::
 
 ## Routes at a glance
@@ -122,7 +122,7 @@ func main() {
    {"name":"email-sender","status":"Running","concurrency":2,"num_processing":2,"num_pending":14,"num_idle_workers":0,"queue_ids":["memory:host-a:fifo:1"],"strategy":"priority","sources":[{"queue_id":"memory:host-a:fifo:1","kind":"queue"}],"metrics":{"completed":4,"successful":4,"failed":0}}
    ```
 
-   The numbers depend on when you ask.
+   The numbers depend on when you ask. The middle of the queue ID is this process's [instance ID](#which-instance-answered), the host name by default.
 
 4. Control a worker:
 
@@ -149,7 +149,7 @@ The API serves the workers in [`WorkerRegistry`](https://pkg.go.dev/github.com/g
 
 You can read the registry yourself. `varmq.WorkerRegistry.Load("email-sender")` returns the worker as an `any`. A type assertion to [`varmq.Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) gives you its methods. You can then build your own routes on it.
 
-## Worker routes
+## Routes
 
 [Routes at a glance](#routes-at-a-glance) has the table of routes.
 
@@ -215,7 +215,7 @@ The list is sorted by `priority`, lowest first, then the sources with none. Sour
 
 - **An in-memory queue keeps only the jobs it can see.** It answers `404` for an ID it does not know. It knows a job only if the job has an ID.
 - **Shared storage cannot tell a waiting job from an unknown ID.** So it answers `202` for any ID with no ended record. It marks the ID cancelled for 24 hours, or until a new job with that ID is added.
-- **A job that has ended** answers `409`.
+- **A job whose ended record is still kept** answers `409`.
 - **A workflow task** answers `202` but still runs. To stop it, cancel its workflow.
 
 An in-memory queue keeps no ended jobs by default. Pass [`WithEndedJobs`](https://pkg.go.dev/github.com/goptics/varmq#WithEndedJobs) when you bind it, so the `completed`, `failed` and `cancelled` lists have records. The in-memory job routes work only for a named worker, after you build the handler.
@@ -226,11 +226,11 @@ The workflow routes read the [workflow](/guides/workflows/) stores this process 
 
 - **`GET /workflows`** lists the workflows of every store, newest first. `state` filters them, for example `running` or `failed`. `offset` is at most 10000, and `limit` is 50 by default and at most 1000.
 - **`GET /workflows/{id}`** returns one workflow, with the state of each task.
-- **`PATCH /workflows/{id}/actions/cancel`** cancels the workflow and answers `200` with its record. Add `?undo=false` to skip the undo steps.
+- **`PATCH /workflows/{id}/actions/cancel`** cancels the workflow and answers `200` with its record. Add `?undo=false` to skip the undo steps. The API cannot turn on undo steps that the workflow turned off: `?undo=true` answers 400.
 
 ## Responses
 
-A response from one of these routes sets `Content-Type: application/json`. A successful worker action, and a job cancel, have no body. An error is a JSON object with one field, `error`.
+Every response with a body sets `Content-Type: application/json`. A successful worker action, and a job cancel, have no body. An error is a JSON object with one field, `error`.
 
 | Status | When | Example | Body |
 |---|---|---|---|

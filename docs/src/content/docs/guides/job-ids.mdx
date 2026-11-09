@@ -70,7 +70,7 @@ Closing a job with its handle's [`Close`](https://pkg.go.dev/github.com/goptics/
 
 `Add` also returns `false` for a full queue and for a closed one, and it does not say which of the three it was. See [queues](/guides/queues/).
 
-### Shared storage
+### Persistent and distributed queues
 
 Shared storage, such as redisq or sqliteq, checks IDs differently.
 

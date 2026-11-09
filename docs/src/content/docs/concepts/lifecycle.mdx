@@ -69,7 +69,7 @@ The program below stops a worker, tries to resume it, adds a job while it is sto
 
 Pause and stop never interrupt a running job. Each running job finishes first.
 
-Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue together (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
+Jobs that have not started stay queued and are not lost. A worker may have taken several jobs from the queue together (see [how it works](/concepts/how-it-works/)). On pause or stop it finishes the job it is running and parks the rest of the batch. Parked jobs are still `Queued`, and the worker's [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) counts them, but the queue's `Len()` does not. They run first, in their original order, after `Resume` or `Restart`. Two more cases make `NumPending` read high. A job closed while it waits still counts, in `Len()` too, until the worker reaches it. While a goroutine works through a batch, the batch's finished jobs count until the whole batch ends. [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) closes them.
 
 A worker pause is not a queue pause. A paused queue stops every worker that takes from it, in every process. [Pausing a queue](/guides/queues/#pausing-a-queue) covers it.
 

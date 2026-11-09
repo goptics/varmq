@@ -277,10 +277,12 @@ When such a job runs again, with redisq v1.6.0:
 - **Keep the heartbeat timeout longer than any freeze you want to survive.** A process can be frozen or cut off from Redis for longer than this timeout. Then redisq treats it as dead. Its running jobs run again elsewhere, and their later `Acknowledge` still returns `true`.
 - **[`GetNackedItemsCount`](https://pkg.go.dev/github.com/goptics/redisq#Queue.GetNackedItemsCount) counts the jobs taken and not acknowledged.** The handle's `Len` does not, because they have left the queue.
 
+### How redisq tracks a taken job
+
 <details>
 <summary>Details</summary>
 
-How redisq tracks a taken job. The [redisq README](https://github.com/goptics/redisq#acknowledgments-and-the-visibility-timeout) has the full description and diagrams.
+The [redisq README](https://github.com/goptics/redisq#acknowledgments-and-the-visibility-timeout) has the full description and diagrams.
 
 - **A taken job is recorded in the same step.** One script moves the job from the queue to the hash `<key>:nacked`, under its acknowledgement ID. The same script gives the job a deadline in `<key>:timeouts`. The deadline is Redis's time plus the visibility timeout, five minutes by default. `Acknowledge` removes both entries.
 - **Every queue object sweeps once a second.** From its creation until `Close`, it puts back the jobs whose deadline has passed. It also puts back the jobs held by a queue object that is treated as dead. On the first-in first-out queues they go to the front, and on a priority queue back at their priority. The sweep also wakes a consumer for them. Creating a queue object also puts back the jobs whose deadline has passed.
@@ -290,7 +292,7 @@ How redisq tracks a taken job. The [redisq README](https://github.com/goptics/re
 
 ## Job IDs
 
-redisq checks job IDs in [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). An `Add` with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) stores the job once per ID within a window, five minutes by default. That covers an `Add` you retry, and a push that the Redis client sent again after its reply was lost. [Job IDs](/guides/job-ids/#shared-storage) says what `Add` returns for a repeat. [`SetDedupWindow`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetDedupWindow) on the queue object changes the window, and 0 turns the check off.
+redisq checks job IDs in [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). An `Add` with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) stores the job once per ID within a window, five minutes by default. That covers an `Add` you retry, and a push that the Redis client sent again after its reply was lost. [Job IDs](/guides/job-ids/#persistent-and-distributed-queues) says what `Add` returns for a repeat. [`SetDedupWindow`](https://pkg.go.dev/github.com/goptics/redisq#Queue.SetDedupWindow) on the queue object changes the window, and 0 turns the check off.
 
 A job without an ID is not checked. If the reply to its push is lost, the Redis client sends the push again, and the job can be stored twice. Give jobs IDs when that matters.
 
