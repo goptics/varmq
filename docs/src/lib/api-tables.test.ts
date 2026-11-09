@@ -25,6 +25,6 @@ describe('API tables', () => {
 	});
 
 	it('errors lists every exported Err value', () => {
-		assert.deepEqual(names(page('guides/errors.mdx'), /^\| \[?`(Err\w+)`/gm), names(go, /^\s*(Err\w+)\s*=/gm));
+		assert.deepEqual(names(page('guides/errors.mdx'), /^\| \[?`(Err\w+)`/gm), names(go, /^\s*(?:var\s+)?(Err\w+)\s*=/gm));
 	});
 });

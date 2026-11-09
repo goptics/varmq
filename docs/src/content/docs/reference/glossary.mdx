@@ -7,22 +7,30 @@ The terms these docs use, in alphabetical order. Each term links to the page tha
 
 | Term | Meaning |
 |---|---|
-| [Acknowledge](/persistence/overview/#acknowledgement) | To tell the storage that a job is done, so the storage forgets it. Only persistent and distributed queues acknowledge jobs. A failed job is acknowledged too. |
+| [Acknowledge](/persistence/overview/#acknowledgement) | To tell the storage that a job is done, so the storage forgets it or keeps a record. Only shared storage acknowledges jobs. A failed job is rejected instead, which also ends it. |
 | [Batch](/concepts/how-it-works/#batched-dispatch) | Several jobs that a pool goroutine takes together and runs one after another. A priority queue is not batched. |
+| [Cancel](/concepts/jobs/#cancelling-a-job) | To stop one job. A waiting job never runs. A running job's `Context()` ends, and the function must watch it. |
 | [Concurrency (limit)](/guides/concurrency/) | The most jobs a worker runs at the same time. It is an upper bound, not a pool size. |
-| [Distributed queue](/persistence/overview/#persistent-or-distributed) | A queue in a storage adapter that workers in several processes share. Each job goes to one of them. |
+| [Distributed queue](/persistence/overview/#persistent-or-distributed) | A queue in shared storage that workers in several processes share. Each job goes to one of them. redisq queues are distributed. |
 | [Event loop](/concepts/how-it-works/#the-event-loop) | The one goroutine in each worker that decides what runs next. It hands waiting jobs to free pool goroutines. |
 | [Goroutine (pool member)](/concepts/how-it-works/#the-worker-pool) | A goroutine in the worker's pool that runs your function. The pool starts more while jobs wait, up to the concurrency limit. |
 | [Job](/concepts/jobs/) | One unit of work: your data, an optional ID, and a status that changes as the worker runs it. `Add` creates it. |
 | [Job ID](/guides/job-ids/) | An optional string that names a job. An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds. |
+| [Outcome](/concepts/jobs/#jobs-in-other-processes) | How a job ended: completed, failed or cancelled. Shared storage reports it to the job's handle in any process. |
 | [Parked job](/concepts/lifecycle/#what-happens-to-jobs) | A job from a batch that did not start before a pause or stop. It stays `Queued` and runs first after `Resume` or `Restart`. |
-| [Persistent queue](/persistence/overview/#persistent-or-distributed) | A queue in a storage adapter that keeps jobs across a restart of one process. |
+| [Persistent queue](/persistence/overview/#persistent-or-distributed) | A queue in shared storage that keeps jobs across a restart of the process. |
 | [Priority queue](/guides/queues/#fifo-and-priority-queues) | A queue that gives out waiting jobs in priority order. A lower number runs first. |
+| [Queue ID](/operations/rest-api/#queues-and-jobs) | The name of a queue in the REST API's `/queues` routes. Every process that binds a shared queue sees the same ID. |
+| [Queue pause](/guides/queues/#pausing-a-queue) | A pause of one queue, not of a worker. No worker takes its jobs until `Resume`. On shared storage it holds for every process. |
 | [Rank](/guides/strategies/#choosing-a-strategy) | The number you set on a source with `WithQueuePriority` or `WithTopicPriority`. A lower rank goes first. |
+| [Shared storage](/persistence/overview/) | Storage outside the process, behind a storage adapter such as redisq or sqliteq. Jobs in it survive a restart. |
 | [Source](/guides/strategies/) | Anything bound to a worker that gives it jobs: a queue, a priority queue or a topic subscription. |
 | [Storage adapter](/persistence/adapters/) | A type that implements some of VarMQ's queue interfaces, such as redisq or sqliteq. It keeps jobs across restarts or shares a queue between processes. |
 | [Strategy](/guides/strategies/) | The rule a worker with several sources uses to pick which source gives the next job. |
 | [Subscription](/guides/topics/#creating-a-topic-and-subscribing) | The link between a topic and one worker, made with `WithTopic`. Each subscription gets its own job for every payload. |
+| [Task](/guides/workflows/#tasks-and-dependencies) | One step of a workflow. It is a job on a queue, and it can wait for other tasks to end first. |
 | [Topic](/guides/topics/) | An in-memory object that gives each published payload to every subscribed worker. A queue gives each job to one worker. |
+| [Undo](/guides/workflows/#undo) | A job that reverses a task that completed. A failed or cancelled workflow runs the undos of its completed tasks. |
 | [Visibility timeout (redisq)](/persistence/redis/#jobs-that-were-not-acknowledged) | How long a taken job can stay unacknowledged in redisq, five minutes by default. After that, the next sweep puts the job back in the queue. |
 | [Worker](/start/introduction/#the-model-a-worker-is-a-pool-a-queue-is-a-source) | The pool that owns your function and the concurrency limit. It runs the jobs from the sources bound to it. |
+| [Workflow](/guides/workflows/) | A set of tasks with dependencies between them. VarMQ runs each task when the tasks it waits for have ended. |
