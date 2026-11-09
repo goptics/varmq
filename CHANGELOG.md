@@ -13,11 +13,11 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
 - **`WithQueue` / `WithPriorityQueue` detect shared storage** (#179): storage with `IAcknowledgeable` binds durable (JSON jobs, storage acks); `Add` returns remote job handle. Custom in-memory storage with `Acknowledge` changes path.
   - IDs from `WithJobIdGenerator` no longer dedupe there; only `WithJobId` / `Item.ID` do.
   - Error and result workers bind shared storage this way.
-- **Interface additions** (break only own implementations, e.g. mocks):
+- **Interface additions** (#177, #179; break only own implementations, e.g. mocks):
   - Queue handles: `Pause`, `Resume`, `IsPaused` (#177); `WorkflowItem(data) (WorkflowItem, error)` (#179).
   - `Awaitable` and `Worker`: `WaitContext(ctx) error` (#179).
   - `EnqueuedJob`: `Cancel() error`; `Job[T]`: `Context() context.Context` (#179).
-- **Behaviour changes:**
+- **Behaviour changes** (#176, #179):
   - In-memory queue pending payloads now served over REST (`GET /queues/{id}/jobs`), as redisq's were: protect `Handler` (#176).
   - In-memory priority queue `Values()` returns hand-out order (#176).
   - `Purge` or `Close` on shared-storage handle detaches its live job handles: `ErrDetached` (#179).
@@ -39,7 +39,7 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - `varmq.TaskOf(j)` in worker → `*TaskContext`: `Result(name, &v)`, `Failed(name)`.
   - Options `WithWorkflowID`, `WithFailFast`, `WithUndoOnCancel`. In-memory store `varmq.NewWorkflowStore()` (`WithResultLimit`, `WithWorkflowRetention`).
   - REST: `GET /workflows`, `GET /workflows/{id}`, `PATCH /workflows/{id}/actions/cancel` (`undo=false` only narrows).
-  - Contract: `WorkflowStore`, `WorkflowAcknowledgeable`, `WorkflowInspector`, `WorkflowKeyLister`, `WorkflowKey`, `WorkflowPlan`, `TaskEnd`, `WorkflowRecord`, `TaskRecord`, `Outcome`, `WorkflowState`. Envelope gains `wf`, `task`, `undo`.
+  - Contract: `WorkflowStore`, `WorkflowAcknowledgeable`, `WorkflowInspector`, `WorkflowKeyLister`, `WorkflowKey`, `WorkflowPlan`, `TaskEnd`, `WorkflowRecord`, `TaskRecord`, `Outcome`, `WorkflowState`; `WorkflowStore.Cancel(…, undo *bool)` (nil = workflow's own setting). Envelope gains `wf`, `task`, `undo`.
   - redisq and sqliteq do not store workflows yet. Durable workflow needs this VarMQ in every consumer process (spec §9).
 - **One binder per kind** (#179, contract v0.6.0): `WithQueue` takes any FIFO storage, `WithPriorityQueue` any priority storage: in-memory, redisq, sqliteq, custom. Persistent vs distributed detected (`IAcknowledgeable`, `ISubscribable`).
   - Producers without worker: `varmq.NewQueue[T]`, `NewErrQueue[T]`, `NewResultQueue[T, R]`, each with `Priority` version → `ProducerQueue[T, J]` / `ProducerPriorityQueue[T, J]`.
@@ -57,10 +57,10 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - `PATCH /queues/{id}/jobs/{jobId}/actions/cancel`: 202 requested, 409 ended, 501 without `JobCanceller`.
   - `Job` gains `result` (one-job read) and `result_size` (list). `?state=cancelled` lists cancelled jobs.
   - `WithEndedJobs(n)` (QueueConfigFunc, 0..200, default 0): in-memory queue keeps last n ended jobs with ID for read and listing.
-  - Contract: `JobReader`, `ErrJobNotFound`, `JobRecord.Result`, `JobRecord.ResultSize`.
+  - Contract: `JobReader`, `ErrJobNotFound`, `JobRecord.Result`, `JobRecord.ResultSize`. `QueueInspector.Jobs` should accept `JobCancelled` (empty page valid); VarMQ answers empty page when storage rejects it.
   - Shared-storage cancel reaches every consumer process: protect `Handler`.
 - **Worker queue IDs over REST** (#182, openapi 1.4.0): `GET /workers` and `GET /workers/{name}` gain `queue_ids`, the `GET /queues` IDs each worker consumes.
-- **Worker strategy and sources over REST** (#183, openapi 1.5.0): `GET /workers/{name}` gains `strategy` and `sources` (`{queue_id, kind, priority}`, sorted by priority). No job-path cost.
+- **Worker strategy and sources over REST** (#183, openapi 1.5.0): `GET /workers/{name}` gains `strategy` (`priority`, `round_robin`, `max_len`, `min_len`) and `sources` (`{queue_id, kind, priority}`, sorted by priority). No job-path cost.
 - **Durable queue pause** (#177; adr 0004, spec 1.3.0, openapi 1.2.0, contract v0.4.0): `q.Pause()` stops every worker in every process taking jobs from the queue until `q.Resume()`. Adds land, running jobs finish. Flag lives in storage: survives restart. `Worker.Pause` stays per worker.
   - Storage opts in: optional `QueuePauser`, `PauseNotifier`. In-memory queues implement both; other storage → `ErrPauseUnsupported`.
   - While paused, worker `NumPending`, `Wait`, `WaitUntilIdle` leave queue's jobs out; handle `Len` counts them.
@@ -68,7 +68,7 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - Redis queue pause needs this VarMQ in every consumer process.
 - **In-memory queues under `GET /queues`** (#176): Queue ID `memory:<InstanceID>:fifo:<n>` or `memory:<InstanceID>:prio:<n>`. Counts pending and processing; totals submitted, completed, failed. `GET /queues/{id}/jobs` pages pending jobs in hand-out order. Named workers only.
 - **Lifecycle reports at once** (#175; spec 1.2.0, contract v0.3.0): `contract.InstanceChanged` wakes reporters on worker start, stop, pause, resume, concurrency change, removal. Worker entries gain `completed`, `successful`, `failed`.
-- **Instance Records** (#174; spec 1.1.0, contract v0.2.0): `InstanceRecord`, `InstanceWorker`, optional `InstanceRegistry` (`ReportInstance`, `RemoveInstance`, `Instances`). Storage turns reports on (redisq `WithInstanceReports`). `contract.ReportInstances` reports every 1–60 s under `InstanceID` read at start; removes record on stop. `openapi.yaml` 1.0.1: clients accept unknown `JobState`.
+- **Instance Records** (#174; spec 1.1.0, contract v0.2.0): `InstanceRecord`, `InstanceWorker`, optional `InstanceRegistry` (`ReportInstance`, `RemoveInstance`, `Instances`). Storage turns reports on (redisq `WithInstanceReports`). `contract.ReportInstances` reports every 1–60 s under `varmq.InstanceID` read at start (set it first); removes record on stop. `openapi.yaml` 1.0.1: clients accept unknown `JobState`.
 - **`/queues` REST routes** (#173, contract v0.1.0): `GET /queues` (counts per Job State, totals), `GET /queues/{id}/jobs?state=…&offset&limit` (payload, times, attempts, `errors[]` last 10). Storage opts in via optional `QueueInspector`. Types in zero-dependency module `github.com/goptics/varmq/contract`; VarMQ re-exports them as aliases.
 - **Specs** (#173): `spec/openapi.yaml` (REST API) and `spec/redis-storage.md` (Redis key layout, job envelope, Job Records, retention, scripts). Shared contract for varmq-ts, varmq-rs, redisq. Envelope carries `enqueued_at` (Unix ms).
 

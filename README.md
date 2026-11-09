@@ -51,7 +51,7 @@
 - **Job cancel and outcome**: cancel a job, or wait for its result, from any process on shared storage.
 - **Queue pause**: pause a queue for every worker in every process; the pause survives a restart.
 - **REST API**: inspect and control workers, queues, jobs and workflows over HTTP.
-- **Extensible**: plug in your own storage by implementing [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) or [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue). Optional interfaces from [`contract`](https://pkg.go.dev/github.com/goptics/varmq/contract) add acks, wake-ups, outcomes, cancel, pause and inspection.
+- **Extensible**: plug in your own storage by implementing [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) or [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue). Optional interfaces add acknowledgments, wake-ups and pause (`varmq`), and outcomes, cancel and inspection ([`contract`](https://pkg.go.dev/github.com/goptics/varmq/contract)).
 
 ## Quick Start
 
@@ -158,7 +158,7 @@ Needs redisq v1.6.0+ or sqliteq v0.4.0+. Older releases (redisq v1.5.1, sqliteq 
 
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`: redisq and sqliteq). A failed job's `Err` is a `*varmq.RemoteError`, with the error text only. A result over 64 KiB is dropped (`ErrNoResult`). Custom storage without `OutcomeWatcher` gives `ErrDetached`. A job added without an ID gets a random one, so its outcome can be matched.
 
-Examples: [SQLite persistent](./examples/sqlite-persistent), [Redis persistent](./examples/redis-persistent), [Redis distributed](./examples/redis-distributed).
+Examples: [SQLite](./examples/sqlite-persistent), [Redis, one process](./examples/redis-persistent), [Redis, producer and consumer](./examples/redis-distributed).
 
 When the adapter deduplicates pushes (`EnqueueOnce`: redisq and sqliteq), give each job a unique ID such as a UUID. A retried `Add` with the same ID is then stored once:
 
@@ -422,7 +422,7 @@ Job routes show one job (state, payload, attempts, times, errors, result) and ca
 Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 
 > [!Warning]
-> The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before you expose it to untrusted networks. It serves job payloads and results, and it can stop workers and cancel jobs.
+> The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before you expose it to untrusted networks. It serves job payloads and results. It can stop and resize workers, pause queues in every process, and cancel jobs and workflows.
 >
 > On shared storage, a job cancel reaches every consumer process. It marks the ID for 24 h, and a re-add of the ID clears the mark. It answers 202 for any ID with no ended record, and 409 for a retained ended job. A waiting workflow task answers 202 but still runs: cancel its workflow instead.
 
@@ -436,7 +436,7 @@ A single event loop sleeps until something signals it: `Add()` putting a job in 
 
 ### Worker pool
 
-Every `Add` (and every job in `AddAll`) tries to wake the event loop, but the signal channel holds only one pending signal, so the extra signals are dropped. One wake-up is enough. The loop keeps giving out jobs while the queue has work and a worker slot is free. It gives each worker its share of the backlog as one batch, not one job per wake-up.
+Every `Add` (and every job in `AddAll`) tries to wake the event loop. The signal channel holds only one pending signal, so the extra signals are dropped. One wake-up is enough. The loop keeps giving out jobs while the queue has work and a worker slot is free. It gives each worker its share of the backlog as one batch, not one job per wake-up.
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
@@ -466,7 +466,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 |---|---|---|
 | In-memory queue, topic | Yes | |
 | Priority queue | No | A higher-priority job added later must not wait behind a batch. |
-| Shared storage (acknowledging) | No | A worker must not hold unacknowledged jobs that other consumers could take. See [Shared storage](#shared-storage). |
+| Shared storage that acknowledges jobs | No | A worker must not hold unacknowledged jobs that other consumers could take. See [Shared storage](#shared-storage). |
 | Worker bound to several queues | No | The strategy picks a queue for every single job. |
 
 ### Shared storage
@@ -474,7 +474,7 @@ Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worke
 A worker bound to shared storage takes jobs as JSON. It ends each job in storage: `Acknowledge` on success, or `Reject` with the error text on an error or panic.
 
 - **Wake-up.** Storage that notifies (`ISubscribable`, redisq) wakes an idle worker as soon as any process adds a job. Other storage is polled, and an add in the same process wakes the worker at once.
-- **Credit dispatch.** When the storage pops in batches (`IBatchAcknowledgeable`, redisq and sqliteq) and is the worker's only source, one pop fills every free slot, up to 64 jobs. Each job goes straight to a goroutine, so no worker holds jobs it has not started.
+- **Credit dispatch.** When the storage pops in batches (`IBatchAcknowledgeable`: redisq, sqliteq) and is the only source, one pop fills every free slot. The limit is 64 jobs. Each job goes straight to a goroutine, so no worker holds jobs it has not started.
 - **Pause.** A paused queue gives out nothing. A `Resume` from any process wakes the workers.
 - **Cancel.** A cancel reaches the worker that runs the job (`CancelNotifier`) and cancels its `j.Context()`. A job that ends cancelled is never retried.
 
@@ -482,7 +482,6 @@ A worker bound to shared storage takes jobs as JSON. It ends each job in storage
 
 - **In-memory jobs are lost on a crash.** In-memory queues live in the process. Use shared storage for jobs you can't lose.
 - **At least once on shared storage.** A job can run again when its process dies mid-job or its acknowledgment is lost. Make handlers safe to run twice.
-- **No retries.** A job that fails is rejected and does not run again. Retry inside the handler if you need it.
 - **Cancel is cooperative.** A running job stops only if its handler watches `j.Context()`.
 - **Outcomes need storage support.** A remote result is capped at 64 KiB. An outcome can be lost when the storage drops its record before a watcher reads it, so wait with `WaitContext` and a timeout.
 
@@ -491,15 +490,15 @@ A worker bound to shared storage takes jobs as JSON. It ends each job in storage
 | Where | Guarantee | Notes |
 | --- | --- | --- |
 | In-memory queue | At most once | Jobs live in the process and are lost if it exits. |
-| Shared storage with acks | At least once | A job comes back if its consumer dies or its acknowledgment is lost. See the adapter's own guarantees. |
-| `Add` with `WithJobId` on storage with `EnqueueOnce` | Once per ID | A retried `Add` with the same ID is stored once. |
+| Shared storage that acknowledges jobs | At least once | A job comes back if its consumer dies or its acknowledgment is lost. See the adapter's own guarantees. |
+| `Add` with `WithJobId` on storage with `EnqueueOnce` | Once per ID, within the dedupe window | A retried `Add` with the same ID is stored once while the adapter keeps the ID. The job can still run twice (at least once). |
 | Topic | At most once, per subscription | Each subscribed worker gets every payload published after it subscribed. |
 
 <a id="benchmarks"></a>
 
 ## Comparison and Benchmarks
 
-VarMQ is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools as a worker pool. It is also compared with Redis and SQLite job queues as a durable queue. The numbers come from the [benchmark repository](https://github.com/goptics/benchmarks).
+VarMQ is compared with [ants](https://github.com/panjf2000/ants), [pond v2](https://github.com/alitto/pond), [conc](https://github.com/sourcegraph/conc), [workerpool](https://github.com/gammazero/workerpool), [errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup), [gopool](https://github.com/bytedance/gopkg/tree/main/util/gopool) and two hand-rolled channel pools as a worker pool. It is also compared with Redis and SQLite job queues as shared storage. The numbers come from the [benchmark repository](https://github.com/goptics/benchmarks).
 
 ### Feature comparison
 

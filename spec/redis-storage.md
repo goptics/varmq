@@ -21,7 +21,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 Terms:
 
 - **Queue ID**: the identity a storage reports for a queue, the same on every instance. Here it is the queue's base key (below), for example `redisq:shop:fifo:{emails}`.
-- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected). Since 1.5.0 a workflow task can also be `waiting` (section 7.3). Since 1.7.0 any job can be `cancelled` (section 6.14). Later versions can add states (section 7).
+- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected). Since 1.5.0 a workflow task can also be `waiting` or `cancelled` (section 7.3). Since 1.7.0 any job can be `cancelled` (section 6.14). Later versions can add states (section 7).
 - **Reject**: the final failure of a job. No retry follows, and the job is not requeued.
 - **Job Record**: what storage keeps about a completed or failed job after it leaves the queue.
 
