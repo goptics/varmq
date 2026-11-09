@@ -177,6 +177,44 @@ VarMQ itself has only the in-memory store. For a workflow that continues after a
 
 </details>
 
+### Workflows on Redis
+
+redisq v1.6.0 keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`WorkflowStore()`](https://pkg.go.dev/github.com/goptics/redisq#Queue.WorkflowStore) on any queue returns the store for that Redis server and namespace.
+
+```go
+qs := redisq.New("redis://localhost:6375")
+defer qs.Close()
+
+upload, thumb := qs.NewQueue("upload"), qs.NewPriorityQueue("thumb")
+
+wf := varmq.NewWorkflow(upload.WorkflowStore(), varmq.WithWorkflowID("upload-1"))
+up := wf.Add("upload", varmq.NewResultQueue[string, string](upload), "photo.png")
+wf.Add("thumb", varmq.NewResultPriorityQueue[int, string](thumb), 64).After(up)
+if err := wf.Submit(ctx); err != nil {
+	return err
+}
+rec, err := wf.WaitContext(ctx)
+```
+
+The process that submits needs no worker. Workers in any process run the tasks. Each one binds the same redisq queue with `WithQueue` or `WithPriorityQueue`:
+
+```go
+w := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) {
+	return "s3://bucket/" + j.Data(), nil
+})
+w.WithQueue(upload)
+```
+
+- **The workflow survives a restart.** Redis keeps its state. So `OpenWorkflow(upload.WorkflowStore(), "upload-1")` works in any process that uses the same Redis server and namespace.
+- **A task ends in one step.** One script records the end of a task and queues the tasks that wait for it. So a crash never leaves a workflow between the two.
+- **Set the store on `redisq.New`.** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowResultLimit) sets the largest task result, 64 KiB by default. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowRetention) sets how long an ended workflow is kept, 7 days by default.
+- **Every process that runs a task must use redisq v1.6.0 or newer.**
+- **Do not call `SetExpiration` on a queue that carries tasks.** `Submit` refuses such a queue.
+- **Redis Cluster is not supported** for workflows.
+- **Protect write access to Redis.** Anyone who can add jobs to a task's queue can add a copy of a task.
+
+The redisq repository has [`examples/workflow`](https://github.com/goptics/redisq/tree/main/examples/workflow), which runs one workflow across three processes. sqliteq has no workflow store yet. A task on a sqliteq queue makes `Submit` return `ErrScopeMismatch`.
+
 For the errors that workflow calls return, see [errors](/guides/errors/#returned-by-calls-you-make).
 
 Next: [Context](/guides/context/).
