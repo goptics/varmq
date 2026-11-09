@@ -587,7 +587,8 @@ const maxEndedJobs = 200
 // worker has a name) and a REST mux was built (Handler, NewServerMux).
 //
 // A record holds the payload and a result worker's R as JSON, each
-// dropped (payload null, no result) over 64 KiB, so n bounds the memory.
+// dropped (payload null, no result) over 64 KiB, and the error cut at
+// 64 KiB, so n bounds the memory.
 //
 // Parameters:
 //   - n: records to keep, clamped to 0..200. 0 keeps none.

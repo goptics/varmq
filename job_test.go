@@ -1935,6 +1935,12 @@ func TestEndedJobsEncodeFailures(t *testing.T) {
 	big := newJob(1, jobConfigs{Id: "t"})
 	big.countedBy(m)
 	m.keep(big, JobCompleted, "", []byte(`"`+strings.Repeat("x", 64<<10)+`"`))
+	long := newJob(1, jobConfigs{Id: "e"})
+	long.countedBy(m)
+	long.fail(strings.Repeat("e", 64<<10+1))
+	rec, err := m.Job(ctx, "e")
+	require.NoError(t, err)
+	assert.Len(t, rec.Errors[0].Error, 64<<10, "error text capped at 64 KiB")
 
 	for id, want := range map[string]JobState{"p": JobCompleted, "f": JobFailed, "t": JobCompleted} {
 		rec, err := m.Job(ctx, id)

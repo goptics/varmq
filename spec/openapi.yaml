@@ -268,7 +268,7 @@ paths:
         under its own state only: `failed` leaves cancelled jobs out.
         Records carry `payload` (null over 64 KiB or when it does not
         encode), `finished_at`, `attempts` (0 for a job cancelled before it
-        ran, else 1), the error, and a result job's `result` (left out over
+        ran, else 1), the error (cut at 64 KiB), and a result job's `result` (left out over
         64 KiB); no `enqueued_at` or `started_at`.
       responses:
         "200":

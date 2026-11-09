@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -246,6 +247,9 @@ func (m *memQueue) store(j memJob, st JobState, reason string, result []byte) {
 		r.Attempts = 1
 	}
 	if reason != "" {
+		if len(reason) > remoteResultLimit { // bounds memory; a copy frees the rest
+			reason = strings.Clone(reason[:remoteResultLimit])
+		}
 		r.Errors = []JobError{{Attempt: 1, Error: reason}}
 	}
 
