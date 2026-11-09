@@ -69,8 +69,10 @@ See [errors](/guides/errors/#sent-to-errs-and-the-handler).
 
 ## A job does not stop when the worker stops
 
-VarMQ does not interrupt a running function. `Stop` and a cancelled context only keep waiting jobs from starting. To end a job early, pass the worker's [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context) to your calls, or select on its `Done` channel. See [stopping a running job early](/guides/context/#stopping-a-running-job-early).
+VarMQ does not interrupt a running function. `Stop` and a cancelled context only keep waiting jobs from starting. To end a job early, pass the worker's [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Context) to your calls, or select on its `Done` channel. See [stopping a running job early](/guides/context/#stopping-a-running-job-early). To stop one job, [cancel it](/concepts/jobs/#cancelling-a-job): its function must watch `j.Context()`.
 
 ## The REST API does not list a worker
 
 Only a named worker is in the registry. Give the worker a name with [`WithName`](https://pkg.go.dev/github.com/goptics/varmq#WithName). A worker joins the registry when it starts, and leaves some time after it stops, one minute by default. See [which workers it serves](/operations/rest-api/#which-workers-it-serves).
+
+Next: [Benchmarks](/reference/benchmarks/).

@@ -1,18 +1,18 @@
 ---
 title: Jobs
-description: "What a job is, the handle Add returns, job IDs and statuses, and how to close or wait on a job."
+description: "What a job is, the handle Add returns, job IDs and statuses, and how to close, cancel or wait on a job."
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
 import JobScene from '../../../components/learn/JobScene.astro';
 
-A job is one unit of work: your data, an optional ID, and a status that changes as the worker runs it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and, on an in-memory queue, hands you a handle.
+A job is one unit of work: your data, an optional ID, and a status that changes as the worker runs it. You never build one yourself. [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add) creates it, puts it in the queue and gives you a handle.
 
 ## Two views of a job
 
 The worker function and the code that called `Add` see different things.
 
-**The worker function gets a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job).** It has two methods: [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) returns what you passed to `Add`, and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) returns the job's ID. The interface has nothing else: no status and no `Close`.
+**The worker function gets a [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job).** It has three methods. [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) returns what you passed to `Add`, and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) returns the job's ID. [`Context()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Context) ends when someone [cancels the job](#cancelling-a-job) while it runs. The interface has no status and no `Close`.
 
 **The caller gets a handle.** `Add` returns the handle and a `bool`:
 
@@ -30,7 +30,7 @@ With a plain worker the handle is an [`EnqueuedJob`](https://pkg.go.dev/github.c
 | [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) | [`EnqueuedErrJob`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) | `Err() error` |
 | [`NewResultWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewResultWorker) | [`EnqueuedResultJob[R]`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) | `Result() (R, error)` |
 
-Every handle has `ID()`, `Status()`, `IsClosed()`, `Wait()` and `Close()`. `Err` and `Result` block until the job is closed, then return what the worker function sent. For a job that was closed before it ran, `Err` returns `nil` and `Result` returns the zero value and a `nil` error. See [worker types](/guides/worker-types/) for the three workers side by side.
+Every handle has `ID()`, `Status()`, `IsClosed()`, `Wait()`, `WaitContext()`, `Close()` and `Cancel()`. `Err` and `Result` block until the job is closed, then return what the worker function sent. For a job that was closed before it ran, `Err` returns `nil` and `Result` returns the zero value and a `nil` error. See [worker types](/guides/worker-types/) for the three workers side by side.
 
 ## Job IDs
 
@@ -71,10 +71,10 @@ job-1 is `Processing` and job-2 is `Queued`. After `Wait`, both read `Closed` an
 
 It succeeds while the job waits. It fails in two cases:
 
-- A running job returns [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing). You cannot stop it from the outside.
+- A running job returns [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing). To stop a running job, [cancel it](#cancelling-a-job).
 - A closed job returns [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed). That includes a job that already ran, since the worker closes those too.
 
-Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. It counts as submitted, and because it never ran, it never counts as completed.
+Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. Because it never ran, it never counts as completed.
 
 Here job-1 is running and job-2 and job-3 wait behind it.
 
@@ -82,6 +82,45 @@ Here job-1 is running and job-2 and job-3 wait behind it.
 
 Closing job-1 fails with `ErrJobProcessing`. Closing job-2 works, its `Wait` returns immediately while job-1 is still running, and a second `Close` fails with `ErrJobAlreadyClosed`. The worker then runs job-3 and never prints a line for job-2.
 
+## Cancelling a job
+
+[`Cancel()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Cancel) stops a job, whether it waits or runs.
+
+- **A job that has not started** is closed and never runs. On an error or result worker, `Err` or `Result` returns [`ErrJobCancelled`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobCancelled).
+- **A running job** has its `Context()` cancelled. VarMQ cannot stop your function, so the function must watch `j.Context()` and return.
+- **A running job that then returns an error, or panics,** ends cancelled, and `Err` returns `ErrJobCancelled`. If it returns without an error, it ends as usual.
+- **A job that has ended** returns [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed).
+
+```go
+worker := varmq.NewErrWorker(func(j varmq.Job[string]) error {
+	select {
+	case <-time.After(time.Minute):
+		return nil
+	case <-j.Context().Done():
+		return j.Context().Err()
+	}
+})
+queue := worker.BindQueue()
+
+job, _ := queue.Add("report")
+job.Cancel()
+fmt.Println(job.Err()) // varmq: job cancelled
+```
+
+On shared storage, `Cancel` reaches the job in whichever process holds it. The storage must support it. Without that support, `Cancel` returns [`ErrCancelUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrCancelUnsupported). The [REST API](/operations/rest-api/#queues-and-jobs) can cancel a job by its ID too.
+
+## Jobs in other processes
+
+On shared storage such as Redis or SQLite, another process can run the job. The handle that `Add` returns still learns how the job ended, if the storage reports outcomes. A producer that runs no worker gets the same handle from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue).
+
+- **`Err`** returns `nil` for a completed job. For a failed job it returns a [`*RemoteError`](https://pkg.go.dev/github.com/goptics/varmq#RemoteError). It holds only the error text, so `errors.Is` does not match your own error values.
+- **`Result`** decodes the result from JSON. It returns [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) when the storage kept no result, for example a result over 64 KiB.
+- **[`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached)** means this handle cannot learn the outcome. The storage does not report outcomes, or you called `Close` on the handle. The job itself still runs.
+
+A job on such storage always has an ID: when you give none, VarMQ makes a random one. To wait on a job from a process that did not add it, use [`OpenJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenJob), [`OpenErrJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenErrJob) or [`OpenResultJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenResultJob) with that ID. The storage finds a job that already ended while it keeps the job's record. [Persistence](/persistence/overview/) says which storage supports this.
+
 ## Waiting on a job
 
-[`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) blocks until the job is closed, whether it ran or you closed it. If that has already happened, it returns immediately. To wait for everything a worker has queued instead of one job, see [waiting](/guides/waiting/).
+[`Wait()`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.Wait) blocks until the job is closed, whether it ran or you closed it. If that has already happened, it returns immediately. [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Awaitable.WaitContext) does the same, but gives up when its context ends. To wait for everything a worker has queued instead of one job, see [waiting](/guides/waiting/).
+
+Next: [Worker lifecycle](/concepts/lifecycle/).
