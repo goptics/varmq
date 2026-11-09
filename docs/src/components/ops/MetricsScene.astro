@@ -9,7 +9,7 @@ import { METRICS, sample, END } from './metrics-data';
 const first = sample(2, null);
 const describe =
 	'A replay of what a Prometheus scrape of /metrics returns while the example program runs 1000 jobs with a concurrency of 10, each job taking 100 milliseconds. ' +
-	'The left side lists the eight metrics in the text format, each with its HELP line, its TYPE line and its value. ' +
+	'The left side lists the seven metrics in the text format, each with its HELP line, its TYPE line and its value. ' +
 	'A slider sets the time from 0 to 11 seconds, and the values change with it. At 2 seconds the scrape shows completed 190, waiting 800 and processing 10. ' +
 	'Press a metric to see its type, the VarMQ method behind it, what it means, a chart of its value over the run, and PromQL queries for it. ' +
 	'A checkbox restarts the process at 5 seconds, which zeroes the counters.';
