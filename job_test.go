@@ -1735,3 +1735,250 @@ func TestResultMarshalPanicFailsJob(t *testing.T) {
 	assert.EqualValues(t, 1, mw.Metrics().Failed())
 	assert.EqualValues(t, 0, mw.Metrics().Successful())
 }
+
+// keptJobs is a named err worker's queue that keeps n ended jobs, once a
+// REST mux exists.
+func keptJobs(t *testing.T, name string, n int) (IErrWorkerBinder[int], ErrQueue[int], *memQueue) {
+	t.Helper()
+	NewServerMux()
+	w := NewErrWorker(func(j Job[int]) error {
+		if j.Data() < 0 {
+			return errors.New("boom")
+		}
+		return nil
+	}, WithName(name))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(n))
+	return w, q, memOf(t, q)
+}
+
+// pageIDs is the IDs of m's page of state.
+func pageIDs(t *testing.T, m *memQueue, st JobState, offset, limit int) []string {
+	t.Helper()
+	recs, err := m.Jobs(context.Background(), st, offset, limit)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, r := range recs {
+		assert.Equal(t, st, r.State)
+		ids = append(ids, r.ID)
+	}
+	return ids
+}
+
+// WithEndedJobs(2) keeps the last 2 of 3 ended jobs: completed, failed,
+// cancelled before it ran.
+func TestEndedJobsKept(t *testing.T) {
+	w, q, m := keptJobs(t, "ended-kept", 2)
+	ctx := context.Background()
+
+	a, _ := q.Add(1, WithJobId("a"))
+	require.NoError(t, a.Err())
+	b, _ := q.Add(-2, WithJobId("b"))
+	require.EqualError(t, b.Err(), "boom")
+	require.NoError(t, w.PauseAndWait())
+	c, _ := q.Add(3, WithJobId("c"))
+	require.NoError(t, m.CancelJob("c"))
+	assert.ErrorIs(t, c.Err(), ErrJobCancelled)
+
+	_, err := m.Job(ctx, "a")
+	assert.ErrorIs(t, err, ErrJobNotFound, "dropped: oldest of 3")
+	assert.ErrorIs(t, m.CancelJob("a"), ErrJobNotFound)
+
+	rb, err := m.Job(ctx, "b")
+	require.NoError(t, err)
+	assert.Positive(t, rb.FinishedAt)
+	assert.Equal(t, JobRecord{ID: "b", State: JobFailed, Payload: json.RawMessage("-2"), FinishedAt: rb.FinishedAt,
+		Attempts: 1, Errors: []JobError{{Attempt: 1, At: rb.FinishedAt, Error: "boom"}}}, rb)
+	rc, err := m.Job(ctx, "c")
+	require.NoError(t, err, "closed in the queue: read from the kept records")
+	assert.Equal(t, JobRecord{ID: "c", State: JobCancelled, Payload: json.RawMessage("3"), FinishedAt: rc.FinishedAt}, rc,
+		"never ran: no attempt, no error")
+	assert.GreaterOrEqual(t, rc.FinishedAt, rb.FinishedAt)
+
+	assert.ErrorIs(t, m.CancelJob("b"), contract.ErrJobEnded)
+	assert.ErrorIs(t, m.CancelJob("c"), contract.ErrJobEnded)
+	require.NoError(t, w.Resume())
+	require.NoError(t, w.WaitContext(ctx))
+	assert.ErrorIs(t, m.CancelJob("c"), contract.ErrJobEnded, "dropped from the queue: still kept")
+
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 0, 10))
+	assert.Equal(t, []string{"b"}, pageIDs(t, m, JobFailed, 0, 10), "cancelled jobs are listed under cancelled only")
+	assert.Equal(t, []string{"c"}, pageIDs(t, m, JobCancelled, 0, 10))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobProcessing, 0, 10))
+	s := stats(t, m)
+	assert.Equal(t, JobCounts{Failed: 1}, s.Counts, "counts: records held now")
+	assert.Equal(t, JobTotals{Submitted: 3, Completed: 1, Failed: 1}, s.Totals)
+
+	// a re-added ID: its waiting job, not the kept record
+	require.NoError(t, w.PauseAndWait())
+	q.Add(4, WithJobId("b"))
+	rb, err = m.Job(ctx, "b")
+	require.NoError(t, err)
+	assert.Equal(t, JobPending, rb.State)
+	require.NoError(t, m.CancelJob("b"), "the waiting one is cancelled")
+}
+
+// Pages of kept jobs are newest first, offset and limit over that state.
+func TestEndedJobsPages(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-pages", 3)
+	for i, id := range []string{"w", "x", "y", "z"} {
+		j, _ := q.Add(i, WithJobId(id))
+		require.NoError(t, j.Err())
+	}
+	j, _ := q.Add(-1) // no ID: not kept
+	require.Error(t, j.Err())
+
+	assert.Equal(t, []string{"z", "y", "x"}, pageIDs(t, m, JobCompleted, 0, 10), "the ring wrapped: w dropped")
+	assert.Equal(t, []string{"z", "y"}, pageIDs(t, m, JobCompleted, 0, 2))
+	assert.Equal(t, []string{"y", "x"}, pageIDs(t, m, JobCompleted, 1, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 3, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobFailed, 0, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, -1, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 0, 0))
+	assert.Equal(t, JobCounts{Completed: 3}, stats(t, m).Counts)
+
+	rec, err := m.Job(context.Background(), "z")
+	require.NoError(t, err)
+	assert.Equal(t, JobRecord{ID: "z", State: JobCompleted, Payload: json.RawMessage("3"), FinishedAt: rec.FinishedAt, Attempts: 1}, rec)
+}
+
+// A job cancelled while it runs is kept cancelled, with its one attempt's
+// error; a job of an unlisted queue, or of a queue that keeps none, is not
+// kept.
+func TestEndedJobsCancelledRunAndGates(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 1)
+	w := NewWorker(func(j Job[int]) {
+		blockOnCancel(started)(j)
+		panic(j.Context().Err()) // a cancelled run that returns normally completes
+	}, WithName("ended-run"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(1))
+	m := memOf(t, q)
+	j, _ := q.Add(5, WithJobId("r"))
+	require.Equal(t, "r", within(t, started))
+	require.NoError(t, m.CancelJob("r"))
+	j.Wait()
+	rec, err := m.Job(context.Background(), "r")
+	require.NoError(t, err)
+	assert.Equal(t, JobRecord{ID: "r", State: JobCancelled, Payload: json.RawMessage("5"), FinishedAt: rec.FinishedAt,
+		Attempts: 1, Errors: []JobError{{Attempt: 1, At: rec.FinishedAt, Error: cancelReason}}}, rec)
+	assert.Equal(t, JobCounts{}, stats(t, m).Counts, "cancelled: neither completed nor failed")
+
+	unnamed := NewWorker(func(Job[int]) {})
+	t.Cleanup(func() { unnamed.Stop() })
+	uq := unnamed.BindQueue(WithEndedJobs(5))
+	u, _ := uq.Add(1, WithJobId("u"))
+	u.Wait()
+	assert.Nil(t, memOf(t, uq).ended, "unlisted: unreadable, so not kept")
+
+	named := NewWorker(func(Job[int]) {}, WithName("ended-off"))
+	t.Cleanup(func() { named.Stop() })
+	off := named.BindQueue()
+	o, _ := off.Add(1, WithJobId("o"))
+	o.Wait()
+	om := memOf(t, off)
+	assert.Nil(t, om.ended, "off by default")
+	_, err = om.Job(context.Background(), "o")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	assert.Equal(t, []string{}, pageIDs(t, om, JobCompleted, 0, 10))
+}
+
+// A result job's record holds R as JSON; a payload or result that does not
+// encode, or is over 64 KiB, is left out.
+func TestEndedJobsResultAndCaps(t *testing.T) {
+	NewServerMux()
+	big := strings.Repeat("x", 64<<10) // 64 KiB + quotes: over
+	w := NewResultWorker(func(j Job[string]) (string, error) {
+		if j.Data() == "big" {
+			return big, nil
+		}
+		return "r:" + j.Data(), nil
+	}, WithName("ended-result"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(5))
+	m := q.(*resultQueue[string, string]).totals
+	for _, d := range []string{"a", "big", big} {
+		j, _ := q.Add(d, WithJobId(d[:min(3, len(d))]))
+		_, err := j.Result()
+		require.NoError(t, err)
+	}
+	ctx := context.Background()
+	rec, err := m.Job(ctx, "a")
+	require.NoError(t, err)
+	assert.JSONEq(t, `"r:a"`, string(rec.Result))
+	assert.JSONEq(t, `"a"`, string(rec.Payload))
+	rec, err = m.Job(ctx, "big")
+	require.NoError(t, err)
+	assert.Nil(t, rec.Result, "result over 64 KiB")
+	rec, err = m.Job(ctx, "xxx")
+	require.NoError(t, err)
+	assert.Equal(t, json.RawMessage("null"), rec.Payload, "payload over 64 KiB")
+	assert.Nil(t, rec.Result)
+}
+
+// A payload that fails to encode, or panics, is null; a workflow task's
+// result over 64 KiB is left out; a job of no in-memory queue keeps nothing.
+func TestEndedJobsEncodeFailures(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{endedN: 5, q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	ctx := context.Background()
+
+	p := newJob(panicky{}, jobConfigs{Id: "p"})
+	p.countedBy(m)
+	p.succeed()
+	f := newJob(func() {}, jobConfigs{Id: "f"})
+	f.countedBy(m)
+	f.fail("bad")
+	big := newJob(1, jobConfigs{Id: "t"})
+	big.countedBy(m)
+	m.keep(big, JobCompleted, "", []byte(`"`+strings.Repeat("x", 64<<10)+`"`))
+
+	for id, want := range map[string]JobState{"p": JobCompleted, "f": JobFailed, "t": JobCompleted} {
+		rec, err := m.Job(ctx, id)
+		require.NoError(t, err, id)
+		assert.Equal(t, want, rec.State, id)
+		assert.Nil(t, rec.Result, id)
+		if id != "t" {
+			assert.Equal(t, json.RawMessage("null"), rec.Payload, id)
+		}
+	}
+
+	var none *memQueue
+	none.keep(p, JobCompleted, "", nil) // nil-safe: storage counts its own
+}
+
+// A workflow task on a queue that keeps ended jobs is kept: its result, or
+// failed when its store refuses the result.
+func TestEndedJobsWorkflowTask(t *testing.T) {
+	NewServerMux()
+	w := NewResultWorker(func(j Job[int]) (string, error) {
+		if j.Data() == 2 {
+			return strings.Repeat("x", 65<<10), nil
+		}
+		return "ok", nil
+	}, WithName("ended-wf"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(5))
+	m := q.(*resultQueue[int, string]).totals
+
+	wf := NewWorkflow(NewWorkflowStore(), WithWorkflowID("kept"))
+	a := wf.Add("a", q, 1)
+	wf.Add("b", q, 2).After(a)
+	require.NoError(t, wf.Submit(context.Background()))
+	require.Equal(t, WorkflowFailed, waitWF(t, wf).State)
+
+	ctx := context.Background()
+	rec, err := m.Job(ctx, taskJobID("kept", "a"))
+	require.NoError(t, err)
+	assert.Equal(t, JobCompleted, rec.State)
+	assert.JSONEq(t, `"ok"`, string(rec.Result))
+	rec, err = m.Job(ctx, taskJobID("kept", "b"))
+	require.NoError(t, err)
+	assert.Equal(t, JobFailed, rec.State)
+	require.Len(t, rec.Errors, 1)
+	assert.Equal(t, ErrResultTooLarge.Error(), rec.Errors[0].Error)
+	assert.Nil(t, rec.Result)
+}

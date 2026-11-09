@@ -135,6 +135,7 @@ func (j *job[T]) cancel(set, release func()) error {
 		// and workflow stores learn it ended cancelled, so the item is not
 		// redelivered and the workflow moves on.
 		ackErr := j.finishCancelled()
+		j.memTotals().keep(j, JobCancelled, "", nil) // before release: a returned Wait finds it
 		if set != nil {
 			set()
 		}
@@ -184,6 +185,7 @@ func (j *job[T]) endFailed(err error) error {
 	j.endCancelled()
 	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
 		ref.totals.failed.Add(1)
+		ref.totals.keep(j, JobCancelled, cancelReason, nil)
 	}
 
 	return ErrJobCancelled

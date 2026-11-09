@@ -8,8 +8,10 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/goptics/varmq/contract"
+	"github.com/goptics/varmq/utils"
 )
 
 // memQueueSeq numbers the in-memory queues of this process, for their Queue IDs.
@@ -37,6 +39,14 @@ type memQueue struct {
 	submitted, completed, failed atomic.Uint64
 	processing                   atomic.Int64
 
+	// endedN is WithEndedJobs, set at bind: 0 keeps no ended job. ended
+	// is a ring of the last endedN Job Records; ended[endNext] is the
+	// oldest once it is full. Own lock: a page copy never stalls runMu.
+	endedN  int
+	endMu   sync.Mutex
+	ended   []JobRecord
+	endNext int
+
 	ref jobAck // what each of its jobs points to: no storage, only totals
 }
 
@@ -58,8 +68,9 @@ func withMemInspector(eq *externalBaseQueue) *externalBaseQueue {
 		kind = "prio"
 	}
 	m := &memQueue{
-		id: fmt.Sprintf("memory:%s:%s:%d", InstanceID, kind, memQueueSeq.Add(1)),
-		q:  eq.q,
+		id:     fmt.Sprintf("memory:%s:%s:%d", InstanceID, kind, memQueueSeq.Add(1)),
+		q:      eq.q,
+		endedN: eq.config.endedJobs,
 	}
 	m.ref.totals = m
 	eq.totals = m
@@ -123,15 +134,25 @@ func (m *memQueue) Paused() bool  { return isQueuePaused(m.q) }
 // batch, parked or running, also the rest of a batch parked by a queue
 // Pause), as redisq counts a popped, unacknowledged job. Processing moves
 // once per batch, so a finished job counts until its batch ends (as
-// NumProcessing). Finished jobs are not kept in memory, so
-// counts.completed and counts.failed are 0; totals.completed counts
-// successful jobs only, as redisq's does.
+// NumProcessing). counts.completed and counts.failed are the kept
+// records in that state (WithEndedJobs; 0 by default), cancelled ones in
+// neither; totals.completed counts successful jobs only, as redisq's does.
 func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 	s := QueueStats{
 		Counts: JobCounts{Pending: int64(m.q.Len()), Processing: max(0, m.processing.Load())},
 		Totals: JobTotals{Submitted: m.submitted.Load(), Completed: m.completed.Load(), Failed: m.failed.Load()},
 		Paused: m.Paused(), // the storage's word, not inferred from PausedAt
 	}
+	m.endMu.Lock()
+	for _, r := range m.ended {
+		switch r.State {
+		case JobCompleted:
+			s.Counts.Completed++
+		case JobFailed:
+			s.Counts.Failed++
+		}
+	}
+	m.endMu.Unlock()
 	if p, ok := m.q.(interface{ PausedAt() int64 }); ok && s.Paused {
 		s.PausedAt = p.PausedAt() // 0, so left out, if a Resume came in between
 	}
@@ -140,8 +161,9 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 }
 
 // Jobs lists pending jobs in hand-out order (a priority queue's Values
-// is sorted so); other states hold none in memory, so their pages are
-// empty. Only waiting jobs count: a closed one still in the queue is
+// is sorted so); completed, failed and cancelled ones from the kept
+// records, newest first (WithEndedJobs; else empty); processing none.
+// Only waiting jobs count: a closed one still in the queue is
 // skipped and offset counts past it, and the page fills up to limit from
 // one copy of the queue, so a short page means the end of that copy (one
 // that starts mid-read is dropped and the next fills its slot).
@@ -149,11 +171,106 @@ func (m *memQueue) QueueStats(context.Context) (QueueStats, error) {
 // O(n log n): fine for the admin route; a paged cursor read if in-memory
 // queues of millions get inspected often.
 func (m *memQueue) Jobs(_ context.Context, state JobState, offset, limit int) ([]JobRecord, error) {
-	if state != JobPending || offset < 0 || limit < 1 || offset >= m.q.Len() { // before copying the queue
+	if offset < 0 || limit < 1 {
+		return []JobRecord{}, nil
+	}
+	if state != JobPending {
+		return m.endedPage(state, offset, limit), nil
+	}
+	if offset >= m.q.Len() { // before copying the queue
 		return []JobRecord{}, nil
 	}
 
 	return m.pageWaiting(m.q.Values(), offset, limit), nil
+}
+
+// endedPage is the kept records in state st, newest first, skipping the
+// first offset, up to limit. Records are copied under endMu; their bytes
+// are never written after keep, so encoding them needs no lock.
+func (m *memQueue) endedPage(st JobState, offset, limit int) []JobRecord {
+	out := []JobRecord{}
+	m.endMu.Lock()
+	defer m.endMu.Unlock()
+	for i := 1; i <= len(m.ended) && len(out) < limit; i++ {
+		r := m.ended[(m.endNext-i+len(m.ended))%len(m.ended)]
+		if r.State != st {
+			continue
+		}
+		if offset > 0 {
+			offset--
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// endedJob is the newest kept record of ID id.
+func (m *memQueue) endedJob(id string) (JobRecord, bool) {
+	m.endMu.Lock()
+	defer m.endMu.Unlock()
+	for i := 1; i <= len(m.ended); i++ {
+		if r := m.ended[(m.endNext-i+len(m.ended))%len(m.ended)]; r.ID == id {
+			return r, true
+		}
+	}
+	return JobRecord{}, false
+}
+
+// keep records that job j of m ended in state st: reason is its error, ""
+// for none (a cancelled job with none never ran); result is R as JSON.
+// A no-op unless m keeps ended jobs (WithEndedJobs): one load. Nil-safe.
+func (m *memQueue) keep(j memJob, st JobState, reason string, result []byte) {
+	if m != nil && m.endedN > 0 {
+		m.store(j, st, reason, result)
+	}
+}
+
+// store adds j's record to the ring, dropping the oldest when full. Only a
+// job with an ID of a listed queue, once a mux is served (tracked): no
+// one else can read it. JSON is built before the lock.
+func (m *memQueue) store(j memJob, st JobState, reason string, result []byte) {
+	id, data := j.recordOf()
+	if id == "" || !m.tracked() {
+		return
+	}
+
+	r := JobRecord{ID: id, State: st, Payload: json.RawMessage("null")}
+	if b := endedJSON(data); b != nil {
+		r.Payload = b
+	}
+	if len(result) <= remoteResultLimit { // a workflow task's, as its store keeps it
+		r.Result = result
+	}
+	if reason != "" || st != JobCancelled {
+		r.Attempts = 1
+	}
+	if reason != "" {
+		r.Errors = []JobError{{Attempt: 1, Error: reason}}
+	}
+
+	m.endMu.Lock()
+	defer m.endMu.Unlock()
+	r.FinishedAt = time.Now().UnixMilli() // under the lock: ring order is finish order
+	if r.Errors != nil {
+		r.Errors[0].At = r.FinishedAt
+	}
+	if len(m.ended) < m.endedN {
+		m.ended = append(m.ended, r)
+	} else {
+		m.ended[m.endNext] = r
+	}
+	m.endNext = (m.endNext + 1) % m.endedN
+}
+
+// endedJSON is v as JSON for a kept record: nil when it does not encode
+// (an error or a panic: the worker must survive) or is over 64 KiB.
+func endedJSON(v any) []byte {
+	var b []byte
+	if p := utils.WithSafe("ended job JSON", func() { b, _ = json.Marshal(v) }); p != nil || len(b) > remoteResultLimit {
+		return nil
+	}
+	return b
 }
 
 // pageWaiting is the records of items' waiting entries, skipping the
@@ -306,8 +423,9 @@ func (m *memQueue) find(id string) []memJob {
 	return out
 }
 
-// Job is the JobReader of an in-memory queue: a waiting job (pending) or
-// a running one (processing). Ended jobs are not kept: ErrJobNotFound.
+// Job is the JobReader of an in-memory queue: a waiting job (pending), a
+// running one (processing), else its newest kept record (WithEndedJobs).
+// ErrJobNotFound when none.
 //
 // A running job's payload is null: its worker may write its data while it
 // runs (a map: a fatal concurrent read). A waiting job's data is read
@@ -329,6 +447,9 @@ func (m *memQueue) Job(_ context.Context, id string) (JobRecord, error) {
 			return JobRecord{ID: id, State: JobProcessing, Payload: json.RawMessage("null"), Attempts: 1}, nil
 		}
 	}
+	if r, ok := m.endedJob(id); ok {
+		return r, nil
+	}
 
 	return JobRecord{}, ErrJobNotFound
 }
@@ -345,10 +466,13 @@ func waitingItem(v any) bool {
 
 // CancelJob is the JobCanceller of an in-memory queue: Cancel on each job
 // with ID id, waiting or running. ErrJobNotFound when there is none,
-// ErrJobEnded when each one ended.
+// ErrJobEnded when each one ended, or only a kept record has the ID.
 func (m *memQueue) CancelJob(id string) error {
 	js := m.find(id)
 	if len(js) == 0 {
+		if _, ok := m.endedJob(id); ok {
+			return contract.ErrJobEnded
+		}
 		return ErrJobNotFound
 	}
 

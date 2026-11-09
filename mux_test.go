@@ -1813,3 +1813,60 @@ func TestMuxJobCloseDuringReadFindsRun(t *testing.T) {
 	defer stop()
 	require.NoError(t, run.WaitContext(ctx))
 }
+
+// WithEndedJobs over REST: an ended result job reads with its result,
+// pages carry result_size, cancel is 409; a queue without it keeps none.
+func TestMuxJobEndedKept(t *testing.T) {
+	w := NewResultWorker(func(j Job[int]) (string, error) {
+		if j.Data() < 0 {
+			return "", errors.New("boom")
+		}
+		return "done", nil
+	}, WithName("job-rest-ended"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(2))
+	off := w.BindQueue()
+	get, cancel := jobRoutes(t)
+	id := q.(*resultQueue[int, string]).totals.QueueID()
+	offID := off.(*resultQueue[int, string]).totals.QueueID()
+	page := func(qid, state string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(qid)+"/jobs?state="+state, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		return rr
+	}
+
+	for _, h := range []ResultQueue[int, string]{q, off} {
+		ok, _ := h.Add(1, WithJobId("ok"))
+		_, err := ok.Result()
+		require.NoError(t, err)
+		bad, _ := h.Add(-1, WithJobId("bad"))
+		_, err = bad.Result()
+		require.Error(t, err)
+	}
+
+	rr := get(id, "ok")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var rec JobRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &rec))
+	assert.JSONEq(t, `"done"`, string(rec.Result))
+	assert.Zero(t, rec.ResultSize, "one-job read: result, no size")
+	assert.Equal(t, http.StatusConflict, cancel(id, "ok").Code)
+	assert.Equal(t, http.StatusConflict, cancel(id, "bad").Code)
+
+	var recs []JobRecord
+	require.NoError(t, json.Unmarshal(page(id, "completed").Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, len(`"done"`), recs[0].ResultSize)
+	assert.Nil(t, recs[0].Result, "pages: size only")
+	require.NoError(t, json.Unmarshal(page(id, "failed").Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, "bad", recs[0].ID)
+	assert.Equal(t, "boom", recs[0].Errors[0].Error)
+
+	for _, st := range []string{"completed", "failed", "cancelled"} {
+		assert.Equal(t, "[]\n", page(offID, st).Body.String(), "off by default: %s", st)
+	}
+	assert.Equal(t, http.StatusNotFound, get(offID, "ok").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(offID, "ok").Code)
+}
