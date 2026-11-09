@@ -6,6 +6,7 @@ import (
 
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestSource(items ...string) *queueSource[string, iJob[string]] {
@@ -162,4 +163,10 @@ func TestSourceManagerEach(t *testing.T) {
 
 	m = m.remove(b).remove(a)
 	assert.Equal(t, []bound{{c, 4}}, list(m), "back to direct")
+
+	q := &batchTestQueue{}
+	s := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
+	cm := singleManager[iJob[string]](s, 7)
+	require.IsType(t, &creditManager[iJob[string]]{}, cm)
+	assert.Equal(t, []bound{{s, 7}}, list(cm), "credit")
 }

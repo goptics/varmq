@@ -134,11 +134,11 @@ func (w *worker[T, JobType]) queueIDOf(q IBaseQueue) string {
 	return id
 }
 
-// sameStorage reports a == b without the panic == gives on two values of
-// one uncomparable type.
+// sameStorage reports a == b without the panic == gives on an uncomparable
+// value: its type, or a map or slice in an interface field of a comparable
+// type (as job_cancel.go's runKey check).
 func sameStorage(a, b IBaseQueue) bool {
-	t := reflect.TypeOf(a)
-	return t == reflect.TypeOf(b) && t.Comparable() && a == b
+	return reflect.ValueOf(a).Comparable() && a == b
 }
 
 // strategyName is the worker's Strategy as GET /workers/{name} sends it.
