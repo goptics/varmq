@@ -1,6 +1,6 @@
 # Animated diagram generators
 
-Sources for the animated SVGs in the main README. Do not hand-edit `../varmq-*.svg`; edit here and run:
+Sources for the animated SVGs in the main README and the docs site. Do not hand-edit `../varmq-*.svg`; edit here and run:
 
 ```bash
 make diagrams
@@ -30,7 +30,7 @@ Needs only Python 3 (stdlib). Output is deterministic, so `git diff` shows exact
 
 - **CSS `@keyframes` only.** GitHub renders README SVGs through `<img>`: no JavaScript, and SMIL / `offset-path` are unreliable. Use the `r` attribute, not CSS `r` (Safari).
 - **Seamless loop.** Every animation ends in its start state: empty queues, idle workers. The lifecycle diagram is the exception: it ends with a fresh `Initiated` worker, since no call returns a worker to `Initiated`.
-- **Match varmq's real behaviour.** Queues start empty (the event loop dispatches immediately). `Add` / `AddAll` signal once per job, but the signal channel holds one pending signal, so extra signals are drawn as dropped (`worker_eventloop.go` `notifyToPullNextJobs`). Done workers signal through `releaseProcessingSlot`.
+- **Match VarMQ's real behaviour.** Queues start empty (the event loop dispatches immediately). `Add` / `AddAll` signal once per job, but the signal channel holds one pending signal, so extra signals are drawn as dropped (`worker_eventloop.go` `notifyToPullNextJobs`). Done workers signal through `finishJobs`.
 - **Batches.** `processNextJob` hands a worker its fair share of the backlog, `pending / min(concurrency, pending)`, in one go, and the goroutine signals done once per hand-off. The share is capped by `batchBudget`: just enough jobs that the live workers come back for a hand-off no more than about every 32 µs between them (measured by the last batch), and one job until a batch has run. The diagrams loop, so the jobs count as measured cheap. `varmq-batch.svg` shows it; in the worker-pool diagram (6 jobs, concurrency 4) the share is one job per worker at every wake-up, so no batch appears there. Jobs waiting in a batch are drawn parked inside the worker's channel box.
 - **Themes.** Colours are CSS variables, swapped by `@media (prefers-color-scheme: dark)`. Text must keep WCAG AA contrast (4.5:1) in both themes, also while a shape is flashing.
 - **Reduced motion.** `prefers-reduced-motion` pauses on an informative frame, chosen by the `still=` argument to `kfu.render` / `kfu.fill`.

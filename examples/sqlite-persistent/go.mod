@@ -3,12 +3,12 @@ module github.com/goptics/varmq/examples/sqlite-persistent
 go 1.27
 
 require (
-	github.com/goptics/sqliteq v0.3.0
-	github.com/goptics/varmq v0.0.0-00010101000000-000000000000
+	github.com/goptics/sqliteq v0.3.1-0.20261109084420-6550e3caed36
+	github.com/goptics/varmq v1.10.1-0.20261108161945-6bc553db29c6
 )
 
 require (
-	github.com/goptics/varmq/contract v0.3.0 // indirect
+	github.com/goptics/varmq/contract v0.6.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.28 // indirect
 )
 

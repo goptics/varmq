@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: varmq HTTP API
+  title: VarMQ HTTP API
   version: 1.5.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
@@ -26,8 +26,8 @@ info:
     - 1.4.0: `GET /queues/{id}/jobs/{jobId}` reads one job and
       `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` cancels one; `Job`
       gains `result` (one-job read only) and `result_size` (list pages);
-      `cancelled` joins `JobState` and is listable.
-      Additive.
+      `cancelled` joins `JobState` and is listable; `WorkerSummary` and
+      `WorkerDetails` gain `queue_ids`. Additive.
     - 1.3.0: `GET /workflows`, `GET /workflows/{id}` and
       `PATCH /workflows/{id}/actions/cancel` read and cancel workflows
       (task DAGs over queues). Additive.

@@ -1,4 +1,4 @@
-# varmq Redis storage
+# VarMQ Redis storage
 
 **Version 1.7.0**
 
@@ -21,7 +21,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 Terms:
 
 - **Queue ID**: the identity a storage reports for a queue, the same on every instance. Here it is the queue's base key (below), for example `redisq:shop:fifo:{emails}`.
-- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected). Later versions can add states (section 7).
+- **Job State**: `pending` (in the queue), `processing` (handed out to a consumer, no outcome yet), `completed` (acknowledged) or `failed` (rejected). Since 1.5.0 a workflow task can also be `waiting` or `cancelled` (section 7.3). Since 1.7.0 any job can be `cancelled` (section 6.14). Later versions can add states (section 7).
 - **Reject**: the final failure of a job. No retry follows, and the job is not requeued.
 - **Job Record**: what storage keeps about a completed or failed job after it leaves the queue.
 
@@ -252,7 +252,7 @@ Reject never puts the item back in the queue.
 
 A consumer calls Acknowledge when a job succeeds and Reject when it fails for the last time. A consumer that retries a failed job calls neither: the job stays processing until the consumer finishes it or the storage requeues it. (varmq has no retries in this version, so every failure calls Reject.)
 
-redisq plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and 1.0.0 has none. Until a later version adds it, `errors` holds only the Reject entry, and `attempts` counts only hand-outs.
+redisq plans for a failed attempt with retries left to bump `attempts` and save its error before the requeue. That needs an operation that records a failed attempt without finishing the job, and this version has none. Until a later version adds it, `errors` holds only the Reject entry, and `attempts` counts only hand-outs.
 
 ### 6.5 Requeue
 
@@ -304,7 +304,7 @@ The key decides; messages are hints. A consumer MUST ignore a `<base>:control` m
 
 ### 6.9 Submit a workflow (since 1.5.0)
 
-A workflow is a DAG of tasks fixed at Submit: no task is added later. Each task has a name, a queue, an envelope, dependencies (earlier tasks, so the DAG has no cycle), a dependency policy and optionally an undo. All queues of one workflow MUST live in one Redis instance and one namespace; a script that touches the keys of several queues needs that. (Redis Cluster is not supported by 1.5.0: queue keys hash on different slots.)
+A workflow is a DAG of tasks fixed at Submit: no task is added later. Each task has a name, a queue, an envelope, dependencies (earlier tasks, so the DAG has no cycle), a dependency policy and optionally an undo. All queues of one workflow MUST live in one Redis instance and one namespace; a script that touches the keys of several queues needs that. (This version does not support Redis Cluster: queue keys hash on different slots.)
 
 Input: the workflow ID, its options (`fail_fast`, `undo_on_cancel`), the plan hash, and per task the data of `t:<task>` and its envelope. The job ID of a task is `wf:<id>:<task>`, and of its undo `wf:<id>:<task>:undo`.
 
@@ -402,9 +402,9 @@ Cancel is cooperative: storage drops a waiting job, and tells consumers about a 
 
 ## 7. Reading
 
-A reader (in Go, a `QueueInspector`) answers the two HTTP routes as follows. It SHOULD read each answer in one script or `MULTI` transaction, so that the numbers come from one instant.
+A reader (in Go, a `QueueInspector`) answers the two list routes as follows. It SHOULD read each answer in one script or `MULTI` transaction, so that the numbers come from one instant.
 
-A reader MUST accept a Job State it does not know, in a Job Record or from the HTTP API, and show the value as it is. It MUST NOT treat it as an error. Since 1.5.0 a task of a workflow can be `waiting` or `cancelled` (section 7.3). This rule lets a later version add a state as a minor change.
+A reader MUST accept a Job State it does not know, in a Job Record or from the HTTP API, and show the value as it is. It MUST NOT treat it as an error. Since 1.5.0 a task of a workflow can be `waiting` or `cancelled` (section 7.3). Since 1.7.0 any job can be `cancelled` (section 6.14). This rule lets a later version add a state as a minor change.
 
 ### 7.1 Counts and totals (`GET /queues`)
 
@@ -425,7 +425,10 @@ Page bounds: `start = offset`, `stop = offset + limit - 1`.
 
 - **pending**: `LRANGE <base> start stop`, or `ZRANGE <base> start stop` with the sequence prefix removed. For each item, the Job ID is the envelope `id`; `attempts` is `HGET <base>:attempts <id>`, or 0. No `started_at`.
 - **processing**: all fields of `<base>:nacked`, sorted by ack ID, then the page. The Job ID follows section 3.1. `attempts = 1 + (HGET <base>:attempts <id> or 0)`. `started_at` is `HGET <base>:started <ack id>`.
-- **completed**, **failed**: `ZREVRANGE <base>:<state> start stop`, then `HMGET <base>:jobs` for those members. Skip a member whose record is gone (a trim ran between the two reads).
+- **completed**, **failed**: `ZREVRANGE <base>:<state> start stop`, then `HMGET <base>:jobs` for those members. Skip a member whose record is gone (a trim ran between the two reads). Since 1.7.0 the `failed` page also holds cancelled records, with `state` `cancelled` (section 6.14).
+- **cancelled** (HTTP `state=cancelled`, `openapi.yaml` 1.4.0): this version has no index of its own for cancelled jobs. A reader returns an empty page, or the `failed` records whose `state` is `cancelled`.
+
+`GET /queues/{id}/jobs/{jobId}` (`openapi.yaml` 1.4.0) has no reading rule in this version. A storage that does not answer it returns HTTP 501.
 
 Mapping to the HTTP `Job`: `payload` is the envelope's `data`; `enqueued_at` is the envelope's `enqueued_at`; the other fields come from the record or as above. For an item that is not an envelope, `payload` is the item as a JSON string (or the item itself, if it is valid JSON) and `enqueued_at` is absent.
 
@@ -515,8 +518,10 @@ A record is **live** when its score is at least `now - 3 × interval_ms`, with n
 - Items, `:nacked` and the other keys from redisq are unchanged in 1.0.0, so a 1.0.0 consumer reads items that an older producer wrote. Such items have no `enqueued_at`.
 - An older producer does not count `submitted`, and an older consumer writes no records and counts nothing. While old and new instances share a queue, the totals and records cover only the new ones.
 - An older requeue does not `HINCRBY <base>:attempts` or `HDEL <base>:started`. A job it requeues gets a too-low `attempts` in its record, and its `:started` entry stays until Purge.
+- 1.1.0 adds keys and a reader rule only. A 1.0.0 implementation works unchanged beside a 1.1.0 one. An instance on 1.0.0 writes no Instance Record, so a reader that lists instances from section 8 does not see it.
+- 1.2.0 adds worker fields and a reporting rule only. A 1.1.0 reader ignores the new fields.
 - 1.3.0 adds a key, a channel and a pop rule. A pre-1.3.0 consumer ignores `<base>:paused` and keeps popping, so a queue is paused only once every consumer of it runs 1.3.0. For varmq that means every consumer process runs a varmq with queue pause and a storage on 1.3.0: a varmq without it, on a 1.3.0 storage, keeps asking a paused queue for work and gets none.
 - 1.5.0 adds keys and envelope fields, and changes how a workflow task finishes. A pre-1.5.0 consumer does not know `wf`: it settles a workflow task with plain Acknowledge or Reject, so the task ends in its queue but nothing is promoted, the workflow waits for it forever, and the pre-run check (section 6.12) is skipped. Every consumer of a queue that carries workflow tasks MUST run a workflow-aware implementation and a storage on 1.5.0; a producer MUST NOT Submit a workflow unless it has checked that every queue involved is served that way. A job without `wf` is unchanged by 1.5.0. A pre-1.5.0 Purge does not cancel workflow tasks, so it leaves their workflow running. A workflow hash and index entry are not part of any queue, so an older Purge does not touch them.
-- 1.2.0 adds worker fields and a reporting rule only. A 1.1.0 reader ignores the new fields.
-- 1.1.0 adds keys and a reader rule only. A 1.0.0 implementation works unchanged beside a 1.1.0 one. An instance on 1.0.0 writes no Instance Record, so a reader that lists instances from section 8 does not see it.
+- 1.6.0 adds a channel and a record field. A pre-1.6.0 consumer publishes no outcome and writes no `result`. A waiter on a job it finishes sees the end only through the record, and gets no result.
+- 1.7.0 adds a key, a control message and a pop rule. A pre-1.7.0 consumer ignores `<base>:cancelled`, so it still hands out and runs a cancelled job. A cancel is reliable only once every consumer of the queue runs 1.7.0.
 - A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.

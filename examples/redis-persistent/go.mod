@@ -3,13 +3,13 @@ module github.com/goptics/varmq/examples/redis-persistent
 go 1.27
 
 require (
-	github.com/goptics/redisq v1.5.1
+	github.com/goptics/redisq v1.5.2-0.20261109084156-7debbc2bbc5b
 	github.com/goptics/varmq v1.0.1
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/goptics/varmq/contract v0.3.0 // indirect
+	github.com/goptics/varmq/contract v0.6.0 // indirect
 	github.com/redis/go-redis/v9 v9.23.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
