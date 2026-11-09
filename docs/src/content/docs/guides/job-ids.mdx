@@ -69,7 +69,7 @@ Closing a job with its handle's [`Close`](https://pkg.go.dev/github.com/goptics/
 - IDs that start with `wf:` are reserved for [workflow](/guides/workflows/) tasks. A plain `Add` with such an ID returns `false`, on every queue, also when a generator made the ID.
 - A queue you bind with [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) is checked by its own [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce). If that only calls `Enqueue`, the queue stores the duplicate.
 
-`Add` also returns `false` for a full queue and for a closed one, and it does not say which of the three it was. See [queues](/guides/queues/).
+`Add` also returns `false` for a full queue and for a closed one, and it does not say which reason it was. See [queues](/guides/queues/).
 
 ### Persistent and distributed queues
 

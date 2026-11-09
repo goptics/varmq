@@ -224,7 +224,7 @@ An in-memory queue keeps no ended jobs by default. Pass [`WithEndedJobs`](https:
 
 ## Workflows
 
-The workflow routes read the [workflow](/guides/workflows/) stores this process knows. These are the in-memory stores you made with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore), and every store an adapter registered, such as `redisq.NewWorkflowStore`. A process that only adds jobs lists them too, so protect the handler there as well.
+The workflow routes read the [workflow](/guides/workflows/) stores this process knows. These are the in-memory stores you made with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore), and every store an adapter registered, such as `redisq.NewWorkflowStore`. A process that only submits workflows, and runs no worker, lists and cancels them too. So protect the handler there as well.
 
 - **`GET /workflows`** lists the workflows of every store, newest first. `state` filters them, for example `running` or `failed`. `offset` is at most 10000, and `limit` is 50 by default and at most 1000.
 - **`GET /workflows/{id}`** returns one workflow, with the state of each task.
