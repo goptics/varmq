@@ -1998,12 +1998,50 @@ func TestEndedJobsOffAllocsNothing(t *testing.T) {
 	m.listed.Store(true)
 	j := newJob(1, jobConfigs{Id: "a"})
 	j.countedBy(m)
+	rj := newResultJob[int, int](1, jobConfigs{Id: "r"})
+	rj.countedBy(m)
 	end := func() {
 		j.succeed()
 		m.keep(j, JobFailed, "x", nil) // fail and endFailed: their own alloc (fail's &reason) predates keep
 		m.keep(j, JobCancelled, "", nil)
+		_ = rj.succeedResult() // R is not encoded
 	}
 	assert.Zero(t, testing.AllocsPerRun(100, end), "off")
 	m.endedN = 1
 	assert.Positive(t, testing.AllocsPerRun(100, end), "on")
+}
+
+// marshalCount counts countedR encodes.
+var marshalCount atomic.Int64
+
+type countedR struct{}
+
+func (countedR) MarshalJSON() ([]byte, error) {
+	marshalCount.Add(1)
+	return []byte("1"), nil
+}
+
+// R is encoded only for a record that is kept: not for a job without an
+// ID, nor on an unlisted queue, nor when off.
+func TestEndedJobsResultEncodedOnlyWhenKept(t *testing.T) {
+	NewServerMux()
+	run := func(t *testing.T, name string, endedN int, opts ...JobConfigFunc) {
+		t.Helper()
+		var cfg []any
+		if name != "" {
+			cfg = append(cfg, WithName(name))
+		}
+		w := NewResultWorker(func(Job[int]) (countedR, error) { return countedR{}, nil }, cfg...)
+		defer w.Stop()
+		j, _ := w.BindQueue(WithEndedJobs(endedN)).Add(1, opts...)
+		_, err := j.Result()
+		require.NoError(t, err)
+	}
+	marshalCount.Store(0)
+	run(t, "ended-enc-noid", 5)
+	run(t, "", 5, WithJobId("u"))
+	run(t, "ended-enc-off", 0, WithJobId("o"))
+	assert.Zero(t, marshalCount.Load(), "nothing kept, nothing encoded")
+	run(t, "ended-enc-kept", 5, WithJobId("k"))
+	assert.EqualValues(t, 1, marshalCount.Load(), "kept: R encoded once")
 }

@@ -218,21 +218,28 @@ func (m *memQueue) endedJob(id string) (JobRecord, bool) {
 	return JobRecord{}, false
 }
 
+// keeps reports whether m keeps the record of a job with ID id
+// (WithEndedJobs): only one with an ID of a listed queue, once a mux is
+// served (tracked), as no one else can read it. Checked before any
+// encode; off, it is one load. Nil-safe.
+func (m *memQueue) keeps(id string) bool {
+	return m != nil && m.endedN > 0 && id != "" && m.tracked()
+}
+
 // keep records that job j of m ended in state st: reason is its error, ""
 // for none (a cancelled job with none never ran); result is R as JSON.
-// A no-op unless m keeps ended jobs (WithEndedJobs): one load. Nil-safe.
+// A no-op unless m keeps j (keeps). Nil-safe.
 func (m *memQueue) keep(j memJob, st JobState, reason string, result []byte) {
 	if m != nil && m.endedN > 0 {
 		m.store(j, st, reason, result)
 	}
 }
 
-// store adds j's record to the ring, dropping the oldest when full. Only a
-// job with an ID of a listed queue, once a mux is served (tracked): no
-// one else can read it. JSON is built before the lock.
+// store adds j's record to the ring, dropping the oldest when full. JSON
+// is built before the lock.
 func (m *memQueue) store(j memJob, st JobState, reason string, result []byte) {
 	id, data := j.recordOf()
-	if id == "" || !m.tracked() {
+	if !m.keeps(id) {
 		return
 	}
 

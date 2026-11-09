@@ -797,7 +797,7 @@ func (rj *resultJob[T, R]) succeedResult() error {
 			return err
 		}
 		var kept []byte // R for an in-memory queue that keeps ended jobs
-		if m := rj.memTotals(); m != nil && m.endedN > 0 {
+		if rj.memTotals().keeps(rj.id) {
 			kept = endedJSON(rj.data)
 		}
 		rj.succeedWith(kept)
