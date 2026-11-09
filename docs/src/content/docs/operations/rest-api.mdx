@@ -164,6 +164,8 @@ The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/v
 | `num_processing` | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) |
 | `num_pending` | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) |
 | `num_idle_workers` | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) |
+| `strategy` (`/workers/{name}` only) | the worker's [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy): `priority`, `round_robin`, `max_len` or `min_len` |
+| `sources` (`/workers/{name}` only) | each bound queue or topic subscription, sorted by `priority` (lowest first, then those with none; ties in bind order), the list the worker's strategy picks from: `queue_id` (its `/queues` ID, `""` if none), `kind` (`queue` or `topic`) and `priority` (from [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) or [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority); absent when not set or set to `math.MaxInt`, which ranks the same) |
 | `metrics.submitted`, `completed`, `successful`, `failed` | the four counters of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) |
 
 [Waiting](/guides/waiting/) covers what `NumPending` and `NumProcessing` count, and [Metrics](/guides/metrics/) covers the four counters on in-memory queues. For a worker on a persistent or distributed queue, see [the overview](/persistence/overview/#metrics).

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1869,4 +1871,210 @@ func TestMuxJobEndedKept(t *testing.T) {
 	}
 	assert.Equal(t, http.StatusNotFound, get(offID, "ok").Code)
 	assert.Equal(t, http.StatusNotFound, cancel(offID, "ok").Code)
+}
+
+// getWorkerRaw is GET /workers/{name} decoded field by field.
+func getWorkerRaw(t *testing.T, server http.Handler, name string) map[string]json.RawMessage {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers/"+name, nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var got map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&got))
+	return got
+}
+
+// GET /workers/{name} sends the worker's strategy and its sources in pick
+// order (priority, ties in bind order); GET /workers does not.
+func TestMuxGetWorkerSources(t *testing.T) {
+	WorkerRegistry.Clear()
+	defer WorkerRegistry.Clear()
+	server := NewServerMux()
+
+	// sources reads name's sources and checks each non-empty queue_id is
+	// one of its queue_ids.
+	sources := func(t *testing.T, name string) []workerSource {
+		t.Helper()
+		raw := getWorkerRaw(t, server, name)
+		var got []workerSource
+		var ids []string
+		require.NoError(t, json.Unmarshal(raw["sources"], &got))
+		require.NoError(t, json.Unmarshal(raw["queue_ids"], &ids))
+		for _, src := range got {
+			if src.QueueID != "" {
+				assert.Contains(t, ids, src.QueueID, "sources[].queue_id is in queue_ids")
+			}
+		}
+		return got
+	}
+
+	t.Run("no source", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-none"))
+		defer w.Stop()
+		got := getWorkerRaw(t, server, "src-none")
+		assert.JSONEq(t, `"priority"`, string(got["strategy"]), "default strategy")
+		assert.JSONEq(t, `[]`, string(got["sources"]), "empty, not null")
+		assert.Empty(t, sources(t, "src-none"))
+	})
+
+	t.Run("one in-memory queue", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-one"))
+		defer w.Stop()
+		id := memOf(t, newQueues(w).BindQueue()).QueueID()
+		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue"}}, sources(t, "src-one"))
+		assert.JSONEq(t, `[{"queue_id":"`+id+`","kind":"queue"}]`, string(getWorkerRaw(t, server, "src-one")["sources"]), "default priority (math.MaxInt): omitted")
+	})
+
+	t.Run("priorities in priority order", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-prio"), WithStrategy(Priority))
+		defer w.Stop()
+		wb := newQueues(w)
+		low := memOf(t, wb.BindQueue(WithQueuePriority(5))).QueueID()
+		shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "z:src-prio"}
+		defer queueRegistry.Delete(shared.id)
+		wb.WithQueue(shared, WithQueuePriority(1))
+		anon := mocks.NewMockPersistentQueue() // acks, no QueueInspector: no ID
+		wb.WithQueue(anon, WithQueuePriority(3))
+
+		assert.JSONEq(t, `"priority"`, string(getWorkerRaw(t, server, "src-prio")["strategy"]))
+		src := sources(t, "src-prio")
+		assert.Equal(t, []workerSource{
+			{QueueID: "z:src-prio", Kind: "queue", Priority: new(1)},
+			{QueueID: "", Kind: "queue", Priority: new(3)},
+			{QueueID: low, Kind: "queue", Priority: new(5)},
+		}, src, "priority order, not bind order")
+	})
+
+	t.Run("two handles on one storage", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-twice"))
+		defer w.Stop()
+		wb := newQueues(w)
+		q := queues.NewQueue[any]()
+		var handleIDs []string
+		for range 7 {
+			handleIDs = append(handleIDs, memOf(t, wb.WithQueue(q)).QueueID())
+		}
+		first := slices.Min(handleIDs)
+		other := memOf(t, wb.BindQueue()).QueueID()
+		want := []workerSource{}
+		for range handleIDs {
+			want = append(want, workerSource{QueueID: first, Kind: "queue"})
+		}
+		want = append(want, workerSource{QueueID: other, Kind: "queue"})
+		for range 20 { // sync.Map order varies: the smallest wins every time
+			require.Equal(t, want, sources(t, "src-twice"), "the smallest ID of the storage's handles")
+		}
+	})
+
+	t.Run("explicit priorities", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-explicit"))
+		defer w.Stop()
+		wb := newQueues(w)
+		maxID := memOf(t, wb.BindQueue(WithQueuePriority(math.MaxInt))).QueueID()
+		zero := memOf(t, wb.BindQueue(WithQueuePriority(0))).QueueID()
+		neg := memOf(t, wb.BindQueue(WithQueuePriority(-1))).QueueID()
+		assert.Equal(t, []workerSource{
+			{QueueID: neg, Kind: "queue", Priority: new(-1)},
+			{QueueID: zero, Kind: "queue", Priority: new(0)},
+			{QueueID: maxID, Kind: "queue"},
+		}, sources(t, "src-explicit"), "-1, 0, then math.MaxInt (omitted, as unset)")
+	})
+
+	t.Run("priority queue", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-pq"))
+		defer w.Stop()
+		wb := newQueues(w)
+		fifo := memOf(t, wb.BindQueue()).QueueID()
+		pq := memOf(t, wb.BindPriorityQueue(WithQueuePriority(2))).QueueID()
+		assert.True(t, strings.HasPrefix(pq, "memory:"+InstanceID+":prio:"), pq)
+		assert.Equal(t, []workerSource{
+			{QueueID: pq, Kind: "queue", Priority: new(2)},
+			{QueueID: fifo, Kind: "queue"},
+		}, sources(t, "src-pq"))
+	})
+
+	t.Run("storage with a map in an interface field", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-valq"))
+		defer w.Stop()
+		newQueues(w).WithQueue(valQ{IQueue: queues.NewQueue[any](), tag: map[string]int{}})
+		assert.Equal(t, []workerSource{{QueueID: "", Kind: "queue"}}, sources(t, "src-valq"), "no panic; not matched to its memQueue")
+	})
+
+	t.Run("topic, then unsubscribed", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-topic"), WithStrategy(RoundRobin))
+		defer w.Stop()
+		wb := newQueues(w)
+		id := memOf(t, wb.BindQueue(WithQueuePriority(2))).QueueID()
+		sub := wb.WithTopic(NewTopic[int](), WithTopicPriority(1))
+
+		assert.JSONEq(t, `"round_robin"`, string(getWorkerRaw(t, server, "src-topic")["strategy"]))
+		assert.Equal(t, []workerSource{
+			{QueueID: "", Kind: "topic", Priority: new(1)},
+			{QueueID: id, Kind: "queue", Priority: new(2)},
+		}, sources(t, "src-topic"))
+
+		sub.Unsubscribe()
+		assert.Equal(t, []workerSource{{QueueID: id, Kind: "queue", Priority: new(2)}}, sources(t, "src-topic"))
+	})
+
+	t.Run("strategy names", func(t *testing.T) {
+		for s, want := range map[Strategy]string{RoundRobin: "round_robin", MaxLen: "max_len", MinLen: "min_len", Priority: "priority", Strategy(9): "priority"} {
+			w := newWorker(func(j iJob[int]) {}, WithName("src-strategy"), WithStrategy(s))
+			assert.JSONEq(t, strconv.Quote(want), string(getWorkerRaw(t, server, "src-strategy")["strategy"]), "strategy %d", s)
+			w.Stop()
+		}
+	})
+
+	t.Run("summary has neither", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-summary"))
+		defer w.Stop()
+		newQueues(w).BindQueue()
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
+		var list []map[string]json.RawMessage
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&list))
+		for _, one := range list {
+			assert.NotContains(t, one, "strategy")
+			assert.NotContains(t, one, "sources")
+		}
+	})
+
+	t.Run("not varmq's worker", func(t *testing.T) {
+		w := newWorker(func(j iJob[int]) {}, WithName("src-inner"))
+		defer w.Stop()
+		WorkerRegistry.Store("src-plain", plainWorker{w})
+		defer WorkerRegistry.Delete("src-plain")
+		got := getWorkerRaw(t, server, "src-plain")
+		assert.NotContains(t, got, "strategy", "unknown: omitted")
+		assert.JSONEq(t, `[]`, string(got["sources"]))
+	})
+}
+
+// valQ is storage of a comparable type whose value == panics on: a map in
+// an interface field.
+type valQ struct {
+	IQueue
+	tag any
+}
+
+// uncomparableQueue is storage whose type == panics on.
+type uncomparableQueue struct{ m map[int]int }
+
+func (uncomparableQueue) Len() int             { return 0 }
+func (uncomparableQueue) Dequeue() (any, bool) { return nil, false }
+func (uncomparableQueue) Values() []any        { return nil }
+func (uncomparableQueue) Purge()               {}
+func (uncomparableQueue) Close() error         { return nil }
+
+func TestSameStorage(t *testing.T) {
+	a, b := queues.NewQueue[any](), queues.NewQueue[any]()
+	assert.True(t, sameStorage(a, a))
+	assert.False(t, sameStorage(a, b))
+	assert.False(t, sameStorage(a, queues.NewPriorityQueue[any]()), "other type")
+	u := uncomparableQueue{m: map[int]int{}}
+	assert.NotPanics(t, func() { assert.False(t, sameStorage(u, u)) })
+	v := valQ{IQueue: a, tag: map[string]int{}}
+	assert.NotPanics(t, func() { assert.False(t, sameStorage(v, v)) }, "map in an interface field")
+	c := valQ{IQueue: a, tag: 1}
+	assert.True(t, sameStorage(c, c), "comparable value")
 }

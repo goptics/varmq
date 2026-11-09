@@ -39,6 +39,10 @@ type source[JobType any] interface {
 	purgeGen() *atomic.Uint64
 }
 
+// queueBacked is a source that reads a bound queue's storage; a topic
+// subscription is not one. REST reads only.
+type queueBacked interface{ storage() IBaseQueue }
+
 // queuePaused reports whether pz is a paused queue. It is the scheduler's gate:
 // a hint read before asking storage, which is the real gate.
 func queuePaused(pz pool.Holder) bool {
@@ -154,6 +158,8 @@ func (s *queueSource[T, JobType]) purgeStateOf() *purgeState {
 	return s.purge
 }
 
+func (s *queueSource[T, JobType]) storage() IBaseQueue { return s.q }
+
 func (s *queueSource[T, JobType]) Next() (JobType, error) {
 	e := s.epoch()
 	v, ok := s.q.Dequeue()
@@ -190,6 +196,8 @@ func (s *ackSource[T, JobType]) maxBatch() int {
 func (s *ackSource[T, JobType]) purgeGen() *atomic.Uint64 {
 	return nil
 }
+
+func (s *ackSource[T, JobType]) storage() IBaseQueue { return s.q }
 
 func (s *ackSource[T, JobType]) Next() (JobType, error) {
 	e := s.epoch()
@@ -432,6 +440,10 @@ var (
 	_ source[iJob[int]] = (*topicSource[int])(nil)
 
 	_ creditSource[iJob[int]] = (*batchAckSource[int, iJob[int]])(nil)
+
+	_ queueBacked = (*queueSource[int, iJob[int]])(nil)
+	_ queueBacked = (*ackSource[int, iJob[int]])(nil)
+	_ queueBacked = (*batchAckSource[int, iJob[int]])(nil)
 )
 
 // bind wraps q in the matching source and registers it with the worker. The

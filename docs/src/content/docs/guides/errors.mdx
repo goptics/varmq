@@ -92,6 +92,14 @@ The next two sections list every exported error, grouped by how you receive them
 | [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | `worker already has the same concurrency` | `TunePool` with the limit the worker already has. A value below 1 is turned into the CPU count first, and that is what is compared. |
 | [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing) | `job is processing, you can't close processing job` | [`Close`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedJob.Close) on a job handle while the job's function is running. |
 | [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed) | `job is already closed` | `Close` on a job that is already closed, which includes one that has run, since the worker closes those. |
+| [`ErrJobCancelled`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobCancelled) | `varmq: job cancelled` | `Err()` or `Result()` of a job cancelled before it ran, or one cancelled while it ran that then returned an error or panicked. |
+| [`ErrCancelUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrCancelUnsupported) | `varmq: storage can't cancel jobs` | `Cancel` on a job whose storage has no `JobCanceller`. |
+| [`ErrWorkflowExists`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowExists) | `varmq: workflow already exists` | `Submit` of a workflow whose ID the store holds with a different plan. The same plan again succeeds. |
+| [`ErrWorkflowNotFound`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowNotFound) | `varmq: workflow not found` | `Cancel`, `Status` or `Wait` on a workflow the store does not hold, or an invalid ID. |
+| [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) | `varmq: task has no result` | `TaskContext.Result` for a name that is not a dependency, or a dependency with no result. |
+| [`ErrDepFailed`](https://pkg.go.dev/github.com/goptics/varmq#ErrDepFailed) | `varmq: dependency failed` | `TaskContext.Result` for a dependency that failed or was cancelled. |
+| [`ErrResultTooLarge`](https://pkg.go.dev/github.com/goptics/varmq#ErrResultTooLarge) | `varmq: task result too large` | A task's result is bigger than the store's limit (`WithResultLimit`): the task fails. |
+| [`ErrScopeMismatch`](https://pkg.go.dev/github.com/goptics/varmq#ErrScopeMismatch) | `varmq: queues are in different storage scopes` | `wf.Add` or `Submit` with a queue that can't take workflow tasks, or one in another storage than the workflow store. |
 
 The first six rows are errors that come from the worker's states. [Lifecycle](/concepts/lifecycle/#moving-between-states) lists, call by call, which states return which error. [Concurrency](/guides/concurrency/#changing-the-limit-with-tunepool) covers `TunePool`, and [jobs](/concepts/jobs/#closing-a-queued-job) covers closing a job.
 

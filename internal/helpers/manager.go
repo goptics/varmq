@@ -205,6 +205,19 @@ func (m *Manager[T]) Only() (T, int, bool) {
 	return m.items[0].item, m.items[0].priority, true
 }
 
+// Each calls fn with every registered item and its priority, in the order
+// the items are kept: priority, ties in registration order. It copies under
+// the read lock and calls fn after.
+func (m *Manager[T]) Each(fn func(item T, priority int)) {
+	m.mx.RLock()
+	items := slices.Clone(m.items)
+	m.mx.RUnlock()
+
+	for _, r := range items {
+		fn(r.item, r.priority)
+	}
+}
+
 // Count returns the number of registered items
 func (m *Manager[T]) Count() int {
 	m.mx.RLock()

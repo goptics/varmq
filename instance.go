@@ -1,7 +1,9 @@
 package varmq
 
 import (
+	"math"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -94,6 +96,64 @@ func (w *worker[T, JobType]) listedQueueIDs() []string {
 	})
 	slices.Sort(ids)
 	return ids
+}
+
+// boundSources is the worker's bound sources sorted by priority (ties in
+// bind order), the list its strategy picks from, for GET /workers/{name}. A queue's ID is the one
+// GET /queues lists, "" if it has none; a topic subscription has none.
+func (w *worker[T, JobType]) boundSources() []workerSource {
+	out := []workerSource{}
+	w.manager().each(func(src source[JobType], priority int) {
+		s := workerSource{Kind: "topic"}
+		if priority != math.MaxInt {
+			s.Priority = &priority
+		}
+		if qb, ok := src.(queueBacked); ok {
+			s.Kind = "queue"
+			s.QueueID = w.queueIDOf(qb.storage())
+		}
+		out = append(out, s)
+	})
+	return out
+}
+
+// queueIDOf is q's Queue ID: its own as a QueueInspector, else the one of
+// the worker's in-memory QueueInspector over q (the smallest, if two
+// handles share q), else "".
+func (w *worker[T, JobType]) queueIDOf(q IBaseQueue) string {
+	if qi, ok := q.(QueueInspector); ok {
+		return qi.QueueID()
+	}
+	id := ""
+	w.memQueues.Range(func(k, m any) bool {
+		if sameStorage(m.(*memQueue).q, q) && (id == "" || k.(string) < id) {
+			id = k.(string)
+		}
+		return true
+	})
+	return id
+}
+
+// sameStorage reports a == b without the panic == gives on an uncomparable
+// value: its type, or a map or slice in an interface field of a comparable
+// type (as job_cancel.go's runKey check).
+func sameStorage(a, b IBaseQueue) bool {
+	return reflect.ValueOf(a).Comparable() && a == b
+}
+
+// strategyName is the worker's Strategy as GET /workers/{name} sends it.
+// A value past Priority picks as Priority does (strategyManager.next).
+func (w *worker[T, JobType]) strategyName() string {
+	switch w.configs().strategy {
+	case RoundRobin:
+		return "round_robin"
+	case MaxLen:
+		return "max_len"
+	case MinLen:
+		return "min_len"
+	default:
+		return "priority"
+	}
 }
 
 // varmqVersion is the varmq module version this binary was built with, or ""

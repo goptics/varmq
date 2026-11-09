@@ -6,6 +6,7 @@ import (
 
 	"github.com/goptics/varmq/internal/queues"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestSource(items ...string) *queueSource[string, iJob[string]] {
@@ -135,4 +136,37 @@ func TestSourceManagerPurgeGen(t *testing.T) {
 
 	prio := &queueSource[string, iJob[string]]{mk: plainMk, q: queues.NewQueue[any](), batch: 1}
 	assert.Nil(t, prio.purgeGen(), "batch of one")
+}
+
+// each walks the bound sources sorted by priority (ties in bind order),
+// whichever manager is current.
+func TestSourceManagerEach(t *testing.T) {
+	type bound struct {
+		src      source[iJob[string]]
+		priority int
+	}
+	list := func(m sourceManager[iJob[string]]) []bound {
+		var got []bound
+		m.each(func(src source[iJob[string]], p int) { got = append(got, bound{src, p}) })
+		return got
+	}
+
+	a, b, c := newTestSource(), newTestSource(), newTestSource()
+	m := newSourceManager[iJob[string]]()
+	assert.Empty(t, list(m), "empty")
+
+	m = m.add(a, 4, Priority)
+	assert.Equal(t, []bound{{a, 4}}, list(m), "direct")
+
+	m = m.add(b, 1, Priority).add(c, 4, Priority)
+	assert.Equal(t, []bound{{b, 1}, {a, 4}, {c, 4}}, list(m), "strategy: priority, ties in bind order")
+
+	m = m.remove(b).remove(a)
+	assert.Equal(t, []bound{{c, 4}}, list(m), "back to direct")
+
+	q := &batchTestQueue{}
+	s := newBatchAckSource(q, q, newWorker(func(iJob[string]) {}, WithAutoRun(false)))
+	cm := singleManager[iJob[string]](s, 7)
+	require.IsType(t, &creditManager[iJob[string]]{}, cm)
+	assert.Equal(t, []bound{{s, 7}}, list(cm), "credit")
 }

@@ -40,6 +40,10 @@ type sourceManager[JobType any] interface {
 	add(src source[JobType], priority int, strategy Strategy) sourceManager[JobType]
 	remove(src source[JobType]) sourceManager[JobType]
 	count() int
+	// each calls fn with every bound source and its bind priority, in the
+	// order the strategy walks them: priority, ties in bind order. REST
+	// reads only; not on the job path.
+	each(fn func(src source[JobType], priority int))
 }
 
 // newSourceManager returns the manager of a worker with nothing bound yet.
@@ -80,6 +84,8 @@ func singleManager[JobType any](src source[JobType], priority int) sourceManager
 func (m *emptyManager[JobType]) remove(source[JobType]) sourceManager[JobType] { return m }
 
 func (m *emptyManager[JobType]) count() int { return 0 }
+
+func (m *emptyManager[JobType]) each(func(source[JobType], int)) {}
 
 // directManager is the manager of a worker with exactly one bound source. It
 // forwards to that source; there is nothing to choose between.
@@ -124,6 +130,8 @@ func (m *directManager[JobType]) remove(src source[JobType]) sourceManager[JobTy
 }
 
 func (m *directManager[JobType]) count() int { return 1 }
+
+func (m *directManager[JobType]) each(fn func(source[JobType], int)) { fn(m.src, m.priority) }
 
 // creditManager is the manager of a worker whose only source is a
 // creditSource. dispatchCredit pops for it; Len is the source's ready hint,
@@ -222,6 +230,8 @@ func (sm *strategyManager[JobType]) remove(src source[JobType]) sourceManager[Jo
 }
 
 func (sm *strategyManager[JobType]) count() int { return sm.Count() }
+
+func (sm *strategyManager[JobType]) each(fn func(source[JobType], int)) { sm.Each(fn) }
 
 var (
 	_ sourceManager[iJob[int]] = (*emptyManager[iJob[int]])(nil)
