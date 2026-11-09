@@ -1819,6 +1819,21 @@ func TestEndedJobsKept(t *testing.T) {
 	require.NoError(t, m.CancelJob("b"), "the waiting one is cancelled")
 }
 
+// A clock step back keeps finished_at in ring order: never older than
+// the newest kept record.
+func TestEndedJobsClockBack(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-clock-back", 2)
+	future := time.Now().Add(time.Hour).UnixMilli()
+	m.endMu.Lock()
+	m.lastEnd = future
+	m.endMu.Unlock()
+	j, _ := q.Add(1, WithJobId("a"))
+	require.NoError(t, j.Err())
+	r, err := m.Job(context.Background(), "a")
+	require.NoError(t, err)
+	assert.Equal(t, future, r.FinishedAt)
+}
+
 // Pages of kept jobs are newest first, offset and limit over that state.
 func TestEndedJobsPages(t *testing.T) {
 	_, q, m := keptJobs(t, "ended-pages", 3)

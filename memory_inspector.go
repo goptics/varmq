@@ -43,10 +43,13 @@ type memQueue struct {
 	// endedN is WithEndedJobs, set at bind: 0 keeps no ended job. ended
 	// is a ring of the last endedN Job Records; ended[endNext] is the
 	// oldest once it is full. Own lock: a page copy never stalls runMu.
+	// lastEnd is the newest FinishedAt: a clock step back never makes
+	// ring order disagree with finished_at order.
 	endedN  int
 	endMu   sync.Mutex
 	ended   []JobRecord
 	endNext int
+	lastEnd int64
 
 	ref jobAck // what each of its jobs points to: no storage, only totals
 }
@@ -262,7 +265,8 @@ func (m *memQueue) store(j memJob, st JobState, reason string, result []byte) {
 
 	m.endMu.Lock()
 	defer m.endMu.Unlock()
-	r.FinishedAt = time.Now().UnixMilli() // under the lock: ring order is finish order
+	r.FinishedAt = max(time.Now().UnixMilli(), m.lastEnd) // under the lock: ring order is finish order
+	m.lastEnd = r.FinishedAt
 	if r.Errors != nil {
 		r.Errors[0].At = r.FinishedAt
 	}
