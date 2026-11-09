@@ -13,7 +13,7 @@ export function pins(goMod: string): Pins {
 	const varmq = /github\.com\/goptics\/varmq[ \t]+(v\S+)/.exec(goMod)?.[1];
 	if (!varmq) throw new Error('varmq require not found in go.mod');
 	// varmq's own contract require can lag its code (it builds with a replace), so pin the contract too when given.
-	const contract = /github\.com\/goptics\/varmq\/contract[ \t]+(v\S+)/.exec(goMod)?.[1];
+	const contract = /^[ \t]*(?:require[ \t]+)?github\.com\/goptics\/varmq\/contract[ \t]+(v\S+)/m.exec(goMod)?.[1];
 	return contract ? { go, varmq, contract } : { go, varmq };
 }
 

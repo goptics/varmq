@@ -28,6 +28,16 @@ describe('pins', () => {
 			pins('module x\n\ngo 1.27\n\nrequire github.com/goptics/varmq v1.11.0\n\nrequire github.com/goptics/varmq/contract v0.7.0 // indirect\n'),
 			{ go: '1.27', varmq: 'v1.11.0', contract: 'v0.7.0' },
 		));
+	it('ignores a commented-out contract require', () =>
+		assert.deepEqual(
+			pins('module x\n\ngo 1.27\n\nrequire github.com/goptics/varmq v1.11.0\n// require github.com/goptics/varmq/contract v0.1.0\n'),
+			{ go: '1.27', varmq: 'v1.11.0' },
+		));
+	it('pins the contract from a require block', () =>
+		assert.equal(
+			pins('module x\n\ngo 1.27\n\nrequire (\n\tgithub.com/goptics/varmq v1.11.0\n\tgithub.com/goptics/varmq/contract v0.7.0 // indirect\n)\n').contract,
+			'v0.7.0',
+		));
 	it('throws when varmq is not required', () =>
 		assert.throws(() => pins('module x\n\ngo 1.24.0\n'), /varmq require not found/));
 	it('throws when the go line is missing', () =>

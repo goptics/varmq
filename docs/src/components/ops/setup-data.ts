@@ -38,7 +38,7 @@ export const redisSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'varmq’s version is the release these pages describe.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq@v1.6.0' }],
 	},
 	{
 		title: 'Create a queue and bind it',
@@ -82,7 +82,7 @@ export const sqliteSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'sqliteq uses <a href="https://github.com/mattn/go-sqlite3">mattn/go-sqlite3</a>, which is built with cgo, so building needs <code>CGO_ENABLED=1</code> and a C compiler.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq@v0.4.0' }],
 	},
 	{
 		title: 'Open the store',

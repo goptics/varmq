@@ -94,7 +94,7 @@ Three choices in it matter:
    ```bash
    mkdir sqlite-persistent && cd sqlite-persistent
    go mod init sqlite-persistent
-   go get github.com/goptics/varmq github.com/goptics/sqliteq
+   go get github.com/goptics/varmq github.com/goptics/sqliteq@v0.4.0
    ```
 
 2. Run it with `go run .`. It creates the folder `data`, with `jobs.db` in it. The first run prints `left in the file by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.

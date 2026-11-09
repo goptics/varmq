@@ -141,7 +141,7 @@ These use the namespace `foo_worker`. Change it to the namespace you pass to eac
 | How large is the backlog? | `foo_worker_jobs_waiting` |
 | Does the backlog grow? | `deriv(foo_worker_jobs_waiting[5m]) > 0` |
 
-The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row is true while jobs arrive faster than they finish. On shared storage, each process counts only the jobs it ran. [The overview](/persistence/overview/#metrics) says more.
+The failure share is `NaN` while no job finishes. The pool can read above 1 just after [`TunePool`](https://pkg.go.dev/github.com/goptics/varmq#Worker.TunePool) lowers the limit, while the jobs already running finish. The last row shows the trend of the backlog. It is true while jobs arrive faster than they finish. A batch's finished jobs stay in `jobs_waiting` until the batch ends, so it can also read true for a short time. On shared storage, each process counts only the jobs it ran. [The overview](/persistence/overview/#metrics) says more.
 
 ## What to watch for
 

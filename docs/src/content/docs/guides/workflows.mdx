@@ -157,7 +157,7 @@ h := varmq.OpenWorkflow(store, "order-1")
 rec, err := h.Status(ctx)
 ```
 
-On this handle, `Cancel`, `Status`, `Wait` and `WaitContext` work. `Submit` returns `ErrWorkflowSubmitted`. If the store does not have the ID, these calls return [`ErrWorkflowNotFound`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowNotFound).
+On this handle, `Cancel`, `Status`, `Wait` and `WaitContext` work. `Submit` returns `ErrWorkflowSubmitted`. If the store does not have the ID, `Cancel`, `Status`, `Wait` and `WaitContext` return [`ErrWorkflowNotFound`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowNotFound).
 
 **The store from `NewWorkflowStore` is in-memory only.** It lives in your process, and it loses every workflow when the process exits. Each call to `NewWorkflowStore` makes a separate store. So `OpenWorkflow` finds a workflow only in the same process, with the same store. The store keeps an ended workflow for 7 days. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/varmq#WithWorkflowRetention) changes that.
 

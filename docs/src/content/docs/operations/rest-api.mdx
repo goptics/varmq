@@ -216,7 +216,7 @@ In Go, an entry is a [`QueueStats`](https://pkg.go.dev/github.com/goptics/varmq#
 **Cancelling a job.** `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` answers `202` with no body. It works like [`Cancel`](/concepts/jobs/#cancelling-a-job) on the job's handle.
 
 - **An in-memory queue finds a job with an ID while the job waits in the queue or runs.** It answers `404` for any other ID.
-- **Shared storage cannot tell a waiting job from an unknown ID.** So it answers `202` for any ID with no ended record. It marks the ID cancelled for 24 hours, or until a new job with that ID is added.
+- **Shared storage cannot tell a waiting job from an unknown ID.** So it answers `202` for any ID with no ended record. It marks the ID cancelled for 24 hours, or until a new job is added with that ID through `WithJobId`.
 - **A job whose ended record is still kept** answers `409`.
 - **A waiting workflow task on shared storage** answers `202` but still runs. To stop it, cancel its workflow. A running task's `Context()` is cancelled, as for any job.
 
