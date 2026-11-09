@@ -1,12 +1,12 @@
 ---
 title: REST API
-description: "Inspect and control running workers over HTTP: list them, read their counters, and pause, resume, stop, restart or resize them."
+description: "Inspect and control workers, queues, jobs and workflows over HTTP."
 ---
 
-VarMQ ships an HTTP handler that lets you look at your workers and control them from outside the process. It serves JSON for a small set of routes, and it works on any worker that has a name.
+VarMQ ships an HTTP handler that lets you look at your workers, queues, jobs and workflows, and control them from outside the process. It serves JSON. It lists only workers that have a name, and the queues they take from.
 
 :::caution
-The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
+The REST API has no authentication. Anyone who can reach it can stop your workers and change their concurrency. They can also read job payloads, cancel jobs, and pause a shared queue for every process. Before it is reachable from an untrusted network, protect it with middleware, network isolation or a reverse proxy.
 :::
 
 ## Routes at a glance
@@ -20,6 +20,14 @@ The paths follow the prefix you give to `Handler`, for example `/varmq`.
 | `GET` | `/workers/{name}` | returns one worker, with its counters |
 | `PATCH` | `/workers/{name}/actions/{action}` | pauses, resumes, restarts, starts or stops a worker |
 | `PATCH` | `/workers/{name}/config/concurrency/{number}` | changes the worker's concurrency limit |
+| `GET` | `/queues` | lists every known queue, with its counts and totals |
+| `PATCH` | `/queues/{id}/actions/{action}` | pauses or resumes a queue |
+| `GET` | `/queues/{id}/jobs?state=…` | lists a queue's jobs in one state |
+| `GET` | `/queues/{id}/jobs/{jobId}` | returns one job |
+| `PATCH` | `/queues/{id}/jobs/{jobId}/actions/cancel` | cancels one job |
+| `GET` | `/workflows` | lists workflows, newest first |
+| `GET` | `/workflows/{id}` | returns one workflow, with its tasks |
+| `PATCH` | `/workflows/{id}/actions/cancel` | cancels a workflow |
 
 ## Mounting it
 
@@ -111,7 +119,7 @@ func main() {
    The first prints `{"status":"ok"}`. The second prints a JSON array with two workers, `email-sender` and `image-processor`, and not the unnamed one. The third prints one worker with its counters, for example:
 
    ```json
-   {"name":"email-sender","status":"Running","concurrency":2,"num_processing":2,"num_pending":14,"num_idle_workers":0,"metrics":{"submitted":20,"completed":4,"successful":4,"failed":0}}
+   {"name":"email-sender","status":"Running","concurrency":2,"num_processing":2,"num_pending":14,"num_idle_workers":0,"queue_ids":["memory:host-a:fifo:1"],"strategy":"priority","sources":[{"queue_id":"memory:host-a:fifo:1","kind":"queue"}],"metrics":{"completed":4,"successful":4,"failed":0}}
    ```
 
    The numbers depend on when you ask.
@@ -141,11 +149,11 @@ The API serves the workers in [`WorkerRegistry`](https://pkg.go.dev/github.com/g
 
 You can read the registry yourself. `varmq.WorkerRegistry.Load("email-sender")` returns the worker as an `any`. A type assertion to [`varmq.Worker`](https://pkg.go.dev/github.com/goptics/varmq#Worker) gives you its methods. You can then build your own routes on it.
 
-## Routes
+## Worker routes
 
 [Routes at a glance](#routes-at-a-glance) has the table of routes.
 
-The `{action}` is one of `pause`, `resume`, `restart`, `start` and `stop`. Each calls the worker method of the same name, which [lifecycle](/concepts/lifecycle/#moving-between-states) describes. Two behaviours follow from that:
+On a worker route, the `{action}` is one of `pause`, `resume`, `restart`, `start` and `stop`. Each calls the worker method of the same name, which [lifecycle](/concepts/lifecycle/#moving-between-states) describes. Two behaviours follow from that:
 
 - **`pause` and `stop` return immediately.** A worker that is running jobs reads `Pausing` or `Stopping` until they end. Read the worker again to see when it has changed.
 - **`restart` waits.** [`Restart`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Restart) stops the worker, waits until it has stopped, and starts it. The request is answered after that, so it can take as long as the running jobs do.
@@ -154,7 +162,7 @@ The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/v
 
 ## What a worker looks like
 
-`/workers` returns a JSON array of these, and `/workers/{name}` returns one with a `metrics` object added:
+`/workers` returns a JSON array of these. `/workers/{name}` returns one, with `strategy`, `sources` and `metrics` added:
 
 | Field | From |
 |---|---|
@@ -164,25 +172,83 @@ The concurrency route calls [`TunePool`](https://pkg.go.dev/github.com/goptics/v
 | `num_processing` | [`NumProcessing`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumProcessing) |
 | `num_pending` | [`NumPending`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumPending) |
 | `num_idle_workers` | [`NumIdleWorkers`](https://pkg.go.dev/github.com/goptics/varmq#Worker.NumIdleWorkers) |
+| `queue_ids` | the IDs of the queues the worker takes from, sorted. They are the IDs that [`/queues`](#queues-and-jobs) uses. The list is empty when no queue has an ID. |
 | `strategy` (`/workers/{name}` only) | the worker's [`WithStrategy`](https://pkg.go.dev/github.com/goptics/varmq#WithStrategy): `priority`, `round_robin`, `max_len` or `min_len` |
-| `sources` (`/workers/{name}` only) | each bound queue or topic subscription, sorted by `priority` (lowest first, then those with none; ties in bind order), the list the worker's strategy picks from: `queue_id` (its `/queues` ID, `""` if none), `kind` (`queue` or `topic`) and `priority` (from [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) or [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority); absent when not set or set to `math.MaxInt`, which ranks the same) |
-| `metrics.submitted`, `completed`, `successful`, `failed` | the four counters of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) |
+| `sources` (`/workers/{name}` only) | each bound queue or topic subscription, in the order the worker's strategy ranks them. See [the source fields](#source-fields). |
+| `metrics.completed`, `successful`, `failed` (`/workers/{name}` only) | the three counters of [`Metrics()`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Metrics) |
 
-[Waiting](/guides/waiting/) covers what `NumPending` and `NumProcessing` count, and [Metrics](/guides/metrics/) covers the four counters on in-memory queues. For a worker on a persistent or distributed queue, see [the overview](/persistence/overview/#metrics).
+### Source fields
+
+Each entry of `sources` has three fields:
+
+- **`queue_id`** is the queue's `/queues` ID. It is `""` for a topic subscription, or for storage with no queue ID.
+- **`kind`** is `queue` or `topic`.
+- **`priority`** comes from [`WithQueuePriority`](https://pkg.go.dev/github.com/goptics/varmq#WithQueuePriority) or [`WithTopicPriority`](https://pkg.go.dev/github.com/goptics/varmq#WithTopicPriority). It is absent when not set, or set to `math.MaxInt`, which ranks the same.
+
+The list is sorted by `priority`, lowest first, then the sources with none. Sources with the same priority keep the order you bound them in.
+
+[Waiting](/guides/waiting/) covers what `NumPending` and `NumProcessing` count, and [Metrics](/guides/metrics/) covers the three counters. For a worker on shared storage, see [the overview](/persistence/overview/#metrics).
+
+## Queues and jobs
+
+`/queues` lists every queue that can report its state. These are the in-memory queues of named workers. They also include shared storage, such as redisq or sqliteq, bound to a worker in this process. A queue that several workers share is listed once. Each entry looks like this:
+
+```json
+{"id":"memory:host-a:fifo:1","counts":{"pending":18,"processing":2,"completed":0,"failed":0},"totals":{"submitted":20,"completed":0,"failed":0},"paused":false}
+```
+
+| Field | What it is |
+|---|---|
+| `id` | the queue ID. An in-memory queue's ID is `memory:` followed by the instance ID, the queue kind and a number. |
+| `counts` | the jobs in each state now. |
+| `totals` | the jobs the queue received (`submitted`), and how many of them completed or failed since it started counting. |
+| `paused`, `paused_at` | whether the queue is [paused](/guides/queues/#pausing-a-queue), and since when, in Unix milliseconds. |
+| `error` | the storage's error, when it could not report its state. The other fields are then absent. |
+
+**Pausing a queue.** `PATCH /queues/{id}/actions/pause` and `…/resume` pause and resume the queue. They answer `200` with the queue's entry. On shared storage, the pause stops every process that takes from the queue, and it survives a restart.
+
+**Listing jobs.** `GET /queues/{id}/jobs` needs a `state`: `pending`, `processing`, `completed`, `failed` or `cancelled`. `offset` starts at 0. `limit` is 50 by default and at most 1000. Each record has the job's `id`, `state`, `payload`, timestamps, `attempts` and `errors`. A list leaves out a job's result and gives its size as `result_size`.
+
+**Reading one job.** `GET /queues/{id}/jobs/{jobId}` returns one record, with its result. The storage must be able to read a job by its ID. The in-memory queues can. redisq and sqliteq cannot yet, so they answer `501`.
+
+**Cancelling a job.** `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` answers `202` with no body. It works like [`Cancel`](/concepts/jobs/#cancelling-a-job) on the job's handle.
+
+- **An in-memory queue keeps only the jobs it can see.** It answers `404` for an ID it does not know. It knows a job only if the job has an ID.
+- **Shared storage cannot tell a waiting job from an unknown ID.** So it answers `202` for any ID with no ended record. It marks the ID cancelled for 24 hours, or until a new job with that ID is added.
+- **A job that has ended** answers `409`.
+- **A workflow task** answers `202` but still runs. To stop it, cancel its workflow.
+
+An in-memory queue keeps no ended jobs by default. Pass [`WithEndedJobs`](https://pkg.go.dev/github.com/goptics/varmq#WithEndedJobs) when you bind it, so the `completed`, `failed` and `cancelled` lists have records. The in-memory job routes work only for a named worker, after you build the handler.
+
+## Workflows
+
+The workflow routes read the [workflow](/guides/workflows/) stores this process knows. These are the stores you made with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore), and the stores of the shared storage your queues are bound to.
+
+- **`GET /workflows`** lists the workflows of every store, newest first. `state` filters them, for example `running` or `failed`. `offset` is at most 10000, and `limit` is 50 by default and at most 1000.
+- **`GET /workflows/{id}`** returns one workflow, with the state of each task.
+- **`PATCH /workflows/{id}/actions/cancel`** cancels the workflow and answers `200` with its record. Add `?undo=false` to skip the undo steps.
 
 ## Responses
 
-A response from one of these routes sets `Content-Type: application/json`, except a successful action, which has no body. An error is a JSON object with one field, `error`.
+A response from one of these routes sets `Content-Type: application/json`. A successful worker action, and a job cancel, have no body. An error is a JSON object with one field, `error`.
 
 | Status | When | Example | Body |
 |---|---|---|---|
-| 200 | the request worked | any read, or an action the worker accepts | JSON for a read, empty for an action or a concurrency change |
-| 400 | the action is not one of the five, or the concurrency is not a number | `actions/jump`, `concurrency/four` | `{"error":"unknown action"}` or `{"error":"invalid concurrency value"}` |
-| 404 | no registered worker has that name | a worker with no name, or one removed from the registry | `{"error":"worker not found"}` |
-| 409 | the call returned [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) or [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency) | `start` on a running worker, or a concurrency change to the same number | the error's message, for example `{"error":"worker is already running"}` |
-| 500 | the call returned any other error | `ErrWorkerPausing`, `ErrWorkerPaused`, `ErrWorkerStopping` or `ErrWorkerStopped`: `resume` on a `Pausing` worker, `pause` on a stopped one | the error's message, for example `{"error":"worker is stopped"}` |
+| 200 | the request worked | any read, a worker action, a queue pause, a workflow cancel | JSON for a read, a queue pause or a workflow cancel. Empty for a worker action or a concurrency change. |
+| 202 | a job cancel was accepted | `PATCH …/jobs/job-1/actions/cancel` | empty |
+| 400 | the action is unknown, or a number or query value is not valid | `actions/jump`, `concurrency/four`, `jobs` with no `state` | for example `{"error":"unknown action"}` |
+| 404 | no registered worker, queue, job or workflow has that name or ID | a worker with no name, or one removed from the registry | for example `{"error":"worker not found"}` |
+| 409 | the call conflicts with the current state | `start` on a running worker, a cancel of a job that ended | the error's message, for example `{"error":"worker is already running"}` |
+| 500 | a worker call returned any other error, or a job read failed | `resume` on a `Pausing` worker, `pause` on a stopped one | the error's message, for example `{"error":"worker is stopped"}` |
+| 501 | the storage does not support the route | a pause on storage with no pause, a one-job read on redisq | the error's message |
+| 503 | the storage failed | Redis is down during a pause, a cancel or a workflow read | the error's message |
 
-The last two rows follow the error the worker returns. `start` on a worker that is running, and a concurrency change to the number it already has, are 409. A worker that is `Pausing`, `Paused`, `Stopping` or `Stopped` answers some calls with [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused), [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) or [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped), and those are 500. So `resume` on a worker that is `Pausing` is a 500 with `worker is pausing`, and so is `pause` on a stopped one. [Errors](/guides/errors/#returned-by-calls-you-make) lists which call returns which error.
+The 409 and 500 rows of the worker routes follow the error the worker returns.
+
+- **409:** [`ErrRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrRunningWorker), [`ErrNotRunningWorker`](https://pkg.go.dev/github.com/goptics/varmq#ErrNotRunningWorker) and [`ErrSameConcurrency`](https://pkg.go.dev/github.com/goptics/varmq#ErrSameConcurrency). So `start` on a running worker, or a concurrency change to the same number, is a 409.
+- **500:** [`ErrWorkerPausing`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPausing), [`ErrWorkerPaused`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerPaused), [`ErrWorkerStopping`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopping) and [`ErrWorkerStopped`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkerStopped). So `resume` on a `Pausing` worker is a 500 with `worker is pausing`.
+
+[Errors](/guides/errors/#returned-by-calls-you-make) lists which call returns which error. A workflow route also answers 409 when two stores hold the same workflow ID.
 
 Two replies do not come from the routes. A path the mux does not know gets a plain-text `404 page not found`. A known path with the wrong method gets a plain-text `405 Method Not Allowed` with an `Allow` header.
 
@@ -197,3 +263,5 @@ varmq.InstanceID = "worker-a"
 ```
 
 Every response from the routes carries the header, whether you use `Handler` or `NewServerMux`. As described above, only `Handler` also adds it to the mux's own 404 and 405 replies.
+
+Next: [Prometheus](/operations/prometheus/).
