@@ -573,9 +573,10 @@ components:
       in: path
       required: true
       description: |
-        The Job ID (`Job.id`), percent-encoded as one path segment. The IDs
-        `.` and `..` can't be addressed: the path is cleaned and the
-        request redirected (307) to another route.
+        The Job ID (`Job.id`), percent-encoded as one path segment. A
+        client encodes the IDs `.` and `..` as `%2E` and `%2E%2E`: sent
+        as is, the path is cleaned and the request redirected (307) to
+        another route.
       schema: { type: string }
 
     WorkflowID:
