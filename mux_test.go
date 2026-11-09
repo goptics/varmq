@@ -578,7 +578,7 @@ func TestMuxQueues(t *testing.T) {
 	for _, storage := range []IPersistentQueue{q, q, mocks.NewMockPersistentQueue(), broken} { // the plain mock is left out
 		w := NewWorker(func(Job[string]) {})
 		defer w.Stop()
-		w.WithPersistentQueue(storage)
+		w.WithQueue(storage)
 	}
 
 	server := NewServerMux()
@@ -703,6 +703,9 @@ type fakeWorkflowStore struct {
 }
 
 func (f *fakeWorkflowStore) ScopeID() string { return f.scope }
+func (f *fakeWorkflowStore) FinishTask(string, string, TaskEnd) ([]string, bool) {
+	return nil, true
+}
 func (f *fakeWorkflowStore) Submit(context.Context, WorkflowPlan) error {
 	return nil
 }
@@ -745,8 +748,7 @@ func (f *fakeWorkflowStore) Workflows(_ context.Context, state WorkflowState, of
 }
 
 func TestMuxWorkflows(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	mem, clock := newMemStore(t)
 	defer runtime.KeepAlive(mem) // the registry holds stores weakly
@@ -765,7 +767,7 @@ func TestMuxWorkflows(t *testing.T) {
 		{ID: "f-mid", State: WorkflowRunning, CreatedAt: 1_001_000},
 		{ID: "f-old", State: WorkflowRunning, CreatedAt: 999_000},
 	}}
-	registerWorkflowStore(fake)
+	useStore(t, fake)
 
 	server := NewServerMux()
 	do := func(method, target string) *httptest.ResponseRecorder {
@@ -872,8 +874,8 @@ func TestMuxWorkflows(t *testing.T) {
 
 	t.Run("409 when two stores hold the id", func(t *testing.T) {
 		twin := &fakeWorkflowStore{scope: "fake:2", recs: []WorkflowRecord{{ID: "f-mid", CreatedAt: 1}}}
-		registerWorkflowStore(twin)
-		defer workflowRegistry.Delete("fake:2")
+		useStore(t, twin)
+		defer contract.UnregisterWorkflowStore(twin)
 
 		n := len(fake.cancelled)
 		for _, method := range []string{"GET", "PATCH"} {
@@ -914,15 +916,14 @@ func TestMuxWorkflows(t *testing.T) {
 
 // TestMuxWorkflowsAllStoresFail: 503 only when every store's listing fails.
 func TestMuxWorkflowsAllStoresFail(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	rr := httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
 	assert.Equal(t, "[]\n", rr.Body.String(), "no store: an empty list")
 
-	registerWorkflowStore(&fakeWorkflowStore{scope: "fake:a", err: errors.New("redis down")})
-	registerWorkflowStore(&fakeWorkflowStore{scope: "fake:b", err: errors.New("redis down")})
+	useStore(t, &fakeWorkflowStore{scope: "fake:a", err: errors.New("redis down")})
+	useStore(t, &fakeWorkflowStore{scope: "fake:b", err: errors.New("redis down")})
 	rr = httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
@@ -970,15 +971,14 @@ func (k *keyedWorkflowStore) Workflows(context.Context, WorkflowState, int, int)
 // TestMuxWorkflowsReadsPageOnly: keys are merged first; only the final page's
 // records are read.
 func TestMuxWorkflowsReadsPageOnly(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	k := &keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{scope: "keyed", recs: []WorkflowRecord{
 		{ID: "k5", CreatedAt: 5}, {ID: "k4", CreatedAt: 4}, {ID: "k3", CreatedAt: 3},
 		{ID: "k2", CreatedAt: 2}, {ID: "k1", CreatedAt: 1},
 	}}}
-	registerWorkflowStore(k)
-	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 4}}})
+	useStore(t, k)
+	useStore(t, &fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 4}}})
 
 	rr := httptest.NewRecorder()
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows?offset=1&limit=2", nil))
@@ -1047,8 +1047,7 @@ func (failReadStore) Record(context.Context, string) (WorkflowRecord, error) {
 // ErrWorkflowNotFound) counts as its store failing: skipped, 503 only when
 // every store failed.
 func TestMuxWorkflowsReadFails(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	get := func() *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
@@ -1056,13 +1055,13 @@ func TestMuxWorkflowsReadFails(t *testing.T) {
 		return rr
 	}
 
-	registerWorkflowStore(failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
+	useStore(t, failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
 		scope: "keyed", recs: []WorkflowRecord{{ID: "k2", CreatedAt: 2}, {ID: "k1", CreatedAt: 1}}}}})
 	rr := get()
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.Contains(t, rr.Body.String(), "redis down")
 
-	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 3}}})
+	useStore(t, &fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{{ID: "p", CreatedAt: 3}}})
 	assert.Equal(t, []string{"p"}, func() []string {
 		rr := get()
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -1079,12 +1078,11 @@ func TestMuxWorkflowsReadFails(t *testing.T) {
 // TestMuxWorkflowsReadFailsFills: a store whose read fails leaves no short
 // page: the other stores' entries fill it, past offset too.
 func TestMuxWorkflowsReadFailsFills(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
-	registerWorkflowStore(failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
+	useStore(t, failReadStore{&keyedWorkflowStore{fakeWorkflowStore: &fakeWorkflowStore{
 		scope: "keyed", recs: []WorkflowRecord{{ID: "k4", CreatedAt: 4}, {ID: "k3", CreatedAt: 3}}}}})
-	registerWorkflowStore(&fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{
+	useStore(t, &fakeWorkflowStore{scope: "plain", recs: []WorkflowRecord{
 		{ID: "p2", CreatedAt: 2}, {ID: "p1", CreatedAt: 1}}})
 
 	for target, want := range map[string][]string{
@@ -1108,11 +1106,10 @@ func TestMuxWorkflowsReadFailsFills(t *testing.T) {
 // TestMuxWorkflowNoInspector: a store that cannot list still serves GET
 // /workflows/{id} and cancel; GET /workflows skips it.
 func TestMuxWorkflowNoInspector(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	fake := &fakeWorkflowStore{scope: "nolist", recs: []WorkflowRecord{{ID: "n1", CreatedAt: 1}}}
-	registerWorkflowStore(plainWorkflowStore{fake}) // hides Workflows
+	useStore(t, plainWorkflowStore{fake}) // hides Workflows
 
 	do := func(method, target string) *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
@@ -1134,16 +1131,14 @@ func mustRecord(t *testing.T, rr *httptest.ResponseRecorder) WorkflowRecord {
 }
 
 func TestWorkflowRegistryFills(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	a, b := NewWorkflowStore(), NewWorkflowStore()
 	assert.ElementsMatch(t, []WorkflowStore{a, b}, workflowStores(),
 		"two in-memory stores, one scope: both listed")
 
-	registerWorkflowStore(nil)
-	registerWorkflowStore(plainWorkflowStore{})
-	_, ok := workflowRegistry.Load("plain")
+	useStore(t, plainWorkflowStore{})
+	_, ok := contract.LookupWorkflowStore("plain")
 	assert.True(t, ok, "a store that cannot list is registered too")
 	assert.Len(t, workflowStores(), 3, "nil is not")
 
@@ -1157,15 +1152,14 @@ func TestWorkflowRegistryFills(t *testing.T) {
 // TestWorkflowRegistryWeak: the registry does not keep a dropped in-memory
 // store alive.
 func TestWorkflowRegistryWeak(t *testing.T) {
-	workflowRegistry.Clear()
-	defer workflowRegistry.Clear()
+	resetWorkflowStores(t)
 
 	func() { NewWorkflowStore() }()
 	runtime.GC()
 	runtime.GC()
 	assert.Empty(t, workflowStores())
 	n := 0
-	workflowRegistry.Range(func(any, any) bool { n++; return true })
+	memWorkflows.Range(func(any, any) bool { n++; return true })
 	assert.Zero(t, n, "the dead entry is removed")
 
 	kept := NewWorkflowStore()
@@ -2077,4 +2071,18 @@ func TestSameStorage(t *testing.T) {
 	assert.NotPanics(t, func() { assert.False(t, sameStorage(v, v)) }, "map in an interface field")
 	c := valQ{IQueue: a, tag: 1}
 	assert.True(t, sameStorage(c, c), "comparable value")
+}
+
+// resetWorkflowStores empties both workflow registries now and after the
+// test.
+func resetWorkflowStores(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		for _, s := range contract.WorkflowStores() {
+			contract.UnregisterWorkflowStore(s)
+		}
+		memWorkflows.Clear()
+	}
+	reset()
+	t.Cleanup(reset)
 }

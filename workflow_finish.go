@@ -32,16 +32,25 @@ func finishMemTask(ext *ackExt) {
 }
 
 // runnable is the pre-run check: false when j's workflow says its task may
-// not start (cancelled, ended, or gone: ErrWorkflowNotFound). A plain job,
-// or a tag with no store, runs with no I/O. Any other store error runs the
+// not start (cancelled, ended, or gone: ErrWorkflowNotFound), or a durable
+// task has no registered store (reported; held, not acked). A plain job, or
+// an in-memory tag with no store, runs with no I/O. Any other store error runs the
 // task: it is at-least-once anyway, and a store that can't answer could not
 // finish it either.
 // ponytail: context.Background, not the worker's: Stop cancels that while
 // the first job of a batch still runs; a hung store hangs the ack too.
 func (w *worker[T, JobType]) runnable(j JobType) bool {
 	t := j.taskTag()
-	if t == nil || t.store == nil {
+	if t == nil {
 		return true
+	}
+	if t.store == nil {
+		if t.scope == "" { // in-memory, never submitted
+			return true
+		}
+		// Durable task, no store: never run it unchecked. The pool holds it.
+		w.sendError(fmt.Errorf("varmq: no workflow store for scope %s: create the storage's workflow store (for example redisq.NewWorkflowStore)", t.scope))
+		return false
 	}
 
 	ok, err := t.store.Runnable(context.Background(), t.wf, t.task, t.undo)

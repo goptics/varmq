@@ -1,6 +1,6 @@
 # VarMQ Redis storage
 
-**Version 1.7.0**
+**Version 1.8.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.8.0**: FinishTask (section 6.10) is an operation of the workflow store, not of the queue: the caller passes the queue ID and the ack ID of the item. A store registers itself by scope, so a queue only names its scope, and a consumer finds the store by that scope. No key, script or item changes: nothing from 1.7.0 changes for the data in Redis.
 - **1.7.0**: job cancel (section 6.14): sorted set `<base>:cancelled`, control message `cancel:<job id>`, record and outcome state `cancelled`. Nothing from 1.6.0 changes while the set is absent.
 - **1.6.0**: job outcome (section 6.13): channel `<base>:done:<job id>`, Acknowledge with a result, Job Record field `result`. Nothing from 1.5.0 changes for a reader that ignores them. redisq offers only distributed queues (every enqueue wakes idle consumers); the plain behaviour stays valid for other implementations.
 - **1.5.0**: workflows (sections 6.9 to 6.12, 7.3): keys `wf:<id>` and `wf:index`, envelope fields `wf`, `task` and `undo`, Purge cancels the workflow tasks it removes. 1.4.0 is reserved for retries (separate change). Nothing from 1.3.0 changes for a job without `wf`.
@@ -320,6 +321,8 @@ A caller MUST write the envelope of a task with `status` `Created`, and with `wf
 ### 6.10 FinishTask (since 1.5.0)
 
 A consumer that takes an item whose envelope has `wf` MUST finish it with this operation, not with Acknowledge or Reject (section 6.3, 6.4). It settles the item as they do and applies the outcome to the workflow in the same script, so no moment exists where a task has ended and its dependents are neither waiting nor queued.
+
+The operation belongs to the workflow store, which a process makes for the storage and registers by scope (the Queue ID of a queue names its scope). A consumer finds the store of the scope of the queue the item came from, and calls it with that queue's Queue ID and the ack ID. A consumer that has no store for the scope MUST NOT run the item and MUST NOT settle it: the item stays pending and is redelivered, and the consumer SHOULD report the missing store.
 
 Input: the ack ID and a task end: workflow, task, `undo`, outcome (`completed`, `failed` or `cancelled`), reason, result bytes; and the result limit (default 65536 bytes) and retention (default 7 days) of the store.
 

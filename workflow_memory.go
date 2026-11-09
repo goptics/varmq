@@ -88,7 +88,7 @@ func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 	}
 
 	m := &memWorkflowStore{cfg: c, now: time.Now, wfs: map[string]*memWorkflow{}}
-	registerWorkflowStore(m)
+	registerMemWorkflowStore(m)
 
 	return m
 }
@@ -96,6 +96,12 @@ func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 var _ WorkflowInspector = (*memWorkflowStore)(nil)
 
 func (m *memWorkflowStore) ScopeID() string { return memoryScope() }
+
+// FinishTask satisfies WorkflowStore. In-memory tasks finish through finish
+// (their jobs hold the store), so this is for completeness.
+func (m *memWorkflowStore) FinishTask(_, _ string, e TaskEnd) ([]string, bool) {
+	return nil, m.finish(e) == nil
+}
 
 // Submit stores the plan and pushes its roots. A plan with a stored ID is
 // success when its Hash is equal, else ErrWorkflowExists. A root its

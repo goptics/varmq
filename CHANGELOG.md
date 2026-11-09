@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.7.0. Specs: `spec/redis-storage.md` 1.7.0, `spec/openapi.yaml` 1.5.0.
+Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.8.0. Specs: `spec/redis-storage.md` 1.8.0, `spec/openapi.yaml` 1.5.0.
 
 ### ⚠️ Breaking Changes
 
@@ -21,11 +21,10 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - In-memory queue pending payloads now served over REST (`GET /queues/{id}/jobs`), as redisq's were: protect `Handler` (#176).
   - In-memory priority queue `Values()` returns hand-out order (#176).
   - `Purge` or `Close` on shared-storage handle detaches its live job handles: `ErrDetached` (#179).
-
-### 🗑️ Deprecated
-
-- `IWorkerBinder.WithPersistentQueue`, `WithPersistentPriorityQueue`, `WithDistributedQueue`, `WithDistributedPriorityQueue`: use `WithQueue` / `WithPriorityQueue` (#179).
-- `NewDistributedQueue[T]`, `NewDistributedPriorityQueue[T]`: use `NewQueue[T]` / `NewPriorityQueue[T]` (#179).
+- **Deprecated binders and handles removed** (#NN): `WithPersistentQueue`, `WithPersistentPriorityQueue`, `WithDistributedQueue`, `WithDistributedPriorityQueue`, `NewDistributedQueue[T]`, `NewDistributedPriorityQueue[T]` and their `PersistentQueue`, `PersistentPriorityQueue`, `DistributedQueue`, `DistributedPriorityQueue` handles. Use `WithQueue` / `WithPriorityQueue` and `NewQueue[T]` / `NewPriorityQueue[T]`.
+- **`IExternalBaseQueue.NumPending` removed** (#NN): use `Len()`.
+- **Workflow store is its own object, found by scope** (#NN; contract v0.8.0, spec 1.8.0): `WorkflowAcknowledgeable` removed; `WorkflowStore` gains `FinishTask(queueID, ackID, TaskEnd)`. Queue implements only `Scoped` + `QueueInspector`. Storage registers its store: `contract.RegisterWorkflowStore` (`UnregisterWorkflowStore`, `LookupWorkflowStore`, `WorkflowStores`, `ErrScopeRegistered`). Adapters must update.
+- **Durable task with no registered store not run** (#NN): worker reports `varmq: no workflow store for scope <scope>` on `Errs()` and handler, leaves job unacked for redelivery. `GET /workflows` lists registered stores, not bound queues'.
 
 ### ⚡ Performance
 
@@ -39,8 +38,8 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - `varmq.TaskOf(j)` in worker → `*TaskContext`: `Result(name, &v)`, `Failed(name)`.
   - Options `WithWorkflowID`, `WithFailFast`, `WithUndoOnCancel`. In-memory store `varmq.NewWorkflowStore()` (`WithResultLimit`, `WithWorkflowRetention`).
   - REST: `GET /workflows`, `GET /workflows/{id}`, `PATCH /workflows/{id}/actions/cancel` (`undo=false` only narrows).
-  - Contract: `WorkflowStore`, `WorkflowAcknowledgeable`, `WorkflowInspector`, `WorkflowKeyLister`, `WorkflowKey`, `WorkflowPlan`, `TaskEnd`, `WorkflowRecord`, `TaskRecord`, `Outcome`, `WorkflowState`; `WorkflowStore.Cancel(…, undo *bool)` (nil = workflow's own setting). Envelope gains `wf`, `task`, `undo`.
-  - redisq and sqliteq do not store workflows yet. Durable workflow needs this VarMQ in every consumer process (spec §9).
+  - Contract: `WorkflowStore`, `WorkflowInspector`, `WorkflowKeyLister`, `WorkflowKey`, `WorkflowPlan`, `TaskEnd`, `WorkflowRecord`, `TaskRecord`, `Outcome`, `WorkflowState`; `WorkflowStore.Cancel(…, undo *bool)` (nil = workflow's own setting). Envelope gains `wf`, `task`, `undo`.
+  - Durable stores: `redisq.NewWorkflowStore` (redisq v1.6.0), `sqliteq.NewWorkflowStore` (sqliteq v0.4.0). Every consumer process creates the store and runs this VarMQ (spec §9).
 - **One binder per kind** (#179, contract v0.6.0): `WithQueue` takes any FIFO storage, `WithPriorityQueue` any priority storage: in-memory, redisq, sqliteq, custom. Persistent vs distributed detected (`IAcknowledgeable`, `ISubscribable`).
   - Producers without worker: `varmq.NewQueue[T]`, `NewErrQueue[T]`, `NewResultQueue[T, R]`, each with `Priority` version → `ProducerQueue[T, J]` / `ProducerPriorityQueue[T, J]`.
 - **Remote job outcome** (#179; spec 1.6.0, contract v0.6.0): storage with optional `OutcomeWatcher` resolves durable job handle when job ends in any process.

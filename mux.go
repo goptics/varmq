@@ -33,54 +33,29 @@ func registerQueue(q any) {
 	}
 }
 
-// workflowRegistry holds every known workflow store by ScopeID, for
-// /workflows. Filled by NewWorkflowStore and when a queue binds. An
-// in-memory store is held weakly, so dropping it frees it.
-// ponytail: durable entries are never removed, like queueRegistry's; a
-// closed storage stays: GET /workflows skips it, the ID routes answer 503
-// when no other store holds the ID. One handle per durable scope is kept:
-// a later bind of the same scope replaces the earlier entry, so closing the
-// later handle loses the scope's workflows here; keep that handle open.
-var workflowRegistry sync.Map
+// memWorkflows holds every in-memory workflow store weakly, for /workflows:
+// dropping a store frees it. Durable stores live in the contract registry.
+var memWorkflows sync.Map
 
-// registerWorkflowStore serves s under /workflows: GET /workflows lists it
-// if it is a WorkflowInspector.
-func registerWorkflowStore(s WorkflowStore) {
-	switch m := s.(type) {
-	case nil:
-	case *memWorkflowStore: // every in-memory store shares one scope
-		workflowRegistry.Store(fmt.Sprintf("%s#%p", m.ScopeID(), m), weak.Make(m))
-	default:
-		workflowRegistry.Store(s.ScopeID(), s)
-	}
+// registerMemWorkflowStore serves m under /workflows.
+func registerMemWorkflowStore(m *memWorkflowStore) {
+	memWorkflows.Store(fmt.Sprintf("%s#%p", m.ScopeID(), m), weak.Make(m))
 }
 
-// workflowStores is every registered store still alive; the entry of a
-// collected in-memory store is removed.
+// workflowStores is every registered durable store plus the in-memory ones
+// still alive; the entry of a collected in-memory store is removed.
 func workflowStores() []WorkflowStore {
-	var out []WorkflowStore
-	workflowRegistry.Range(func(k, v any) bool {
-		switch s := v.(type) {
-		case weak.Pointer[memWorkflowStore]:
-			if m := s.Value(); m != nil {
-				out = append(out, m)
-			} else {
-				workflowRegistry.CompareAndDelete(k, v)
-			}
-		case WorkflowStore:
-			out = append(out, s)
+	out := contract.WorkflowStores()
+	memWorkflows.Range(func(k, v any) bool {
+		if m := v.(weak.Pointer[memWorkflowStore]).Value(); m != nil {
+			out = append(out, m)
+		} else {
+			memWorkflows.CompareAndDelete(k, v)
 		}
 		return true
 	})
 
 	return out
-}
-
-// registerWorkflowStorage lists the workflow store of a queue storage.
-func registerWorkflowStorage(q any) {
-	if wa, ok := q.(WorkflowAcknowledgeable); ok {
-		registerWorkflowStore(wa.WorkflowStore())
-	}
 }
 
 // maxWorkflowsOffset caps GET /workflows' offset: every store pages

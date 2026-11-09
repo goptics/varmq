@@ -126,6 +126,14 @@ func (w *worker[T, JobType]) initPoolNode() *pool.Elem[JobType] {
 			// A workflow task its workflow no longer wants (cancelled, ended)
 			// ends cancelled without running.
 			if !w.runnable(j) {
+				// No store: leave it unacked (acknowledge skips it).
+				if t := j.taskTag(); t != nil && t.store == nil {
+					if err := j.Close(); err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
+						w.sendError(err)
+					}
+					run.add(j.memTotals(), -1)
+					continue
+				}
 				j.endTask(OutcomeCancelled, "workflow cancelled", nil)
 				err := j.Close()
 				if err != nil && !errors.Is(err, ErrJobAlreadyClosed) {
