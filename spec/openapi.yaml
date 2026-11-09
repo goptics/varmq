@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.4.0
+  version: 1.5.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,9 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.5.0: `GET /workers/{name}` gains `strategy` and `sources` (each
+      bound queue or topic subscription with its Queue ID, kind and bind
+      priority). Additive.
     - 1.4.0: `GET /queues/{id}/jobs/{jobId}` reads one job and
       `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` cancels one; `Job`
       gains `result` (one-job read only) and `result_size` (list pages);
@@ -696,6 +699,24 @@ components:
         - type: object
           required: [metrics]
           properties:
+            strategy:
+              type: string
+              description: |
+                Since 1.5.0. How the worker picks the next source when it has
+                two or more: `priority` (lowest `sources[].priority` with a job
+                first; the default), `round_robin`, `max_len` (the longest
+                source) or `min_len` (the shortest non-empty one). Sent even
+                with one source, where it changes nothing. Absent from older
+                servers, and when the server cannot tell; a client MUST accept
+                a value it does not know.
+              enum: [priority, round_robin, max_len, min_len]
+            sources:
+              type: array
+              description: |
+                Since 1.5.0. The queues and topic subscriptions the worker
+                pulls from, in bind order. Empty when it binds none. Absent
+                from older servers.
+              items: { $ref: "#/components/schemas/WorkerSource" }
             metrics:
               type: object
               description: |
@@ -707,6 +728,29 @@ components:
                 completed: { type: integer, minimum: 0, description: Jobs this worker finished, successful or failed. }
                 successful: { type: integer, minimum: 0 }
                 failed: { type: integer, minimum: 0, description: Jobs that returned an error or panicked. }
+
+    WorkerSource:
+      type: object
+      required: [queue_id, kind, priority]
+      properties:
+        queue_id:
+          type: string
+          description: |
+            The `GET /queues` ID, as in `queue_ids`. Empty for a topic
+            subscription, and for storage with no Queue ID.
+        kind:
+          type: string
+          description: |
+            `queue` or `topic` (a topic subscription). A client MUST accept a
+            value it does not know.
+        priority:
+          type: integer
+          description: |
+            The priority given at bind (`WithQueuePriority`,
+            `WithTopicPriority`). Lower picks first under the `priority`
+            strategy; ties keep bind order. Without one it is the largest
+            int64, 9223372036854775807, the lowest priority. Other
+            strategies ignore it.
 
     JobState:
       type: string
