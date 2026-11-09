@@ -309,3 +309,29 @@ func TestManagerOnly(t *testing.T) {
 	_, _, ok = m.Only()
 	assert.False(t, ok, "two items")
 }
+
+func TestManagerEach(t *testing.T) {
+	m := NewManager[*testItem]()
+
+	var got []string
+	m.Each(func(it *testItem, _ int) { got = append(got, it.id) })
+	assert.Empty(t, got, "no items")
+
+	a, b, c := &testItem{id: "a"}, &testItem{id: "b"}, &testItem{id: "c"}
+	m.Register(a, 5)
+	m.Register(b, 1) // sorts first for GetPriorityItem
+	m.Register(c, 5)
+
+	var prios []int
+	m.Each(func(it *testItem, p int) {
+		got = append(got, it.id)
+		prios = append(prios, p)
+	})
+	assert.Equal(t, []string{"a", "b", "c"}, got, "registration order, not priority order")
+	assert.Equal(t, []int{5, 1, 5}, prios)
+
+	m.UnregisterItem(a)
+	got = nil
+	m.Each(func(it *testItem, _ int) { got = append(got, it.id) })
+	assert.Equal(t, []string{"b", "c"}, got)
+}

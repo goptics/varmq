@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"cmp"
 	"reflect"
 	"slices"
 	"sync"
@@ -14,12 +15,14 @@ type Sizer interface {
 type registered[T Sizer] struct {
 	item     T
 	priority int
+	seq      uint64 // registration order; Each reports by it
 }
 
 // Manager is a generic item manager that manages items implementing the Sizer interface
 type Manager[T Sizer] struct {
 	items           []registered[T]
 	roundRobinIndex int
+	seq             uint64 // last seq handed out
 	mx              sync.RWMutex
 }
 
@@ -37,9 +40,11 @@ func (m *Manager[T]) Register(item T, priority int) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
+	m.seq++
 	r := registered[T]{
 		item:     item,
 		priority: priority,
+		seq:      m.seq,
 	}
 
 	// Insert into the right position to maintain priority (ascending order: lower number = higher priority)
@@ -203,6 +208,19 @@ func (m *Manager[T]) Only() (T, int, bool) {
 	}
 
 	return m.items[0].item, m.items[0].priority, true
+}
+
+// Each calls fn with every registered item and its priority, in
+// registration order. It copies under the read lock and calls fn after.
+func (m *Manager[T]) Each(fn func(item T, priority int)) {
+	m.mx.RLock()
+	items := slices.Clone(m.items)
+	m.mx.RUnlock()
+
+	slices.SortFunc(items, func(a, b registered[T]) int { return cmp.Compare(a.seq, b.seq) })
+	for _, r := range items {
+		fn(r.item, r.priority)
+	}
 }
 
 // Count returns the number of registered items
