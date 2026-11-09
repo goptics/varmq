@@ -56,3 +56,5 @@ The output, line by line:
 **No persistence.** A persistent or distributed queue stores each job as JSON, and a function cannot be encoded as JSON. Keep function jobs for in-memory queues. For jobs that must survive a restart, use plain data and put the logic in the worker function.
 
 **Naming jobs.** The job's [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) is the function, so nothing about the job says what it does. [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) gives it a name. See [job IDs](/guides/job-ids/).
+
+Next: [Workers and queues](/concepts/workers-and-queues/).
