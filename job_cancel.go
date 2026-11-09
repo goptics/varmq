@@ -135,6 +135,7 @@ func (j *job[T]) cancel(set, release func()) error {
 		// and workflow stores learn it ended cancelled, so the item is not
 		// redelivered and the workflow moves on.
 		ackErr := j.finishCancelled()
+		j.memTotals().keep(j, JobCancelled, "", nil) // before release: a returned Wait finds it
 		if set != nil {
 			set()
 		}
@@ -184,6 +185,7 @@ func (j *job[T]) endFailed(err error) error {
 	j.endCancelled()
 	if ref := j.ackRef.Load(); ref != nil && ref.totals != nil {
 		ref.totals.failed.Add(1)
+		ref.totals.keep(j, JobCancelled, cancelReason, nil)
 	}
 
 	return ErrJobCancelled
@@ -251,17 +253,28 @@ type runKey struct {
 	id string
 }
 
-// trackRun lists j while it runs, when j came from shared storage with an
-// ID; the run loop calls it only while this worker watches cancel requests.
-// It returns the key to untrack; zero when j is not tracked. Several live
-// runs may share a key (a redelivered item, a reused ID): a cancel reaches
-// each.
+// trackRun lists j while it runs, when j has an ID: a job of a listed
+// in-memory queue in that memQueue's index (whichever worker runs it), a
+// job of shared storage in this worker's running. The run loop calls it
+// only while cancelWatch is on or j's memQueue is listed. It returns the
+// key to untrack; zero when j is not tracked. Several live runs may share
+// a key (a redelivered item, a reused ID): a cancel reaches each.
 func (w *worker[T, JobType]) trackRun(j JobType) runKey {
-	q := j.ackStorage()
 	id := j.ID()
+	if id == "" {
+		return runKey{}
+	}
+	if m := j.memTotals(); m != nil {
+		if !m.tracked() {
+			return runKey{}
+		}
+		m.track(id, j)
+		return runKey{m, id}
+	}
+	q := j.ackStorage()
 	// A map key must hash: a value whose type is comparable can still hold
 	// a map or slice in an interface field, so check the value.
-	if q == nil || id == "" || !reflect.ValueOf(q).Comparable() {
+	if q == nil || !reflect.ValueOf(q).Comparable() {
 		return runKey{}
 	}
 	k := runKey{q, id}
@@ -277,6 +290,10 @@ func (w *worker[T, JobType]) trackRun(j JobType) runKey {
 // untrackRun drops j's entry, not another run's under the same key.
 func (w *worker[T, JobType]) untrackRun(k runKey, j JobType) {
 	if k.id == "" {
+		return
+	}
+	if m, ok := k.q.(*memQueue); ok {
+		m.untrack(k.id, j)
 		return
 	}
 	w.runMu.Lock()

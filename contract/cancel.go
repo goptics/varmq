@@ -15,7 +15,8 @@ type JobCanceller interface {
 	// stops it if it watches its context. ErrJobEnded when its record shows
 	// it ended. Each mark expires 24 h after its request. Storage can't tell
 	// a waiting job from an unknown ID: authorize and rate-limit untrusted
-	// callers. On storage with workflows, a valid workflow item (spec
+	// callers. Storage that can tell (an in-memory queue) returns
+	// ErrJobNotFound. On storage with workflows, a valid workflow item (spec
 	// section 3, id wf:<wf>:<task>[:undo]) is never dropped at pop: pop
 	// alone can't end its workflow, so it is handed out and runs unless its
 	// workflow is cancelled. Any other item is checked as a plain job.

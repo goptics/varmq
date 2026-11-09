@@ -84,6 +84,18 @@ func (w *worker[T, JobType]) boundQueueIDs() []string {
 	return ids
 }
 
+// listedQueueIDs is boundQueueIDs plus the IDs of the worker's in-memory
+// queues (GET /queues lists them while the worker is registered), sorted.
+func (w *worker[T, JobType]) listedQueueIDs() []string {
+	ids := w.boundQueueIDs()
+	w.memQueues.Range(func(k, _ any) bool {
+		ids = append(ids, k.(string))
+		return true
+	})
+	slices.Sort(ids)
+	return ids
+}
+
 // varmqVersion is the varmq module version this binary was built with, or ""
 // when unknown (tests, builds without module info).
 func varmqVersion() string { return depVersion(debug.ReadBuildInfo()) }

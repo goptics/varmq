@@ -4,18 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goptics/varmq/contract"
+	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 )
 
@@ -311,6 +315,27 @@ func TestMuxListWorkers(t *testing.T) {
 	if !foundMap["test-worker-1"] || !foundMap["test-worker-2"] {
 		t.Errorf("did not find expected workers in response")
 	}
+	for _, w := range workers {
+		assert.Equal(t, []string{}, w.QueueIDs, "no queue bound: empty, not null")
+	}
+
+	// a Worker that is not varmq's: queue_ids [], not null
+	WorkerRegistry.Store("plain", plainWorker{w1})
+	defer WorkerRegistry.Delete("plain")
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
+	var raw []map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&raw))
+	require.Len(t, raw, 3)
+	for _, w := range raw {
+		assert.JSONEq(t, `[]`, string(w["queue_ids"]))
+	}
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers/plain", nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	var one map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&one))
+	assert.JSONEq(t, `[]`, string(one["queue_ids"]))
 
 	w1.Stop()
 	w2.Stop()
@@ -351,6 +376,28 @@ func TestMuxGetWorker(t *testing.T) {
 	if _, ok := response["metrics"]; !ok {
 		t.Errorf("expected metrics payload")
 	}
+
+	// queue_ids names its in-memory queue as GET /queues lists it.
+	ids, _ := response["queue_ids"].([]any)
+	require.Len(t, ids, 1)
+	id, _ := ids[0].(string)
+	assert.True(t, strings.HasPrefix(id, "memory:"+InstanceID+":fifo:"), id)
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(id)+"/jobs?state=pending", nil))
+	assert.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	// A bound shared queue and a priority queue join it, sorted.
+	shared := &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "z:shared"}
+	defer queueRegistry.Delete(shared.id)
+	wb.WithQueue(shared)
+	pid := memOf(t, wb.BindPriorityQueue()).QueueID()
+	assert.True(t, strings.HasPrefix(pid, "memory:"+InstanceID+":prio:"), pid)
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/workers", nil))
+	var list []workerSummary
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&list))
+	require.Len(t, list, 1)
+	assert.Equal(t, []string{id, pid, "z:shared"}, list[0].QueueIDs)
 
 	w.Stop()
 }
@@ -1129,3 +1176,697 @@ func TestWorkflowRegistryWeak(t *testing.T) {
 type plainWorkflowStore struct{ WorkflowStore }
 
 func (plainWorkflowStore) ScopeID() string { return "plain" }
+
+// inspectedCancelStore is cancelStore listed under GET /queues, its Job
+// Records read from its outcomes: what a result worker left, cancelled
+// ones listed under cancelled.
+type inspectedCancelStore struct{ *cancelStore }
+
+func (*inspectedCancelStore) QueueID() string { return "shared:cancel" }
+func (*inspectedCancelStore) QueueStats(context.Context) (QueueStats, error) {
+	return QueueStats{}, nil
+}
+
+func outcomeRecord(o JobOutcome) JobRecord {
+	return JobRecord{ID: o.ID, State: o.State, Payload: json.RawMessage("null"), Attempts: 1, Result: o.Result}
+}
+
+func (s *inspectedCancelStore) Jobs(_ context.Context, state JobState, _, _ int) ([]JobRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []JobRecord
+	for _, o := range s.outcomes {
+		if o.State == state {
+			out = append(out, outcomeRecord(o))
+		}
+	}
+	return out, nil
+}
+
+func (s *inspectedCancelStore) Job(_ context.Context, id string) (JobRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.outcomes[id]; ok {
+		return outcomeRecord(o), nil
+	}
+	return JobRecord{}, ErrJobNotFound
+}
+
+// brokenJobStore reads and cancels jobs, and fails at both.
+type brokenJobStore struct{ plainInspector }
+
+func (brokenJobStore) QueueID() string { return "custom:broken-jobs" }
+func (brokenJobStore) Job(context.Context, string) (JobRecord, error) {
+	return JobRecord{}, errors.New("redis down")
+}
+func (brokenJobStore) CancelJob(string) error { return errors.New("redis down") }
+
+// sizedJobStore reads a job with both result and result_size set.
+type sizedJobStore struct{ plainInspector }
+
+func (sizedJobStore) QueueID() string { return "custom:sized" }
+func (sizedJobStore) Job(context.Context, string) (JobRecord, error) {
+	return JobRecord{ID: "x", State: JobCompleted, Payload: json.RawMessage("null"), Result: json.RawMessage("1"), ResultSize: 1}, nil
+}
+
+// endedJobStore cancels with an ended-job error: err, and lists one
+// completed job whose result_size it fills without the result.
+type endedJobStore struct {
+	plainInspector
+	id  string
+	err error
+}
+
+func (e endedJobStore) QueueID() string        { return e.id }
+func (e endedJobStore) CancelJob(string) error { return e.err }
+func (endedJobStore) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
+	return []JobRecord{{ID: "x", State: JobCompleted, Payload: json.RawMessage("null"), ResultSize: 7}}, nil
+}
+
+func jobRoutes(t *testing.T) (get, cancel func(q, job string) *httptest.ResponseRecorder) {
+	server := NewServerMux()
+	do := func(method, path string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(method, path, nil))
+		assert.Contains(t, rr.Header(), InstanceHeader)
+		return rr
+	}
+	get = func(q, job string) *httptest.ResponseRecorder {
+		return do("GET", "/queues/"+url.PathEscape(q)+"/jobs/"+url.PathEscape(job))
+	}
+	cancel = func(q, job string) *httptest.ResponseRecorder {
+		return do("PATCH", "/queues/"+url.PathEscape(q)+"/jobs/"+url.PathEscape(job)+"/actions/cancel")
+	}
+	return get, cancel
+}
+
+func TestMuxJobInMemory(t *testing.T) {
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("job-rest"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	get, cancel := jobRoutes(t)
+
+	run, _ := q.Add(7, WithJobId("run"))
+	require.Equal(t, "run", within(t, started))
+	wait, _ := q.Add(8, WithJobId("wait")) // concurrency 1: stays in the queue
+
+	rr := get(m.QueueID(), "run")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"run","state":"processing","payload":null,"attempts":1}`, rr.Body.String(), "a running job's data is not read")
+	rr = get(m.QueueID(), "wait")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"wait","state":"pending","payload":8,"attempts":0}`, rr.Body.String())
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusNotFound, get("nope", "run").Code)
+
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusNotFound, cancel("nope", "run").Code)
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("PATCH", "/queues/"+url.PathEscape(m.QueueID())+"/jobs/run/actions/stop", nil))
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+
+	// waiting: closed, never runs; still in the queue, so a second cancel is 409
+	rr = cancel(m.QueueID(), "wait")
+	require.Equal(t, http.StatusAccepted, rr.Code, rr.Body.String())
+	assert.Empty(t, rr.Body.String())
+	assert.Equal(t, "Closed", wait.Status())
+	rr = cancel(m.QueueID(), "wait")
+	assert.Equal(t, http.StatusConflict, rr.Code)
+	assert.JSONEq(t, `{"error":"varmq: job already ended"}`, rr.Body.String())
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "wait").Code, "ended jobs are not kept")
+
+	// running: its context is cancelled
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "run").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, run.WaitContext(ctx), "the running job saw the cancel")
+	require.NoError(t, w.WaitContext(ctx))
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "run").Code, "ended jobs are not kept")
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "run").Code)
+
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+"/jobs?state=cancelled", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "[]\n", rr.Body.String(), "in-memory queues keep no cancelled jobs")
+}
+
+func TestMuxJobSharedStorage(t *testing.T) {
+	s := &inspectedCancelStore{newCancelStore()}
+	started := make(chan struct{}, 1)
+	w := NewResultWorker(func(j Job[int]) (int, error) {
+		if j.Data() == 0 {
+			started <- struct{}{}
+			<-j.Context().Done()
+			return 0, j.Context().Err()
+		}
+		return j.Data() * 2, nil
+	})
+	t.Cleanup(func() { w.Stop() })
+	q := w.WithQueue(s) // lists s under GET /queues
+	defer queueRegistry.Delete(s.QueueID())
+	get, cancel := jobRoutes(t)
+
+	done, _ := q.Add(21, WithJobId("done"))
+	_, err := done.Result()
+	require.NoError(t, err)
+	rr := get(s.QueueID(), "done")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"done","state":"completed","payload":null,"attempts":1,"result":42}`, rr.Body.String())
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+s.QueueID()+"/jobs?state=completed", nil))
+	assert.JSONEq(t, `[{"id":"done","state":"completed","payload":null,"attempts":1,"result_size":2}]`, rr.Body.String(), "listed with its result size, not its bytes")
+	assert.Equal(t, http.StatusConflict, cancel(s.QueueID(), "done").Code, "ended")
+	assert.Equal(t, http.StatusNotFound, get(s.QueueID(), "nope").Code)
+	assert.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "nope").Code, "storage can't tell waiting from unknown")
+
+	long, _ := q.Add(0, WithJobId("long"))
+	within(t, started)
+	require.Equal(t, http.StatusAccepted, cancel(s.QueueID(), "long").Code)
+	_, err = long.Result()
+	require.ErrorIs(t, err, ErrJobCancelled)
+	rr = get(s.QueueID(), "long")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"state":"cancelled"`)
+
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+s.QueueID()+"/jobs?state=cancelled", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `[{"id":"long","state":"cancelled","payload":null,"attempts":1}]`, rr.Body.String())
+}
+
+func TestMuxJobUnsupportedAndFailing(t *testing.T) {
+	queueRegistry.Store("custom:plain", plainInspector{})
+	queueRegistry.Store("custom:broken-jobs", brokenJobStore{})
+	defer queueRegistry.Delete("custom:plain")
+	defer queueRegistry.Delete("custom:broken-jobs")
+	get, cancel := jobRoutes(t)
+
+	assert.Equal(t, http.StatusNotImplemented, get("custom:plain", "x").Code)
+	assert.Equal(t, http.StatusNotImplemented, cancel("custom:plain", "x").Code)
+	assert.Equal(t, http.StatusInternalServerError, get("custom:broken-jobs", "x").Code)
+	rr := cancel("custom:broken-jobs", "x")
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	assert.JSONEq(t, `{"error":"redis down"}`, rr.Body.String())
+
+	// result_size is for list pages: a one-job read drops it.
+	queueRegistry.Store("custom:sized", sizedJobStore{})
+	defer queueRegistry.Delete("custom:sized")
+	rr = get("custom:sized", "x")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.NotContains(t, rr.Body.String(), "result_size")
+
+	// ended: 409 with the storage's error, plain or wrapped
+	defer queueRegistry.Delete("custom:ended")
+	for _, e := range []error{ErrJobAlreadyClosed, fmt.Errorf("store: %w", contract.ErrJobEnded)} {
+		s := endedJobStore{id: "custom:ended", err: e}
+		queueRegistry.Store(s.id, s)
+		rr = cancel(s.id, "x")
+		assert.Equal(t, http.StatusConflict, rr.Code)
+		assert.JSONEq(t, `{"error":`+strconv.Quote(e.Error())+`}`, rr.Body.String())
+	}
+
+	// a storage-filled result_size without the result stays on the page
+	rr = httptest.NewRecorder()
+	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/custom:ended/jobs?state=completed", nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `[{"id":"x","state":"completed","payload":null,"attempts":0,"result_size":7}]`, rr.Body.String())
+}
+
+// Job IDs with path characters, escaped as one segment, reach the job
+// routes under a prefix. "." and ".." can't: ServeMux cleans the path and
+// redirects (307), and the Location drops the prefix.
+func TestMuxJobIDEscaping(t *testing.T) {
+	w := NewWorker(func(Job[int]) {}, WithName("job-rest-ids"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	require.NoError(t, w.Pause())
+	h := Handler("/admin")
+	do := func(method, id, suffix string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(method, "/admin/queues/"+url.PathEscape(m.QueueID())+"/jobs/"+url.PathEscape(id)+suffix, nil))
+		return rr
+	}
+
+	for _, id := range []string{"a/b", "a%b", "a b", "wf:x:y", "a//b", "a/../b", "a/./b", "/a", "a/", "a?b#c"} {
+		t.Run(id, func(t *testing.T) {
+			j, ok := q.Add(1, WithJobId(id))
+			require.True(t, ok)
+			rr := do("GET", id, "")
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			var r JobRecord
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &r))
+			assert.Equal(t, id, r.ID)
+			assert.Equal(t, http.StatusAccepted, do("PATCH", id, "/actions/cancel").Code)
+			assert.True(t, j.IsClosed())
+		})
+	}
+
+	enc := url.PathEscape(m.QueueID())
+	for _, c := range []struct{ id, get, cancel string }{
+		{".", "/queues/" + enc + "/jobs", "/queues/" + enc + "/jobs/actions/cancel"},
+		{"..", "/queues/" + enc, "/queues/" + enc + "/actions/cancel"},
+	} {
+		q.Add(1, WithJobId(c.id))
+		rr := do("GET", c.id, "")
+		assert.Equal(t, http.StatusTemporaryRedirect, rr.Code, c.id)
+		assert.Equal(t, c.get, rr.Header().Get("Location"), c.id)
+		rr = do("PATCH", c.id, "/actions/cancel")
+		assert.Equal(t, http.StatusTemporaryRedirect, rr.Code, c.id)
+		assert.Equal(t, c.cancel, rr.Header().Get("Location"), c.id)
+	}
+}
+
+// Two workers on one storage: a job added through the named worker's
+// handle but run by the unnamed one is still read and cancelled by ID.
+func TestMuxJobRunByAnotherWorker(t *testing.T) {
+	shared := queues.NewQueue[any]()
+	started := make(chan string, 1)
+	runner := NewWorker(blockOnCancel(started)) // unnamed: lists nothing
+	t.Cleanup(func() { runner.Stop() })
+	runner.WithQueue(shared)
+	owner := NewWorker(func(Job[int]) {}, WithName("job-rest-owner"))
+	t.Cleanup(func() { owner.Stop() })
+	q := owner.WithQueue(shared)
+	m := memOf(t, q)
+	require.NoError(t, owner.Pause()) // only runner takes jobs
+	require.NoError(t, runner.Pause())
+	get, cancel := jobRoutes(t)
+
+	j, _ := q.Add(5, WithJobId("x"))
+	require.NoError(t, runner.Resume()) // an add wakes only its own handle's worker
+	select {
+	case id := <-started:
+		require.Equal(t, "x", id)
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner never took the job")
+	}
+	rr := get(m.QueueID(), "x")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"x","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "x").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, j.WaitContext(ctx), "the runner's job saw the cancel")
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "x").Code)
+}
+
+// A running job's data is never read: its worker writes a map while GETs
+// come in (-race, and a fatal concurrent map access if it were read).
+func TestMuxJobRunningPayloadNotRead(t *testing.T) {
+	started := make(chan struct{})
+	w := NewWorker(func(j Job[map[string]int]) {
+		close(started)
+		d := j.Data()
+		for i := 0; j.Context().Err() == nil; i++ {
+			d[strconv.Itoa(i%64)] = i
+		}
+	}, WithName("job-rest-map"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := q.(*queue[map[string]int]).totals
+	get, cancel := jobRoutes(t)
+
+	j, _ := q.Add(map[string]int{"a": 1}, WithJobId("m"))
+	within(t, started)
+	for range 200 {
+		rr := get(m.QueueID(), "m")
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		require.JSONEq(t, `{"id":"m","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
+	}
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "m").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, j.WaitContext(ctx))
+}
+
+// A job held in a batch behind a running one is in neither the queue nor
+// the run index: 404 for both routes until it starts, and it still runs.
+func TestMuxJobInBatch(t *testing.T) {
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("job-rest-batch"), 1)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	get, cancel := jobRoutes(t)
+
+	require.NoError(t, w.Pause())
+	a, _ := q.Add(1, WithJobId("a"))
+	b, _ := q.Add(2, WithJobId("b"))
+	require.NoError(t, w.Resume()) // one batch: a runs, b waits behind it
+	require.Equal(t, "a", within(t, started))
+
+	assert.Equal(t, http.StatusNotFound, get(m.QueueID(), "b").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(m.QueueID(), "b").Code)
+	assert.Equal(t, "Queued", b.Status())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "a").Code)
+	a.Wait()
+	require.Equal(t, "b", within(t, started), "b still runs")
+	assert.Equal(t, http.StatusOK, get(m.QueueID(), "b").Code)
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "b").Code)
+	b.Wait()
+}
+
+// A job parked by a worker Pause or Stop mid-batch is in neither the
+// queue nor the run index: 404 for both routes until Resume or Start, and
+// it still runs.
+func TestMuxJobParkedByPause(t *testing.T) {
+	for _, c := range []struct {
+		halt, status string
+	}{{"Pause", "Paused"}, {"Stop", "Stopped"}} {
+		t.Run(c.halt, func(t *testing.T) {
+			started := make(chan string, 1)
+			w := NewWorker(blockOnCancel(started), WithName("job-rest-parked-"+c.halt), 1, WithStoppedRetention(time.Hour))
+			t.Cleanup(func() { w.Stop() })
+			q := w.BindQueue()
+			m := memOf(t, q)
+			get, cancel := jobRoutes(t)
+
+			require.NoError(t, w.Pause())
+			a, _ := q.Add(1, WithJobId("a"))
+			b, _ := q.Add(2, WithJobId("b"))
+			require.NoError(t, w.Resume()) // one batch: a runs, b waits behind it
+			require.Equal(t, "a", within(t, started))
+			if c.halt == "Pause" {
+				require.NoError(t, w.Pause())
+			} else {
+				require.NoError(t, w.Stop())
+			}
+			_ = a.Cancel()
+			a.Wait()
+			wk := w.(*workerBinder[int])
+			require.Eventually(t, func() bool { return wk.nParked.Load() == 1 && w.Status() == c.status }, 2*time.Second, time.Millisecond)
+
+			for _, rr := range []*httptest.ResponseRecorder{get(m.QueueID(), "b"), cancel(m.QueueID(), "b")} {
+				assert.Equal(t, http.StatusNotFound, rr.Code)
+				assert.JSONEq(t, `{"error":"job not found"}`, rr.Body.String(), "the queue stays listed")
+			}
+			assert.Equal(t, "Queued", b.Status())
+
+			if c.halt == "Pause" {
+				require.NoError(t, w.Resume())
+			} else {
+				require.NoError(t, w.Start())
+			}
+			require.Equal(t, "b", within(t, started), "b still runs")
+			assert.Equal(t, http.StatusOK, get(m.QueueID(), "b").Code)
+			require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "b").Code)
+			b.Wait()
+		})
+	}
+}
+
+// A job added through another handle on the same storage is not this
+// queue's: 404 through it, found through its own.
+func TestMuxJobOtherHandleNotFound(t *testing.T) {
+	shared := queues.NewQueue[any]()
+	w1 := NewWorker(func(Job[int]) {}, WithName("job-rest-h1"))
+	w2 := NewWorker(func(Job[int]) {}, WithName("job-rest-h2"))
+	t.Cleanup(func() { w1.Stop() })
+	t.Cleanup(func() { w2.Stop() })
+	m1, q2 := memOf(t, w1.WithQueue(shared)), w2.WithQueue(shared)
+	m2 := memOf(t, q2)
+	require.NoError(t, w1.Pause())
+	require.NoError(t, w2.Pause())
+	get, cancel := jobRoutes(t)
+
+	j2, _ := q2.Add(1, WithJobId("only2"))
+	assert.Equal(t, http.StatusNotFound, get(m1.QueueID(), "only2").Code)
+	assert.Equal(t, http.StatusOK, get(m2.QueueID(), "only2").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(m1.QueueID(), "only2").Code)
+	assert.Equal(t, "Queued", j2.Status())
+
+	// The pending page has the same scope: m1 does not list it, m2 does.
+	page := func(m *memQueue) []JobRecord {
+		recs, err := m.Jobs(context.Background(), JobPending, 0, 10)
+		require.NoError(t, err)
+		return recs
+	}
+	assert.Empty(t, page(m1))
+	require.Len(t, page(m2), 1)
+	assert.Equal(t, "only2", page(m2)[0].ID)
+}
+
+// Storage that rejects state=cancelled (older than openapi 1.4.0) gets an
+// empty page while it still serves failed; a storage that is down is 500.
+type noCancelledState struct{ plainInspector }
+
+func (noCancelledState) QueueID() string { return "custom:no-cancelled" }
+func (noCancelledState) Jobs(_ context.Context, s JobState, _, _ int) ([]JobRecord, error) {
+	if s == JobCancelled {
+		return nil, errors.New(`unknown job state "cancelled"`)
+	}
+	return nil, nil
+}
+
+func TestMuxJobsCancelledRejected(t *testing.T) {
+	queueRegistry.Store("custom:no-cancelled", noCancelledState{})
+	queueRegistry.Store("custom:down", &inspectedQueue{MockPersistentQueue: mocks.NewMockPersistentQueue(), id: "custom:down", err: errors.New("down")})
+	defer queueRegistry.Delete("custom:no-cancelled")
+	defer queueRegistry.Delete("custom:down")
+	server := NewServerMux()
+	list := func(id string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+id+"/jobs?state=cancelled", nil))
+		return rr
+	}
+
+	rr := list("custom:no-cancelled")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "[]\n", rr.Body.String())
+	rr = list("custom:down")
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.JSONEq(t, `{"error":"down"}`, rr.Body.String())
+
+	// only state=cancelled falls back: a failing pending page stays 500
+	queueRegistry.Store("custom:fails-pending", failsPending{})
+	defer queueRegistry.Delete("custom:fails-pending")
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/custom:fails-pending/jobs?state=pending", nil))
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+// failsPending fails its pending page and serves failed.
+type failsPending struct{ plainInspector }
+
+func (failsPending) QueueID() string { return "custom:fails-pending" }
+func (failsPending) Jobs(_ context.Context, s JobState, _, _ int) ([]JobRecord, error) {
+	if s == JobPending {
+		return nil, errors.New("pending broken")
+	}
+	return nil, nil
+}
+
+// hookData runs onMarshal when a REST read marshals it, then marshals M.
+type hookData struct {
+	M         map[string]int
+	onMarshal func()
+}
+
+func (d hookData) MarshalJSON() ([]byte, error) {
+	if d.onMarshal != nil {
+		d.onMarshal()
+	}
+	return json.Marshal(d.M)
+}
+
+// A job closed during its read (its MarshalJSON closes it) is 404 on the
+// one-job route and left off the pending page: the read never waits on,
+// nor holds, the job's state.
+func TestMuxJobCloseDuringRead(t *testing.T) {
+	w := NewWorker(func(Job[hookData]) {}, WithName("job-rest-close-read"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := q.(*queue[hookData]).totals
+	require.NoError(t, w.Pause())
+	server := NewServerMux()
+
+	for _, path := range []string{"/jobs/c", "/jobs?state=pending"} {
+		var j EnqueuedJob
+		var once sync.Once
+		data := hookData{M: map[string]int{"a": 1}}
+		data.onMarshal = func() { once.Do(func() { require.NoError(t, j.Close()) }) }
+		j, _ = q.Add(data, WithJobId("c"))
+
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+path, nil))
+		if path == "/jobs/c" {
+			assert.Equal(t, http.StatusNotFound, rr.Code, rr.Body.String())
+		} else {
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Equal(t, "[]\n", rr.Body.String(), "closed during the read: not pending")
+		}
+		assert.True(t, j.IsClosed())
+		q.Purge() // drop the closed item: the ID is free for the next round
+	}
+}
+
+// within receives from ch, failing the test after 2 s instead of hanging.
+func within[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting on a channel")
+		var zero T
+		return zero
+	}
+}
+
+// A job that starts during its read (its MarshalJSON resumes the worker,
+// and the start does not wait on the read) is answered running with no
+// payload, and left off the pending page, the next waiting job taking its
+// slot: FIFO and priority (sorted Values).
+func TestMuxJobStartDuringRead(t *testing.T) {
+	for _, mode := range []string{"job", "fifo", "priority"} {
+		started := make(chan struct{})
+		w := NewWorker(func(j Job[hookData]) {
+			if j.ID() == "s" {
+				close(started)
+			}
+			<-j.Context().Done()
+		}, WithName("job-rest-start-read"), 1)
+		t.Cleanup(func() { w.Stop() })
+		w.BindQueue() // two sources: no batch, so only s starts and t waits in the queue
+		require.NoError(t, w.Pause())
+		var once sync.Once
+		data := hookData{M: map[string]int{"a": 1}}
+		data.onMarshal = func() {
+			once.Do(func() {
+				require.NoError(t, w.Resume())
+				within(t, started) // the start does not wait on the read
+			})
+		}
+
+		var m *memQueue
+		var j, jt EnqueuedJob
+		var ok bool
+		next := hookData{M: map[string]int{"b": 2}}
+		if mode == "priority" {
+			pq := w.BindPriorityQueue()
+			m = pq.(*priorityQueue[hookData]).totals
+			j, ok = pq.Add(data, 0, WithJobId("s"))
+			jt, _ = pq.Add(next, 1, WithJobId("t"))
+		} else {
+			q := w.BindQueue()
+			m = q.(*queue[hookData]).totals
+			j, ok = q.Add(data, WithJobId("s"))
+			jt, _ = q.Add(next, WithJobId("t"))
+		}
+		require.True(t, ok)
+		require.NotNil(t, jt)
+
+		// list: s starts mid-read and is dropped; t fills its slot
+		path, want := "/jobs/s", `{"id":"s","state":"processing","payload":null,"attempts":1}`
+		if mode != "job" {
+			path, want = "/jobs?state=pending&limit=1", `[{"id":"t","state":"pending","payload":{"b":2},"attempts":0}]`
+		}
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(m.QueueID())+path, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.JSONEq(t, want, rr.Body.String(), mode)
+
+		require.NoError(t, j.Cancel())
+		ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+		require.NoError(t, j.WaitContext(ctx))
+		require.NoError(t, jt.Cancel())
+		require.NoError(t, jt.WaitContext(ctx))
+		stop()
+		w.Stop()
+	}
+}
+
+// Two jobs under one ID: the waiting one closed mid-read is passed over,
+// and the running one answers.
+func TestMuxJobCloseDuringReadFindsRun(t *testing.T) {
+	started := make(chan struct{}, 1)
+	w := NewWorker(func(j Job[hookData]) {
+		started <- struct{}{}
+		<-j.Context().Done()
+	}, WithName("job-rest-two-runs"), 1)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := q.(*queue[hookData]).totals
+	get, cancel := jobRoutes(t)
+
+	run, _ := q.Add(hookData{M: map[string]int{"r": 1}}, WithJobId("d"))
+	within(t, started)
+	var second EnqueuedJob
+	var once sync.Once
+	data := hookData{M: map[string]int{"w": 1}}
+	data.onMarshal = func() { once.Do(func() { require.NoError(t, second.Close()) }) }
+	second, ok := q.Add(data, WithJobId("d")) // the first left the queue: allowed
+	require.True(t, ok)
+
+	rr := get(m.QueueID(), "d")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.JSONEq(t, `{"id":"d","state":"processing","payload":null,"attempts":1}`, rr.Body.String())
+	assert.True(t, second.IsClosed())
+
+	require.Equal(t, http.StatusAccepted, cancel(m.QueueID(), "d").Code)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, run.WaitContext(ctx))
+}
+
+// WithEndedJobs over REST: an ended result job reads with its result,
+// pages carry result_size, cancel is 409; a queue without it keeps none.
+func TestMuxJobEndedKept(t *testing.T) {
+	w := NewResultWorker(func(j Job[int]) (string, error) {
+		if j.Data() < 0 {
+			return "", errors.New("boom")
+		}
+		return "done", nil
+	}, WithName("job-rest-ended"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(2))
+	off := w.BindQueue()
+	get, cancel := jobRoutes(t)
+	id := q.(*resultQueue[int, string]).totals.QueueID()
+	offID := off.(*resultQueue[int, string]).totals.QueueID()
+	page := func(qid, state string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/queues/"+url.PathEscape(qid)+"/jobs?state="+state, nil))
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		return rr
+	}
+
+	for _, h := range []ResultQueue[int, string]{q, off} {
+		ok, _ := h.Add(1, WithJobId("ok"))
+		_, err := ok.Result()
+		require.NoError(t, err)
+		bad, _ := h.Add(-1, WithJobId("bad"))
+		_, err = bad.Result()
+		require.Error(t, err)
+	}
+
+	rr := get(id, "ok")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var rec JobRecord
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &rec))
+	assert.JSONEq(t, `"done"`, string(rec.Result))
+	assert.Zero(t, rec.ResultSize, "one-job read: result, no size")
+	assert.Equal(t, http.StatusConflict, cancel(id, "ok").Code)
+	assert.Equal(t, http.StatusConflict, cancel(id, "bad").Code)
+
+	var recs []JobRecord
+	require.NoError(t, json.Unmarshal(page(id, "completed").Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, len(`"done"`), recs[0].ResultSize)
+	assert.Nil(t, recs[0].Result, "pages: size only")
+	require.NoError(t, json.Unmarshal(page(id, "failed").Body.Bytes(), &recs))
+	require.Len(t, recs, 1)
+	assert.Equal(t, "bad", recs[0].ID)
+	assert.Equal(t, "boom", recs[0].Errors[0].Error)
+
+	for _, st := range []string{"completed", "failed", "cancelled"} {
+		assert.Equal(t, "[]\n", page(offID, st).Body.String(), "off by default: %s", st)
+	}
+	assert.Equal(t, http.StatusNotFound, get(offID, "ok").Code)
+	assert.Equal(t, http.StatusNotFound, cancel(offID, "ok").Code)
+}

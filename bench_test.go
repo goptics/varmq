@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -171,6 +172,47 @@ func BenchmarkAddWithId(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+			}
+		})
+	})
+
+	// Parallel with a REST mux: each run of a named worker's job takes
+	// its memQueue's runMu twice (track, untrack).
+	b.Run("ParallelTracked", func(b *testing.B) {
+		NewServerMux()
+		worker := NewWorker(task, WithName("bench-tracked"), runtime.GOMAXPROCS(0))
+		q := worker.BindQueue()
+		defer worker.StopAndWait()
+		if !q.(*queue[int]).totals.tracked() {
+			b.Fatal("runs not tracked")
+		}
+
+		var n atomic.Uint64
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				job, _ := q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+				job.Wait()
+			}
+		})
+	})
+
+	// ParallelTracked keeping the last 200 ended jobs (WithEndedJobs):
+	// a record per job, its payload as JSON.
+	b.Run("ParallelKept", func(b *testing.B) {
+		NewServerMux()
+		worker := NewWorker(task, WithName("bench-kept"), runtime.GOMAXPROCS(0))
+		q := worker.BindQueue(WithEndedJobs(200))
+		defer worker.StopAndWait()
+
+		var n atomic.Uint64
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				job, _ := q.Add(1, WithJobId(strconv.FormatUint(n.Add(1), 36)))
+				job.Wait()
 			}
 		})
 	})

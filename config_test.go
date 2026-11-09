@@ -335,6 +335,13 @@ func TestConfig(t *testing.T) {
 				})
 			}
 		})
+
+		t.Run("WithEndedJobs", func(t *testing.T) {
+			assert.Equal(t, 0, loadQueueConfigs().endedJobs, "off by default")
+			for in, want := range map[int]int{-1: 0, 0: 0, 1: 1, 100: 100, 200: 200, 201: 200, math.MaxInt: 200} {
+				assert.Equal(t, want, loadQueueConfigs(WithEndedJobs(in)).endedJobs, "WithEndedJobs(%d)", in)
+			}
+		})
 	})
 }
 

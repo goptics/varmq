@@ -457,8 +457,9 @@ func WithJobId(id string) JobConfigFunc {
 type QueueConfigFunc func(*queueConfig)
 
 type queueConfig struct {
-	priority int
-	capacity int
+	priority  int
+	capacity  int
+	endedJobs int
 }
 
 func loadQueueConfigs(configs ...QueueConfigFunc) queueConfig {
@@ -572,5 +573,36 @@ func WithTopicCapacity(capacity int) TopicConfigFunc {
 func WithQueueCapacity(capacity int) QueueConfigFunc {
 	return func(c *queueConfig) {
 		c.capacity = max(0, capacity)
+	}
+}
+
+// maxEndedJobs caps WithEndedJobs.
+const maxEndedJobs = 200
+
+// WithEndedJobs makes an in-memory queue keep the Job Records of its last n
+// ended jobs with an ID (completed, failed or cancelled, oldest dropped
+// first), so the REST job routes still read them: GET
+// /queues/{id}/jobs?state=completed|failed|cancelled pages and
+// GET /queues/{id}/jobs/{jobId}. Kept only while the queue is listed (its
+// worker has a name) and a REST mux was built (Handler, NewServerMux).
+//
+// A record holds the payload and a result worker's R as JSON, each
+// dropped (payload null, no result) over 64 KiB, and the error cut at
+// 64 KiB, so n bounds the memory. An AddAll result member keeps no R.
+// Cancelled means Cancel (or the cancel route): a job closed or purged
+// while it waits, or a workflow task its cancelled workflow skips, is not
+// kept.
+//
+// Parameters:
+//   - n: records to keep, clamped to 0..200. 0 keeps none.
+//
+// Example:
+//   - worker.BindQueue(varmq.WithEndedJobs(100))
+//
+// Default behavior: 0, no ended job is kept and nothing is paid per job.
+// Shared storage (persistent, distributed) keeps its own records: ignored.
+func WithEndedJobs(n int) QueueConfigFunc {
+	return func(c *queueConfig) {
+		c.endedJobs = min(max(n, 0), maxEndedJobs)
 	}
 }

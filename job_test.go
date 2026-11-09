@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/goptics/varmq/contract"
+	"github.com/goptics/varmq/internal/queues"
 	"github.com/goptics/varmq/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1337,13 +1339,276 @@ func TestUnhashableStorageGetsNoCancelWatch(t *testing.T) {
 	assert.NoError(t, j.Err(), "not reached: ran to the end")
 }
 
-func TestCancelWatchSkipsInMemoryJobs(t *testing.T) {
+// A worker's cancel watch (shared storage) does not track its in-memory
+// jobs: only a listed memQueue does (listMem).
+func TestCancelWatchSkipsUnlistedInMemoryJobs(t *testing.T) {
+	NewServerMux() // served: only listed gates tracking
 	w := NewWorker(func(Job[int]) {})
 	defer w.Stop()
 	w.WithQueue(newCancelStore()) // the watch is on
-	j, _ := w.BindQueue().Add(1)  // no storage: not tracked
+	q := w.BindQueue()            // unnamed worker: not listed
+	j, _ := q.Add(1, WithJobId("m"))
 	j.Wait()
 	assert.Equal(t, "Closed", j.Status())
+	assert.Nil(t, memOf(t, q).running, "never tracked")
+}
+
+func TestInMemoryRunsTrackedOnlyWhenListed(t *testing.T) {
+	NewServerMux() // tracking needs a REST mux
+	started := make(chan string, 1)
+	unnamed := NewWorker(blockOnCancel(started))
+	t.Cleanup(func() { unnamed.Stop() })
+	uq := unnamed.BindQueue()
+	um := memOf(t, uq)
+	assert.False(t, um.listed.Load(), "not listed for REST: the run loop tracks nothing")
+	assert.False(t, unnamed.(*workerBinder[int]).cancelWatch.Load())
+	u, _ := uq.Add(0, WithJobId("u"))
+	require.Equal(t, "u", within(t, started))
+	assert.Nil(t, um.runsOf("u"), "unlisted: not tracked")
+	_, err := um.Job(context.Background(), "u")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	require.NoError(t, u.Cancel())
+	u.Wait()
+
+	named := NewWorker(blockOnCancel(started), WithName("tracked-runs"))
+	t.Cleanup(func() { named.Stop() })
+	q := named.BindPriorityQueue()
+	m := memOf(t, q)
+	assert.True(t, m.listed.Load(), "listed: runs with an ID are tracked")
+	assert.False(t, named.(*workerBinder[int]).cancelWatch.Load(), "the worker's watch stays off")
+
+	ctx := context.Background()
+	run, _ := q.Add(1, 0, WithJobId("r"))
+	require.Equal(t, "r", within(t, started))
+	wait, _ := q.Add(2, 0, WithJobId("w"))
+
+	rec, err := m.Job(ctx, "r")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	rec, err = m.Job(ctx, "w")
+	require.NoError(t, err)
+	assert.Equal(t, JobPending, rec.State)
+	_, err = m.Job(ctx, "")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+
+	require.NoError(t, m.CancelJob("w"), "waiting: closed")
+	assert.True(t, wait.IsClosed())
+	assert.ErrorIs(t, m.CancelJob("w"), contract.ErrJobEnded, "closed, still in the queue")
+	require.NoError(t, m.CancelJob("r"), "running: context cancelled")
+	run.Wait()
+	assert.ErrorIs(t, m.CancelJob("r"), ErrJobNotFound, "ended jobs are not kept")
+	_, err = m.Job(ctx, "r")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+}
+
+// A job closed while it waits in a batch is tracked, skipped, and untracked.
+func TestInMemorySkippedBatchJobUntracked(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-skip"), 1)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	require.NoError(t, w.Pause())
+	q.Add(1, WithJobId("a"))
+	jb, _ := q.Add(2, WithJobId("b"))
+	require.NoError(t, w.Resume()) // one batch: b waits behind a
+	require.Equal(t, "a", within(t, started))
+	require.NoError(t, jb.Close())
+	require.NoError(t, m.CancelJob("a"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	require.NoError(t, w.WaitContext(ctx))
+
+	m.runMu.Lock()
+	assert.Empty(t, m.running)
+	assert.Empty(t, m.extra)
+	m.runMu.Unlock()
+	assert.ErrorIs(t, m.CancelJob("b"), ErrJobNotFound)
+}
+
+// Two live runs under one ID are tracked apart: the first ending leaves
+// the second readable and cancellable.
+func TestInMemoryDuplicateIDRunsTrackedApart(t *testing.T) {
+	NewServerMux()
+	started := make(chan int, 2)
+	release := make(chan struct{})
+	w := NewWorker(func(j Job[int]) {
+		started <- j.Data()
+		if j.Data() == 1 {
+			<-release
+			return
+		}
+		<-j.Context().Done()
+	}, WithName("tracked-dup"), 2)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	q.Add(1, WithJobId("d"))
+	require.Equal(t, 1, within(t, started))
+	run2, ok := q.Add(2, WithJobId("d")) // the first left the queue: allowed
+	require.True(t, ok)
+	require.Equal(t, 2, within(t, started))
+	close(release)
+	require.Eventually(t, func() bool { return len(m.runsOf("d")) == 1 }, time.Second, time.Millisecond)
+
+	rec, err := m.Job(context.Background(), "d")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	require.NoError(t, m.CancelJob("d"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	assert.NoError(t, run2.WaitContext(ctx))
+}
+
+// Without a REST mux nothing is tracked, even on a listed queue.
+func TestInMemoryUntrackedWithoutMux(t *testing.T) {
+	old := served.Load()
+	served.Store(false)
+	t.Cleanup(func() { served.Store(old) })
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("untracked-nomux"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	require.True(t, m.listed.Load())
+
+	j, _ := q.Add(1, WithJobId("n"))
+	within(t, started)
+	assert.Nil(t, m.runsOf("n"))
+	_, err := m.Job(context.Background(), "n")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	require.NoError(t, j.Cancel())
+	j.Wait()
+}
+
+// A mux built while a job runs: that run stays untracked, later runs on
+// the same worker are tracked (served is read per run, not cached).
+func TestInMemoryTrackedFromMuxOn(t *testing.T) {
+	old := served.Load()
+	served.Store(false)
+	t.Cleanup(func() { served.Store(old) })
+	started := make(chan string, 1)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-late-mux"), 2)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+	ctx := context.Background()
+
+	r1, _ := q.Add(1, WithJobId("r1"))
+	require.Equal(t, "r1", within(t, started))
+	NewServerMux()
+	_, err := m.Job(ctx, "r1")
+	assert.ErrorIs(t, err, ErrJobNotFound, "running before the mux: untracked")
+
+	r2, _ := q.Add(2, WithJobId("r2"))
+	require.Equal(t, "r2", within(t, started))
+	rec, err := m.Job(ctx, "r2")
+	require.NoError(t, err)
+	assert.Equal(t, JobProcessing, rec.State)
+	require.NoError(t, m.CancelJob("r2"))
+	r2.Wait()
+	require.NoError(t, r1.Cancel())
+	r1.Wait()
+}
+
+// Untracking any of three runs under one ID keeps the others; the last
+// leaves both maps empty.
+func TestMemQueueUntrackOrders(t *testing.T) {
+	for _, order := range [][3]int{{1, 0, 2}, {0, 1, 2}, {2, 1, 0}, {0, 2, 1}} {
+		m := &memQueue{}
+		js := []any{newJob(1, jobConfigs{}), newJob(2, jobConfigs{}), newJob(3, jobConfigs{})}
+		for _, j := range js {
+			m.track("d", j)
+		}
+		require.Len(t, m.runsOf("d"), 3)
+		for n, i := range order {
+			m.untrack("d", js[i])
+			runs := m.runsOf("d")
+			assert.Len(t, runs, 2-n, "order %v", order)
+			assert.False(t, slices.Contains(runs, js[i]), "order %v: run %d gone", order, i)
+		}
+		assert.Empty(t, m.running)
+		assert.Empty(t, m.extra)
+	}
+}
+
+// find skips values that are no memJob; CancelJob reports a run's own
+// cancel error over ErrJobEnded.
+type failingMemJob struct{ m *memQueue }
+
+func (f failingMemJob) recordOf() (string, any) { return "x", nil }
+func (failingMemJob) phase() status             { return processing }
+func (f failingMemJob) memTotals() *memQueue    { return f.m }
+func (failingMemJob) Cancel() error             { return errors.New("boom") }
+
+func TestMemQueueCancelJobOddRuns(t *testing.T) {
+	m := &memQueue{q: queues.NewQueue[any]()}
+	m.track("x", "not a job")
+	_, err := m.Job(context.Background(), "x")
+	require.ErrorIs(t, err, ErrJobNotFound)
+
+	m.track("x", failingMemJob{m})
+	require.EqualError(t, m.CancelJob("x"), "boom")
+
+	// mixed runs under one ID: a cancelled run wins, then a real error,
+	// then ErrJobEnded
+	for _, c := range []struct {
+		runs []error
+		want error
+	}{
+		{[]error{nil, errors.New("boom")}, nil},
+		{[]error{ErrJobAlreadyClosed, errors.New("boom")}, errors.New("boom")},
+		{[]error{ErrJobAlreadyClosed}, contract.ErrJobEnded},
+	} {
+		m := &memQueue{q: queues.NewQueue[any]()}
+		for _, e := range c.runs {
+			m.track("x", &cancelRun{m, e})
+		}
+		err := m.CancelJob("x")
+		switch c.want {
+		case nil:
+			assert.NoError(t, err, c.runs)
+		case contract.ErrJobEnded:
+			assert.ErrorIs(t, err, contract.ErrJobEnded, c.runs)
+		default:
+			assert.EqualError(t, err, c.want.Error(), c.runs)
+		}
+	}
+}
+
+// cancelRun is a live run whose Cancel returns err.
+type cancelRun struct {
+	m   *memQueue
+	err error
+}
+
+func (r *cancelRun) recordOf() (string, any) { return "x", nil }
+func (*cancelRun) phase() status             { return processing }
+func (r *cancelRun) memTotals() *memQueue    { return r.m }
+func (r *cancelRun) Cancel() error           { return r.err }
+
+// CancelJob reaches every live run of an ID.
+func TestInMemoryCancelReachesDuplicateRuns(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 2)
+	w := NewWorker(blockOnCancel(started), WithName("tracked-dup-cancel"), 2)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue()
+	m := memOf(t, q)
+
+	r1, _ := q.Add(1, WithJobId("d"))
+	within(t, started)
+	r2, ok := q.Add(2, WithJobId("d"))
+	require.True(t, ok)
+	within(t, started)
+	require.NoError(t, m.CancelJob("d"))
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	assert.NoError(t, r1.WaitContext(ctx))
+	assert.NoError(t, r2.WaitContext(ctx))
 }
 
 // cancelOnly can cancel by ID but reports no outcomes.
@@ -1470,4 +1735,439 @@ func TestResultMarshalPanicFailsJob(t *testing.T) {
 	}
 	assert.EqualValues(t, 1, mw.Metrics().Failed())
 	assert.EqualValues(t, 0, mw.Metrics().Successful())
+}
+
+// keptJobs is a named err worker's queue that keeps n ended jobs, once a
+// REST mux exists.
+func keptJobs(t *testing.T, name string, n int) (IErrWorkerBinder[int], ErrQueue[int], *memQueue) {
+	t.Helper()
+	NewServerMux()
+	w := NewErrWorker(func(j Job[int]) error {
+		if j.Data() < 0 {
+			return errors.New("boom")
+		}
+		return nil
+	}, WithName(name))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(n))
+	return w, q, memOf(t, q)
+}
+
+// pageIDs is the IDs of m's page of state.
+func pageIDs(t *testing.T, m *memQueue, st JobState, offset, limit int) []string {
+	t.Helper()
+	recs, err := m.Jobs(context.Background(), st, offset, limit)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, r := range recs {
+		assert.Equal(t, st, r.State)
+		ids = append(ids, r.ID)
+	}
+	return ids
+}
+
+// WithEndedJobs(2) keeps the last 2 of 3 ended jobs: completed, failed,
+// cancelled before it ran.
+func TestEndedJobsKept(t *testing.T) {
+	w, q, m := keptJobs(t, "ended-kept", 2)
+	ctx := context.Background()
+
+	a, _ := q.Add(1, WithJobId("a"))
+	require.NoError(t, a.Err())
+	b, _ := q.Add(-2, WithJobId("b"))
+	require.EqualError(t, b.Err(), "boom")
+	require.NoError(t, w.PauseAndWait())
+	c, _ := q.Add(3, WithJobId("c"))
+	require.NoError(t, m.CancelJob("c"))
+	assert.ErrorIs(t, c.Err(), ErrJobCancelled)
+
+	_, err := m.Job(ctx, "a")
+	assert.ErrorIs(t, err, ErrJobNotFound, "dropped: oldest of 3")
+	assert.ErrorIs(t, m.CancelJob("a"), ErrJobNotFound)
+
+	rb, err := m.Job(ctx, "b")
+	require.NoError(t, err)
+	assert.Positive(t, rb.FinishedAt)
+	assert.Equal(t, JobRecord{ID: "b", State: JobFailed, Payload: json.RawMessage("-2"), FinishedAt: rb.FinishedAt,
+		Attempts: 1, Errors: []JobError{{Attempt: 1, At: rb.FinishedAt, Error: "boom"}}}, rb)
+	rc, err := m.Job(ctx, "c")
+	require.NoError(t, err, "closed in the queue: read from the kept records")
+	assert.Equal(t, JobRecord{ID: "c", State: JobCancelled, Payload: json.RawMessage("3"), FinishedAt: rc.FinishedAt}, rc,
+		"never ran: no attempt, no error")
+	assert.GreaterOrEqual(t, rc.FinishedAt, rb.FinishedAt)
+
+	assert.ErrorIs(t, m.CancelJob("b"), contract.ErrJobEnded)
+	assert.ErrorIs(t, m.CancelJob("c"), contract.ErrJobEnded)
+	require.NoError(t, w.Resume())
+	require.NoError(t, w.WaitContext(ctx))
+	assert.ErrorIs(t, m.CancelJob("c"), contract.ErrJobEnded, "dropped from the queue: still kept")
+
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 0, 10))
+	assert.Equal(t, []string{"b"}, pageIDs(t, m, JobFailed, 0, 10), "cancelled jobs are listed under cancelled only")
+	assert.Equal(t, []string{"c"}, pageIDs(t, m, JobCancelled, 0, 10))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobProcessing, 0, 10))
+	s := stats(t, m)
+	assert.Equal(t, JobCounts{Failed: 1}, s.Counts, "counts: records held now")
+	assert.Equal(t, JobTotals{Submitted: 3, Completed: 1, Failed: 1}, s.Totals)
+
+	// a re-added ID: its waiting job, not the kept record
+	require.NoError(t, w.PauseAndWait())
+	q.Add(4, WithJobId("b"))
+	rb, err = m.Job(ctx, "b")
+	require.NoError(t, err)
+	assert.Equal(t, JobPending, rb.State)
+	require.NoError(t, m.CancelJob("b"), "the waiting one is cancelled")
+}
+
+// A clock step back keeps finished_at in ring order: never older than
+// the newest kept record.
+func TestEndedJobsClockBack(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-clock-back", 2)
+	future := time.Now().Add(time.Hour).UnixMilli()
+	m.endMu.Lock()
+	m.lastEnd = future
+	m.endMu.Unlock()
+	j, _ := q.Add(1, WithJobId("a"))
+	require.NoError(t, j.Err())
+	r, err := m.Job(context.Background(), "a")
+	require.NoError(t, err)
+	assert.Equal(t, future, r.FinishedAt)
+}
+
+// Pages of kept jobs are newest first, offset and limit over that state.
+func TestEndedJobsPages(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-pages", 3)
+	for i, id := range []string{"w", "x", "y", "z"} {
+		j, _ := q.Add(i, WithJobId(id))
+		require.NoError(t, j.Err())
+	}
+	j, _ := q.Add(-1) // no ID: not kept
+	require.Error(t, j.Err())
+
+	assert.Equal(t, []string{"z", "y", "x"}, pageIDs(t, m, JobCompleted, 0, 10), "the ring wrapped: w dropped")
+	assert.Equal(t, []string{"z", "y"}, pageIDs(t, m, JobCompleted, 0, 2))
+	assert.Equal(t, []string{"y", "x"}, pageIDs(t, m, JobCompleted, 1, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 3, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobFailed, 0, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, -1, 5))
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCompleted, 0, 0))
+	assert.Equal(t, JobCounts{Completed: 3}, stats(t, m).Counts)
+
+	rec, err := m.Job(context.Background(), "z")
+	require.NoError(t, err)
+	assert.Equal(t, JobRecord{ID: "z", State: JobCompleted, Payload: json.RawMessage("3"), FinishedAt: rec.FinishedAt, Attempts: 1}, rec)
+}
+
+// A job cancelled while it runs is kept cancelled, with its one attempt's
+// error; a job of an unlisted queue, or of a queue that keeps none, is not
+// kept.
+func TestEndedJobsCancelledRunAndGates(t *testing.T) {
+	NewServerMux()
+	started := make(chan string, 1)
+	w := NewWorker(func(j Job[int]) {
+		blockOnCancel(started)(j)
+		panic(j.Context().Err()) // a cancelled run that returns normally completes
+	}, WithName("ended-run"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(1))
+	m := memOf(t, q)
+	j, _ := q.Add(5, WithJobId("r"))
+	require.Equal(t, "r", within(t, started))
+	require.NoError(t, m.CancelJob("r"))
+	j.Wait()
+	rec, err := m.Job(context.Background(), "r")
+	require.NoError(t, err)
+	assert.Equal(t, JobRecord{ID: "r", State: JobCancelled, Payload: json.RawMessage("5"), FinishedAt: rec.FinishedAt,
+		Attempts: 1, Errors: []JobError{{Attempt: 1, At: rec.FinishedAt, Error: cancelReason}}}, rec)
+	assert.Equal(t, JobCounts{}, stats(t, m).Counts, "cancelled: neither completed nor failed")
+
+	unnamed := NewWorker(func(Job[int]) {})
+	t.Cleanup(func() { unnamed.Stop() })
+	uq := unnamed.BindQueue(WithEndedJobs(5))
+	u, _ := uq.Add(1, WithJobId("u"))
+	u.Wait()
+	assert.Nil(t, memOf(t, uq).ended, "unlisted: unreadable, so not kept")
+
+	named := NewWorker(func(Job[int]) {}, WithName("ended-off"))
+	t.Cleanup(func() { named.Stop() })
+	off := named.BindQueue()
+	o, _ := off.Add(1, WithJobId("o"))
+	o.Wait()
+	om := memOf(t, off)
+	assert.Nil(t, om.ended, "off by default")
+	_, err = om.Job(context.Background(), "o")
+	assert.ErrorIs(t, err, ErrJobNotFound)
+	assert.Equal(t, []string{}, pageIDs(t, om, JobCompleted, 0, 10))
+}
+
+// A result job's record holds R as JSON; a payload or result that does not
+// encode, or is over 64 KiB, is left out.
+func TestEndedJobsResultAndCaps(t *testing.T) {
+	NewServerMux()
+	big := strings.Repeat("x", 64<<10) // 64 KiB + quotes: over
+	w := NewResultWorker(func(j Job[string]) (string, error) {
+		if j.Data() == "big" {
+			return big, nil
+		}
+		return "r:" + j.Data(), nil
+	}, WithName("ended-result"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(5))
+	m := q.(*resultQueue[string, string]).totals
+	for _, d := range []string{"a", "big", big} {
+		j, _ := q.Add(d, WithJobId(d[:min(3, len(d))]))
+		_, err := j.Result()
+		require.NoError(t, err)
+	}
+	ctx := context.Background()
+	rec, err := m.Job(ctx, "a")
+	require.NoError(t, err)
+	assert.JSONEq(t, `"r:a"`, string(rec.Result))
+	assert.JSONEq(t, `"a"`, string(rec.Payload))
+	rec, err = m.Job(ctx, "big")
+	require.NoError(t, err)
+	assert.Nil(t, rec.Result, "result over 64 KiB")
+	rec, err = m.Job(ctx, "xxx")
+	require.NoError(t, err)
+	assert.Equal(t, json.RawMessage("null"), rec.Payload, "payload over 64 KiB")
+	assert.Nil(t, rec.Result)
+}
+
+// A payload that fails to encode, or panics, is null; a workflow task's
+// result over 64 KiB is left out; a job of no in-memory queue keeps nothing.
+func TestEndedJobsEncodeFailures(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{endedN: 5, q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	ctx := context.Background()
+
+	p := newJob(panicky{}, jobConfigs{Id: "p"})
+	p.countedBy(m)
+	p.succeed()
+	f := newJob(func() {}, jobConfigs{Id: "f"})
+	f.countedBy(m)
+	f.fail("bad")
+	big := newJob(1, jobConfigs{Id: "t"})
+	big.countedBy(m)
+	m.keep(big, JobCompleted, "", []byte(`"`+strings.Repeat("x", 64<<10)+`"`))
+	long := newJob(1, jobConfigs{Id: "e"})
+	long.countedBy(m)
+	long.fail(strings.Repeat("e", 64<<10+1))
+	rec, err := m.Job(ctx, "e")
+	require.NoError(t, err)
+	assert.Len(t, rec.Errors[0].Error, 64<<10, "error text capped at 64 KiB")
+
+	for id, want := range map[string]JobState{"p": JobCompleted, "f": JobFailed, "t": JobCompleted} {
+		rec, err := m.Job(ctx, id)
+		require.NoError(t, err, id)
+		assert.Equal(t, want, rec.State, id)
+		assert.Nil(t, rec.Result, id)
+		if id != "t" {
+			assert.Equal(t, json.RawMessage("null"), rec.Payload, id)
+		}
+	}
+
+	var none *memQueue
+	none.keep(p, JobCompleted, "", nil) // nil-safe: storage counts its own
+}
+
+// A workflow task on a queue that keeps ended jobs is kept: its result, or
+// failed when its store refuses the result.
+func TestEndedJobsWorkflowTask(t *testing.T) {
+	NewServerMux()
+	w := NewResultWorker(func(j Job[int]) (string, error) {
+		if j.Data() == 2 {
+			return strings.Repeat("x", 65<<10), nil
+		}
+		return "ok", nil
+	}, WithName("ended-wf"))
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(5))
+	m := q.(*resultQueue[int, string]).totals
+
+	wf := NewWorkflow(NewWorkflowStore(), WithWorkflowID("kept"))
+	a := wf.Add("a", q, 1)
+	wf.Add("b", q, 2).After(a)
+	require.NoError(t, wf.Submit(context.Background()))
+	require.Equal(t, WorkflowFailed, waitWF(t, wf).State)
+
+	ctx := context.Background()
+	rec, err := m.Job(ctx, taskJobID("kept", "a"))
+	require.NoError(t, err)
+	assert.Equal(t, JobCompleted, rec.State)
+	assert.JSONEq(t, `"ok"`, string(rec.Result))
+	rec, err = m.Job(ctx, taskJobID("kept", "b"))
+	require.NoError(t, err)
+	assert.Equal(t, JobFailed, rec.State)
+	require.Len(t, rec.Errors, 1)
+	assert.Equal(t, ErrResultTooLarge.Error(), rec.Errors[0].Error)
+	assert.Nil(t, rec.Result)
+}
+
+// Off (WithEndedJobs 0, the default), a job's end allocates nothing more:
+// keep is one field load. On, it builds a record.
+func TestEndedJobsOffAllocsNothing(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	j := newJob(1, jobConfigs{Id: "a"})
+	j.countedBy(m)
+	rj := newResultJob[int, int](1, jobConfigs{Id: "r"})
+	rj.countedBy(m)
+	end := func() {
+		j.succeed()
+		m.keep(j, JobFailed, "x", nil) // fail and endFailed: their own alloc (fail's &reason) predates keep
+		m.keep(j, JobCancelled, "", nil)
+		_ = rj.succeedResult() // R is not encoded
+	}
+	assert.Zero(t, testing.AllocsPerRun(100, end), "off")
+	m.endedN = 1
+	assert.Positive(t, testing.AllocsPerRun(100, end), "on")
+}
+
+// marshalCount counts countedR encodes.
+var marshalCount atomic.Int64
+
+type countedR struct{}
+
+func (countedR) MarshalJSON() ([]byte, error) {
+	marshalCount.Add(1)
+	return []byte("1"), nil
+}
+
+// R is encoded only for a record that is kept: not for a job without an
+// ID, nor on an unlisted queue, nor when off.
+func TestEndedJobsResultEncodedOnlyWhenKept(t *testing.T) {
+	NewServerMux()
+	run := func(t *testing.T, name string, endedN int, opts ...JobConfigFunc) {
+		t.Helper()
+		var cfg []any
+		if name != "" {
+			cfg = append(cfg, WithName(name))
+		}
+		w := NewResultWorker(func(Job[int]) (countedR, error) { return countedR{}, nil }, cfg...)
+		defer w.Stop()
+		j, _ := w.BindQueue(WithEndedJobs(endedN)).Add(1, opts...)
+		_, err := j.Result()
+		require.NoError(t, err)
+	}
+	marshalCount.Store(0)
+	run(t, "ended-enc-noid", 5)
+	run(t, "", 5, WithJobId("u"))
+	run(t, "ended-enc-off", 0, WithJobId("o"))
+	assert.Zero(t, marshalCount.Load(), "nothing kept, nothing encoded")
+	run(t, "ended-enc-kept", 5, WithJobId("k"))
+	assert.EqualValues(t, 1, marshalCount.Load(), "kept: R encoded once")
+}
+
+// Offsets count records of the asked state only; the newest record of a
+// reused ID wins.
+func TestEndedJobsMixedStates(t *testing.T) {
+	_, q, m := keptJobs(t, "ended-mixed", 10)
+	for _, d := range []struct {
+		id string
+		v  int
+	}{{"c1", 1}, {"f1", -1}, {"c2", 2}, {"f2", -2}, {"c3", 3}} {
+		j, _ := q.Add(d.v, WithJobId(d.id))
+		j.Wait()
+	}
+	assert.Equal(t, []string{"c2", "c1"}, pageIDs(t, m, JobCompleted, 1, 10))
+	assert.Equal(t, []string{"f1"}, pageIDs(t, m, JobFailed, 1, 10))
+	assert.Equal(t, []string{"c1"}, pageIDs(t, m, JobCompleted, 2, 1))
+
+	ok, _ := q.Add(1, WithJobId("x"))
+	ok.Wait()
+	bad, _ := q.Add(-1, WithJobId("x"))
+	bad.Wait()
+	rec, err := m.Job(context.Background(), "x")
+	require.NoError(t, err)
+	assert.Equal(t, JobFailed, rec.State, "newest record of x")
+}
+
+// A job closed or purged while it waits is not kept: not cancelled by ID.
+func TestEndedJobsCloseAndPurgeNotKept(t *testing.T) {
+	w, q, m := keptJobs(t, "ended-close", 10)
+	require.NoError(t, w.PauseAndWait())
+	cl, _ := q.Add(1, WithJobId("cl"))
+	require.NoError(t, cl.Close())
+	q.Add(2, WithJobId("pu"))
+	q.Purge()
+	require.NoError(t, w.Resume())
+	require.NoError(t, w.WaitContext(context.Background()))
+	for _, id := range []string{"cl", "pu"} {
+		_, err := m.Job(context.Background(), id)
+		assert.ErrorIs(t, err, ErrJobNotFound, id)
+	}
+	assert.Equal(t, []string{}, pageIDs(t, m, JobCancelled, 0, 10))
+}
+
+// Payload and result are kept up to exactly 64 KiB of JSON.
+func TestEndedJobsCapBoundaries(t *testing.T) {
+	NewServerMux()
+	m := &memQueue{endedN: 5, q: queues.NewQueue[any]()}
+	m.ref.totals = m
+	m.listed.Store(true)
+	ctx := context.Background()
+	for id, n := range map[string]int{"in": 64<<10 - 2, "out": 64<<10 - 1} { // + 2 quotes
+		j := newJob(strings.Repeat("x", n), jobConfigs{Id: id})
+		j.countedBy(m)
+		m.keep(j, JobCompleted, "", []byte(strings.Repeat("1", n+2)))
+	}
+	in, err := m.Job(ctx, "in")
+	require.NoError(t, err)
+	assert.Len(t, in.Payload, 64<<10)
+	assert.Len(t, in.Result, 64<<10)
+	out, err := m.Job(ctx, "out")
+	require.NoError(t, err)
+	assert.Equal(t, json.RawMessage("null"), out.Payload)
+	assert.Nil(t, out.Result)
+}
+
+// Records are written while pages, reads and stats run: endMu guards the
+// ring (go test -race).
+func TestEndedJobsConcurrent(t *testing.T) {
+	NewServerMux()
+	w := NewErrWorker(func(j Job[int]) error {
+		if j.Data()%3 == 0 {
+			return errors.New("boom")
+		}
+		return nil
+	}, WithName("ended-concurrent"), 8)
+	t.Cleanup(func() { w.Stop() })
+	q := w.BindQueue(WithEndedJobs(16))
+	m := memOf(t, q)
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	for range 3 {
+		readers.Go(func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				for _, st := range []JobState{JobCompleted, JobFailed, JobCancelled} {
+					recs, err := m.Jobs(ctx, st, 0, 16)
+					assert.NoError(t, err)
+					for i := 1; i < len(recs); i++ {
+						assert.LessOrEqual(t, recs[i].FinishedAt, recs[i-1].FinishedAt, "newest first")
+					}
+				}
+				_, _ = m.Job(ctx, "7")
+				_ = m.CancelJob("8")
+				_ = stats(t, m)
+			}
+		})
+	}
+	for i := range 500 {
+		q.Add(i, WithJobId(strconv.Itoa(i)))
+	}
+	require.NoError(t, w.WaitContext(ctx))
+	close(done)
+	readers.Wait()
+	assert.Len(t, m.ended, 16)
 }

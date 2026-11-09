@@ -32,7 +32,7 @@ func (w *worker[T, JobType]) Start() error {
 		// listed only while still ours: a Start of another worker under the
 		// name may have dropped ours already
 		if v, _ := WorkerRegistry.Load(name); v == any(w) {
-			w.memQueues.Range(func(_, m any) bool { registerQueue(m); return true })
+			w.memQueues.Range(func(_, m any) bool { listMem(m.(*memQueue)); return true })
 		}
 		w.memMx.Unlock()
 	}
@@ -143,7 +143,7 @@ func (w *worker[T, JobType]) addMemQueue(m *memQueue) {
 
 	w.memQueues.Store(m.id, m)
 	if v, ok := WorkerRegistry.Load(w.Name()); ok && v == any(w) {
-		registerQueue(m)
+		listMem(m)
 	}
 }
 

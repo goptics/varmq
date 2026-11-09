@@ -178,8 +178,7 @@ type iJob[T any] interface {
 	endTask(o Outcome, reason string, result []byte) *jobAck
 	fail(reason string)
 	succeed()
-	memTotals() *memQueue
-	Cancel() error
+	memJob // so find reads every run kind
 	ackStorage() any
 	endRun()
 	endFailed(err error) error
@@ -300,6 +299,7 @@ func (j *job[T]) fail(reason string) {
 
 	if ref != nil && ref.totals != nil {
 		ref.totals.failed.Add(1)
+		ref.totals.keep(j, JobFailed, reason, nil)
 	}
 }
 
@@ -307,7 +307,8 @@ func (j *job[T]) fail(reason string) {
 // finishes a workflow task completed, with no result.
 func (j *job[T]) succeed() { j.succeedWith(nil) }
 
-// succeedWith is succeed with the task's Result. A result its in-memory
+// succeedWith is succeed with the task's Result (or a plain result job's
+// R, for its in-memory queue's kept record only). A result its in-memory
 // store refuses (too large) counts failed, as the store ends the task.
 func (j *job[T]) succeedWith(result []byte) {
 	ref := j.endTask(OutcomeCompleted, "", result)
@@ -315,8 +316,10 @@ func (j *job[T]) succeedWith(result []byte) {
 	case ref == nil || ref.totals == nil:
 	case ref.ext != nil && ref.ext.task != nil && ref.ext.task.tooLarge(result):
 		ref.totals.failed.Add(1)
+		ref.totals.keep(j, JobFailed, ErrResultTooLarge.Error(), nil)
 	default:
 		ref.totals.completed.Add(1)
+		ref.totals.keep(j, JobCompleted, "", result)
 	}
 }
 
@@ -364,6 +367,9 @@ func (j *job[T]) Status() string {
 		return "Unknown"
 	}
 }
+
+// phase is the job's status value.
+func (j *job[T]) phase() status { return j.status.Load() }
 
 // IsClosed returns true if the job has been closed.
 func (j *job[T]) IsClosed() bool {
@@ -790,7 +796,11 @@ func (rj *resultJob[T, R]) succeedResult() error {
 		if err := rj.keepResult(); err != nil {
 			return err
 		}
-		rj.succeedWith(nil)
+		var kept []byte // R for an in-memory queue that keeps ended jobs
+		if rj.memTotals().keeps(rj.id) {
+			kept = endedJSON(rj.data)
+		}
+		rj.succeedWith(kept)
 		return nil
 	}
 	if t.undo {

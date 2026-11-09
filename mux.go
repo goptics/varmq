@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"weak"
+
+	"github.com/goptics/varmq/contract"
 )
 
 // WorkerRegistry safely stores reference to all active workers by Name
@@ -109,6 +111,26 @@ type workerSummary struct {
 	NumProcessing  int    `json:"num_processing"`
 	NumPending     int    `json:"num_pending"`
 	NumIdleWorkers int    `json:"num_idle_workers"`
+	// QueueIDs are the GET /queues IDs of the queues the worker consumes,
+	// in-memory ones too, sorted. Empty when it binds none with an ID.
+	QueueIDs []string `json:"queue_ids"`
+}
+
+// summarizeWorker is w's workerSummary.
+func summarizeWorker(w Worker) workerSummary {
+	s := workerSummary{
+		Name:           w.Name(),
+		Status:         w.Status(),
+		Concurrency:    w.NumConcurrency(),
+		NumProcessing:  w.NumProcessing(),
+		NumPending:     w.NumPending(),
+		NumIdleWorkers: w.NumIdleWorkers(),
+		QueueIDs:       []string{},
+	}
+	if q, ok := w.(interface{ listedQueueIDs() []string }); ok {
+		s.QueueIDs = q.listedQueueIDs()
+	}
+	return s
 }
 
 // Handler returns an [http.Handler] that serves the varmq REST API
@@ -126,7 +148,11 @@ type workerSummary struct {
 // The PATCH routes change state and have no auth: protect Handler. The
 // worker routes act on this process only, but PATCH /queues/{id}/actions
 // pauses a shared queue for every process that consumes it, and the pause
-// outlives restarts.
+// outlives restarts. PATCH /queues/{id}/jobs/{jobId}/actions/cancel on
+// shared storage also reaches every consumer process: it marks the ID for
+// 24 h (until a re-add of the ID clears it) and answers 202 for any ID with
+// no ended record, known or not; a retained ended job answers 409. A waiting
+// workflow task there answers 202 but still runs: cancel its workflow.
 func Handler(prefix string) http.Handler {
 	mux := http.StripPrefix(prefix, NewServerMux())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +165,7 @@ func Handler(prefix string) http.Handler {
 // The returned mux has no path prefix, so it can be used directly or mounted
 // under any prefix using [Handler].
 func NewServerMux() *http.ServeMux {
+	served.Store(true) // in-memory runs are tracked for the job routes from now on
 	mux := http.NewServeMux()
 	// GET /health
 	mux.HandleFunc("GET /health", handleHealthCheck)
@@ -157,6 +184,10 @@ func NewServerMux() *http.ServeMux {
 	mux.HandleFunc("GET /queues", handleListQueues)
 	// GET /queues/{id}/jobs?state=...&offset=...&limit=...
 	mux.HandleFunc("GET /queues/{id}/jobs", handleListJobs)
+	// GET /queues/{id}/jobs/{jobId}
+	mux.HandleFunc("GET /queues/{id}/jobs/{jobId}", handleGetJob)
+	// PATCH /queues/{id}/jobs/{jobId}/actions/{action}
+	mux.HandleFunc("PATCH /queues/{id}/jobs/{jobId}/actions/{action}", handleJobAction)
 	// PATCH /queues/{id}/actions/{action}
 	mux.HandleFunc("PATCH /queues/{id}/actions/{action}", handleQueueAction)
 
@@ -181,14 +212,7 @@ func handleListWorkers(w http.ResponseWriter, r *http.Request) {
 
 	WorkerRegistry.Range(func(key, value any) bool {
 		if worker, ok := value.(Worker); ok {
-			workers = append(workers, workerSummary{
-				Name:           worker.Name(),
-				Status:         worker.Status(),
-				Concurrency:    worker.NumConcurrency(),
-				NumProcessing:  worker.NumProcessing(),
-				NumPending:     worker.NumPending(),
-				NumIdleWorkers: worker.NumIdleWorkers(),
-			})
+			workers = append(workers, summarizeWorker(worker))
 		}
 
 		return true // continue iteration
@@ -228,14 +252,7 @@ func handleGetWorker(w http.ResponseWriter, r *http.Request) {
 			Failed     uint64 `json:"failed"`
 		} `json:"metrics"`
 	}{
-		workerSummary: workerSummary{
-			Name:           worker.Name(),
-			Status:         worker.Status(),
-			Concurrency:    worker.NumConcurrency(),
-			NumProcessing:  worker.NumProcessing(),
-			NumPending:     worker.NumPending(),
-			NumIdleWorkers: worker.NumIdleWorkers(),
-		},
+		workerSummary: summarizeWorker(worker),
 	}
 
 	details.Metrics.Completed = metrics.Completed()
@@ -369,9 +386,9 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	state := JobState(query.Get("state"))
 	switch state {
-	case JobPending, JobProcessing, JobCompleted, JobFailed:
+	case JobPending, JobProcessing, JobCompleted, JobFailed, JobCancelled:
 	default:
-		writeError(w, http.StatusBadRequest, "state must be pending, processing, completed or failed")
+		writeError(w, http.StatusBadRequest, "state must be pending, processing, completed, failed or cancelled")
 		return
 	}
 
@@ -387,7 +404,15 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, err := v.(QueueInspector).Jobs(r.Context(), state, offset, limit)
+	qi := v.(QueueInspector)
+	jobs, err := qi.Jobs(r.Context(), state, offset, limit)
+	if err != nil && state == JobCancelled {
+		// Storage older than openapi 1.4.0 rejects the state: an empty
+		// page, if it still answers a failed page.
+		if _, ferr := qi.Jobs(r.Context(), JobFailed, 0, 1); ferr == nil {
+			jobs, err = nil, nil
+		}
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -396,8 +421,77 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 	if jobs == nil {
 		jobs = []JobRecord{}
 	}
+	// Pages carry the size only: up to maxJobsLimit results of 64 KiB.
+	for i := range jobs {
+		if n := len(jobs[i].Result); n > 0 {
+			jobs[i].ResultSize, jobs[i].Result = n, nil
+		}
+	}
 
 	writeJSON(w, http.StatusOK, jobs)
+}
+
+// handleGetJob returns one job of a queue whose storage reads jobs by ID
+// (JobReader).
+func handleGetJob(w http.ResponseWriter, r *http.Request) {
+	v, ok := queueRegistry.Load(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "queue not found")
+		return
+	}
+
+	jr, ok := v.(JobReader)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "storage can't read a job by id")
+		return
+	}
+
+	rec, err := jr.Job(r.Context(), r.PathValue("jobId"))
+	switch {
+	case errors.Is(err, ErrJobNotFound):
+		writeError(w, http.StatusNotFound, "job not found")
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	default:
+		rec.ResultSize = 0 // list pages only; a reader may fill both
+		writeJSON(w, http.StatusOK, rec)
+	}
+}
+
+// handleJobAction cancels a job by ID (JobCanceller). 202: a waiting job
+// never runs; a running one stops only if its worker watches Context().
+// Exception: a waiting workflow task on shared storage still runs; PATCH
+// /workflows/{id}/actions/cancel stops it.
+func handleJobAction(w http.ResponseWriter, r *http.Request) {
+	v, ok := queueRegistry.Load(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "queue not found")
+		return
+	}
+
+	if r.PathValue("action") != "cancel" {
+		writeError(w, http.StatusBadRequest, "unknown action")
+		return
+	}
+
+	jc, ok := v.(JobCanceller)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, ErrCancelUnsupported.Error())
+		return
+	}
+
+	err := jc.CancelJob(r.PathValue("jobId"))
+	switch {
+	case errors.Is(err, ErrJobNotFound):
+		writeError(w, http.StatusNotFound, "job not found")
+	case errors.Is(err, contract.ErrJobEnded), errors.Is(err, ErrJobAlreadyClosed):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+	default:
+		w.Header().Set(InstanceHeader, InstanceID)
+		w.WriteHeader(http.StatusAccepted)
+	}
 }
 
 // workflowStates are the states GET /workflows filters by.

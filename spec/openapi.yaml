@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: varmq HTTP API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,11 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.4.0: `GET /queues/{id}/jobs/{jobId}` reads one job and
+      `PATCH /queues/{id}/jobs/{jobId}/actions/cancel` cancels one; `Job`
+      gains `result` (one-job read only) and `result_size` (list pages);
+      `cancelled` joins `JobState` and is listable.
+      Additive.
     - 1.3.0: `GET /workflows`, `GET /workflows/{id}` and
       `PATCH /workflows/{id}/actions/cancel` read and cancel workflows
       (task DAGs over queues). Additive.
@@ -146,10 +151,11 @@ paths:
         A queue is listed when its storage can report shared counts (in Go,
         it implements `varmq.QueueInspector`), once per Queue ID however many
         workers bind it. Since 1.1.0 in-memory queues of listed (named)
-        workers are listed too, under `memory:<instance>:<n>`: this
-        process's counts only; they keep no
-        finished jobs, so `counts.completed` and `counts.failed` are 0 and
-        their `completed` and `failed` pages are empty. Other queues whose
+        workers are listed too, under `memory:<instance>:fifo|prio:<n>`: this
+        process's counts only. By default they keep no finished jobs, so
+        `counts.completed` and `counts.failed` are 0 and their `completed`
+        and `failed` pages are empty; one bound with `WithEndedJobs(n)`
+        counts the records it holds (see `listJobs`). Other queues whose
         storage cannot report are left out. Entries are sorted by `id`.
       responses:
         "200":
@@ -236,10 +242,39 @@ paths:
       summary: One page of a queue's jobs in one Job State.
       description: |
         Order: `pending` in the order the queue hands jobs out (priority
-        first for a priority queue); `completed` and `failed` newest
-        `finished_at` first; `processing` unspecified. Pages are read
+        first for a priority queue); `completed`, `failed` and `cancelled`
+        newest `finished_at` first; `processing` unspecified. Pages are read
         separately, so jobs that change state between two requests can be
         skipped or repeated.
+
+        An in-memory queue lists only waiting jobs added through it (another
+        queue on the same storage lists its own, as the job routes do): one
+        closed while it waits, or started by the end of its read, is left
+        out, `offset`
+        counts waiting jobs only, and a page fills up to `limit`, so a
+        short page means the end. A job that starts while its data is being
+        read can be read while its worker writes `Data()`: don't mutate
+        `Data()` in place if you use the job routes.
+
+        `cancelled` since 1.4.0. Storage that keeps cancelled records with
+        its failed ones (redisq, spec redis-storage.md 6.14) lists them under
+        `failed` too, with `state` `cancelled`; storage that keeps none
+        returns an empty page.
+
+        An in-memory queue keeps no ended jobs by default: its `completed`,
+        `failed` and `cancelled` pages are empty. Bound with
+        `WithEndedJobs(n)` (n up to 200), it keeps the records of its last n
+        ended jobs with an ID, all states in one ring, oldest dropped, while
+        its worker is listed and the REST handler exists. It lists each
+        under its own state only: `failed` leaves cancelled jobs out.
+        Records carry `payload` (null over 64 KiB or when it does not
+        encode), `finished_at`, `attempts` (0 for a job cancelled before it
+        ran, else 1), the error (cut at 64 KiB), and a result job's result
+        (left out over 64 KiB; none for a group member): this page carries
+        its `result_size`, the one-job read its `result`; no `enqueued_at`
+        or `started_at`.
+        Cancelled means cancelled by ID or `Cancel`: a job closed or purged
+        while it waits, or a task its cancelled workflow skips, is not kept.
       responses:
         "200":
           description: The jobs; an empty array past the end.
@@ -259,6 +294,138 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404": { $ref: "#/components/responses/QueueNotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
+
+  /queues/{id}/jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/QueueID"
+      - $ref: "#/components/parameters/JobID"
+    get:
+      operationId: getJob
+      summary: One job of a queue, by Job ID.
+      description: |
+        Since 1.4.0. Served when the queue's storage reads one job (in Go,
+        its `QueueInspector` is also a `varmq.JobReader`); else 501. An
+        in-memory queue finds a waiting job (`pending`) or a running one
+        (`processing`, `attempts` 1, no times, `payload` null: its worker
+        may change the data while it runs), else its newest kept ended
+        record (see `listJobs`: none by default). Without one, a job that
+        completed, failed or was cancelled is 404, and so is a job without
+        an ID, and one cancelled or closed while it waits. A
+        waiting job's data is read without stopping it from starting: a job
+        that starts while its data is being read can be read while its
+        worker writes `Data()`, so don't mutate `Data()` in place if you use
+        the job routes (the pending page has the same window). A job that
+        started during the read is answered `processing`, one closed or
+        ended then is 404. A job a worker took into a batch behind a running job is in
+        neither place until it starts, however long the job ahead runs:
+        404 for both routes, and it still runs; so is one parked by a worker
+        Pause or Stop. Running jobs are tracked from when the process builds
+        its REST handler and the queue's worker is listed (started under its
+        name); one already running then is 404 until it ends.
+      responses:
+        "200":
+          description: The job.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404":
+          description: No queue with this ID (`queue not found`), or no job with this ID in it (`job not found`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "501":
+          description: "The queue's storage cannot read one job (`storage can't read a job by id`)."
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /queues/{id}/jobs/{jobId}/actions/{action}:
+    parameters:
+      - $ref: "#/components/parameters/QueueID"
+      - $ref: "#/components/parameters/JobID"
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [cancel]
+    patch:
+      operationId: jobAction
+      summary: Cancel a job, waiting or running.
+      description: |
+        Since 1.4.0. Cooperative: a waiting job never runs; a running job
+        has its context cancelled and stops only if its worker watches it
+        (in Go, `Job.Context()`), else it finishes as usual. The reply comes
+        when the request is made, not when the job ends: read the job (or
+        its queue's `cancelled` page) to see how it ended. That is why it is
+        202 with no body, while a workflow cancel is 200 with the record:
+        a workflow's state changes in the request's own step, a job's end
+        comes later, in whichever process runs it.
+
+        Shared storage (in Go, a `varmq.JobCanceller`) marks the ID for 24 h
+        and tells every process that consumes the queue (spec
+        redis-storage.md 6.14). It cannot tell a waiting job from an unknown
+        ID, so an unknown ID is 202 there; only an in-memory queue answers
+        404. A waiting workflow task on shared storage answers 202 but still
+        runs: stop it with `PATCH /workflows/{id}/actions/cancel`. Protect
+        it at least as well as the worker routes, and rate-limit untrusted
+        callers.
+      responses:
+        "202":
+          description: Cancel requested. The body is empty.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+        "400":
+          description: Unknown action (`unknown action`).
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: |
+            No queue with this ID (`queue not found`), or, for an in-memory
+            queue, no waiting, running or kept job with this ID (`job not found`):
+            as for `GET`, a job taken into a batch behind a running job, or
+            parked by a worker Pause or Stop, is 404 and still runs.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: |
+            The job already ended: completed, failed or cancelled
+            (`varmq: job already ended`). For an in-memory queue: a job
+            cancelled or closed that still waits in the queue, or one with
+            a kept ended record (`listJobs`); else, once a worker drops
+            it, it is 404.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "501":
+          description: "The queue's storage cannot cancel jobs by ID (`varmq: storage can't cancel jobs`)."
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: The storage could not store the request; `error` holds why.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /workflows:
     get:
@@ -403,6 +570,19 @@ components:
         `redisq:fifo:{orders}` as `redisq:fifo:%7Borders%7D`.
       schema: { type: string }
 
+    JobID:
+      name: jobId
+      in: path
+      required: true
+      description: |
+        The Job ID (`Job.id`), percent-encoded as one path segment. A
+        client encodes the IDs `.` and `..` as `%2E` and `%2E%2E`: sent
+        as is, the path is cleaned and the request redirected (307) to
+        another route. A browser's URL parser (fetch, links) drops `%2E`
+        and `%2E%2E` segments as it does `.` and `..`, so a browser can't
+        address these IDs; a server-side client (Go's net/http) can.
+      schema: { type: string }
+
     WorkflowID:
       name: id
       in: path
@@ -500,6 +680,15 @@ components:
             Jobs waiting in the worker's bound queues, as their `Len` reports
             it. For shared storage this includes jobs other processes added.
         num_idle_workers: { type: integer, description: Pool goroutines waiting for a job. }
+        queue_ids:
+          type: array
+          items: { type: string }
+          description: |
+            Since 1.4.0. The `GET /queues` IDs of the queues the worker
+            consumes, sorted: shared storage with a Queue ID and the worker's
+            in-memory queues (`memory:<instance>:fifo|prio:<n>`, readable on this
+            process only). Empty when it binds none with an ID. Absent from
+            older servers.
 
     WorkerDetails:
       allOf:
@@ -525,11 +714,12 @@ components:
         Where a job is in its life. `pending`: in the queue, not handed out.
         `processing`: handed out to a worker, no outcome yet. `completed`:
         acknowledged. `failed`: rejected, that is failed for the last time,
-        with no retry.
+        with no retry. `cancelled` (since 1.4.0): cancelled before or while
+        it ran, never retried.
 
         A client MUST accept a value it does not know and show it as it is.
-        Later versions can add states; `cancelled` is reserved.
-      enum: [pending, processing, completed, failed]
+        Later versions can add states.
+      enum: [pending, processing, completed, failed, cancelled]
 
     QueueSummary:
       type: object
@@ -545,16 +735,24 @@ components:
       properties:
         id:
           type: string
-          description: The Queue ID, the same on every instance for shared storage; for redisq, the queue's full Redis key; `memory:<instance>:<n>` for an in-memory queue, unique to its process.
+          description: The Queue ID, the same on every instance for shared storage; for redisq, the queue's full Redis key; `memory:<instance>:fifo|prio:<n>` for an in-memory queue, unique to its process.
         counts:
           type: object
           description: |
             Jobs the queue holds in each state now. `completed` and `failed`
             count the Job Records storage still keeps, which retention bounds,
-            not every job that ever finished.
+            not every job that ever finished. An in-memory queue counts its
+            kept records (`listJobs`; 0 by default), cancelled ones in
+            neither.
           required: [pending, processing, completed, failed]
           properties:
-            pending: { type: integer, minimum: 0 }
+            pending:
+              type: integer
+              minimum: 0
+              description: |
+                Jobs in the queue. An in-memory queue also counts jobs
+                cancelled or closed while they wait, until a worker drops
+                them, so it can be above the `pending` page's length.
             processing: { type: integer, minimum: 0 }
             completed: { type: integer, minimum: 0 }
             failed: { type: integer, minimum: 0 }
@@ -609,7 +807,7 @@ components:
           description: Unix milliseconds the last attempt started. Absent before the first.
         finished_at:
           type: integer
-          description: Unix milliseconds the job completed or failed. Only on completed and failed jobs.
+          description: Unix milliseconds the job completed, failed or was cancelled. Only on ended jobs.
         attempts:
           type: integer
           minimum: 0
@@ -621,6 +819,17 @@ components:
             The job's failed attempts, oldest first; the last is its final
             error. At most the last 10. Absent when no attempt failed.
           items: { $ref: "#/components/schemas/JobError" }
+        result:
+          description: |
+            Since 1.4.0. The JSON a result worker returned, verbatim, on a
+            completed job whose storage keeps it (spec redis-storage.md 6.13).
+            Only from `GET /queues/{id}/jobs/{jobId}`; list pages carry
+            `result_size` instead. Absent otherwise.
+        result_size:
+          type: integer
+          description: |
+            Since 1.4.0, on list pages only: bytes of the stored result,
+            which the page leaves out. Absent when none.
 
     JobError:
       type: object
