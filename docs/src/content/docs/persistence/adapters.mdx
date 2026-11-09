@@ -142,7 +142,7 @@ Each interface below adds one feature. VarMQ checks for it on the storage value,
 | [`CancelAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#CancelAcknowledgeable) | `AcknowledgeCancelled(ackID, reason string) bool` | a cancelled job is recorded as cancelled. Without it, VarMQ calls `Reject`. |
 | [`QueueInspector`](https://pkg.go.dev/github.com/goptics/varmq#QueueInspector) | `QueueID()`, `QueueStats(ctx)`, `Jobs(ctx, state, offset, limit)` | the queue's counts and job records, for [`GET /queues`](/operations/rest-api/#queues-and-jobs). |
 | [`JobReader`](https://pkg.go.dev/github.com/goptics/varmq#JobReader) | `Job(ctx, id) (JobRecord, error)` | the REST route that reads one job. Without it, the route answers 501. |
-| [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable) | `WorkflowStore()`, `FinishTask(ackID, end)`, `ScopeID()` | [workflow](/guides/workflows/) tasks on this storage. It needs `QueueInspector` too, and a `WorkflowStore()` that is not `nil`. |
+| [`Scoped`](https://pkg.go.dev/github.com/goptics/varmq#Scoped) | `ScopeID()` | [workflow](/guides/workflows/) tasks on this storage, with `QueueInspector`. A worker finds the workflow store by this scope. |
 | [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector) | `Workflows(ctx, state, offset, limit)`, `ScopeID()` | on a workflow store: the store's workflows in [`GET /workflows`](/operations/rest-api/#workflows). |
 | [`InstanceRegistry`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRegistry) | `ReportInstance`, `RemoveInstance`, `Instances` | a record of each process, its workers and their queues, for dashboards. VarMQ supplies the record. |
 
@@ -150,8 +150,8 @@ The types these methods use are in the `contract` module too.
 
 - **Outcomes:** `WatchOutcome` reports a [`JobOutcome`](https://pkg.go.dev/github.com/goptics/varmq#JobOutcome).
 - **Instances:** a record is an [`InstanceRecord`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRecord), with one [`InstanceWorker`](https://pkg.go.dev/github.com/goptics/varmq#InstanceWorker) per worker.
-- **Scopes:** `ScopeID` comes from [`Scoped`](https://pkg.go.dev/github.com/goptics/varmq#Scoped). Stores and queues with the same scope can share workflows.
-- **Workflows:** `Submit` takes a [`WorkflowPlan`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowPlan), with a [`TaskPlan`](https://pkg.go.dev/github.com/goptics/varmq#TaskPlan) per task and an [`UndoPlan`](https://pkg.go.dev/github.com/goptics/varmq#UndoPlan) per undo job. `FinishTask` takes a [`TaskEnd`](https://pkg.go.dev/github.com/goptics/varmq#TaskEnd). Its [`Outcome`](https://pkg.go.dev/github.com/goptics/varmq#Outcome) is [`OutcomeCompleted`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCompleted), [`OutcomeFailed`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeFailed) or [`OutcomeCancelled`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCancelled).
+- **Scopes:** a queue and a workflow store with the same `ScopeID` belong together. The adapter's store constructor registers the store with `contract.RegisterWorkflowStore`, one store per scope in a process. VarMQ finds it with `contract.LookupWorkflowStore`. The store must be a pointer, and its `Close` must call `contract.UnregisterWorkflowStore`.
+- **Workflows:** `Submit` takes a [`WorkflowPlan`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowPlan), with a [`TaskPlan`](https://pkg.go.dev/github.com/goptics/varmq#TaskPlan) per task and an [`UndoPlan`](https://pkg.go.dev/github.com/goptics/varmq#UndoPlan) per undo job. The store's `FinishTask` takes the queue ID, the acknowledgement ID and a [`TaskEnd`](https://pkg.go.dev/github.com/goptics/varmq#TaskEnd). Its [`Outcome`](https://pkg.go.dev/github.com/goptics/varmq#Outcome) is [`OutcomeCompleted`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCompleted), [`OutcomeFailed`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeFailed) or [`OutcomeCancelled`](https://pkg.go.dev/github.com/goptics/varmq#OutcomeCancelled).
 - **Listing workflows:** a store that implements [`WorkflowKeyLister`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowKeyLister) lists [`WorkflowKey`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowKey) values. Then `GET /workflows` reads a full record only for the workflows on its page.
 
 <details>
@@ -167,7 +167,7 @@ The rest of the interfaces are not for adapters to implement. They describe what
 
 ### [`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue)
 
-[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge`, `Close`, `Pause`, `Resume` and `IsPaused`. It also has a deprecated `NumPending` that does what `Len` does. The handles a worker binds also have `Worker()`, and a producer handle from `NewQueue` does not. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
+[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge`, `Close`, `Pause`, `Resume` and `IsPaused`. The handles a worker binds also have `Worker()`, and a producer handle from `NewQueue` does not. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
 
 ### Job interfaces
 
@@ -199,7 +199,7 @@ The table is for redisq v1.6.0 and sqliteq v0.4.0. [Installation](/start/install
 | `JobCanceller`, `CancelNotifier`, `CancelAcknowledgeable` | yes | yes |
 | `QueueInspector` | yes | yes |
 | `JobReader` | no | no |
-| `WorkflowAcknowledgeable` | yes | no |
+| `Scoped`, and a workflow store (`NewWorkflowStore`) | yes | yes |
 | `InstanceRegistry` | yes, on its `Queues` value | no |
 | `CapacitySetter`, `IPurgeValuesQueue` | no | no |
 
