@@ -45,7 +45,7 @@ export const BASE: NodeDef = {
 	methods: ['Len() int', 'Dequeue() (any, bool)', 'Values() []any', 'Purge()', 'Close() error'],
 	adds: 'The root of every queue. Every queue you give to VarMQ has these five methods.',
 	worker: [
-		'Len: whenever it decides whether there is work. On a persistent or distributed queue each call is a call to the storage.',
+		'Len: whenever it decides whether there is work. On shared storage each call is a call to the storage.',
 		'Dequeue: once for each job it takes from a queue that does not acknowledge.',
 		'Values and Purge: when you call Purge on the handle. Close: when you call Close on the handle.',
 	],

@@ -74,6 +74,8 @@ It succeeds while the job waits. It fails in two cases:
 - A running job returns [`ErrJobProcessing`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobProcessing). To stop a running job, [cancel it](#cancelling-a-job).
 - A closed job returns [`ErrJobAlreadyClosed`](https://pkg.go.dev/github.com/goptics/varmq#ErrJobAlreadyClosed). That includes a job that already ran, since the worker closes those too.
 
+On shared storage, `Close` only stops this handle from waiting. It returns `nil`, `Err` then returns `ErrDetached`, and the job still runs.
+
 Until the worker reaches it, a job closed while it waited still counts in the queue's `Len()` and in the worker's `NumPending()`. Because it never ran, it never counts as completed.
 
 Here job-1 is running and job-2 and job-3 wait behind it.
@@ -107,17 +109,17 @@ job.Cancel()
 fmt.Println(job.Err()) // varmq: job cancelled
 ```
 
-On shared storage, `Cancel` reaches the job in whichever process holds it. The storage must support it. Without that support, `Cancel` returns [`ErrCancelUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrCancelUnsupported). The [REST API](/operations/rest-api/#queues-and-jobs) can cancel a job by its ID too.
+On shared storage, `Cancel` reaches the job in whichever process holds it. A waiting [workflow](/guides/workflows/#cancelling-a-workflow) task is the exception: cancel its workflow. The storage must support it. Without that support, `Cancel` returns [`ErrCancelUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrCancelUnsupported). The [REST API](/operations/rest-api/#queues-and-jobs) can cancel a job by its ID too.
 
 ## Jobs in other processes
 
-On shared storage such as Redis or SQLite, another process can run the job. The handle that `Add` returns still learns how the job ended, if the storage reports outcomes. A producer that runs no worker gets the same handle from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue).
+On shared storage such as Redis or SQLite, another process can run the job. The handle that `Add` returns still learns how the job ended, if the storage reports outcomes. A producer that runs no worker gets the same handles from [`NewQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewQueue), [`NewErrQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewErrQueue) or [`NewResultQueue`](https://pkg.go.dev/github.com/goptics/varmq#NewResultQueue).
 
 - **`Err`** returns `nil` for a completed job. For a failed job it returns a [`*RemoteError`](https://pkg.go.dev/github.com/goptics/varmq#RemoteError). It holds only the error text, so `errors.Is` does not match your own error values.
 - **`Result`** decodes the result from JSON. It returns [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) when the storage kept no result, for example a result over 64 KiB.
 - **[`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached)** means this handle cannot learn the outcome. The storage does not report outcomes, or you called `Close` on the handle. The job itself still runs.
 
-A job on such storage always has an ID: when you give none, VarMQ makes a random one. To wait on a job from a process that did not add it, use [`OpenJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenJob), [`OpenErrJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenErrJob) or [`OpenResultJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenResultJob) with that ID. The storage finds a job that already ended while it keeps the job's record. [Persistence](/persistence/overview/) says which storage supports this.
+A job on storage that reports outcomes or cancels jobs always has an ID: when you give none, VarMQ makes a random one. To wait on a job from a process that did not add it, use [`OpenJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenJob), [`OpenErrJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenErrJob) or [`OpenResultJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenResultJob) with that ID. The storage finds a job that already ended while it keeps the job's record. [Persistence](/persistence/overview/) says which storage supports this.
 
 ## Waiting on a job
 

@@ -102,8 +102,8 @@ The next two sections list every exported error, grouped by how you receive them
 | [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) | `varmq: task has no result` | `TaskContext.Result` for a name that is not a dependency, or a dependency with no result. `Result()` of a job on shared storage that kept no result. |
 | [`ErrDepFailed`](https://pkg.go.dev/github.com/goptics/varmq#ErrDepFailed) | `varmq: dependency failed` | `TaskContext.Result` for a dependency that failed or was cancelled. |
 | [`ErrResultTooLarge`](https://pkg.go.dev/github.com/goptics/varmq#ErrResultTooLarge) | `varmq: task result too large` | A task's result is bigger than the store's limit (`WithResultLimit`): the task fails. |
-| [`ErrWorkflowSubmitted`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowSubmitted) | `varmq: workflow already submitted` | `Add` or `Submit` on a workflow that was already submitted or opened by ID. |
-| [`ErrScopeMismatch`](https://pkg.go.dev/github.com/goptics/varmq#ErrScopeMismatch) | `varmq: queues are in different storage scopes` | `Submit` of a workflow with a task on a queue that can't take workflow tasks, or on storage outside the workflow store's scope. |
+| [`ErrWorkflowSubmitted`](https://pkg.go.dev/github.com/goptics/varmq#ErrWorkflowSubmitted) | `varmq: workflow already submitted` | `Submit` after an `Add` or `Task` method on a submitted workflow, or `Submit` on a handle from `OpenWorkflow`. |
+| [`ErrScopeMismatch`](https://pkg.go.dev/github.com/goptics/varmq#ErrScopeMismatch) | `varmq: queues are in different storage scopes` | `Submit` of a workflow with a task on shared storage that can't take workflow tasks, or on storage outside the workflow store's scope. |
 
 The first six rows are errors that come from the worker's states. [Lifecycle](/concepts/lifecycle/#moving-between-states) lists, call by call, which states return which error. [Concurrency](/guides/concurrency/#changing-the-limit-with-tunepool) covers `TunePool`, and [jobs](/concepts/jobs/#closing-a-queued-job) covers closing a job.
 

@@ -19,7 +19,7 @@ Every worker keeps three counters over its lifetime. [`Metrics()`](https://pkg.g
 
 A job that runs counts once in `Completed` and once in `Successful` or `Failed`. After a worker has gone idle, `Completed` equals `Successful` plus `Failed`, unless you called [`Reset`](https://pkg.go.dev/github.com/goptics/varmq#Metrics.Reset) partway.
 
-Only a job that ran counts. A job closed or [cancelled](/concepts/jobs/#cancelling-a-job) before it starts counts in none of them. So does a job removed by [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge), or a topic payload that is dropped unread.
+Only a job that ran counts. A job closed or [cancelled](/concepts/jobs/#cancelling-a-job) before it starts counts in none of them. A job removed by [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge), or a topic payload that is dropped unread, does not count either.
 
 ## Jobs a queue received
 

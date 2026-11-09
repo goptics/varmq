@@ -94,7 +94,7 @@ export const METRICS: Metric[] = [
 		from: 'Worker.NumPending',
 		href: doc + 'Worker.NumPending',
 		meaning: 'Jobs that have not started: they wait in the queue, or a goroutine took them in a batch and has not started them.',
-		watch: 'It is a gauge. It goes up and down. On a persistent or distributed queue, each scrape calls the storage.',
+		watch: 'It is a gauge. It goes up and down. On shared storage, each scrape calls the storage.',
 		queries: [
 			{ q: 'foo_worker_jobs_waiting', says: 'The backlog now.' },
 			{ q: 'avg_over_time(foo_worker_jobs_waiting[5m]) > 500', says: 'True when the backlog averaged above 500 jobs for 5 minutes. Pick your own limit.' },

@@ -44,7 +44,7 @@ The root of every queue. Every queue you give to VarMQ has these five methods:
 | [`Purge()`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Purge) | When you call `Purge` on the handle, as above. |
 | [`Close() error`](https://pkg.go.dev/github.com/goptics/varmq#IBaseQueue.Close) | When you call `Close` on the handle. |
 
-On shared storage, `Purge` cannot close the jobs it drops, because they live in the storage. Instead, the handle stops waiting on the jobs it added: their `Err` returns [`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached).
+On shared storage, `Purge` cannot close the jobs it drops, because they live in the storage. Instead, the handle stops waiting on the jobs it added, including running ones: their `Err` returns [`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached).
 
 ### `IQueue` and `IPriorityQueue`
 
@@ -114,7 +114,7 @@ Binding one wraps it so that `Add` writes JSON and the worker reads with `Dequeu
 
 [`ISubscribable`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable) has one method, [`Subscribe(func(action string))`](https://pkg.go.dev/github.com/goptics/varmq#ISubscribable.Subscribe). It is what makes a queue distributed.
 
-`WithQueue` and `WithPriorityQueue` call `Subscribe` once, while binding, when the storage implements it. They pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewQueue` does not call `Subscribe`, because it has no worker.
+`WithQueue` and `WithPriorityQueue` call `Subscribe` once, while binding, when shared storage (`IAcknowledgeable`) implements it. They pass the worker's handler. The adapter calls the handler with a string for each event. The worker acts on one: `"enqueued"` makes it wake to pull. Any other action is ignored, so an adapter may send others. The handler runs on whichever goroutine the adapter calls it from, and it does not block. The interface has no way to unsubscribe, so the handler stays until the adapter stops calling it. `NewQueue` does not call `Subscribe`, because it has no worker.
 
 ### `IDistributedQueue` and `IDistributedPriorityQueue`
 
@@ -142,7 +142,7 @@ Each interface below adds one feature. VarMQ checks for it on the storage value,
 | [`CancelAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#CancelAcknowledgeable) | `AcknowledgeCancelled(ackID, reason string) bool` | a cancelled job is recorded as cancelled. Without it, VarMQ calls `Reject`. |
 | [`QueueInspector`](https://pkg.go.dev/github.com/goptics/varmq#QueueInspector) | `QueueID()`, `QueueStats(ctx)`, `Jobs(ctx, state, offset, limit)` | the queue's counts and job records, for [`GET /queues`](/operations/rest-api/#queues-and-jobs). |
 | [`JobReader`](https://pkg.go.dev/github.com/goptics/varmq#JobReader) | `Job(ctx, id) (JobRecord, error)` | the REST route that reads one job. Without it, the route answers 501. |
-| [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable) | `WorkflowStore()`, `FinishTask(ackID, end)`, `ScopeID()` | [workflow](/guides/workflows/) tasks on this storage. |
+| [`WorkflowAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowAcknowledgeable) | `WorkflowStore()`, `FinishTask(ackID, end)`, `ScopeID()` | [workflow](/guides/workflows/) tasks on this storage. It needs `QueueInspector` too, and a `WorkflowStore()` that is not `nil`. |
 | [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector) | `Workflows(ctx, state, offset, limit)`, `ScopeID()` | on a workflow store: the store's workflows in [`GET /workflows`](/operations/rest-api/#workflows). |
 | [`InstanceRegistry`](https://pkg.go.dev/github.com/goptics/varmq#InstanceRegistry) | `ReportInstance`, `RemoveInstance`, `Instances` | a record of each process, its workers and their queues, for dashboards. VarMQ supplies the record. |
 
@@ -159,7 +159,7 @@ The rest of the interfaces are not for adapters to implement. They describe what
 
 ### [`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue)
 
-[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge`, `Close`, `Pause`, `Resume`, `IsPaused` and `Worker`. It also has a deprecated `NumPending` that does what `Len` does. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
+[`IExternalBaseQueue`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue) is what every queue handle has: `Len`, `IsFull`, `Purge`, `Close`, `Pause`, `Resume` and `IsPaused`. It also has a deprecated `NumPending` that does what `Len` does. The handles a worker binds also have `Worker()`, and a producer handle from `NewQueue` does not. VarMQ implements it around your storage. `Len`, `Purge` and `Close` reach the `IBaseQueue` methods above, and `IsFull` reads `Len`.
 
 ### Job interfaces
 

@@ -43,7 +43,7 @@ A dependency must be a task of the same workflow, added before the task that wai
 
 By default, a task is cancelled when one of its dependencies fails or is cancelled. Its own dependents are then cancelled too, and so on. A task with `Always` runs anyway. In its worker, [`Failed(dep)`](https://pkg.go.dev/github.com/goptics/varmq#TaskContext.Failed) tells you which dependency failed.
 
-A failed task does not fail the workflow when it has dependents and all of them use `Always`. Those tasks take care of the failure. Any other failed task makes the workflow end as `failed`.
+A failed task does not fail the workflow when it has dependents and all of them use `Always`. Those tasks handle the failure. Any other failed task makes the workflow end as `failed`.
 
 Without other options, tasks on other branches still run after a failure. [`WithFailFast()`](https://pkg.go.dev/github.com/goptics/varmq#WithFailFast) changes that. At the first failure that makes the workflow fail, every waiting task is cancelled. Queued tasks that have not started are cancelled too. The failed task's own `Always` dependents still run.
 
@@ -142,7 +142,7 @@ By default, the undo jobs of the completed tasks then run, and the workflow ends
 
 The store keeps the `WithUndoOnCancel` value with the workflow. So a cancel from any handle follows it. `Cancel` on a workflow that has ended does nothing and returns `nil`.
 
-Cancelling one task's job is not a workflow cancel: see [cancelling a job](/concepts/jobs/#cancelling-a-job). The task ends as `cancelled`, and the workflow handles it like a failed task. A [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) of a queue has the same effect on the tasks in it.
+Cancelling one task's job is not a workflow cancel: see [cancelling a job](/concepts/jobs/#cancelling-a-job). The task ends as `cancelled`, and the workflow handles it like a failed task. On shared storage, a cancel does not stop a task that still waits: cancel the workflow instead. A [`Purge`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Purge) of a queue has the same effect on the tasks in it.
 
 The REST API lists workflows, shows one and cancels one, with `?undo=false` to skip the undo jobs: see [workflows](/operations/rest-api/#workflows).
 

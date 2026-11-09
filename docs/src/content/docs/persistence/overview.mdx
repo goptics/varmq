@@ -66,7 +66,7 @@ VarMQ stores each job as JSON, in the shape `{"id":"…","status":"Created","dat
 
 `Add` returns a job handle and a `bool`. The `bool` is `false` when the encoding fails, or when the storage refuses the job, for example because the queue was closed. [`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) works too.
 
-The job handle learns how the job ended when the storage reports outcomes. redisq and sqliteq do. [Jobs in other processes](/concepts/jobs/#jobs-in-other-processes) covers `Wait`, `Err`, `Result` and the errors they return. When you give a job no ID, VarMQ makes a random one, so the outcome and a cancel can find the job.
+The job handle learns how the job ended when the storage reports outcomes. redisq and sqliteq do. [Jobs in other processes](/concepts/jobs/#jobs-in-other-processes) covers `Wait`, `Err`, `Result` and the errors they return. When you give a job no ID, VarMQ makes a random one, so the outcome and a cancel can find the job. It does this when the storage reports outcomes or cancels jobs.
 
 The handle's [`Len`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.Len) asks the storage, so it counts the jobs waiting there, including jobs another process added. [`WithQueueCapacity`](https://pkg.go.dev/github.com/goptics/varmq#WithQueueCapacity) reaches the storage only if the adapter implements [`CapacitySetter`](https://pkg.go.dev/github.com/goptics/varmq#CapacitySetter). Neither redisq nor sqliteq does. With them `Add` is not refused, and [`IsFull`](https://pkg.go.dev/github.com/goptics/varmq#IExternalBaseQueue.IsFull) only compares `Len` with the number you passed.
 
@@ -130,7 +130,7 @@ A [queue pause](/guides/queues/#pausing-a-queue) on shared storage is kept in th
 
 ## Metrics
 
-[Metrics](/guides/metrics/) describes the three counters of a worker. For these queues, keep three things in mind.
+[Metrics](/guides/metrics/) describes the three counters of a worker. For these queues, note three things.
 
 - **Each worker counts the jobs it ran.** A job that another process ran counts in that process. So the counters of one process do not add up to the queue's work.
 - **The queue counts the jobs it received.** Read `totals.submitted` from [`GET /queues`](/operations/rest-api/#queues-and-jobs). It counts jobs that every process added.

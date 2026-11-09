@@ -104,7 +104,7 @@ queue.Resume()     // the worker starts it now
 
 - **Adds still work.** The queue takes new jobs while it is paused. They wait until `Resume`.
 - **Running jobs finish.** A pause stops new jobs only.
-- **Other sources keep going.** A worker with several queues still takes jobs from the others.
+- **Other sources continue.** A worker with several queues still takes jobs from the others.
 - **A paused queue's jobs are not pending.** The worker's `Wait` and `WaitUntilIdle` return without them.
 - **On shared storage, the pause is in the storage.** Every process that takes from the queue stops, and the pause survives a restart.
 - **The storage must support it.** Without that support, `Pause` and `Resume` return [`ErrPauseUnsupported`](https://pkg.go.dev/github.com/goptics/varmq#ErrPauseUnsupported). The in-memory queues support it.
