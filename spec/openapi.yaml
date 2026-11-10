@@ -516,7 +516,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/WorkflowStoreCounts" }
         "503":
-          description: Every workflow store failed; `error` holds the last reason.
+          description: Every workflow store failed; `error` is the fixed text `workflow counts unavailable`.
           headers:
             X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
           content:

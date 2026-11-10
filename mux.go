@@ -650,7 +650,7 @@ func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
 	var (
 		out    = []storeCounts{}
 		mem    map[WorkflowState]int64
-		failed error
+		failed bool
 		ok     bool
 	)
 	zero := func() map[WorkflowState]int64 {
@@ -681,7 +681,7 @@ func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
 		}
 		by, err := wc.WorkflowCounts(r.Context())
 		if err != nil {
-			failed = err
+			failed = true // error text dropped: may hold address, keys
 			continue
 		}
 		ok = true
@@ -701,8 +701,8 @@ func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if failed != nil && !ok {
-		writeError(w, http.StatusServiceUnavailable, failed.Error())
+	if failed && !ok {
+		writeError(w, http.StatusServiceUnavailable, "workflow counts unavailable")
 		return
 	}
 	if mem != nil {

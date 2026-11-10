@@ -1023,7 +1023,8 @@ func TestMuxWorkflowCounts(t *testing.T) {
 	useStore(t, counting)
 	rr = get()
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
-	assert.Contains(t, rr.Body.String(), "redis down")
+	assert.Contains(t, rr.Body.String(), "workflow counts unavailable")
+	assert.NotContains(t, rr.Body.String(), "redis down", "store error text stays out")
 }
 
 // keyedWorkflowStore lists keys only; its records are read one by one.
