@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: VarMQ HTTP API
-  version: 1.5.1
+  version: 1.6.0
   description: |
     The API that `varmq.Handler` serves and that observers such as vartop read.
     This file is the contract: every
@@ -20,6 +20,9 @@ info:
     reports the same numbers; group them by Queue ID, do not add them.
 
     Changes:
+    - 1.6.0: `GET /workflow-counts` counts the workflows of each store by
+      state; `TaskRecord` gains `enqueued_at`, `started_at` and
+      `finished_at`. Additive.
     - 1.5.0: `GET /workers/{name}` gains `strategy` and `sources` (each
       bound queue or topic subscription with its Queue ID, kind and bind
       priority). Additive.
@@ -485,6 +488,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /workflow-counts:
+    get:
+      operationId: countWorkflows
+      summary: How many workflows each store holds, by state.
+      description: |
+        Since 1.6.0. One entry per registered workflow store that lists
+        workflows, and one entry (no `store`, `shared` false) that sums every
+        in-memory store of this process; that entry is absent when the
+        process has none. Sorted by `store`, the in-memory entry first.
+
+        A store in shared storage reports the same numbers on every instance
+        that registers it: across instances, keep one entry per `store` and
+        add only the entries with `shared` false. A store that cannot count
+        has an entry with no `counts`: the total is then unknown, not zero.
+        A store whose count fails also has an entry with no `counts`; the
+        reply is 503 only when no store counted and one failed. A count can lag the list by the store's trim
+        (a workflow past retention can still count until then).
+      responses:
+        "200":
+          description: The counts; an empty array when the process has no workflow store.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkflowStoreCounts" }
+        "503":
+          description: Every workflow store failed; `error` is the fixed text `workflow counts unavailable`.
+          headers:
+            X-Varmq-Instance: { $ref: "#/components/headers/Instance" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /workflows/{id}:
     parameters:
       - $ref: "#/components/parameters/WorkflowID"
@@ -913,6 +951,35 @@ components:
         string, the `state` query parameter the closed enum.
       enum: [running, completed, failed, compensating, compensated, compensation_failed, cancelled]
 
+    WorkflowStoreCounts:
+      type: object
+      description: The workflow counts of one store, or of every in-memory store of the process.
+      required: [shared]
+      properties:
+        store:
+          type: string
+          description: |
+            Opaque ID of the store: 12 hex characters, a truncated hash of
+            the store's scope, the same on every instance that registers
+            the store. The address is not shown in clear, but the ID is not
+            a secret: a caller who guesses the address can confirm it. A
+            store in a file on the host (SQLite) has the host name in the
+            hash, so the same path on two hosts gives two IDs. Two network
+            stores with one scope text (the same address string for
+            different servers) get one ID. Absent for the in-memory entry.
+        shared:
+          type: boolean
+          description: |
+            True when other instances can see the same store, so their
+            entries with this `store` repeat these numbers. False for the
+            in-memory entry, which only this process holds.
+        counts:
+          type: object
+          description: |
+            Workflows per `WorkflowState`; every state of this version is
+            present, 0 when none. Absent when the store cannot count.
+          additionalProperties: { type: integer, minimum: 0 }
+
     WorkflowRecord:
       type: object
       required: [id, state, created_at, undo_on_cancel, tasks]
@@ -953,6 +1020,24 @@ components:
         always: { type: boolean, description: True when the task runs even after a dependency failed. }
         reason: { type: string, description: Why the task failed or was cancelled. Absent otherwise. }
         result_size: { type: integer, description: Bytes of the stored result; absent when none. }
+        enqueued_at:
+          type: integer
+          description: |
+            Since 1.6.0. Unix milliseconds, on the storage's clock, the
+            task's job (for `undo`: the undo job) went to its queue. Absent
+            while the task waits, and when the store keeps no task times.
+        started_at:
+          type: integer
+          description: |
+            Since 1.6.0. Unix milliseconds a worker last got leave to run the
+            job (the pre-run check). Absent before that; a job that runs
+            again after a crash moves it.
+        finished_at:
+          type: integer
+          description: |
+            Since 1.6.0. Unix milliseconds the task ended (completed, failed
+            or cancelled). A task cancelled while it waited has only this
+            time.
         undo:
           description: The task's compensation job, when it has one. Its `reason` is why it failed or was cancelled.
           allOf: [{ $ref: "#/components/schemas/TaskRecord" }]

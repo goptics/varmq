@@ -177,6 +177,8 @@ For a workflow that continues after a restart, or that spans processes, the stor
 - A process can register one adapter store per scope. A second `NewWorkflowStore` for the same scope returns `ErrScopeRegistered` from the `contract` module, until you close the first.
 - Job IDs that start with `wf:` belong to workflow tasks. A plain `Add` with such an ID returns `false`.
 - `GET /workflows` lists the registered stores that also implement [`WorkflowInspector`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowInspector). The in-memory store does.
+- `GET /workflow-counts` counts the workflows of each store by state. A store counts when it implements [`WorkflowCounter`](https://pkg.go.dev/github.com/goptics/varmq#WorkflowCounter). The in-memory store does.
+- A task record keeps three times: when the task went to its queue, when a worker started it, and when it ended. The store sets the start time in the `Runnable` check.
 
 </details>
 

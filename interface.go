@@ -204,6 +204,8 @@ type (
 	WorkflowInspector = contract.WorkflowInspector
 	WorkflowKey       = contract.WorkflowKey
 	WorkflowKeyLister = contract.WorkflowKeyLister
+	WorkflowCounter   = contract.WorkflowCounter
+	HostLocal         = contract.HostLocal
 )
 
 const (

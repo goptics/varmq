@@ -16,6 +16,9 @@ type wfState struct {
 	// UndoOnCancel: a cancel compensates. The plan's, until cancel sets
 	// the value its caller resolved.
 	UndoOnCancel bool
+	// At is now, Unix ms: the store sets it before finish and cancel, which
+	// stamp what they end. The store stamps pushes and starts itself.
+	At int64
 
 	next      map[string][]string // dependents per task, in Order
 	failed    bool                // an unabsorbed failure happened before any cancel
@@ -31,6 +34,10 @@ type wfTask struct {
 	UndoState  JobState // "" none, waiting, pending, completed, failed
 	UndoOpen   int      // undos of completed descendants not ended yet
 	UndoReason string   // why the undo failed or was cancelled
+
+	// Unix ms, 0 when not reached (TaskRecord).
+	Enqueued, Started, Finished             int64
+	UndoEnqueued, UndoStarted, UndoFinished int64
 }
 
 // wfEffect is one thing storage must do: push a task (or its undo), and/or
@@ -89,7 +96,7 @@ func (s *wfState) finish(e TaskEnd) ([]wfEffect, error) {
 		return nil, nil
 	}
 
-	t.Reason, t.Result = e.Reason, e.Result
+	t.Reason, t.Result, t.Finished = e.Reason, e.Result, s.At
 	push := map[string]bool{}
 	if e.Outcome == OutcomeCompleted {
 		t.State = JobCompleted
@@ -147,7 +154,7 @@ func (s *wfState) finishUndo(t *wfTask, e TaskEnd) []wfEffect {
 	if s.State != WorkflowCompensating || !active(t.UndoState) {
 		return nil
 	}
-	t.UndoState, t.UndoReason = JobFailed, e.Reason
+	t.UndoState, t.UndoReason, t.UndoFinished = JobFailed, e.Reason, s.At
 	if e.Outcome == OutcomeCompleted {
 		t.UndoState, t.UndoReason = JobCompleted, ""
 	}
@@ -205,7 +212,7 @@ func (s *wfState) drop(name string, push map[string]bool) {
 			s.release(d, push)
 			continue
 		}
-		t.State = JobCancelled
+		t.State, t.Finished = JobCancelled, s.At
 		s.drop(d, push)
 	}
 }
@@ -227,7 +234,7 @@ func (s *wfState) failFast(failed string, push map[string]bool) {
 	var cancelled []string
 	for _, name := range s.Order {
 		if t := s.Tasks[name]; t.State == JobWaiting && !keep[name] {
-			t.State = JobCancelled
+			t.State, t.Finished = JobCancelled, s.At
 			cancelled = append(cancelled, name)
 		}
 	}
@@ -261,7 +268,7 @@ func (s *wfState) reach(name string, up bool) map[string]bool {
 func (s *wfState) cancelWaiting() {
 	for _, name := range s.Order {
 		if t := s.Tasks[name]; t.State == JobWaiting {
-			t.State = JobCancelled
+			t.State, t.Finished = JobCancelled, s.At
 		}
 	}
 }
