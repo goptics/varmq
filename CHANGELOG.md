@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.8.0. Specs: `spec/redis-storage.md` 1.8.0, `spec/openapi.yaml` 1.5.1.
+Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.9.0. Specs: `spec/redis-storage.md` 1.9.0, `spec/openapi.yaml` 1.6.0.
 
 ### ⚠️ Breaking Changes
 
@@ -40,6 +40,8 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - REST: `GET /workflows`, `GET /workflows/{id}`, `PATCH /workflows/{id}/actions/cancel` (`undo=false` only narrows).
   - Contract: `WorkflowStore`, `WorkflowInspector`, `WorkflowKeyLister`, `WorkflowKey`, `WorkflowPlan`, `TaskEnd`, `WorkflowRecord`, `TaskRecord`, `Outcome`, `WorkflowState`; `WorkflowStore.Cancel(…, undo *bool)` (nil = workflow's own setting). Envelope gains `wf`, `task`, `undo`.
   - Durable stores: `redisq.NewWorkflowStore` (redisq v1.6.0), `sqliteq.NewWorkflowStore` (sqliteq v0.4.0). Every consumer process creates the store and runs this VarMQ (spec 1.8.0, section 9).
+  - Counts (#NN; contract v0.9.0, spec 1.9.0, openapi 1.6.0): `GET /workflow-counts` → per store `{store, shared, counts}` by state; in-memory stores summed in one entry. Optional `WorkflowCounter` (`WorkflowCounts(ctx)`); store without it → entry with no `counts`. `store` = 12 hex of scope hash (opaque, not secret); optional `HostLocal` marker (file store) adds host name to hash.
+  - Task times (#NN; contract v0.9.0, spec 1.9.0, openapi 1.6.0): `TaskRecord` gains `EnqueuedAt`, `StartedAt`, `FinishedAt` (Unix ms, storage clock; undo record same). Store stamps `StartedAt` when `Runnable` answers true. 0 = not reached or not kept.
 - **One binder per kind** (#179, contract v0.6.0): `WithQueue` takes any FIFO storage, `WithPriorityQueue` any priority storage: in-memory, redisq, sqliteq, custom. Persistent vs distributed detected (`IAcknowledgeable`, `ISubscribable`).
   - Producers without worker: `varmq.NewQueue[T]`, `NewErrQueue[T]`, `NewResultQueue[T, R]`, each with `Priority` version → `ProducerQueue[T, J]` / `ProducerPriorityQueue[T, J]`.
 - **Remote job outcome** (#179; spec 1.6.0, contract v0.6.0): storage with optional `OutcomeWatcher` resolves durable job handle when job ends in any process.

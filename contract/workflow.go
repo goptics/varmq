@@ -68,7 +68,11 @@ type TaskEnd struct {
 	Undo           bool
 }
 
-// TaskRecord is a task as storage holds it.
+// TaskRecord is a task as storage holds it. Times are Unix ms on the
+// storage's clock, 0 when not reached or the store does not keep them:
+// EnqueuedAt when the task (an Undo record: its undo job) was pushed to its
+// queue, StartedAt when the pre-run check (Runnable) last let it run,
+// FinishedAt when it ended (a task cancelled while waiting has only this).
 type TaskRecord struct {
 	Name       string      `json:"name"`
 	State      JobState    `json:"state"`
@@ -78,6 +82,9 @@ type TaskRecord struct {
 	Always     bool        `json:"always,omitempty"`
 	Reason     string      `json:"reason,omitempty"`
 	ResultSize int         `json:"result_size,omitempty"`
+	EnqueuedAt int64       `json:"enqueued_at,omitempty"`
+	StartedAt  int64       `json:"started_at,omitempty"`
+	FinishedAt int64       `json:"finished_at,omitempty"`
 	Undo       *TaskRecord `json:"undo,omitempty"`
 }
 
@@ -108,7 +115,8 @@ type WorkflowStore interface {
 	// workflow was submitted (WorkflowPlan.UndoOnCancel); non-nil overrides.
 	Cancel(ctx context.Context, id string, undo *bool) error
 	// Runnable reports whether the task (undo: its undo job) may run now:
-	// the pre-run check.
+	// the pre-run check. A store that keeps task times stamps StartedAt
+	// when it answers true.
 	Runnable(ctx context.Context, workflowID, task string, undo bool) (bool, error)
 	// DepResult returns the stored result of the task's dependency.
 	DepResult(ctx context.Context, workflowID, task string) ([]byte, error)
@@ -144,6 +152,19 @@ type WorkflowKey struct {
 // several stores reads (Record) only the workflows of its final page.
 type WorkflowKeyLister interface {
 	WorkflowKeys(ctx context.Context, state WorkflowState, offset, limit int) ([]WorkflowKey, error)
+}
+
+// WorkflowCounter is optional for a WorkflowInspector: how many workflows
+// the store holds in each state. A state with none may be absent.
+type WorkflowCounter interface {
+	WorkflowCounts(ctx context.Context) (map[WorkflowState]int64, error)
+}
+
+// HostLocal is optional for a WorkflowInspector whose storage is a file on
+// this host: its ScopeID (a path) names it on this host only. A reader
+// across hosts must not take two such stores with one ScopeID as one.
+type HostLocal interface {
+	HostLocal()
 }
 
 var (

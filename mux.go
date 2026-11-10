@@ -2,6 +2,8 @@ package varmq
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -191,6 +193,8 @@ func NewServerMux() *http.ServeMux {
 	mux.HandleFunc("GET /workflows", handleListWorkflows)
 	// GET /workflows/{id}
 	mux.HandleFunc("GET /workflows/{id}", handleGetWorkflow)
+	// GET /workflow-counts
+	mux.HandleFunc("GET /workflow-counts", handleWorkflowCounts)
 	// PATCH /workflows/{id}/actions/{action}
 	mux.HandleFunc("PATCH /workflows/{id}/actions/{action}", handleWorkflowAction)
 
@@ -627,6 +631,86 @@ func handleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, page)
+}
+
+// storeCounts is one entry of GET /workflow-counts. Store is a hash of the
+// scope ID (the ID may hold an address or a path): equal on every instance
+// that reads the same shared store, so a fleet reader counts it once.
+// Counts is nil for a store that is not a WorkflowCounter.
+type storeCounts struct {
+	Store  string                  `json:"store,omitempty"`
+	Shared bool                    `json:"shared"`
+	Counts map[WorkflowState]int64 `json:"counts,omitempty"`
+}
+
+// handleWorkflowCounts returns workflows per state: one entry per durable
+// store, and one for the process's in-memory stores together. A store whose
+// count fails is left out; 503 only when every one fails.
+func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
+	var (
+		out    = []storeCounts{}
+		mem    map[WorkflowState]int64
+		failed error
+		ok     bool
+	)
+	zero := func() map[WorkflowState]int64 {
+		m := make(map[WorkflowState]int64, len(workflowStates))
+		for _, st := range workflowStates {
+			m[st] = 0
+		}
+		return m
+	}
+
+	for _, ws := range workflowStores() {
+		if _, lists := ws.(WorkflowInspector); !lists {
+			continue
+		}
+		_, inMem := ws.(*memWorkflowStore)
+		scope := ws.ScopeID()
+		if _, local := ws.(HostLocal); local {
+			scope = hostname + "\x00" + scope // same path on two hosts: two stores
+		}
+		sum := sha256.Sum256([]byte(scope))
+		e := storeCounts{Store: hex.EncodeToString(sum[:6]), Shared: true}
+
+		wc, counts := ws.(WorkflowCounter)
+		if !counts {
+			ok = true
+			out = append(out, e)
+			continue
+		}
+		by, err := wc.WorkflowCounts(r.Context())
+		if err != nil {
+			failed = err
+			continue
+		}
+		ok = true
+
+		e.Counts = zero()
+		if inMem {
+			if mem == nil {
+				mem = zero()
+			}
+			e.Counts = mem
+		}
+		for _, st := range workflowStates { // known states only
+			e.Counts[st] += by[st]
+		}
+		if !inMem {
+			out = append(out, e)
+		}
+	}
+
+	if failed != nil && !ok {
+		writeError(w, http.StatusServiceUnavailable, failed.Error())
+		return
+	}
+	if mem != nil {
+		out = append(out, storeCounts{Counts: mem})
+	}
+	slices.SortFunc(out, func(a, b storeCounts) int { return strings.Compare(a.Store, b.Store) })
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // listed is one workflow of a store's listing: its sort key, its store

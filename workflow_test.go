@@ -1468,7 +1468,7 @@ func TestMemStoreRecord(t *testing.T) {
 	assert.Equal(t, WorkflowRecord{
 		ID: "rec", State: WorkflowRunning, CreatedAt: clock.UnixMilli(), UndoOnCancel: true,
 		Tasks: []TaskRecord{
-			{Name: "a", State: JobPending, QueueID: fifoID, JobID: "wf:rec:a"},
+			{Name: "a", State: JobPending, QueueID: fifoID, JobID: "wf:rec:a", EnqueuedAt: clock.UnixMilli()},
 			{Name: "b", State: JobWaiting, Deps: []string{"a"}, QueueID: prioID, JobID: "wf:rec:b",
 				Undo: &TaskRecord{Name: "b", State: JobWaiting, QueueID: fifoID, JobID: "wf:rec:b:undo"}},
 			{Name: "c", State: JobWaiting, Deps: []string{"a", "b"}, QueueID: fifoID, JobID: "wf:rec:c", Always: true},
@@ -1545,6 +1545,9 @@ func TestMemStoreRetention(t *testing.T) {
 	list, err := s.Workflows(ctx, "", 0, 10)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"x2", "x1", "live"}, ids(list))
+	by, err := s.WorkflowCounts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[WorkflowState]int64{WorkflowRunning: 3}, by, "a swept workflow does not count")
 
 	require.NoError(t, submit(t, one("old", 7)), "a swept id is free again")
 }
@@ -1589,6 +1592,89 @@ func TestMemStoreWorkflows(t *testing.T) {
 	list, err = s.Workflows(ctx, "", 0, 0)
 	require.NoError(t, err)
 	assert.Empty(t, list, "limit 0")
+
+	by, err := s.WorkflowCounts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[WorkflowState]int64{WorkflowRunning: 2, WorkflowCompleted: 1, WorkflowFailed: 1}, by)
+}
+
+// TestMemStoreTaskTimes: a task record carries when it was pushed, when the
+// pre-run check let it run and when it ended; so does its undo.
+func TestMemStoreTaskTimes(t *testing.T) {
+	ctx := context.Background()
+	s, clock := newMemStore(t)
+	tick := func() int64 {
+		*clock = clock.Add(time.Second)
+		return clock.UnixMilli()
+	}
+	task := func(name string) TaskRecord {
+		r, err := s.Record(ctx, "w")
+		require.NoError(t, err)
+		for _, tr := range r.Tasks {
+			if tr.Name == name {
+				return tr
+			}
+		}
+		t.Fatalf("no task %s", name)
+		return TaskRecord{}
+	}
+
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	wf := NewWorkflow(s, WithWorkflowID("w"))
+	a := wf.Add("a", q, 1)
+	a.Undo(q, 1)
+	b := wf.Add("b", q, 2).After(a)
+	wf.Add("c", q, 3).After(b)
+	t0 := clock.UnixMilli()
+	require.NoError(t, submit(t, wf))
+	assert.Equal(t, TaskRecord{EnqueuedAt: t0}, times(task("a")), "root pushed at submit")
+	assert.Equal(t, TaskRecord{}, times(task("b")), "waiting: no times")
+
+	t1 := tick()
+	ok, err := s.Runnable(ctx, "w", "a", false)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, _ = s.Runnable(ctx, "w", "b", false)
+	require.False(t, ok)
+	assert.Zero(t, task("b").StartedAt, "a refused check stamps nothing")
+
+	t2 := tick()
+	require.NoError(t, s.finish(end("w", "a", OutcomeCompleted)))
+	assert.Equal(t, TaskRecord{EnqueuedAt: t0, StartedAt: t1, FinishedAt: t2}, times(task("a")))
+	assert.Equal(t, TaskRecord{EnqueuedAt: t2}, times(task("b")), "released by a's end")
+
+	t3 := tick()
+	require.NoError(t, s.finish(end("w", "b", OutcomeFailed)))
+	assert.Equal(t, TaskRecord{EnqueuedAt: t2, FinishedAt: t3}, times(task("b")))
+	assert.Equal(t, TaskRecord{FinishedAt: t3}, times(task("c")), "cancelled while waiting")
+	assert.Equal(t, TaskRecord{EnqueuedAt: t3}, times(*task("a").Undo), "undo pushed")
+
+	t4 := tick()
+	ok, _ = s.Runnable(ctx, "w", "a", true)
+	require.True(t, ok)
+	t5 := tick()
+	e := end("w", "a", OutcomeCompleted)
+	e.Undo = true
+	require.NoError(t, s.finish(e))
+	assert.Equal(t, TaskRecord{EnqueuedAt: t3, StartedAt: t4, FinishedAt: t5}, times(*task("a").Undo))
+	assert.Equal(t, t2, task("a").FinishedAt, "the undo leaves the task's own times")
+
+	ff := NewWorkflow(s, WithWorkflowID("ff"), WithFailFast())
+	ff.Add("a", q, 1)
+	fb := ff.Add("b", q, 2)
+	ff.Add("c", q, 3).After(fb)
+	require.NoError(t, submit(t, ff))
+	t6 := tick()
+	require.NoError(t, s.finish(end("ff", "a", OutcomeFailed)))
+	r, err := s.Record(ctx, "ff")
+	require.NoError(t, err)
+	assert.Equal(t, TaskRecord{FinishedAt: t6}, times(r.Tasks[2]), "fail-fast cancels waiting c")
+}
+
+// times is r's time fields only.
+func times(r TaskRecord) TaskRecord {
+	return TaskRecord{EnqueuedAt: r.EnqueuedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt}
 }
 
 // TestMemStoreWorkflowsTies: workflows of one ms list by ID, as GET
@@ -1747,7 +1833,7 @@ func TestMemStoreResults(t *testing.T) {
 
 func TestMemStoreCancel(t *testing.T) {
 	ctx := context.Background()
-	s, _ := newMemStore(t)
+	s, clock := newMemStore(t)
 
 	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 	q := w.BindQueue()
@@ -1767,11 +1853,13 @@ func TestMemStoreCancel(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 
+	*clock = clock.Add(time.Second)
 	require.NoError(t, s.Cancel(ctx, "cx", nil))
 	ok, _ = s.Runnable(ctx, "cx", "b", false)
 	assert.False(t, ok, "pending b is cancelled by the pre-run check")
 	r, _ := s.Record(ctx, "cx")
 	assert.Equal(t, JobCancelled, r.Tasks[2].State, "waiting c cancelled now")
+	assert.Equal(t, TaskRecord{FinishedAt: clock.UnixMilli()}, times(r.Tasks[2]), "stamped at the cancel")
 	assert.Equal(t, WorkflowRunning, r.State, "b is still queued")
 
 	err = s.finish(end("cx", "b", OutcomeCancelled))
@@ -1869,7 +1957,7 @@ func TestMemStorePromotion(t *testing.T) {
 	})
 
 	t.Run("refused push fails the task", func(t *testing.T) {
-		s, _ := newMemStore(t)
+		s, clock := newMemStore(t)
 		w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 		rq := &refusingQueue{IQueue: queues.NewQueue[iJob[int]]()}
 		q := w.WithQueue(rq)
@@ -1891,13 +1979,15 @@ func TestMemStorePromotion(t *testing.T) {
 		assert.Equal(t, JobFailed, r.Tasks[1].State)
 		assert.Equal(t, "queue refused promotion", r.Tasks[1].Reason)
 		assert.Equal(t, JobCancelled, r.Tasks[2].State)
+		assert.Equal(t, TaskRecord{FinishedAt: clock.UnixMilli()}, times(r.Tasks[1]), "refused: ended, never enqueued")
+		assert.Equal(t, clock.UnixMilli(), r.Tasks[2].FinishedAt)
 		assert.Equal(t, WorkflowFailed, r.State)
 		assert.True(t, bJob.IsClosed(), "the refused job is closed, so its waiters release")
 		assert.Equal(t, submitted, q.(*queue[int]).totals.submitted.Load(), "a refusal is not counted")
 	})
 
 	t.Run("refused root fails at Submit", func(t *testing.T) {
-		s, _ := newMemStore(t)
+		s, clock := newMemStore(t)
 		w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
 		rq := &refusingQueue{IQueue: queues.NewQueue[iJob[int]]()}
 		rq.refuse.Store(true)
@@ -1909,6 +1999,7 @@ func TestMemStorePromotion(t *testing.T) {
 		r, _ := s.Record(ctx, "root")
 		assert.Equal(t, WorkflowFailed, r.State)
 		assert.Equal(t, "queue refused promotion", r.Tasks[0].Reason)
+		assert.Equal(t, TaskRecord{FinishedAt: clock.UnixMilli()}, times(r.Tasks[0]))
 	})
 }
 
