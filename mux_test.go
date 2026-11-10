@@ -950,7 +950,7 @@ func (localWorkflowStore) HostLocal() {}
 
 // TestMuxWorkflowCounts: GET /workflow-counts gives one entry per durable
 // store under a hashed scope, the in-memory stores summed in one, every
-// state present; a failing store is left out, 503 when all fail.
+// state present; a failing store keeps its entry with no counts, 503 when all fail.
 func TestMuxWorkflowCounts(t *testing.T) {
 	resetWorkflowStores(t)
 
@@ -1015,8 +1015,14 @@ func TestMuxWorkflowCounts(t *testing.T) {
 	counting.err = errors.New("redis down")
 	rr = get()
 	require.Equal(t, http.StatusOK, rr.Code)
+	got = nil // Unmarshal would reuse the old maps
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
-	assert.Len(t, got, 2, "the failing store is left out")
+	require.Len(t, got, 3, "the failing store keeps its entry")
+	sum := sha256.Sum256([]byte(counting.scope))
+	i := slices.IndexFunc(got, func(e storeCounts) bool { return e.Store == hex.EncodeToString(sum[:6]) })
+	require.GreaterOrEqual(t, i, 0)
+	assert.True(t, got[i].Shared)
+	assert.Nil(t, got[i].Counts, "failed store: entry without counts")
 	assert.NotContains(t, rr.Body.String(), "redis down")
 
 	resetWorkflowStores(t)

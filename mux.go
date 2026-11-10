@@ -645,7 +645,8 @@ type storeCounts struct {
 
 // handleWorkflowCounts returns workflows per state: one entry per durable
 // store, and one for the process's in-memory stores together. A store whose
-// count fails is left out; 503 only when every one fails.
+// count fails keeps its entry, with no counts (a client shows none, not a
+// low total); 503 only when no store counted and one failed.
 func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
 	var (
 		out    = []storeCounts{}
@@ -682,6 +683,9 @@ func handleWorkflowCounts(w http.ResponseWriter, r *http.Request) {
 		by, err := wc.WorkflowCounts(r.Context())
 		if err != nil {
 			failed = true // error text dropped: may hold address, keys
+			if !inMem {   // ponytail: memory store never errors, no entry for it
+				out = append(out, e)
+			}
 			continue
 		}
 		ok = true

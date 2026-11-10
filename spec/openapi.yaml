@@ -502,8 +502,8 @@ paths:
         that registers it: across instances, keep one entry per `store` and
         add only the entries with `shared` false. A store that cannot count
         has an entry with no `counts`: the total is then unknown, not zero.
-        A store whose count fails is left out; the reply is 503 only when
-        every store fails. A count can lag the list by the store's trim
+        A store whose count fails also has an entry with no `counts`; the
+        reply is 503 only when no store counted and one failed. A count can lag the list by the store's trim
         (a workflow past retention can still count until then).
       responses:
         "200":
