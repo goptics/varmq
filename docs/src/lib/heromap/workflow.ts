@@ -33,8 +33,9 @@ export interface WorkflowRun {
 	states: { at: number; state: WorkflowState }[];
 }
 
-// Between the lands of jobs pushed at one instant: they leave the workflow one at a time, and the second lands once
-// the first is taken. Two that wait together at limit 1 would leave as one batch, which the map cannot show (pool.ts).
+// ponytail: varmq pushes the tasks one finish releases at one instant. Here their jobs land STAGGER apart, so the
+// second lands once the first is taken: two that wait together at limit 1 would leave as one batch, which the pool
+// simulation refuses to draw (pool.ts). Drop the gap if the map learns to show a batch.
 const STAGGER = 500;
 
 /**

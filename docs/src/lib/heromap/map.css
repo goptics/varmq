@@ -311,7 +311,7 @@ varmq-map .vm-svg:not(.vm-under) {
 	fill: var(--vm-red);
 }
 
-/* A workflow task's states, each a layer over its chip: waiting and cancelled are grey, cancelled dimmed and struck
+/* A workflow task's states, each a layer over its chip: waiting and cancelled are grey, cancelled struck
    through (a dashed edge would show the chip's own between its dashes), and undone is the stores' purple. Done and failed are the value and error chips' tones, above. */
 :is(varmq-map, .vm-mini) .vm-mark > .vm-shape {
 	stroke-width: max(1, var(--vm-floor));
@@ -328,7 +328,6 @@ varmq-map .vm-svg:not(.vm-under) {
 
 :is(varmq-map, .vm-mini) .vm-cancel > .vm-text {
 	text-decoration: line-through;
-	opacity: 0.6;
 }
 
 :is(varmq-map, .vm-mini) .vm-undo > .vm-shape {

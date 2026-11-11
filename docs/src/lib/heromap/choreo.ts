@@ -558,9 +558,9 @@ export class Choreo {
 		for (const p of [...PIECES, ...CONNS]) for (const text of this.texts(nodes.piece(p.id))) score.start(text, { opacity: 1 });
 	}
 
-	/** A piece's or a line's text: its label, a chip's text, the SQLite program's crash labels, a store's logo. */
+	/** A piece's or a line's text: its label, a chip's text and a task's layers', the crash and state labels, a store's logo. */
 	private texts(g: Element): Element[] {
-		return [...g.querySelectorAll(':scope > .vm-label, :scope > .vm-text, :scope > .vm-logo')];
+		return [...g.querySelectorAll(':scope > .vm-label, :scope > .vm-text, :scope > .vm-logo, :scope > .vm-mark > .vm-text')];
 	}
 
 	/** What names a piece above it, to fade in with it: its label, and a store's logo before it. */

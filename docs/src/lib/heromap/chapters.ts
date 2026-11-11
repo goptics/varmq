@@ -133,7 +133,8 @@ function workflow(carry: Carry, wf: WorkflowPlan): PoolPart {
 }
 
 // The workflow's four tasks, in Add order: reserve, then label and charge, then ship, which waits for both. Only
-// reserve has an undo. This is the Workflows page's "Failure and undo" example without its last task.
+// reserve has an undo. The Workflows page's "Failure and undo" example has the same tasks and a fifth, notify; here
+// label is added before charge, so the worker's one goroutine runs it first and the failure comes last.
 const order = (works: number[], fails = false): TaskSpec[] => [
 	{ name: 'reserve', work: works[0], undoWork: works[4] },
 	{ name: 'label', deps: ['reserve'], work: works[1] },
