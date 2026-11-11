@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // Hub protocol 1 limits (spec/hub.md).
@@ -29,6 +30,9 @@ const (
 	hubMaxBadFrames = 16       // bad frames that end a stream
 	hubMaxIDLen     = 128      // InstanceID bytes
 	hubMaxFrameID   = 64       // request id bytes
+	hubMinSession   = 22       // session bytes, hello (Revision A)
+	hubMaxSession   = 64
+	hubSessionHdr   = "X-Hub-Session"
 	hubDefaultBeat  = 5 * time.Second
 	hubMinBeat      = time.Second
 	hubMaxBeat      = 60 * time.Second
@@ -105,8 +109,11 @@ var (
 	errHubBusy      = errors.New("varmq: hub stream: request queue full for 3 heartbeats (8 running, 64 waiting)")
 	errHubBadFrames = errors.New("varmq: hub stream: 16 bad frames")
 	errHubBadLine   = errors.New("varmq: hub frame: not a JSON object with a string type")
-	errHubNoStream  = errors.New("varmq: hub beat: no open stream")
+	errHubNoStream  = errors.New("varmq: hub beat: no stream with this session")
 	errHubClosed    = errors.New("varmq: hub stream: closed by hub")
+	errHubBadHello  = errors.New("varmq: hub hello: missing or invalid session")
+	errHubEarlyReq  = errors.New("varmq: hub frame: request before hello, dropped")
+	errHubBadID     = fmt.Errorf("varmq: InstanceID must be 1 to %d bytes of UTF-8 with no control characters", hubMaxIDLen)
 )
 
 // ConnectHub connects this process to a hub (vartop) at hubURL and serves
@@ -115,8 +122,17 @@ var (
 // redials with backoff when it drops, and returns ctx.Err() once ctx ends,
 // after telling the hub (best effort). It returns at once on a bad config:
 // hubURL not http(s), or with userinfo, a query or a fragment; empty
-// token; [InstanceID] empty or over 128 bytes; or plain http:// to a host
-// that is not loopback without [WithHubInsecure].
+// token; [InstanceID] empty, over 128 bytes, not UTF-8 or with a control
+// byte (below 0x20, or 0x7F); or plain http:// to a host that is not
+// loopback without [WithHubInsecure].
+//
+// Each stream opens with a hello that carries a session secret. Beats and
+// replies carry it in a header, never in a URL or an error: a process
+// with the same token cannot evict, or answer for, a connected instance.
+// The first beat goes out as soon as hello is read. A request that comes
+// before hello is dropped. When a stream that received hello ends, the
+// instance says bye for that session (2 s limit) before it redials, so the
+// hub frees the ID at once.
 //
 // The token proves this instance to the hub; only TLS and hubURL prove the
 // hub. Whoever answers at hubURL gets everything Handler allows: it reads
@@ -164,10 +180,12 @@ type hub struct {
 	closed bool // ConnectHub returned: no more callbacks
 }
 
-// hubJob is a request frame and the context of the stream it came on.
+// hubJob is a request frame, and the context and session of the stream it
+// came on.
 type hubJob struct {
-	ctx context.Context
-	f   hubFrame
+	ctx     context.Context
+	session string
+	f       hubFrame
 }
 
 // newHubConfig applies opts over the protocol defaults.
@@ -207,8 +225,8 @@ func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
 		return nil, errors.New("varmq: hub token empty or not a header value")
 	}
 	id := InstanceID
-	if id == "" || len(id) > hubMaxIDLen {
-		return nil, fmt.Errorf("varmq: InstanceID must be 1 to %d bytes", hubMaxIDLen)
+	if !validInstanceID(id) {
+		return nil, errHubBadID // fixed: never echo control bytes
 	}
 
 	u.Path = strings.TrimSuffix(u.Path, "/")
@@ -267,7 +285,8 @@ func (h *hub) report(err error) {
 	}
 }
 
-// run dials until ctx ends, then says bye if a stream was ever open.
+// run dials until ctx ends. After each stream that received hello it says
+// bye for that stream's session, before the redial or the return.
 func (h *hub) run(ctx context.Context) {
 	defer func() {
 		h.errMu.Lock()
@@ -278,39 +297,47 @@ func (h *hub) run(ctx context.Context) {
 		h.cfg.runners.Go(func() { h.runner(ctx) })
 	}
 
-	var (
-		ceiling time.Duration // current backoff ceiling, 0: none yet
-		ever    bool
-	)
+	var ceiling time.Duration // current backoff ceiling, 0: none yet
 	for {
-		hello, err := h.session(ctx)
-		ever = ever || hello
-		if ctx.Err() != nil {
-			break
+		sess, err := h.session(ctx)
+		if ctx.Err() == nil {
+			h.report(err)
 		}
-		h.report(err)
+		if sess != "" {
+			ceiling = 0
+			// a dead HTTP/2 connection (no FIN) would carry the bye: dial
+			// fresh. The transport may still hold it for a moment: then
+			// the bye uses its 2 s and is lost.
+			h.client.CloseIdleConnections()
+			h.sayBye(sess)
+		}
+		if ctx.Err() != nil {
+			return
+		}
 
 		var se *hubStatusError
-		if hello {
-			ceiling = 0
-		}
 		ceiling = h.nextBackoff(ceiling, errors.As(err, &se) && (se.code == http.StatusUnauthorized || se.code == http.StatusBadRequest))
 		select {
 		case <-ctx.Done():
+			return
 		case <-time.After(ceiling/2 + rand.N(ceiling/2+1)):
-		}
-		if ctx.Err() != nil {
-			break
 		}
 		// a dead HTTP/2 connection (no FIN) would carry the redial: dial fresh
 		h.client.CloseIdleConnections()
 	}
+}
 
-	if ever {
-		bctx, cancel := context.WithTimeout(context.Background(), hubByeTimeout)
-		defer cancel()
-		h.post(bctx, h.bye, nil, nil)
-	}
+// sayBye tells the hub that session ended, best effort, within 2 s on its
+// own context: ConnectHub's may be over.
+func (h *hub) sayBye(sess string) {
+	bctx, cancel := context.WithTimeout(context.Background(), hubByeTimeout)
+	defer cancel()
+	h.post(bctx, h.bye, sessionHeader(sess), nil)
+}
+
+// sessionHeader carries a stream's session secret on a beat or a reply.
+func sessionHeader(sess string) http.Header {
+	return http.Header{hubSessionHdr: {sess}}
 }
 
 // runner serves queued frames until ctx ends. The runners live as long as
@@ -323,7 +350,7 @@ func (h *hub) runner(ctx context.Context) {
 			return
 		case j := <-h.frames:
 			if j.ctx.Err() == nil { // dead stream: the hub fails what waits
-				h.serve(j.ctx, j.f)
+				h.serve(j.ctx, j.session, j.f)
 			}
 		}
 	}
@@ -358,13 +385,15 @@ type hubFrame struct {
 	Type        string `json:"type"`
 	Protocol    int    `json:"protocol"`
 	HeartbeatMS int64  `json:"heartbeat_ms"`
+	Session     string `json:"session"` // secret: never in a URL, log or error
 	ID          string `json:"id"`
 	Method      string `json:"method"`
 	Path        string `json:"path"`
 }
 
 // parseFrame decodes one stream line. Only hello and request are decoded
-// in full: any other type is ignored whole, whatever its fields hold.
+// in full: any other type is ignored whole, whatever its fields hold. On a
+// bad hello or request the frame still carries its type.
 func parseFrame(line []byte) (hubFrame, error) {
 	var head struct {
 		Type string `json:"type"`
@@ -377,18 +406,19 @@ func parseFrame(line []byte) (hubFrame, error) {
 	}
 	var f hubFrame
 	if json.Unmarshal(line, &f) != nil {
-		return hubFrame{}, fmt.Errorf("varmq: hub frame: bad %s fields", head.Type)
+		return hubFrame{Type: head.Type}, fmt.Errorf("varmq: hub frame: bad %s fields", head.Type)
 	}
 	if f.Type == "request" && !validFrameID(f.ID) {
-		return hubFrame{}, fmt.Errorf("varmq: hub frame: bad request id %.80q", f.ID)
+		return hubFrame{Type: f.Type}, fmt.Errorf("varmq: hub frame: bad request id %.80q", f.ID)
 	}
 	return f, nil
 }
 
-// session runs one stream until it drops or ctx ends. hello reports the
-// hub's hello arrived. It returns without waiting for the runners: a
-// request of this stream still running ends with its context.
-func (h *hub) session(ctx context.Context) (hello bool, err error) {
+// session runs one stream until it drops or ctx ends. sess is the session
+// of the stream's hello, "" when no valid hello arrived. It returns without
+// waiting for the runners: a request of this stream still running ends
+// with its context.
+func (h *hub) session(ctx context.Context) (sess string, err error) {
 	sctx, cancel := context.WithCancelCause(ctx)
 	var beats sync.WaitGroup
 	defer func() {
@@ -410,18 +440,18 @@ func (h *hub) session(ctx context.Context) (hello bool, err error) {
 
 	req, err := http.NewRequestWithContext(sctx, http.MethodGet, h.stream, nil)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	req.Header.Set("Accept", "application/x-ndjson")
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return false, causeOr(sctx, err)
+		return "", causeOr(sctx, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		io.Copy(io.Discard, io.LimitReader(resp.Body, hubErrBodyLimit))
-		return false, &hubStatusError{op: "stream", code: resp.StatusCode}
+		return "", &hubStatusError{op: "stream", code: resp.StatusCode}
 	}
 	stale.Reset(3 * beat)
 
@@ -431,29 +461,38 @@ func (h *hub) session(ctx context.Context) (hello bool, err error) {
 	for sc.Scan() {
 		stale.Reset(3 * beat)
 		f, err := parseFrame(sc.Bytes())
+		if err == nil && f.Type == "request" && sess == "" {
+			err = errHubEarlyReq // no session to reply with
+		}
 		if err != nil {
+			if f.Type == "hello" && sess == "" {
+				return "", err // a stream opens with a session or not at all
+			}
 			h.report(err)
 			if bad++; bad == hubMaxBadFrames { // the redial backoff bounds the rate
-				return hello, errHubBadFrames
+				return sess, errHubBadFrames
 			}
 			continue
 		}
 		switch f.Type {
 		case "hello":
-			if hello {
+			if sess != "" {
 				continue
 			}
 			if f.Protocol != hubProtocol {
-				return hello, fmt.Errorf("varmq: hub speaks protocol %d, want %d", f.Protocol, hubProtocol)
+				return "", fmt.Errorf("varmq: hub speaks protocol %d, want %d", f.Protocol, hubProtocol)
 			}
-			hello, beat = true, h.clampBeat(f.HeartbeatMS)
+			if !validChars(f.Session, hubMinSession, hubMaxSession) {
+				return "", errHubBadHello // fixed: never echo the value
+			}
+			sess, beat = f.Session, h.clampBeat(f.HeartbeatMS)
 			stale.Reset(3 * beat)
-			every := beat
-			beats.Go(func() { h.beatLoop(sctx, cancel, every) })
+			every, s := beat, sess
+			beats.Go(func() { h.beatLoop(sctx, cancel, every, s) })
 		case "request":
 			// ponytail: the reader blocks once hubQueued frames wait; a
 			// hub that floods slow requests past 3 heartbeats gets a redial.
-			j := hubJob{sctx, f}
+			j := hubJob{ctx: sctx, session: sess, f: f}
 			select {
 			case h.frames <- j:
 				continue
@@ -464,17 +503,17 @@ func (h *hub) session(ctx context.Context) (hello bool, err error) {
 			case h.frames <- j:
 				full.Store(false)
 			case <-sctx.Done():
-				return hello, context.Cause(sctx)
+				return sess, context.Cause(sctx)
 			}
 		}
 	}
 	if c := context.Cause(sctx); c != nil {
-		return hello, c
+		return sess, c
 	}
 	if err := sc.Err(); err != nil {
-		return hello, fmt.Errorf("varmq: hub stream: %w", err)
+		return sess, fmt.Errorf("varmq: hub stream: %w", err)
 	}
-	return hello, errHubClosed
+	return sess, errHubClosed
 }
 
 // causeOr is ctx's cause once it ended (the watchdog's, say), else err.
@@ -485,19 +524,15 @@ func causeOr(ctx context.Context, err error) error {
 	return err
 }
 
-// beatLoop posts a beat every interval until ctx ends. 404 (the hub lost
-// the stream) and 401 end the session.
-func (h *hub) beatLoop(ctx context.Context, cancel context.CancelCauseFunc, every time.Duration) {
+// beatLoop posts a beat of session sess at once, then every interval until
+// ctx ends. 404 (the hub has no stream with that session) and 401 end the
+// stream.
+func (h *hub) beatLoop(ctx context.Context, cancel context.CancelCauseFunc, every time.Duration, sess string) {
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
 		bctx, stop := context.WithTimeout(ctx, every)
-		code, err := h.post(bctx, h.beat, nil, nil)
+		code, err := h.post(bctx, h.beat, sessionHeader(sess), nil)
 		stop()
 		switch {
 		case err != nil:
@@ -513,6 +548,11 @@ func (h *hub) beatLoop(ctx context.Context, cancel context.CancelCauseFunc, ever
 			return
 		default:
 			h.report(&hubStatusError{op: "beat", code: code})
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }
@@ -537,11 +577,14 @@ func (h *hub) post(ctx context.Context, target string, hdr http.Header, body []b
 }
 
 // validFrameID reports id is 1 to 64 bytes of [A-Za-z0-9_-].
-func validFrameID(id string) bool {
-	if id == "" || len(id) > hubMaxFrameID {
+func validFrameID(id string) bool { return validChars(id, 1, hubMaxFrameID) }
+
+// validChars reports s is lo to hi bytes of [A-Za-z0-9_-].
+func validChars(s string, lo, hi int) bool {
+	if len(s) < lo || len(s) > hi {
 		return false
 	}
-	for _, c := range []byte(id) {
+	for _, c := range []byte(s) {
 		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || c == '_' || c == '-') {
 			return false
 		}
@@ -549,15 +592,25 @@ func validFrameID(id string) bool {
 	return true
 }
 
-// serve runs one request frame on the handler and posts the reply, once,
-// within the reply timeout. A reply for a stream that ended is dropped.
-func (h *hub) serve(ctx context.Context, f hubFrame) {
+// validInstanceID reports id is 1 to 128 bytes of UTF-8 with no byte below
+// 0x20 and no 0x7F.
+func validInstanceID(id string) bool {
+	if id == "" || len(id) > hubMaxIDLen || !utf8.ValidString(id) {
+		return false
+	}
+	return !strings.ContainsFunc(id, func(r rune) bool { return r < 0x20 || r == 0x7f })
+}
+
+// serve runs one request frame on the handler and posts the reply of
+// session sess, once, within the reply timeout. A reply for a stream that
+// ended is dropped.
+func (h *hub) serve(ctx context.Context, sess string, f hubFrame) {
 	rec := h.run1(ctx, f)
 	if ctx.Err() != nil { // the hub failed the request with its stream
 		return
 	}
 
-	hdr := http.Header{}
+	hdr := sessionHeader(sess)
 	hdr.Set("X-Hub-Status", strconv.Itoa(rec.code))
 	if ct := rec.h.Get("Content-Type"); ct != "" {
 		hdr.Set("Content-Type", ct)

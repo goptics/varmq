@@ -3,6 +3,7 @@ package varmq
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -2201,31 +2202,44 @@ func withHubTiming(minBeat, firstRetry, maxRetry time.Duration) HubOption {
 }
 
 // fakeHub is a hub (spec/hub.md) for tests: every stream it opens arrives
-// on streams, every reply on replies, every beat on beats.
+// on streams, every reply on replies, every beat on beats. Each stream gets
+// a new session, put in place of $SESSION in hello.
 type fakeHub struct {
 	srv          *httptest.Server
 	token        string
-	hello        atomic.Value // string: first stream line
+	hello        atomic.Value // string: first stream line, "" for none
 	streamStatus atomic.Int32 // non-zero: refuse streams with it
 	beatStatus   atomic.Int32 // non-zero: answer beats with it
 	replyStatus  atomic.Int32 // non-zero: answer replies with it
 	replyHang    atomic.Bool  // hold replies until the caller gives up
 	streams      chan *hubStream
 	replies      chan hubReply
-	beats        chan url.Values
+	beats        chan hubBeat
 }
 
 // hubStream is one open stream: send lines down it, close quit to end it.
 type hubStream struct {
-	query url.Values
-	lines chan string
-	quit  chan struct{}
+	query   url.Values
+	session string // this stream's secret, sent in hello
+	lines   chan string
+	quit    chan struct{}
+}
+
+// hubBeat is one beat: its query and its X-Hub-Session header.
+type hubBeat struct {
+	url.Values
+	session string
 }
 
 func (s *hubStream) send(lines ...string) {
 	for _, l := range lines {
 		s.lines <- l
 	}
+}
+
+// hello sends a hello of heartbeat ms with this stream's session.
+func (s *hubStream) hello(ms int) {
+	s.send(strings.ReplaceAll(hubHello(ms), "$SESSION", s.session))
 }
 
 // request sends a request frame.
@@ -2237,12 +2251,17 @@ func (s *hubStream) request(id, method, path string) {
 type hubReply struct {
 	id, instance           string
 	status, ctype, varmqID string
+	session, url           string // X-Hub-Session; path and query
 	body                   string
 }
 
+// hubHello is a hello whose session the fake hub fills in per stream.
 func hubHello(ms int) string {
-	return fmt.Sprintf(`{"type":"hello","protocol":1,"heartbeat_ms":%d}`, ms)
+	return fmt.Sprintf(`{"type":"hello","protocol":1,"heartbeat_ms":%d,"session":"$SESSION"}`, ms)
 }
+
+// hubSession is a new session secret: 26 bytes of [A-Z2-7].
+func hubSession() string { return rand.Text() }
 
 func newFakeHub(t *testing.T) *fakeHub {
 	t.Helper()
@@ -2250,7 +2269,7 @@ func newFakeHub(t *testing.T) *fakeHub {
 		token:   "s3cret",
 		streams: make(chan *hubStream, 16),
 		replies: make(chan hubReply, 64),
-		beats:   make(chan url.Values, 256),
+		beats:   make(chan hubBeat, 256),
 	}
 	f.hello.Store(hubHello(5000))
 	authed := func(w http.ResponseWriter, r *http.Request) bool {
@@ -2274,12 +2293,12 @@ func newFakeHub(t *testing.T) *fakeHub {
 		w.WriteHeader(http.StatusOK)
 		fl := w.(http.Flusher)
 		write := func(l string) { io.WriteString(w, l+"\n"); fl.Flush() }
+		s := &hubStream{query: r.URL.Query(), session: hubSession(), lines: make(chan string, 64), quit: make(chan struct{})}
 		if h := f.hello.Load().(string); h != "" {
-			write(h)
+			write(strings.ReplaceAll(h, "$SESSION", s.session))
 		} else {
 			fl.Flush()
 		}
-		s := &hubStream{query: r.URL.Query(), lines: make(chan string, 64), quit: make(chan struct{})}
 		select { // undrained (redial tests): never block srv.Close
 		case f.streams <- s:
 		case <-r.Context().Done():
@@ -2309,7 +2328,8 @@ func newFakeHub(t *testing.T) *fakeHub {
 		case f.replies <- hubReply{
 			id: r.PathValue("id"), instance: r.URL.Query().Get("instance"),
 			status: r.Header.Get("X-Hub-Status"), ctype: r.Header.Get("Content-Type"),
-			varmqID: r.Header.Get(InstanceHeader), body: string(body),
+			varmqID: r.Header.Get(InstanceHeader), session: r.Header.Get("X-Hub-Session"),
+			url: r.URL.RequestURI(), body: string(body),
 		}:
 		case <-r.Context().Done():
 		}
@@ -2324,7 +2344,7 @@ func newFakeHub(t *testing.T) *fakeHub {
 			return
 		}
 		select {
-		case f.beats <- r.URL.Query():
+		case f.beats <- hubBeat{r.URL.Query(), r.Header.Get("X-Hub-Session")}:
 		default:
 		}
 		code := int(f.beatStatus.Load())
@@ -2428,6 +2448,7 @@ func TestHubConnectGetAndPatch(t *testing.T) {
 	s.request("g1", "GET", "/workers/hub-worker")
 	r := f.reply(t, "g1")
 	assert.Equal(t, "200", r.status)
+	assert.Equal(t, s.session, r.session)
 	assert.Equal(t, "application/json", r.ctype)
 	assert.Equal(t, "hub-test", r.varmqID)
 	assert.Equal(t, "hub-test", r.instance)
@@ -2599,6 +2620,7 @@ func TestHubByeOnCancel(t *testing.T) {
 	for {
 		if b := within(t, f.beats); b.Get("bye") == "1" {
 			assert.Equal(t, "hub-test", b.Get("instance"))
+			assert.Equal(t, s.session, b.session)
 			return
 		}
 	}
@@ -2620,8 +2642,21 @@ func TestHubConfigErrors(t *testing.T) {
 
 	InstanceID = ""
 	assert.ErrorContains(t, ConnectHub(ctx, "https://h", "t"), "InstanceID")
-	InstanceID = strings.Repeat("x", 129)
-	assert.ErrorContains(t, ConnectHub(ctx, "https://h", "t"), "InstanceID")
+	// Revision A: UTF-8, no byte below 0x20, no 0x7F, 1 to 128 bytes; the
+	// error is fixed and never echoes the ID
+	for _, id := range []string{strings.Repeat("x", 129), "a\x01b", "tab\there", "a\nb", "del\x7f", "bad\xffutf8", "\xc3"} {
+		InstanceID = id
+		err := ConnectHub(ctx, "https://h", "t")
+		assert.ErrorIs(t, err, errHubBadID, "%q", id)
+		assert.ErrorContains(t, err, "InstanceID")
+		assert.False(t, strings.ContainsFunc(err.Error(), func(r rune) bool { return r < 0x20 || r == 0x7f }), "%q", id)
+	}
+	cctx0, cancel0 := context.WithCancel(ctx)
+	cancel0()
+	for _, id := range []string{strings.Repeat("x", 128), "héllo wörld-ü", "a"} {
+		InstanceID = id
+		assert.ErrorIs(t, ConnectHub(cctx0, "https://h", "t"), context.Canceled, "%q", id)
+	}
 	InstanceID = "hub-test"
 
 	for _, h := range []string{"localhost", "127.0.0.1", "::1"} {
@@ -3069,7 +3104,7 @@ func TestHubHTTP2HalfOpenRedials(t *testing.T) {
 		streams.Add(1)
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		fl := w.(http.Flusher)
-		io.WriteString(w, hubHello(20)+"\n")
+		io.WriteString(w, strings.ReplaceAll(hubHello(20), "$SESSION", hubSession())+"\n")
 		fl.Flush()
 		tk := time.NewTicker(10 * time.Millisecond)
 		defer tk.Stop()
@@ -3116,7 +3151,8 @@ func TestHubHTTP2HalfOpenRedials(t *testing.T) {
 
 	waitFor := func(cond func() bool, msg string) {
 		t.Helper()
-		for deadline := time.Now().Add(3 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
+		// 5 s: the bye before the redial may ride the dead connection for its 2 s
+		for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
 			if time.Now().After(deadline) {
 				t.Fatal(msg)
 			}
@@ -3238,13 +3274,15 @@ func TestHubHelloHeartbeat(t *testing.T) {
 		f.hello.Store(hubHello(30))
 		f.connect(t) // configured: 5 s
 		within(t, f.streams)
+		within(t, f.beats) // the first, at once
 		assert.Empty(t, within(t, f.beats).Get("bye"))
 	})
 	t.Run("absent", func(t *testing.T) {
 		f := newFakeHub(t)
-		f.hello.Store(`{"type":"hello","protocol":1}`)
+		f.hello.Store(`{"type":"hello","protocol":1,"session":"$SESSION"}`)
 		f.connect(t, WithHubHeartbeat(30*time.Millisecond))
 		within(t, f.streams)
+		within(t, f.beats)
 		assert.Empty(t, within(t, f.beats).Get("bye"))
 	})
 }
@@ -3255,11 +3293,12 @@ func TestHubSecondHello(t *testing.T) {
 	errs, _ := f.connect(t)
 	s := within(t, f.streams)
 
-	s.send(hubHello(10)) // applied, no pings: stale in 30 ms
+	s.hello(10) // applied, no pings: stale in 30 ms
 	time.Sleep(100 * time.Millisecond)
 	s.request("h", "GET", "/health")
 	assert.Equal(t, "200", f.reply(t, "h").status)
-	assert.Empty(t, f.beats, "beats at 5 s")
+	within(t, f.beats) // the first beat, at once
+	assert.Empty(t, f.beats, "next beat at 5 s")
 	assert.Empty(t, f.streams, "no redial")
 	assert.Empty(t, errs)
 }
@@ -3280,16 +3319,138 @@ func TestHubProtocolMismatch(t *testing.T) {
 	}
 }
 
-// A stream with no hello serves requests, and stop sends no bye.
+// A stream with no hello runs no request and sends no beat, and stop
+// sends no bye.
 func TestHubNoHelloNoBye(t *testing.T) {
 	f := newFakeHub(t)
 	f.hello.Store("")
-	_, stop := f.connect(t)
+	errs, stop := f.connect(t)
 	s := within(t, f.streams)
 	s.request("h", "GET", "/health")
-	assert.Equal(t, "200", f.reply(t, "h").status)
+	errIs(t, errs, func(err error) bool { return errors.Is(err, errHubEarlyReq) })
 	assert.ErrorIs(t, stop(), context.Canceled)
+	assert.Empty(t, f.replies, "dropped")
 	assert.Empty(t, f.beats, "no beat, no bye")
+}
+
+// A request before hello is dropped; one after it runs and its reply
+// carries the session.
+func TestHubRequestBeforeHello(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store("")
+	f.connect(t)
+	s := within(t, f.streams)
+	s.request("early", "GET", "/health")
+	s.hello(5000)
+	s.request("late", "GET", "/health")
+	r := f.reply(t, "late") // the first reply: early was dropped
+	assert.Equal(t, "200", r.status)
+	assert.Equal(t, s.session, r.session)
+}
+
+// Beats and replies carry the stream's session in X-Hub-Session, never in
+// a URL; the first beat comes at once after hello, not one heartbeat on.
+func TestHubSession(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(60000))
+	errs, stop := f.connect(t)
+	s := within(t, f.streams)
+	assert.NotContains(t, s.query.Encode(), s.session)
+
+	select {
+	case b := <-f.beats:
+		assert.Equal(t, s.session, b.session)
+		assert.Empty(t, b.Get("bye"))
+		assert.NotContains(t, b.Encode(), s.session)
+	case <-time.After(2 * time.Second): // a heartbeat is 60 s
+		t.Fatal("no first beat right after hello")
+	}
+
+	s.request("r", "GET", "/health")
+	r := f.reply(t, "r")
+	assert.Equal(t, s.session, r.session)
+	assert.NotContains(t, r.url, s.session)
+
+	assert.ErrorIs(t, stop(), context.Canceled)
+	b := within(t, f.beats)
+	assert.Equal(t, "1", b.Get("bye"))
+	assert.Equal(t, s.session, b.session)
+	for len(errs) > 0 {
+		assert.NotContains(t, (<-errs).Error(), s.session)
+	}
+}
+
+// A hello without a valid session (22 to 64 bytes of [A-Za-z0-9_-]) ends
+// the stream: the instance redials, sends no beat and no bye, and its
+// error never repeats the value.
+func TestHubHelloBadSession(t *testing.T) {
+	for name, c := range map[string]struct{ hello, leak string }{
+		"missing":   {`{"type":"hello","protocol":1,"heartbeat_ms":5000}`, ""},
+		"empty":     {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":""}`, ""},
+		"21 bytes":  {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":"LEAK` + strings.Repeat("a", 17) + `"}`, "LEAK"},
+		"65 bytes":  {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":"LEAK` + strings.Repeat("a", 61) + `"}`, "LEAK"},
+		"bad char":  {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":"LEAK` + strings.Repeat("a", 20) + `.x"}`, "LEAK"},
+		"not text":  {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":5}`, ""},
+		"null byte": {`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":"LEAK` + strings.Repeat("a", 20) + `\u0000"}`, "LEAK"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeHub(t)
+			f.hello.Store(c.hello)
+			errs, stop := f.connect(t)
+			s := within(t, f.streams)
+			s.request("r", "GET", "/health") // may arrive before the stream ends
+			err := errIs(t, errs, func(err error) bool {
+				return errors.Is(err, errHubBadHello) || strings.Contains(err.Error(), "bad hello fields")
+			})
+			if c.leak != "" {
+				assert.NotContains(t, err.Error(), c.leak)
+			}
+			within(t, f.streams) // redialed
+			assert.ErrorIs(t, stop(), context.Canceled)
+			assert.Empty(t, f.replies, "no session, no reply")
+			assert.Empty(t, f.beats, "no session, no beat, no bye")
+		})
+	}
+	for _, n := range []int{22, 64} { // the bounds are valid
+		f := newFakeHub(t)
+		sess := strings.Repeat("A_-9", 16)[:n]
+		f.hello.Store(`{"type":"hello","protocol":1,"heartbeat_ms":5000,"session":"` + sess + `"}`)
+		f.connect(t)
+		within(t, f.streams)
+		assert.Equal(t, sess, within(t, f.beats).session, n)
+	}
+}
+
+// When a stream that received hello ends, the instance says bye with that
+// stream's session before it redials; the new stream has a new session.
+func TestHubByeBeforeRedial(t *testing.T) {
+	f := newFakeHub(t)
+	errs, stop := f.connect(t)
+	s1 := within(t, f.streams)
+	assert.Equal(t, s1.session, within(t, f.beats).session) // first beat
+	close(s1.quit)
+	errIs(t, errs, func(err error) bool { return errors.Is(err, errHubClosed) })
+	s2 := within(t, f.streams)
+	assert.NotEqual(t, s1.session, s2.session)
+
+	var bye *hubBeat // posted before the redial: already in f.beats
+	for len(f.beats) > 0 && bye == nil {
+		if b := <-f.beats; b.Get("bye") == "1" {
+			bye = &b
+		}
+	}
+	require.NotNil(t, bye, "no bye before the redial")
+	assert.Equal(t, s1.session, bye.session, "bye carries the old session")
+
+	s2.request("r", "GET", "/health")
+	assert.Equal(t, s2.session, f.reply(t, "r").session)
+	assert.ErrorIs(t, stop(), context.Canceled)
+	for {
+		if b := within(t, f.beats); b.Get("bye") == "1" {
+			assert.Equal(t, s2.session, b.session)
+			return
+		}
+	}
 }
 
 // A 64 KiB line is read; a longer one ends the stream.
@@ -3345,6 +3506,19 @@ func TestHubConflictBackoff(t *testing.T) {
 	for range 3 {
 		errIs(t, errs, hubStatus("stream", http.StatusConflict))
 	}
+}
+
+// A stream 503 (hub at its instance limit, rate limit or memory budget)
+// retries with the normal backoff, not the cap.
+func TestHubUnavailableBackoff(t *testing.T) {
+	f := newFakeHub(t)
+	f.streamStatus.Store(http.StatusServiceUnavailable)
+	errs, _ := f.connect(t, withHubTiming(10*time.Millisecond, 10*time.Millisecond, time.Hour))
+	for range 3 {
+		errIs(t, errs, hubStatus("stream", http.StatusServiceUnavailable))
+	}
+	f.streamStatus.Store(0)
+	within(t, f.streams)
 }
 
 // hubCountingTransport counts the requests it carries.
