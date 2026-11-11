@@ -21,10 +21,10 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
   - In-memory queue pending payloads now served over REST (`GET /queues/{id}/jobs`), as redisq's were: protect `Handler` (#176).
   - In-memory priority queue `Values()` returns hand-out order (#176).
   - `Purge` or `Close` on shared-storage handle detaches its live job handles: `ErrDetached` (#179).
-- **Deprecated binders and handles removed** (#NN): `WithPersistentQueue`, `WithPersistentPriorityQueue`, `WithDistributedQueue`, `WithDistributedPriorityQueue`, `NewDistributedQueue[T]`, `NewDistributedPriorityQueue[T]` and their `PersistentQueue`, `PersistentPriorityQueue`, `DistributedQueue`, `DistributedPriorityQueue` handles. Use `WithQueue` / `WithPriorityQueue` and `NewQueue[T]` / `NewPriorityQueue[T]`.
-- **`IExternalBaseQueue.NumPending` removed** (#NN): use `Len()`.
-- **Workflow store is its own object, found by scope** (#NN; contract v0.8.0, spec 1.8.0): `WorkflowAcknowledgeable` removed; `WorkflowStore` gains `FinishTask(queueID, ackID, TaskEnd)`. Queue implements only `Scoped` + `QueueInspector`. Storage registers its store: `contract.RegisterWorkflowStore` (`UnregisterWorkflowStore`, `LookupWorkflowStore`, `WorkflowStores`, `ErrScopeRegistered`). Adapters must update.
-- **Durable task with no registered store not run** (#NN): worker reports `varmq: no workflow store for scope <scope>` on `Errs()` and handler, leaves job unacked for redelivery. `GET /workflows` lists registered stores, not bound queues'.
+- **Deprecated binders and handles removed** (#187): `WithPersistentQueue`, `WithPersistentPriorityQueue`, `WithDistributedQueue`, `WithDistributedPriorityQueue`, `NewDistributedQueue[T]`, `NewDistributedPriorityQueue[T]` and their `PersistentQueue`, `PersistentPriorityQueue`, `DistributedQueue`, `DistributedPriorityQueue` handles. Use `WithQueue` / `WithPriorityQueue` and `NewQueue[T]` / `NewPriorityQueue[T]`.
+- **`IExternalBaseQueue.NumPending` removed** (#187): use `Len()`.
+- **Workflow store is its own object, found by scope** (#187; contract v0.8.0, spec 1.8.0): `WorkflowAcknowledgeable` removed; `WorkflowStore` gains `FinishTask(queueID, ackID, TaskEnd)`. Queue implements only `Scoped` + `QueueInspector`. Storage registers its store: `contract.RegisterWorkflowStore` (`UnregisterWorkflowStore`, `LookupWorkflowStore`, `WorkflowStores`, `ErrScopeRegistered`). Adapters must update.
+- **Durable task with no registered store not run** (#187): worker reports `varmq: no workflow store for scope <scope>` on `Errs()` and handler, leaves job unacked for redelivery. `GET /workflows` lists registered stores, not bound queues'.
 
 ### ⚡ Performance
 

@@ -3,6 +3,8 @@
 
 export interface SetupCode {
 	label?: string;
+	/** A storage: the tab shows its mark and name (ui/stores.ts). */
+	store?: 'memory' | 'sqlite' | 'redis';
 	file?: string;
 	lang?: 'bash' | 'go';
 	code: string;
@@ -38,7 +40,7 @@ export const redisSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'varmq’s version is the release these pages describe.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq@v1.6.0' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/redisq' }],
 	},
 	{
 		title: 'Create a queue and bind it',
@@ -82,7 +84,7 @@ export const sqliteSetup: SetupStep[] = [
 	{
 		title: 'Add the two modules',
 		text: 'sqliteq uses <a href="https://github.com/mattn/go-sqlite3">mattn/go-sqlite3</a>, which is built with cgo, so building needs <code>CGO_ENABLED=1</code> and a C compiler.',
-		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq@v0.4.0' }],
+		code: [{ lang: 'bash', code: 'go get github.com/goptics/varmq github.com/goptics/sqliteq' }],
 	},
 	{
 		title: 'Open the store',
@@ -110,6 +112,75 @@ export const sqliteSetup: SetupStep[] = [
 				lang: 'go',
 				file: 'main.go',
 				code: 'pq, err := sdb.NewPriorityQueue("priority_jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithPriorityQueue(pq)\nqueue.Add("alert", 1) // a lower number runs first',
+			},
+		],
+	},
+];
+
+// The first workflow of guides/workflows.mdx: download, resize, save. examples/workflows-chain is the in-memory
+// program; the SQLite and Redis tabs ran against sqliteq and redisq with the same three tasks.
+const worker = `steps := varmq.NewErrWorker(func(j varmq.Job[string]) error {
+	fmt.Println("run:", j.Data())
+	return nil
+})`;
+
+export const workflowSteps: SetupStep[] = [
+	{
+		title: 'Create a worker and the workflow',
+		text: `Each task is one job, so a worker must run it. Here one worker runs all three tasks. The workflow needs a store, which keeps its state. The queue and the store must use the same storage. Pick one.`,
+		code: [
+			{
+				store: 'memory',
+				lang: 'go',
+				code: `${worker}.BindQueue()\n\nwf := varmq.NewWorkflow(varmq.NewWorkflowStore())`,
+				note: `<a href="${pkg}/varmq#NewWorkflowStore"><code>NewWorkflowStore</code></a> keeps the state in your process. It is lost when the process exits.`,
+			},
+			{
+				store: 'sqlite',
+				lang: 'go',
+				code:
+					'qs, err := sqliteq.New("data")\nif err != nil {\n\tpanic(err)\n}\ndefer qs.Close()\n\n' +
+					'queue, err := qs.NewQueue("steps")\nif err != nil {\n\tpanic(err)\n}\n' +
+					`${worker}.WithQueue(queue)\n\n` +
+					'store, err := sqliteq.NewWorkflowStore(qs)\nif err != nil {\n\tpanic(err)\n}\ndefer store.Close()\n\n' +
+					'wf := varmq.NewWorkflow(store)',
+				note: `<a href="${pkg}/sqliteq#NewWorkflowStore"><code>sqliteq.NewWorkflowStore</code></a> keeps the state in SQLite, so the workflow continues after a restart. The <code>defer</code> order closes the store before the client.`,
+			},
+			{
+				store: 'redis',
+				lang: 'go',
+				code:
+					'qs := redisq.New("redis://localhost:6375")\ndefer qs.Close()\n\n' +
+					`${worker}.WithQueue(qs.NewQueue("steps"))\n\n` +
+					'store, err := redisq.NewWorkflowStore(qs)\nif err != nil {\n\tpanic(err)\n}\ndefer store.Close()\n\n' +
+					'wf := varmq.NewWorkflow(store)',
+				note: `<a href="${pkg}/redisq#NewWorkflowStore"><code>redisq.NewWorkflowStore</code></a> keeps the state in Redis, so the workflow continues after a restart and other processes can run its tasks. Port 6375 is the Redis of <a href="/persistence/redis/#setup">Redis setup</a>.`,
+			},
+		],
+	},
+	{
+		title: 'Add the first task',
+		text: '<code>wf.Add(name, queue, data)</code> adds a task. Nothing runs yet. This task has no dependencies, so it starts first.',
+		code: [{ lang: 'go', code: 'download := wf.Add("download", steps, "download photo.png")' }],
+	},
+	{
+		title: 'Add a task that waits',
+		text: '<code>After(download)</code> makes this task wait until <code>download</code> has ended.',
+		code: [{ lang: 'go', code: 'resize := wf.Add("resize", steps, "resize to 64px").After(download)' }],
+	},
+	{
+		title: 'Add the last task',
+		text: 'It waits for <code>resize</code>. The steps from here are the same for every store.',
+		code: [{ lang: 'go', code: 'wf.Add("save", steps, "save to disk").After(resize)' }],
+	},
+	{
+		title: 'Submit and wait',
+		text: `<a href="${pkg}/varmq#Workflow.Submit"><code>Submit</code></a> starts the workflow. <a href="${pkg}/varmq#Workflow.Wait"><code>Wait</code></a> blocks until it ends. <a href="${pkg}/varmq#Workflow.WaitContext"><code>WaitContext</code></a> does the same with a deadline.`,
+		code: [
+			{
+				lang: 'go',
+				code: 'if err := wf.Submit(context.Background()); err != nil {\n\tpanic(err)\n}\nrec, err := wf.Wait()\nif err != nil {\n\tpanic(err)\n}\nfmt.Println("workflow:", rec.State)',
+				note: 'It prints <code>run: download photo.png</code>, <code>run: resize to 64px</code>, <code>run: save to disk</code>, then <code>workflow: completed</code>.',
 			},
 		],
 	},

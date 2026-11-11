@@ -117,7 +117,7 @@ On shared storage such as Redis or SQLite, another process can run the job. The 
 
 - **`Err`** returns `nil` for a completed job. For a failed job it returns a [`*RemoteError`](https://pkg.go.dev/github.com/goptics/varmq#RemoteError). It holds only the error text, so `errors.Is` does not match your own error values.
 - **`Result`** decodes the result from JSON. It returns [`ErrNoResult`](https://pkg.go.dev/github.com/goptics/varmq#ErrNoResult) when the storage kept no result, for example a result over 64 KiB.
-- **[`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached)** means this handle cannot learn the outcome. The storage does not report outcomes, or you called `Close` on the handle. The job itself still runs.
+- **[`ErrDetached`](https://pkg.go.dev/github.com/goptics/varmq#ErrDetached)** means this handle cannot learn the outcome. The storage does not report outcomes, you called `Close` on the handle, or you called `Purge` or `Close` on the queue handle that added the job. The job itself still runs.
 
 A job on storage that reports outcomes or cancels jobs always has an ID: when you give none, VarMQ makes a random one. To wait on a job from a process that did not add it, use [`OpenJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenJob), [`OpenErrJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenErrJob) or [`OpenResultJob`](https://pkg.go.dev/github.com/goptics/varmq#OpenResultJob) with that ID. The storage finds a job that already ended while it keeps the job's record. [Persistence](/persistence/overview/) says which storage supports this.
 

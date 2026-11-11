@@ -2,8 +2,8 @@
 // In memory there is no acknowledgement: the worker takes the job with Dequeue and closes it when the
 // function returns (source.go, worker_pool.go). A worker whose only source is redisq or sqliteq takes
 // its jobs with DequeueBatchWithAckIds, one call for up to 64 free slots (maxCredit, worker_credit.go).
-// An adapter of your own needs only DequeueWithAckId. Closing a job calls Acknowledge, so between the
-// function's return and the storage's answer the job has run but is not acknowledged (job.go).
+// An adapter of your own needs no batch call: DequeueWithAckId is enough. Closing a job calls Acknowledge (Reject for
+// a failed one), so between the function's return and the storage's answer the job has run but is not acknowledged (job.go).
 
 export type Mode = 'memory' | 'redis' | 'sqlite' | 'own';
 

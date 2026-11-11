@@ -14,31 +14,32 @@ The in-memory worker pool, queues and topics are all in this one package. Shared
 
 ## Versions
 
-Each module has its own `go.mod`, so each one can need a different Go version. The table is for the releases these docs describe.
+`go get` without a version takes the latest release of each module. Use the latest releases of VarMQ and its adapters together.
 
-| Module | Version | Go version | Other needs |
-|---|---|---|---|
-| `github.com/goptics/varmq` | v1.11.0 | 1.27 or newer | None. |
-| `github.com/goptics/varmq/contract` | v0.7.0 | 1.24 or newer | None. VarMQ and the adapters import it. |
-| `github.com/goptics/redisq` | v1.6.0 | 1.26 or newer | Redis 6.0 or newer, with Lua scripts allowed. |
-| `github.com/goptics/sqliteq` | v0.4.0 | 1.27 or newer | cgo (`CGO_ENABLED=1`) and a C compiler, because it uses `mattn/go-sqlite3`. |
+| Module | Go version | Other needs |
+|---|---|---|
+| `github.com/goptics/varmq` | 1.27 or newer | None. |
+| `github.com/goptics/varmq/contract` | 1.24 or newer | None. VarMQ and the adapters import it. |
+| `github.com/goptics/redisq` | 1.26 or newer | Redis 6.0 or newer, with Lua scripts allowed. |
+| `github.com/goptics/sqliteq` | 1.27 or newer | cgo (`CGO_ENABLED=1`) and a C compiler, because it uses `mattn/go-sqlite3`. |
 
-Your module needs the highest Go version of the modules it uses. With VarMQ v1.11.0, that is Go 1.27.
+Your module needs the highest Go version of the modules it uses. With VarMQ, that is Go 1.27.
 
-### What each adapter release supports
+### What the adapters support
 
-| Feature | VarMQ | redisq | sqliteq |
-|---|---|---|---|
-| Binding with `WithQueue` and producers with `NewQueue` | v1.11.0 | v1.6.0 | v0.4.0 |
-| [`Reject`](/persistence/overview/#acknowledgement) of a failed job | v1.11.0 | v1.6.0 | v0.4.0 |
-| [Job outcome](/concepts/jobs/#jobs-in-other-processes) and [cancel](/concepts/jobs/#cancelling-a-job) | v1.11.0 | v1.6.0 | v0.4.0 |
-| [Queue pause](/guides/queues/#pausing-a-queue) | v1.11.0 | v1.6.0 | v0.4.0 |
-| Job records for the [REST API](/operations/rest-api/#queues-and-jobs) | v1.11.0 | v1.6.0 | v0.4.0 |
-| Reading one job by ID over REST | v1.11.0 | no: the route answers 501 | no: the route answers 501 |
-| [Workflows](/guides/workflows/) | v1.11.0 | v1.6.0 | v0.4.0 |
+redisq and sqliteq support these features:
+
+- Binding with `WithQueue`, and producers with `NewQueue`
+- [`Reject`](/persistence/overview/#acknowledgement) of a failed job
+- [Job outcome](/concepts/jobs/#jobs-in-other-processes) and [cancel](/concepts/jobs/#cancelling-a-job)
+- [Queue pause](/guides/queues/#pausing-a-queue)
+- Job records for the [REST API](/operations/rest-api/#queues-and-jobs)
+- [Workflows](/guides/workflows/)
+
+Neither adapter reads one job by its ID. For their queues, that REST route answers 501.
 
 :::caution
-Older adapter releases do not work with VarMQ v1.11.0: redisq v1.5.1 and older, and sqliteq v0.3.0 and older. Use redisq v1.6.0 or newer, or sqliteq v0.4.0 or newer.
+Older adapter releases do not work with this VarMQ: redisq v1.5.1 and older, and sqliteq v0.3.0 and older. They do not have `Reject`, so your module does not compile.
 :::
 
 Next: the [quick start](/start/quick-start/).

@@ -1,0 +1,35 @@
+// The steps of guides/workflows.mdx, "A first workflow" (workflowSteps in components/ops/setup-data.ts),
+// as one program, so run_test.go checks that they compile and run. Keep the two in sync.
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/goptics/varmq"
+)
+
+func main() {
+	// 1. A worker and its queue, then the workflow on a store. Here one worker runs every task.
+	steps := varmq.NewErrWorker(func(j varmq.Job[string]) error {
+		fmt.Println("run:", j.Data())
+		return nil
+	}).BindQueue()
+
+	wf := varmq.NewWorkflow(varmq.NewWorkflowStore())
+
+	// 2-4. The tasks, one Add each. After sets the order.
+	download := wf.Add("download", steps, "download photo.png")
+	resize := wf.Add("resize", steps, "resize to 64px").After(download)
+	wf.Add("save", steps, "save to disk").After(resize)
+
+	// 5. Submit, then wait for the end.
+	if err := wf.Submit(context.Background()); err != nil {
+		panic(err)
+	}
+	rec, err := wf.Wait()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("workflow:", rec.State)
+}

@@ -86,7 +86,7 @@ Three choices in it matter:
    ```bash
    mkdir redis-persistent && cd redis-persistent
    go mod init redis-persistent
-   go get github.com/goptics/varmq github.com/goptics/redisq@v1.6.0
+   go get github.com/goptics/varmq github.com/goptics/redisq
    ```
 
 3. Run it with `go run .`. The first run prints `left in Redis by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.
@@ -247,7 +247,7 @@ How it fits together:
    mkdir redis-distributed && cd redis-distributed
    go mod init redis-distributed
    mkdir producer consumer
-   go get github.com/goptics/varmq github.com/goptics/redisq@v1.6.0
+   go get github.com/goptics/varmq github.com/goptics/redisq
    ```
 
 3. In one terminal run `go run ./consumer`. It prints `waiting in Redis: 0` and `listening`.
@@ -262,7 +262,7 @@ To see a crash instead, run the producer again and kill one consumer with `kill 
 
 [The overview](/persistence/overview/#acknowledgement) describes when VarMQ acknowledges a job. This is what redisq does with a job that was taken and not acknowledged, for example because the process died.
 
-When such a job runs again, with redisq v1.6.0:
+When such a job runs again:
 
 | Case | The job runs again |
 |---|---|
@@ -298,7 +298,7 @@ A job without an ID is not checked. If the reply to its push is lost, the Redis 
 
 ## Pause, outcome, cancel and workflows
 
-redisq v1.6.0 supports these VarMQ features. Each guide has the details.
+redisq supports these VarMQ features. Each guide has the details.
 
 - **[Queue pause](/guides/queues/#pausing-a-queue):** the pause is kept in Redis, so every process stops taking jobs, and it survives a restart.
 - **[Job outcome](/concepts/jobs/#jobs-in-other-processes):** a producer's job handle learns how the job ended, with a result worker's result.

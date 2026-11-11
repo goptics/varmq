@@ -105,11 +105,12 @@ export const NODES: NodeDef[] = [
 			c.ack = false;
 			c.batch = false;
 		},
-		methods: ['DequeueWithAckId() (any, bool, string)', 'Acknowledge(ackID string) bool'],
+		methods: ['DequeueWithAckId() (any, bool, string)', 'Acknowledge(ackID string) bool', 'Reject(ackID, reason string) bool'],
 		adds: 'The interface that makes a queue persistent. The storage gives out a job with an acknowledgement ID and learns when the job is done.',
 		worker: [
 			'DequeueWithAckId: once for each job it takes, when a slot is free and Len is above 0.',
-			'Acknowledge: once for each job, with its ID, when the function has returned and the worker closes the job. An empty ID means nothing to acknowledge.',
+			'Acknowledge: once for each job that completed, with its ID, when the function has returned and the worker closes the job. An empty ID means nothing to acknowledge.',
+			'Reject: instead of Acknowledge, for a job that failed or panicked, with the error text. The storage records it failed and does not queue it again.',
 			'What happens to a job that is taken and not acknowledged is the storage’s decision. So the delivery guarantee is the adapter’s.',
 		],
 		by: ['redisq', 'sqliteq'],

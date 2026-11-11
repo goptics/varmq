@@ -4,6 +4,9 @@ description: "Run jobs on several queues in a set order, pass results between th
 ---
 
 import GoPlay from '../../../components/GoPlay.astro';
+import WorkflowRun from '../../../components/guides-a/WorkflowRun.astro';
+import SetupSteps from '../../../components/ops/SetupSteps.astro';
+import { workflowSteps } from '../../../components/ops/setup-data';
 
 A workflow is a set of tasks with dependencies. Each task is one job on a queue that you bound to a worker. VarMQ queues a task when every task it depends on has ended. Use a workflow when one job needs the output of another, or when finished work must be undone after a later failure.
 
@@ -11,12 +14,19 @@ A workflow is a set of tasks with dependencies. Each task is one job on a queue 
 
 ## A first workflow
 
-You need three things: a store, a workflow and its tasks.
+This workflow has three tasks: download a photo, resize it, then save it. Each task waits for the one before it.
 
-1. Create a store with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore). It keeps the state of each workflow in memory.
-2. Create a [`Workflow`](https://pkg.go.dev/github.com/goptics/varmq#Workflow) with [`NewWorkflow`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflow).
-3. Add the tasks, then call [`Submit`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Submit).
-4. Call [`Wait`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Wait) or [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.WaitContext) to block until the workflow ends.
+<SetupSteps id="wf-steps" steps={workflowSteps} />
+
+### Watch it run
+
+The scene runs the same workflow on VarMQ's own workflow rules. Press **Submit**, or **Step** to go one round at a time.
+
+<WorkflowRun />
+
+### A bigger example
+
+In this program, two tasks run at the same time, and tasks pass results to each other.
 
 <GoPlay example="workflows-dag" />
 
@@ -51,7 +61,7 @@ Without other options, tasks on other branches still run after a failure. [`With
 
 A task can use a queue handle that [`BindQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindQueue), [`BindPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.BindPriorityQueue), [`WithQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithQueue) or [`WithPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IWorkerBinder.WithPriorityQueue) returns. These handles implement [`TaskQueue`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue), whose [`WorkflowItem`](https://pkg.go.dev/github.com/goptics/varmq#TaskQueue.WorkflowItem) method turns task data into a job. You do not call it yourself. Each handle must also be in the scope of the workflow's store: see [workflows across processes](#workflows-across-processes). [Queues](/guides/queues/) covers how to bind a queue.
 
-The deprecated binding methods for shared storage return handles that a task cannot use. Passing one to `Add` does not compile. Bind that storage with `WithQueue` or `WithPriorityQueue` instead. A topic subscription cannot be a task's queue either.
+A topic subscription cannot be a task's queue either.
 
 A built-in in-memory queue takes a task's job even when the queue is full. A custom queue bound with `WithQueue` can refuse it. The task then fails with the reason `queue refused promotion`.
 
@@ -121,6 +131,8 @@ How undo jobs run:
 
 The task record shows an undo as `waiting` until an undo phase reaches it. In a `completed` workflow, the undo stays `waiting`, because it never runs.
 
+To see failures and undo at work, pick **Failure and undo** in the [scene under "Watch it run"](#watch-it-run). There you choose the task that fails and turn `Always` and `WithFailFast` on or off. With `ship` failing, the workflow ends as `completed`: its only dependent uses `Always`, so the failure does not fail the workflow.
+
 ## Cancelling a workflow
 
 [`Cancel(ctx)`](https://pkg.go.dev/github.com/goptics/varmq#Workflow.Cancel) stops a workflow:
@@ -182,7 +194,7 @@ For a workflow that continues after a restart, or that spans processes, the stor
 
 ### Workflows on Redis
 
-redisq v1.6.0 keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`redisq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/redisq#NewWorkflowStore) makes the store for the client's Redis server, database and namespace.
+redisq keeps workflows in Redis. Every redisq queue can carry workflow tasks. [`redisq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/redisq#NewWorkflowStore) makes the store for the client's Redis server, database and namespace.
 
 ```go
 qs := redisq.New("redis://localhost:6375")
@@ -225,7 +237,7 @@ w.WithQueue(qs.NewQueue("upload"))
 - **Store options go to `NewWorkflowStore`.** [`WithWorkflowResultLimit`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowResultLimit) sets the largest task result, 64 KiB by default. [`WithWorkflowRetention`](https://pkg.go.dev/github.com/goptics/redisq#WithWorkflowRetention) sets how long an ended workflow is kept, 7 days by default.
 - **Closing.** `store.Close` unregisters the store and leaves the client open. Closing the client also closes its store.
 - **One Redis credential per scope in a process,** with the same ACL user and TLS settings. The scope is the address, database and namespace. The registered store ends the tasks of every client of that scope over its own connection.
-- **Every process that runs a task must use redisq v1.6.0 or newer.**
+- **Every process that runs a task must use a redisq release that this VarMQ supports.** [Versions](/start/installation/#versions) names the releases that do not work.
 - **Do not call `SetExpiration` on a queue that carries tasks.** `Submit` refuses such a queue.
 - **Redis Cluster is not supported** for workflows.
 - **Protect write access to Redis.** Anyone who can add jobs to a task's queue can add a copy of a task.
@@ -234,7 +246,7 @@ The redisq repository has [`examples/workflow`](https://github.com/goptics/redis
 
 ### Workflows on SQLite
 
-sqliteq v0.4.0 keeps workflows in SQLite. [`sqliteq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/sqliteq#NewWorkflowStore) makes the store for the client's root.
+sqliteq keeps workflows in SQLite. [`sqliteq.NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/sqliteq#NewWorkflowStore) makes the store for the client's root.
 
 ```go
 qs, err := sqliteq.New("data")

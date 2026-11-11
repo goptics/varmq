@@ -1,10 +1,15 @@
 ---
-// Numbered setup steps. A step may have tabs for alternatives. Every code card has a copy button.
+// Numbered setup steps. A step may have tabs for alternatives. Every code card has a copy button. A tab that names
+// a store leads with its mark, as JOB 02's tabs on the home page do (ui/stores.ts).
 import '../../styles/ops.css';
+import '../../lib/heromap/map.css';
+import { STORES, type StoreKey } from '../ui/stores';
 import { highlightGo, highlightShell } from '../ui/go';
 
 interface Code {
 	label?: string;
+	/** A storage: the tab shows its mark and name. */
+	store?: StoreKey;
 	file?: string;
 	lang?: 'bash' | 'go';
 	code: string;
@@ -33,7 +38,7 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 					<h3 class="ops-step__t">{s.title}</h3>
 					{s.text && <p class="ops-step__p" set:html={s.text} />}
 					{s.code.length > 1 && (
-						<div class="seg" role="tablist" aria-label={s.title}>
+						<div class="seg" role="tablist" aria-label={s.title} data-store-tabs={s.code.some((c) => c.store) ? '' : undefined}>
 							{s.code.map((c, ci) => (
 								<button
 									type="button"
@@ -42,9 +47,14 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 									aria-controls={`${id}-${si}-panel-${ci}`}
 									aria-selected={ci === 0 ? 'true' : 'false'}
 									tabindex={ci === 0 ? 0 : -1}
-									data-key={String(ci)}
+									data-key={c.store ?? String(ci)}
 								>
-									{c.label}
+									{c.store && (
+										<svg class="store-tab__icon" viewBox="0 0 24 24" aria-hidden="true">
+											<path d={STORES[c.store].icon} />
+										</svg>
+									)}
+									{c.label ?? (c.store && STORES[c.store].label)}
 								</button>
 							))}
 						</div>

@@ -94,7 +94,7 @@ Three choices in it matter:
    ```bash
    mkdir sqlite-persistent && cd sqlite-persistent
    go mod init sqlite-persistent
-   go get github.com/goptics/varmq github.com/goptics/sqliteq@v0.4.0
+   go get github.com/goptics/varmq github.com/goptics/sqliteq
    ```
 
 2. Run it with `go run .`. It creates the folder `data`, with `jobs.db` in it. The first run prints `left in the file by an earlier run: 0`, then a `processing` line and a `processed` line for each job, one second apart. Concurrency is 1, so they run in the order they were added.
@@ -177,7 +177,7 @@ The scene below shows the table of a queue named `jobs`. Take a job, then kill t
 
 ## Pause, outcome, cancel and workflows
 
-sqliteq v0.4.0 supports these VarMQ features. Each guide has the details.
+sqliteq supports these VarMQ features. Each guide has the details.
 
 - **[Queue pause](/guides/queues/#pausing-a-queue):** the pause is kept in the file, so it survives a restart.
 - **[Job outcome](/concepts/jobs/#jobs-in-other-processes):** a job handle learns how the job ended, with a result worker's result.

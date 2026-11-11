@@ -9,7 +9,7 @@ The terms these docs use, in alphabetical order. Each term links to the page tha
 |---|---|
 | [Acknowledge](/persistence/overview/#acknowledgement) | To tell the storage that a job is done, so the storage forgets it or keeps a record. Only shared storage acknowledges jobs. A failed job is rejected instead, which also ends it. |
 | [Batch](/concepts/how-it-works/#batched-dispatch) | Several jobs that a pool goroutine takes together and runs one after another. A priority queue is not batched. |
-| [Cancel](/concepts/jobs/#cancelling-a-job) | To stop one job. A waiting job never runs. A running job's `Context()` ends, and the function must watch it. |
+| [Cancel](/concepts/jobs/#cancelling-a-job) | To stop one job. A waiting job never runs, except a waiting workflow task on shared storage: cancel its workflow. A running job's `Context()` ends, and the function must watch it. |
 | [Concurrency (limit)](/guides/concurrency/) | The most jobs a worker runs at the same time. It is an upper bound, not a pool size. |
 | [Distributed queue](/persistence/overview/#persistent-or-distributed) | A queue in shared storage that workers in several processes share. Each job goes to one of them. redisq queues are distributed. |
 | [Event loop](/concepts/how-it-works/#the-event-loop) | The one goroutine in each worker that decides what runs next. It hands waiting jobs to free pool goroutines. |
