@@ -125,13 +125,21 @@ The hub drops an instance (closes its stream and fails its waiting requests) whe
 
 These are choices of `ConnectHub`, not requirements on a hub.
 
+- Trust: the token proves the instance to the hub; only TLS and the hub URL prove the hub. Whoever answers at the hub URL gets everything `varmq.Handler` allows: by default it reads job payloads and results, stops and resizes workers, pauses queues, and cancels jobs and workflows. On shared storage a queue pause or a job cancel reaches every consumer process. `WithHubInsecure` lets a party on the network path act as the hub, not only read the token.
+- A hub URL with userinfo is refused. Configuration errors do not repeat the URL.
+- No request follows a redirect: a `3xx` is an unexpected status, and the token goes to the hub URL only.
+- `heartbeat_ms` absent or `0` in `hello` means the instance's configured heartbeat (default 5000). Any other value is clamped to 1000 to 60000. A second `hello` on the same stream is ignored.
 - A stream line over 64 KiB, or a `hello` whose `protocol` is not `1`, ends the stream; the instance redials.
-- A `request` runs on a request context that ends when the stream drops.
-- An API reply over 16 MiB is answered with `X-Hub-Status: 502` and `{"error":"reply over 16 MiB"}`. A handler panic is answered with `500`.
+- A line whose `type` is not `hello`, `request` or `ping` is ignored whole, whatever its fields hold. A line that is not a JSON object with a string `type`, a `hello` or `request` with fields of the wrong JSON type, or a `request` without a valid `id` is a bad frame: it is reported (hub text cut to 80 bytes) and dropped. 16 bad frames end the stream, so the redial backoff bounds the rate.
+- At most 8 requests run at once, across redials. Up to 64 more frames wait in order. When the queue is full the instance stops reading the stream; if it stays full for 3 × `heartbeat_ms`, the instance ends the stream and redials.
+- A `request` runs on a request context that ends when the stream drops. A request that is still running when its stream ends keeps its slot until its handler returns; its reply is not sent.
+- A reply is posted once, with a 30 s limit. No reply is retried.
+- An API reply over 16 MiB is answered with `X-Hub-Status: 502` and `{"error":"reply over 16 MiB"}`. A handler panic is answered with `500` and reported.
 - A beat answered `401` ends the stream and retries at the cap delay, as a stream `401` does. A `409` from the stream retries with the normal backoff.
 - On a clean stop, the instance posts `bye=1` once, with a short timeout, if it ever received `hello`.
 - Read-only mode answers every `PATCH` with `403` and `{"error":"read-only hub connection"}`, without running the handler.
-- No-payload mode answers `GET /queues/{id}/jobs` and `GET /queues/{id}/jobs/{jobId}` with `payload` set to `null` and `result` removed. A reply it cannot decode is answered with `502`, never forwarded.
+- No-payload mode answers `GET /queues/{id}/jobs` and `GET /queues/{id}/jobs/{jobId}`, in any path spelling, with `payload` set to `null` and `result` removed (`result_size` stays). Job error texts (`errors[].error`) and workflow task `reason` texts are still sent; they can hold application data.
+- The hub connection holds no job-path lock. It runs the same handlers as a mounted `varmq.Handler`, which turns on the same job tracking as `varmq.NewServerMux`.
 
 ## 5. Compatibility
 
