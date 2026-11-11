@@ -1,0 +1,78 @@
+---
+title: FAQ
+description: "Short answers to the first questions about VarMQ: retries, delays, delivery guarantees, storage, processes and where to ask."
+---
+
+Each answer is short and links to the page with the details.
+
+## What VarMQ does
+
+### Is VarMQ a worker pool or a job queue?
+
+Both. A worker is a pool of goroutines with a concurrency limit, and a queue gives it jobs. With in-memory queues it is a worker pool in your process. With [Redis or SQLite](/persistence/overview/) storage, the same worker takes jobs that survive a restart. [What is VarMQ](/start/introduction/) has the model.
+
+### Does VarMQ retry a failed job?
+
+No. A job that returns an error or panics is final. To retry, add a new job for the same work. [Patterns](/guides/patterns/#retry-with-backoff) has a program with backoff and a dead-letter queue.
+
+### Can a job run later, or on a schedule?
+
+Not with a built-in option. `Add` always queues the job now. A timer or a ticker in your program calls `Add` at the right time. [Patterns](/guides/patterns/#delayed-jobs) shows both. A timer lives in your process, so a delay does not survive a restart.
+
+### Can I limit jobs per second?
+
+The concurrency limits how many jobs run at the same time, not how many start each second. [Patterns](/guides/patterns/#rate-limits) shows a rate limit in the worker function.
+
+### Can a job have a timeout?
+
+Yes, in the worker function: make a context with a deadline from `j.Context()`. [Patterns](/guides/patterns/#job-timeouts) has the program.
+
+### Can one job wait for another?
+
+Yes, with a [workflow](/guides/workflows/). A task runs after the tasks it depends on, and it can read their results.
+
+## Guarantees
+
+### Does a job run exactly once?
+
+In memory, a job runs once, and it is lost if the process exits first. With redisq and sqliteq, a job runs at least once: it runs again if its process died while it ran. Write the job function so that a second run is safe. [What this guarantees](/persistence/overview/#what-this-guarantees) has the cases.
+
+### What happens to my jobs when the process exits?
+
+Jobs in an in-memory queue are lost. Jobs in Redis or SQLite stay in storage, and a worker takes them after the restart. [Persistence](/persistence/overview/) explains.
+
+### In what order do jobs run?
+
+A FIFO queue gives jobs out in the order you added them. A priority queue gives the lowest number first. With a concurrency above 1, jobs run at the same time, so they can end in another order. [Jobs run out of order](/operations/troubleshooting/#jobs-run-out-of-order) lists the causes.
+
+### What happens when a job panics?
+
+The worker recovers the panic and counts the job as failed. The process continues. The panic becomes an error on the job's handle, the `Errs()` channel and the error handler. [Errors](/guides/errors/#where-a-failure-is-reported) explains.
+
+## Storage and processes
+
+### Which storage can I use?
+
+In-memory queues are built in. [redisq](/persistence/redis/) keeps a queue in Redis and [sqliteq](/persistence/sqlite/) keeps one in a SQLite file. For other storage, such as Postgres, you [write an adapter](/persistence/adapters/).
+
+### Can many processes take jobs from one queue?
+
+Yes, with Redis. One or more programs add jobs, and each job goes to one of the programs that run them. [A distributed queue](/persistence/redis/#a-distributed-queue) has the programs.
+
+### Are topics kept in Redis or SQLite?
+
+No. A topic is in memory only. A worker that subscribes gets the payloads published after it subscribed. [Topics](/guides/topics/) explains.
+
+## The project
+
+### Which Go version do I need?
+
+Go 1.27 or newer for VarMQ. [Installation](/start/installation/#versions) lists the needs of each module.
+
+### How fast is it?
+
+The [benchmarks](/reference/benchmarks/) compare VarMQ with other worker pools and with Redis and SQLite job queues. They also show where VarMQ is slower or uses more memory.
+
+### Where do I ask a question or report a bug?
+
+Ask in [GitHub Discussions](https://github.com/goptics/varmq/discussions). Report a bug in [GitHub Issues](https://github.com/goptics/varmq/issues). Pull requests are welcome.

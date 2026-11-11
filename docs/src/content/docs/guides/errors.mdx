@@ -124,4 +124,4 @@ A failed job on shared storage reports a [`*RemoteError`](https://pkg.go.dev/git
 
 One more error has no variable. The helpers [`Func`](https://pkg.go.dev/github.com/goptics/varmq#Func), [`ErrFunc`](https://pkg.go.dev/github.com/goptics/varmq#ErrFunc) and [`ResultFunc`](https://pkg.go.dev/github.com/goptics/varmq#ResultFunc) handle a `nil` function with the error `provided function is nil`. `ErrFunc` and `ResultFunc` return it; `Func` panics with it, so the text arrives inside the panic message. It is not exported, so match it with `strings.Contains`. See [function helpers](/guides/function-helpers/#details).
 
-Next: [Concurrency](/guides/concurrency/).
+Next: [Context](/guides/context/).

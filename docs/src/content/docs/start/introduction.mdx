@@ -26,6 +26,7 @@ Use VarMQ when a program has work to run in the background. It also lets you con
 - **Control at runtime.** Pause, resume, restart or resize a running worker.
 - **Jobs that outlive the process.** Plug in a storage adapter, such as [redisq](https://github.com/goptics/redisq) or [sqliteq](https://github.com/goptics/sqliteq). The adapter keeps jobs across restarts or shares a queue between instances.
 - **Fan-out.** Publish to a [topic](https://pkg.go.dev/github.com/goptics/varmq#Topic) once and every subscribed worker gets its own job. Topics are in-memory only.
+- **Jobs that depend on other jobs.** A [workflow](/guides/workflows/) runs a task after the tasks it depends on, passes results between them, and can undo finished work after a later failure.
 - **Inspection over HTTP.** A [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) lists workers and pauses, resumes or resizes them.
 
 If all you need is to run a fixed set of functions and wait for them, [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup) or a `sync.WaitGroup` is enough.

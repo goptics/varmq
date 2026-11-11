@@ -1,0 +1,48 @@
+---
+title: Going to production
+description: "A checklist before VarMQ runs in production: shutdown, failures, memory limits, job functions that are safe to run twice, the REST API and metrics."
+---
+
+This page is a checklist. Each item says what to do and links to the page that explains it. The other pages have the details. This page adds no new rules.
+
+## Every program
+
+- **Stop the worker before the process exits.** On SIGTERM, wait for the signal, then call [`WaitAndStop`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitAndStop) to run the waiting jobs first, or [`StopAndWait`](https://pkg.go.dev/github.com/goptics/varmq#Worker.StopAndWait) to finish only the running ones. An in-memory queue loses the jobs that did not run. [Context](/guides/context/#shutting-down-on-a-signal-or-a-deadline) has the code.
+- **Give the shutdown a time limit.** Your platform ends the process some time after SIGTERM. A job that never returns keeps `StopAndWait` waiting. Make each job [watch a context](/guides/context/#stopping-a-running-job-early) and give it a [timeout](/guides/patterns/#job-timeouts).
+- **Set an error handler.** The [`Errs()`](/guides/errors/#the-errs-channel) channel holds one error and drops the rest when nobody reads it. [`WithErrHandler`](/guides/errors/#the-error-handler) gets every error. The handler must not block.
+- **Put the job's identity in its error.** An error from the worker does not say which job it came from. Add the job's ID or its key data to the message you return. [Errors](/guides/errors/#the-errs-channel) explains.
+- **Set a capacity on queues that can grow.** A queue has no limit by default, so jobs wait in memory when you add them faster than the worker runs them. Use [`WithQueueCapacity`](/guides/queues/#capacity), and decide what your code does when `Add` returns `false`. For topics, use [`WithTopicCapacity`](/guides/topics/#how-a-topic-stores-payloads).
+- **Decide what a failed job means.** VarMQ does not run a failed job again. If the work needs a second attempt, add [a retry and a dead-letter queue](/guides/patterns/#retry-with-backoff).
+- **Choose the concurrency from what the job uses.** A job that calls a database or an API is limited by that service, not by your CPU. [Concurrency](/guides/concurrency/) explains the limit, and [`TunePool`](/guides/concurrency/#changing-the-limit-with-tunepool) changes it on a running worker.
+
+## Redis and SQLite
+
+- **Write job functions that are safe to run twice.** With redisq and sqliteq a job runs at least once. It runs again if its process died while it ran, or if its acknowledgement failed. [What this guarantees](/persistence/overview/#what-this-guarantees) has the cases.
+- **Close in the right order.** Stop the worker, then close the queue, then close the adapter's `Queues` value. A queue closed while a job runs gives that job out again. [Shutting down](/persistence/overview/#shutting-down) has the four steps.
+- **Give a job an ID when a repeated `Add` must store one job.** [`WithJobId`](/guides/job-ids/#persistent-and-distributed-queues) stops a double add. It does not stop a double run.
+- **Keep job data small and in JSON.** Storage holds each job as JSON. Put large data, such as a file, in your own storage and put its key in the job. [What is stored](/persistence/overview/#what-is-stored) shows the stored form.
+- **Use one version of VarMQ and its adapters in every process of a queue.** Queue pause, cancel and workflows need every consumer process on a version that knows them. [Installation](/start/installation/#versions) lists the versions.
+- **Read storage errors.** A storage problem goes to `Errs()` and the error handler, not to a job. [Storage errors on Errs()](/operations/troubleshooting/#storage-errors-on-errs) lists them.
+
+## Workflows
+
+- **Create the workflow store in every consumer process.** A durable task whose process has no store for its scope does not run. [Workflows across processes](/guides/workflows/#workflows-across-processes) explains.
+- **Give each task that changes something an undo, or accept that it stays.** [Undo](/guides/workflows/#undo) shows when undo jobs run.
+
+## The REST API
+
+- **Protect the handler.** The REST API has no authentication. Anyone who can reach it can stop workers, read job payloads and cancel jobs. Listen on loopback, or put your own authentication in front. [Mounting it](/operations/rest-api/#mounting-it) has an example.
+- **Name the workers you want to control.** The API serves named workers only. [Which workers it serves](/operations/rest-api/#which-workers-it-serves) has the rules.
+
+## Metrics and alerts
+
+- **Export the worker's metrics.** [Prometheus](/operations/prometheus/) has a collector and the queries to start with.
+- **Alert on these three.** The share of jobs that fail, a backlog that grows for a long time, and a pool that stays full. [Queries to start with](/operations/prometheus/#queries-to-start-with) has the PromQL for each, and [what to watch for](/operations/prometheus/#what-to-watch-for) lists the limits of the numbers.
+
+## Before the first release
+
+- Run your tests with `-race`. [Testing](/guides/testing/) shows the tests to write.
+- Stop the process while jobs run, then start it again. Check that no job is lost and that a job that ran twice did no harm.
+- Stop Redis, or make the SQLite file read-only, while jobs run. Check what your error handler reports.
+
+Next: [Troubleshooting](/operations/troubleshooting/), which lists the common problems by symptom.

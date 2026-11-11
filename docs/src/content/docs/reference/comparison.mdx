@@ -12,10 +12,26 @@ This table compares VarMQ with [ants](https://github.com/panjf2000/ants), [pond 
 
 Checked against each package's source, October 2026.
 
-## What this page leaves out
+## VarMQ and job queue libraries
 
-This table covers in-process worker pools only. The [benchmarks](/reference/benchmarks/) also measure Redis job queues (Asynq, gocraft/work, rmq, taskq) and SQLite job queues (goqite, Backlite, River). This page has no feature table for them.
+This table covers in-process worker pools only. The [benchmarks](/reference/benchmarks/) also measure Redis job queues (Asynq, gocraft/work, rmq, taskq) and SQLite job queues (goqite, Backlite, River). This page has no feature table for them. It says what VarMQ itself has and does not have, so you can compare it with the one you know.
+
+| A job queue library often has | VarMQ |
+|---|---|
+| Jobs that survive a restart | Yes, with [redisq or sqliteq](/persistence/overview/). In-memory queues are the default. |
+| Many processes on one queue | Yes, with [Redis](/persistence/redis/#a-distributed-queue). |
+| Automatic retries | No. A failed job is final. [Build a retry](/guides/patterns/#retry-with-backoff) in your code. |
+| Delayed and scheduled jobs | No. A [timer in your process](/guides/patterns/#delayed-jobs) adds the job, and it does not survive a restart. |
+| Periodic (cron) jobs | No. A [ticker in your process](/guides/patterns/#periodic-jobs) adds the job. |
+| Rate limits | No. [Limit the rate](/guides/patterns/#rate-limits) in the worker function. |
+| Unique jobs | By [job ID](/guides/job-ids/), while the job waits. Shared storage sets its own window. |
+| Priorities | Yes: [priority queues](/guides/queues/), and a [strategy](/guides/strategies/) across queues. |
+| Jobs that depend on other jobs | Yes: [workflows](/guides/workflows/), with results and undo. |
+| A web dashboard | No. A [REST API](/operations/rest-api/) and [Prometheus metrics](/operations/prometheus/). |
+| Typed jobs and results | Yes, with Go generics: `Job[T]`, and a result of type `R`. |
+
+VarMQ is a worker pool first, with storage as an option. If your program needs durable schedules and automatic retries from the library, a job queue library that has them fits better.
 
 For how fast each one runs, see the [benchmarks](/reference/benchmarks/), with the raw data in [goptics/benchmarks](https://github.com/goptics/benchmarks), and the [bench log](https://varmq.goptics.org/bench-log/).
 
-Next: [Installation](/start/installation/).
+Next: [workers and queues](/concepts/workers-and-queues/).

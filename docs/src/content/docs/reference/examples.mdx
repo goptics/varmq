@@ -1,0 +1,52 @@
+---
+title: Examples
+description: "Every example program: the ones that run in the Go Playground from these docs, and the larger ones in the repository."
+---
+
+VarMQ has two sets of example programs.
+
+## Programs in these docs
+
+Each guide has small programs with a **Run** button. They run in the Go Playground, and you can edit them first. Their source is in [`docs/examples`](https://github.com/goptics/varmq/tree/main/docs/examples), one folder for each program, and a test runs all of them.
+
+| To see | Open |
+|---|---|
+| A first worker and queue | [Quick start](/start/quick-start/) |
+| The three worker types | [Worker types](/guides/worker-types/) |
+| Priority queues, capacity, purge and close | [Queues](/guides/queues/) |
+| `Wait`, `WaitUntilIdle` and stops | [Waiting](/guides/waiting/) |
+| The `Errs` channel, the error handler and sentinel errors | [Errors](/guides/errors/) |
+| The concurrency limit and `TunePool` | [Concurrency](/guides/concurrency/) |
+| `AddAll` with results and errors | [Adding many jobs](/guides/adding-many/) |
+| Job IDs and deduplication | [Job IDs](/guides/job-ids/) |
+| Many queues on one worker | [Strategies](/guides/strategies/) |
+| Publish and subscribe | [Topics](/guides/topics/) |
+| A chain, a DAG and undo | [Workflows](/guides/workflows/) |
+| Cancel and stop early | [Context](/guides/context/) |
+| Retry, delay, periodic jobs, rate limits and timeouts | [Patterns](/guides/patterns/) |
+
+## Programs in the repository
+
+These are larger, and some need Redis or run until you stop them. Clone the repository and run one with `go run`.
+
+| Program | What it shows |
+|---|---|
+| [`result-worker`](https://github.com/goptics/varmq/tree/main/examples/result-worker) | A worker that returns a value and an error for each job |
+| [`multi-queue-binds`](https://github.com/goptics/varmq/tree/main/examples/multi-queue-binds) | Two FIFO queues and a priority queue on one worker |
+| [`tune-worker`](https://github.com/goptics/varmq/tree/main/examples/tune-worker) | `TunePool` raises and lowers the concurrency of a running worker |
+| [`idle-wokers`](https://github.com/goptics/varmq/tree/main/examples/idle-wokers) | Idle goroutines expire with `WithIdleWorkerExpiryDuration` and `WithMinIdleWorkerRatio` |
+| [`context-worker`](https://github.com/goptics/varmq/tree/main/examples/context-worker) | A worker that stops on Ctrl+C |
+| [`workflow`](https://github.com/goptics/varmq/tree/main/examples/workflow) | A workflow whose tasks have different workers and data types |
+| [`api-control`](https://github.com/goptics/varmq/tree/main/examples/api-control) | Three named workers behind the REST API |
+| [`prometheus`](https://github.com/goptics/varmq/tree/main/examples/prometheus) | A Prometheus collector for a worker |
+| [`sqlite-persistent`](https://github.com/goptics/varmq/tree/main/examples/sqlite-persistent) | A queue in a SQLite file that survives a restart |
+| [`redis-persistent`](https://github.com/goptics/varmq/tree/main/examples/redis-persistent) | A queue in Redis that survives a restart |
+| [`redis-distributed`](https://github.com/goptics/varmq/tree/main/examples/redis-distributed) | One program adds jobs to Redis, and one or more others run them |
+
+The Redis programs need a Redis server. Start one with the compose file in the same folder:
+
+```bash
+docker compose -f examples/compose.yml up -d
+```
+
+Next: [Benchmarks](/reference/benchmarks/).

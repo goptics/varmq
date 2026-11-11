@@ -164,4 +164,4 @@ scrape_configs:
 
 Prometheus scrapes `/metrics` by default, which is where the program serves them. If you serve VarMQ's [REST API](/operations/rest-api/) as well, it can sit on the same server: mount it with `http.Handle("/varmq/", varmq.Handler("/varmq"))` next to the metrics route. The REST API lists only named workers, so give the worker a name. The REST API returns the same worker numbers as JSON, which suits a dashboard, and Prometheus suits history and alerts.
 
-Next: [Troubleshooting](/operations/troubleshooting/).
+Next: [Going to production](/operations/production/).

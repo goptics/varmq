@@ -1,0 +1,84 @@
+---
+title: Upgrading
+description: "What to change in your code when you move from VarMQ v1.10 to the next release: Go 1.27, one binder for each queue kind, removed methods and new adapter versions."
+---
+
+This page lists what breaks when you move from VarMQ v1.10.0 to the release after it, and what to write instead. The [changelog](https://github.com/goptics/varmq/blob/main/CHANGELOG.md) has every change with its pull request.
+
+## Before you start
+
+- **Go 1.27 or newer.** The `go` line of the module is 1.27, because `wf.Add` and `Task.Undo` are generic methods.
+- **Upgrade VarMQ and the adapters together.** redisq v1.5.1 and older, and sqliteq v0.3.0 and older, do not work with this release. [Installation](/start/installation/#versions) has the versions.
+- **Upgrade every process of a shared queue.** Queue pause, job cancel and workflows work only when every consumer process runs this release.
+
+## Binders and queue handles
+
+One binder now takes every storage of its kind: in-memory, redisq, sqliteq or your own. VarMQ finds out from the storage whether it is persistent or distributed.
+
+| v1.10 | Now |
+|---|---|
+| `worker.WithPersistentQueue(q)` | `worker.WithQueue(q)` |
+| `worker.WithDistributedQueue(q)` | `worker.WithQueue(q)` |
+| `worker.WithPersistentPriorityQueue(q)` | `worker.WithPriorityQueue(q)` |
+| `worker.WithDistributedPriorityQueue(q)` | `worker.WithPriorityQueue(q)` |
+| `varmq.NewDistributedQueue[T](q)` | `varmq.NewQueue[T](q)` |
+| `varmq.NewDistributedPriorityQueue[T](q)` | `varmq.NewPriorityQueue[T](q)` |
+
+The handle types `PersistentQueue`, `PersistentPriorityQueue`, `DistributedQueue` and `DistributedPriorityQueue` are removed with them. If your code names one of these types, name the type that the new call returns. [Persistence](/persistence/overview/#persistent-or-distributed) explains how VarMQ tells the two kinds apart.
+
+```go
+// v1.10
+queue := worker.WithPersistentQueue(rq)
+
+// now
+queue := worker.WithQueue(rq)
+```
+
+Two things change with the binder:
+
+- **Error and result workers can bind shared storage.** In v1.10 they could not.
+- **Only an ID you give deduplicates on shared storage.** An ID from [`WithJobIdGenerator`](https://pkg.go.dev/github.com/goptics/varmq#WithJobIdGenerator) is no longer checked there. Use [`WithJobId`](/guides/job-ids/), or `Item.ID` with `AddAll`.
+
+## Removed methods
+
+| Removed | Use |
+|---|---|
+| `worker.Metrics().Submitted()` | `totals.submitted` of the queue, from [`GET /queues`](/operations/rest-api/#queues-and-jobs) |
+| `NumPending()` on a queue handle | `Len()` |
+
+`worker.NumPending()` stays. The Prometheus example no longer exports `submitted_total`.
+
+## Behaviour that changed
+
+- **A failed job on shared storage is rejected, not acknowledged.** A job that returns an error or panics is final, as before. The storage now gets [`Reject`](/persistence/overview/#acknowledgement) with the error text.
+- **`Purge` or `Close` on a shared-storage handle detaches its job handles.** A handle you still hold then returns [`ErrDetached`](/guides/errors/#matching-an-error).
+- **The REST API serves the waiting jobs of in-memory queues.** `GET /queues/{id}/jobs` now returns their payloads, as it did for redisq. [Protect the handler](/operations/rest-api/#mounting-it).
+- **`Values()` of an in-memory priority queue returns the hand-out order.**
+
+## If you wrote your own storage
+
+A custom adapter or a mock must add these. [Writing an adapter](/persistence/adapters/) shows each one.
+
+- `Reject(ackID, reason string) bool` next to `Acknowledge`.
+- `EnqueueOnce` on every queue. Storage that does not deduplicate can call its own `Enqueue` from it. `IDedupQueue` and `IDedupPriorityQueue` are removed.
+- A custom in-memory storage that has an `Acknowledge` method is now bound as shared storage: its jobs are JSON, and `Add` returns a remote job handle.
+
+Storage that supports workflows registers a workflow store of its own. `WorkflowAcknowledgeable` is removed. [The storage contract](/persistence/adapters/) has the details.
+
+## If you implemented VarMQ's interfaces
+
+These interfaces have new methods. Only code with its own implementation, such as a mock, must change.
+
+| Interface | New methods |
+|---|---|
+| Queue handles | `Pause`, `Resume`, `IsPaused`, `WorkflowItem` |
+| `Awaitable` and `Worker` | `WaitContext(ctx) error` |
+| `EnqueuedJob` | `Cancel() error` |
+| `Job[T]` | `Context() context.Context` |
+
+## What you can use after the upgrade
+
+- [Workflows](/guides/workflows/): tasks with dependencies, results and undo.
+- [Job cancel](/concepts/jobs/#cancelling-a-job) and [job outcome in another process](/concepts/jobs/#jobs-in-other-processes).
+- [Queue pause](/guides/queues/#pausing-a-queue) for every process of a queue.
+- Jobs and workflows over the [REST API](/operations/rest-api/).
