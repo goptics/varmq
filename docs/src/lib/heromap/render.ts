@@ -104,8 +104,8 @@ export const LOGOS: Record<string, { name: string; d: string }> = {
 };
 const LOGO = 12; // a logo's size: the height of the label's capitals, and a little more
 const LOGO_GAP = 5; // between a logo and its label's text
-// The programs that die mid-job, and whether one comes back labelled RESTARTED: SQLite's in chapter 7 does, and
-// Redis's program B in chapter 8 comes back as itself.
+// The programs that die mid-job, and whether one comes back labelled RESTARTED: SQLite's in chapter 8 does, and
+// Redis's program B in chapter 9 comes back as itself.
 const CRASHES = new Map([
 	['s-prog', true],
 	['b-prog', false],

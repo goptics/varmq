@@ -11,11 +11,11 @@ const dispatches = p => p.events.filter(e => e.type === 'dispatch');
 describe('chapters', () => {
 	it('are the agreed eleven, in order', () => {
 		assert.deepEqual(CHAPTERS.map(c => c.title), ['One worker', 'The pool', 'Results and errors', 'Priority',
-			'Many queues, one worker', 'Topics', 'SQLite', 'Redis', 'Workflows', 'Control', 'Everything together']);
+			'Many queues, one worker', 'Topics', 'Workflows', 'SQLite', 'Redis', 'Control', 'Everything together']);
 	});
 	it('carry the agreed captions', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add puts jobs in a queue');
-		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
+		assert.equal(plain(CHAPTERS[7].captions[3].text), 'The program dies mid-job');
 		assert.deepEqual(CHAPTERS[10].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
 		assert.equal(plain(CHAPTERS[10].captions[0].swap.text), 'Redis');
 		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
@@ -47,8 +47,8 @@ describe('chapters', () => {
 			last = endState(p.plan, p.events);
 		}
 		// Round robin goes on from the source after the last one served, as varmq keeps its index for the worker's life.
-		// It starts at the queue in chapter 4, where a second source first binds; chapter 9 takes only from the queue,
-		// so chapter 10 looks at the priority queue first and finds the topic's copy before the queue's jobs.
+		// It starts at the queue in chapter 4, where a second source first binds; chapter 10 takes only from the queue,
+		// so chapter 11 looks at the priority queue first and finds the topic's copy before the queue's jobs.
 		assert.equal(part(4, 'pool', 'core').plan.turn, 0);
 		assert.equal(part(11, 'pool', 'core').plan.turn, 1);
 		assert.deepEqual(dispatches(part(11, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
@@ -56,14 +56,14 @@ describe('chapters', () => {
 	it('chapter 4 runs the lowest number first', () => {
 		assert.deepEqual(dispatches(part(4, 'pool', 'core')).map(e => e.job), ['p1', 'p2', 'p3', 'p5', 'p8']);
 	});
-	it('chapter 7 puts the crashed jobs back at the head and acks all four', () => {
-		const ev = part(7, 'sqlite').events;
+	it('chapter 8 puts the crashed jobs back at the head and acks all four', () => {
+		const ev = part(8, 'sqlite').events;
 		const rq = ev.find(e => e.type === 'requeue');
 		assert.deepEqual(queueStates(ev).find(s => s.at === rq.at).order.slice(0, rq.jobs.length), rq.jobs);
 		assert.equal(ev.filter(e => e.type === 'ack').length, 4);
 	});
-	it('chapter 8 never holds more than 4 in flight', () => {
-		for (const s of trayStates(part(8, 'redis').events)) assert.ok(s.tray.filter(Boolean).length <= 4);
+	it('chapter 9 never holds more than 4 in flight', () => {
+		for (const s of trayStates(part(9, 'redis').events)) assert.ok(s.tray.filter(Boolean).length <= 4);
 	});
 	it('chapter 10 starts nothing while paused or stopped, empties the pool at the stop, and runs what waited after Restart', () => {
 		const p = part(10, 'pool', 'core');
@@ -130,7 +130,7 @@ describe('chapter rules', () => {
 	});
 	it('hand a worker at limit 1 one job at a time, never a batch', () => {
 		// varmq hands a lone worker every job waiting at once, which the map has no way to draw. Chapter 1's core, chapter
-		// 3's result worker, chapter 6's second worker and chapter 10's two lone workers run at limit 1.
+		// 3's result worker, chapter 6's second worker and chapter 11's two lone workers run at limit 1.
 		let lone = 0;
 		for (const c of CHAPTERS) for (const p of c.parts) {
 			if (p.kind !== 'pool') continue;
@@ -194,16 +194,16 @@ describe('chapter rules', () => {
 			roundrobin: 'areare', // each in turn, from the turn chapter 4 left
 		});
 	});
-	it('chapter 7 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
-		const ev = part(7, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
+	it('chapter 8 tells the store fixture\'s story, and keeps the program down for 2.6 s', () => {
+		const ev = part(8, 'sqlite').events, index = type => ev.findIndex(e => e.type === type);
 		// s0 and s2 run when the program dies, and the restart puts them back ahead of s3
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['s0', 's2']);
 		assert.deepEqual(queueStates(ev)[index('requeue')].order, ['s0', 's2', 's3']);
 		// The program stays down, its box red and its card empty, long enough to read the caption about it.
 		assert.ok(ev[index('restart')].at - ev[index('crash')].at >= 2600);
 	});
-	it('chapter 8 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {
-		const ev = part(8, 'redis').events, index = type => ev.findIndex(e => e.type === type);
+	it('chapter 9 has B die mid-job, and Redis put its jobs back at the front and wake C for them', () => {
+		const ev = part(9, 'redis').events, index = type => ev.findIndex(e => e.type === type);
 		assert.deepEqual(ev[index('crash')], { at: 4000, type: 'crash', consumer: 'b' });
 		// B's two jobs and C's two are in flight when B dies, and C finishes its own before B's come back.
 		assert.deepEqual(trayStates(ev)[index('crash')].tray.filter(Boolean), ['r0', 'r1', 'r2', 'r3']);
@@ -224,14 +224,14 @@ describe('chapter rules', () => {
 	it('start and stop store goroutines when varmq would', () => {
 		const changes = (n, kind) => part(n, kind).events.filter(e => e.type === 'spawn' || e.type === 'exit')
 			.map(e => `${e.at} ${e.type} ${e.consumer} ${e.ring}`);
-		assert.deepEqual(changes(7, 'sqlite'), [
+		assert.deepEqual(changes(8, 'sqlite'), [
 			'3300 spawn sqlite 1', // the first claim takes two jobs, and one goroutine is idle
 			'6800 exit sqlite 0', '6800 exit sqlite 1', // the program dies with both
 			'9400 spawn sqlite 0', // and restarts with one
 			'10900 spawn sqlite 1', // the claim after the requeue takes two again
 			'15900 exit sqlite 1', // at s3's ack nothing waits, and ring 0 is idle
 		]);
-		assert.deepEqual(changes(8, 'redis'), [
+		assert.deepEqual(changes(9, 'redis'), [
 			'2420 spawn b 1', '2520 spawn c 1', // each woken worker pulls two jobs, the second on a new goroutine
 			'4000 exit b 0', '4000 exit b 1', // program B dies with both
 			'5370 exit c 0', // C's last ack, with nothing waiting and its other goroutine idle
@@ -260,8 +260,8 @@ describe('chapter rules', () => {
 		const p = part(10, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
 		assert.ok(p.events.some(e => e.type === 'land' && e.at > at('pause') && e.at < at('resume')));
 	});
-	it('chapter 9 runs the workflow by varmq\'s rules: charge fails, ship is cancelled, reserve is undone', () => {
-		const p = part(9, 'pool', 'result'), run = p.workflow;
+	it('chapter 7 runs the workflow by varmq\'s rules: charge fails, ship is cancelled, reserve is undone', () => {
+		const p = part(7, 'pool', 'result'), run = p.workflow;
 		// One goroutine: reserve, then label and charge in Add order, then the undo job. ship never becomes a job.
 		assert.deepEqual(dispatches(p).map(d => d.job), ['w-reserve', 'w-label', 'w-charge', 'w-reserve-undo']);
 		assert.deepEqual(p.outcomes, { 'w-reserve': 'value', 'w-label': 'value', 'w-charge': 'error', 'w-reserve-undo': 'value' });
@@ -273,7 +273,7 @@ describe('chapter rules', () => {
 		for (const job of ['w-label', 'w-charge']) assert.ok(at('land', job) > at('done', 'w-reserve'), job);
 		assert.ok(at('land', 'w-reserve-undo') > at('done', 'w-charge'));
 		// Each caption after the first starts at the event it names.
-		const caps = CHAPTERS[8].captions.map(c => c.at);
+		const caps = CHAPTERS[6].captions.map(c => c.at);
 		assert.deepEqual(caps.slice(1, 4), [run.submit, at('done', 'w-reserve'), at('done', 'w-charge')]);
 		assert.ok(caps[4] > at('done', 'w-charge') && caps[4] < at('land', 'w-reserve-undo') - 400);
 	});

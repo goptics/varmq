@@ -1,4 +1,4 @@
-// The workflow of the home page's map (src/lib/heromap/chapters.ts, chapter 9, and src/lib/story/stations.ts):
+// The workflow of the home page's map (src/lib/heromap/chapters.ts, chapter 7, and src/lib/story/stations.ts):
 // four tasks on one result worker's queue. charge fails, ship is cancelled, and the undo job of reserve runs.
 package main
 

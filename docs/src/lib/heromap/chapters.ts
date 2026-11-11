@@ -55,7 +55,7 @@ export interface Chapter {
 	parts: Part[];
 	published?: { id: string; at: number }[]; // values published to the topic: one square in its lane each
 	// Transient chips. `id` names the piece whose place a chip takes: chapter 2's TunePool(5) sits where Restart()
-	// switches on in chapter 9. A chip pops in, or with `fade` takes the place of the chip before it at once while
+	// switches on in chapter 10. A chip pops in, or with `fade` takes the place of the chip before it at once while
 	// its name fades in, as chapter 5's strategy names take over from each other; one that leaves under another is
 	// not seen to.
 	chips?: { id: string; label: string; at: number; until: number; fade?: boolean }[];
@@ -323,7 +323,33 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		};
 	},
 
-	// 7. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
+	// 7. A workflow on the result worker's queue. Submit adds reserve alone: the others wait for it. Its outcome
+	// releases label and charge, which run one after the other, as the worker has one goroutine. charge fails: ship,
+	// which waits for it, is cancelled, and the workflow fails. reserve completed and has an undo, so its undo job
+	// runs, and the workflow ends compensated. Each caption starts on a still frame: at Submit, at reserve's done, at
+	// charge's failure, and as the undo job leaves the workflow.
+	(carry) => ({
+		title: 'Workflows',
+		duration: 14300,
+		captions: [
+			{ at: 300, text: 'A *workflow* is jobs that wait for other jobs' },
+			{ at: 2300, text: '*Submit* queues the tasks with nothing to wait for' },
+			{ at: 5100, text: 'A finished task *releases* the tasks after it' },
+			{ at: 9350, text: 'charge !fails!, so ship is *cancelled*' },
+			{ at: 10400, text: 'and the *undo* job of reserve runs' },
+		],
+		parts: [
+			workflow(carry, {
+				id: 'w',
+				submit: 2300,
+				promote: 1000,
+				undoAfter: 1700,
+				tasks: order([1400, 1300, 1300, 1300, 1300], true),
+			}),
+		],
+	}),
+
+	// 8. The stores' SQLite fixture, retimed to fit: s0 and s2 are running when the program dies, the restart
 	// puts them back at the head of the queue, ahead of s3, and all four are acked in the end. The program stays
 	// down 2600 ms, its box red and its card empty. The first caption ends as the store has drawn in (the camera
 	// lands at 1200), and the rerun waits for the last caption, so the one before it ends on the jobs in the queue.
@@ -358,7 +384,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 8. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
+	// 9. Program A adds four jobs, and Redis wakes B and C, the two idle workers, once each: each pulls two. B dies
 	// mid-job, and its jobs stay in flight in Redis while C finishes its own and goes idle. Then Redis takes B for
 	// dead, and the sweep puts B's jobs back at the front and wakes C, which takes both at once. (In redisq that is
 	// about six seconds after the crash; here 2.5 s.) B comes back at the end, with nothing left to take. The first
@@ -388,32 +414,6 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					['r3', 1600, 1000],
 				]),
 				crash: { consumer: 'b', at: 4000, backAfter: 2500, wakeAfter: 400, restartAt: 9000, rework: { r0: 1600, r1: 1300 } },
-			}),
-		],
-	}),
-
-	// 9. A workflow on the result worker's queue. Submit adds reserve alone: the others wait for it. Its outcome
-	// releases label and charge, which run one after the other, as the worker has one goroutine. charge fails: ship,
-	// which waits for it, is cancelled, and the workflow fails. reserve completed and has an undo, so its undo job
-	// runs, and the workflow ends compensated. Each caption starts on a still frame: at Submit, at reserve's done, at
-	// charge's failure, and as the undo job leaves the workflow.
-	(carry) => ({
-		title: 'Workflows',
-		duration: 14300,
-		captions: [
-			{ at: 300, text: 'A *workflow* is jobs that wait for other jobs' },
-			{ at: 2300, text: '*Submit* queues the tasks with nothing to wait for' },
-			{ at: 5100, text: 'A finished task *releases* the tasks after it' },
-			{ at: 9350, text: 'charge !fails!, so ship is *cancelled*' },
-			{ at: 10400, text: 'and the *undo* job of reserve runs' },
-		],
-		parts: [
-			workflow(carry, {
-				id: 'w',
-				submit: 2300,
-				promote: 1000,
-				undoAfter: 1700,
-				tasks: order([1400, 1300, 1300, 1300, 1300], true),
 			}),
 		],
 	}),
