@@ -19,7 +19,7 @@ export interface WorkflowPlan {
 	id: string; // its jobs are `<id>-<task>`, and a task's undo job `<id>-<task>-undo`
 	submit: number; // when Submit() is called
 	promote: number; // ms from a push to the job's land in the queue
-	undoAfter: number; // ms from the push of an undo job to its land
+	undoAfter: number; // ms from a failure to the land of the first undo jobs; a later undo job lands `promote` after its push
 	tasks: TaskSpec[]; // in Add order
 }
 
@@ -55,13 +55,13 @@ export function runWorkflow(wf: WorkflowPlan, pool: Omit<PoolPlan, 'jobs'>, sour
 	};
 
 	/** After the machine has moved at `at`: its pushes become jobs, and what it cancelled or ended shows. */
-	const apply = (fx: { push?: string; undo?: boolean }[], at: number) => {
+	const apply = (fx: { push?: string; undo?: boolean }[], at: number, afterUndo = false) => {
 		let k = 0;
 		for (const e of fx) {
 			if (!e.push) continue;
 			const spec = specs.get(e.push)!;
 			const id = `${wf.id}-${e.push}${e.undo ? '-undo' : ''}`;
-			const land = at + (e.undo ? wf.undoAfter : wf.promote) + STAGGER * k++;
+			const land = at + (e.undo && !afterUndo ? wf.undoAfter : wf.promote) + STAGGER * k++;
 			jobs.push({ id, source, at: land, work: e.undo ? spec.undoWork! : spec.work });
 			run.jobs[id] = { task: e.push, undo: !!e.undo };
 			outcomes[id] = !e.undo && spec.fails ? 'error' : 'value';
@@ -87,7 +87,7 @@ export function runWorkflow(wf: WorkflowPlan, pool: Omit<PoolPlan, 'jobs'>, sour
 		const failed = !undo && !!specs.get(task)!.fails;
 		const fx = machine.finish(task, failed ? 'failed' : 'completed', undo);
 		mark(done.at, task, undo ? 'undone' : failed ? 'failed' : 'done');
-		apply(fx, done.at);
+		apply(fx, done.at, undo);
 	}
 	return { jobs, events, outcomes, run };
 }

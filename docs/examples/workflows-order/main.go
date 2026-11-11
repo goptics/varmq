@@ -1,5 +1,6 @@
 // The workflow of the home page's map (src/lib/heromap/chapters.ts, chapter 7, and src/lib/story/stations.ts):
-// four tasks on one result worker's queue. charge fails, ship is cancelled, and the undo job of reserve runs.
+// four tasks on one result worker's queue. charge fails, ship is cancelled, and the undo jobs of label and reserve
+// run, label's first.
 package main
 
 import (
@@ -12,8 +13,13 @@ import (
 )
 
 func main() {
-	// One worker with one goroutine runs every task, and the undo job too.
+	// One worker with one goroutine runs every task, and the undo jobs too.
 	queue := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) {
+		// An undo job reverses its task: here it would release the stock, or void the label.
+		if varmq.TaskOf(j).Undo {
+			fmt.Println("undo:", j.Data())
+			return "ok", nil
+		}
 		if j.Data() == "charge card" {
 			fmt.Println("run: charge card - declined")
 			return "", errors.New("card declined")
@@ -27,6 +33,7 @@ func main() {
 	r := wf.Add("reserve", queue, "reserve stock")
 	r.Undo(queue, "release stock")
 	l := wf.Add("label", queue, "print label").After(r)
+	l.Undo(queue, "void label")
 	c := wf.Add("charge", queue, "charge card").After(r)
 	wf.Add("ship", queue, "ship order").After(l, c)
 

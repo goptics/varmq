@@ -132,12 +132,12 @@ function workflow(carry: Carry, wf: WorkflowPlan): PoolPart {
 	return { kind: 'pool', worker: 'result', plan, events, outcomes, workflow: run };
 }
 
-// The workflow's four tasks, in Add order: reserve, then label and charge, then ship, which waits for both. Only
-// reserve has an undo. The Workflows page's "Failure and undo" example has the same tasks and a fifth, notify; here
-// label is added before charge, so the worker's one goroutine runs it first and the failure comes last.
+// The workflow's four tasks, in Add order: reserve, then label and charge, then ship, which waits for both. reserve
+// and label each have an undo. The Workflows page's "Failure and undo" example has the same tasks and a fifth,
+// notify; here label is added before charge, so the worker's one goroutine runs it first and the failure comes last.
 const order = (works: number[], fails = false): TaskSpec[] => [
 	{ name: 'reserve', work: works[0], undoWork: works[4] },
-	{ name: 'label', deps: ['reserve'], work: works[1] },
+	{ name: 'label', deps: ['reserve'], work: works[1], undoWork: works[4] },
 	{ name: 'charge', deps: ['reserve'], work: works[2], fails },
 	{ name: 'ship', deps: ['label', 'charge'], work: works[3] },
 ];
@@ -325,18 +325,19 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 
 	// 7. A workflow on the result worker's queue. Submit adds reserve alone: the others wait for it. Its outcome
 	// releases label and charge, which run one after the other, as the worker has one goroutine. charge fails: ship,
-	// which waits for it, is cancelled, and the workflow fails. reserve completed and has an undo, so its undo job
-	// runs, and the workflow ends compensated. Each caption starts on a still frame: at Submit, at reserve's done, at
-	// charge's failure, and as the undo job leaves the workflow.
+	// which waits for it, is cancelled, and the workflow fails. reserve and label completed and each has an undo. The
+	// undo jobs run in reverse: label's first, as label waited for reserve, then reserve's, and the workflow ends
+	// compensated. Each caption starts on a still frame: at Submit, at reserve's done, at charge's failure, and as
+	// the first undo job leaves the workflow.
 	(carry) => ({
 		title: 'Workflows',
-		duration: 14300,
+		duration: 16100,
 		captions: [
 			{ at: 300, text: 'A *workflow* is jobs that wait for other jobs' },
 			{ at: 2300, text: '*Submit* queues the tasks with nothing to wait for' },
 			{ at: 5100, text: 'A finished task *releases* the tasks after it' },
 			{ at: 9350, text: 'charge !fails!, so ship is *cancelled*' },
-			{ at: 10400, text: 'and the *undo* job of reserve runs' },
+			{ at: 10400, text: 'The *undo* jobs run in reverse: label, then reserve' },
 		],
 		parts: [
 			workflow(carry, {
@@ -344,7 +345,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 				submit: 2300,
 				promote: 1000,
 				undoAfter: 1700,
-				tasks: order([1400, 1300, 1300, 1300, 1300], true),
+				tasks: order([1400, 1300, 1300, 1300, 1100], true),
 			}),
 		],
 	}),

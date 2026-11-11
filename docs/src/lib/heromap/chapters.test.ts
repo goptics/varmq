@@ -260,22 +260,23 @@ describe('chapter rules', () => {
 		const p = part(10, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
 		assert.ok(p.events.some(e => e.type === 'land' && e.at > at('pause') && e.at < at('resume')));
 	});
-	it('chapter 7 runs the workflow by varmq\'s rules: charge fails, ship is cancelled, reserve is undone', () => {
+	it('chapter 7 runs the workflow by varmq\'s rules: charge fails, ship is cancelled, label and reserve are undone', () => {
 		const p = part(7, 'pool', 'result'), run = p.workflow;
-		// One goroutine: reserve, then label and charge in Add order, then the undo job. ship never becomes a job.
-		assert.deepEqual(dispatches(p).map(d => d.job), ['w-reserve', 'w-label', 'w-charge', 'w-reserve-undo']);
-		assert.deepEqual(p.outcomes, { 'w-reserve': 'value', 'w-label': 'value', 'w-charge': 'error', 'w-reserve-undo': 'value' });
+		// One goroutine: reserve, then label and charge in Add order, then the undo jobs in reverse. ship never becomes a job.
+		assert.deepEqual(dispatches(p).map(d => d.job), ['w-reserve', 'w-label', 'w-charge', 'w-label-undo', 'w-reserve-undo']);
+		assert.deepEqual(p.outcomes, { 'w-reserve': 'value', 'w-label': 'value', 'w-charge': 'error', 'w-label-undo': 'value', 'w-reserve-undo': 'value' });
 		const last = Object.fromEntries(run.marks.map(m => [m.task, m.mark]));
-		assert.deepEqual(last, { reserve: 'undone', label: 'done', charge: 'failed', ship: 'cancelled' });
+		assert.deepEqual(last, { reserve: 'undone', label: 'undone', charge: 'failed', ship: 'cancelled' });
 		assert.deepEqual(run.states.map(s => s.state), ['running', 'compensating', 'compensated']);
 		// A task's job lands only after the tasks it waits for are done, and the undo job after the failure.
 		const at = (type, job) => p.events.find(e => e.type === type && e.job === job).at;
 		for (const job of ['w-label', 'w-charge']) assert.ok(at('land', job) > at('done', 'w-reserve'), job);
-		assert.ok(at('land', 'w-reserve-undo') > at('done', 'w-charge'));
+		assert.ok(at('land', 'w-label-undo') > at('done', 'w-charge'));
+		assert.ok(at('land', 'w-reserve-undo') > at('done', 'w-label-undo'));
 		// Each caption after the first starts at the event it names.
 		const caps = CHAPTERS[6].captions.map(c => c.at);
 		assert.deepEqual(caps.slice(1, 4), [run.submit, at('done', 'w-reserve'), at('done', 'w-charge')]);
-		assert.ok(caps[4] > at('done', 'w-charge') && caps[4] < at('land', 'w-reserve-undo') - 400);
+		assert.ok(caps[4] > at('done', 'w-charge') && caps[4] < at('land', 'w-label-undo') - 400);
 	});
 	it('chapter 11 runs the same workflow to completed, before the zoom into chapter 1', () => {
 		const p = part(11, 'pool', 'result'), run = p.workflow;
