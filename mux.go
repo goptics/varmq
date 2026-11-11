@@ -433,9 +433,13 @@ func handleListJobs(w http.ResponseWriter, r *http.Request) {
 		jobs = []JobRecord{}
 	}
 	// Pages carry the size only: up to maxJobsLimit results of 64 KiB.
+	hide := hidePayloads(r)
 	for i := range jobs {
 		if n := len(jobs[i].Result); n > 0 {
 			jobs[i].ResultSize, jobs[i].Result = n, nil
+		}
+		if hide {
+			jobs[i].Payload = jsonNull
 		}
 	}
 
@@ -465,8 +469,24 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 	default:
 		rec.ResultSize = 0 // list pages only; a reader may fill both
+		if hidePayloads(r) {
+			rec.Payload, rec.Result = jsonNull, nil
+		}
 		writeJSON(w, http.StatusOK, rec)
 	}
+}
+
+// noPayloadsKey marks a request from a hub connection made with
+// WithHubNoPayloads: the job routes answer payload null and no result.
+// The hub sets it on each request; the job handlers read it after routing,
+// so no path spelling gets around it.
+type noPayloadsKey struct{}
+
+var jsonNull = json.RawMessage("null")
+
+func hidePayloads(r *http.Request) bool {
+	hide, _ := r.Context().Value(noPayloadsKey{}).(bool)
+	return hide
 }
 
 // handleJobAction cancels a job by ID (JobCanceller). 202: a waiting job

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,8 +24,9 @@ const (
 	hubProtocol     = 1
 	hubMaxLine      = 64 << 10 // bytes per stream line
 	hubMaxReply     = 16 << 20 // bytes per reply body
-	hubMaxInFlight  = 8        // requests run at once
+	hubMaxInFlight  = 8        // requests run at once, across redials
 	hubQueued       = 64       // frames waiting for a runner; the reader blocks past it
+	hubMaxBadFrames = 16       // bad frames that end a stream
 	hubMaxIDLen     = 128      // InstanceID bytes
 	hubMaxFrameID   = 64       // request id bytes
 	hubDefaultBeat  = 5 * time.Second
@@ -33,6 +35,7 @@ const (
 	hubFirstRetry   = time.Second
 	hubMaxRetry     = 30 * time.Second
 	hubByeTimeout   = 2 * time.Second
+	hubReplyTimeout = 30 * time.Second
 	hubErrBodyLimit = 4 << 10
 )
 
@@ -48,9 +51,11 @@ type hubConfig struct {
 	onErr      func(error)
 
 	// test hooks: protocol floors are too slow for unit tests
-	minBeat    time.Duration
-	firstRetry time.Duration
-	maxRetry   time.Duration
+	minBeat      time.Duration
+	firstRetry   time.Duration
+	maxRetry     time.Duration
+	replyTimeout time.Duration
+	runners      *sync.WaitGroup // tracks the runners, which may outlive ConnectHub
 }
 
 // WithHubReadOnly refuses every request but GET with 403: the hub can read
@@ -58,11 +63,16 @@ type hubConfig struct {
 func WithHubReadOnly() HubOption { return func(c *hubConfig) { c.readOnly = true } }
 
 // WithHubNoPayloads answers the job routes (GET /queues/{id}/jobs and
-// /queues/{id}/jobs/{jobId}) with payload null and no result.
+// /queues/{id}/jobs/{jobId}) with payload null and no result; result_size
+// stays. Job error texts (errors[].error) and workflow task reasons are
+// still sent: they can hold application data.
 func WithHubNoPayloads() HubOption { return func(c *hubConfig) { c.noPayloads = true } }
 
-// WithHubClient sets the HTTP client, e.g. for custom TLS or a proxy. Its
-// Timeout is ignored: the stream is long-lived.
+// WithHubClient sets the HTTP client, e.g. for custom TLS or a proxy.
+// ConnectHub uses a copy: its Timeout is ignored (the stream is long-lived)
+// and redirects are never followed (the token stays with hubURL). Before
+// each redial ConnectHub closes the idle connections of its transport, so
+// a dead HTTP/2 connection is not reused.
 func WithHubClient(c *http.Client) HubOption { return func(cfg *hubConfig) { cfg.client = c } }
 
 // WithHubHeartbeat sets the heartbeat used when the hub's hello gives none
@@ -70,11 +80,14 @@ func WithHubClient(c *http.Client) HubOption { return func(cfg *hubConfig) { cfg
 func WithHubHeartbeat(d time.Duration) HubOption { return func(c *hubConfig) { c.heartbeat = d } }
 
 // WithHubInsecure allows plain http:// to a host that is not loopback. The
-// token then travels in clear text.
+// token then travels in clear text, and anyone on the path can act as the
+// hub: read the instance and run every action the connection allows.
 func WithHubInsecure() HubOption { return func(c *hubConfig) { c.insecure = true } }
 
 // WithHubErrHandler receives connection errors: failed dials, hub statuses
-// such as 401, dropped streams. Calls are serialized. nil ignores them.
+// such as 401, dropped streams, bad frames, handler panics. Text from the
+// hub is truncated. Calls are serialized and stop when ConnectHub
+// returns. nil ignores them.
 func WithHubErrHandler(f func(error)) HubOption { return func(c *hubConfig) { c.onErr = f } }
 
 // hubStatusError is an unexpected hub reply status.
@@ -88,9 +101,12 @@ func (e *hubStatusError) Error() string {
 }
 
 var (
-	errHubStale    = errors.New("varmq: hub stream: no line for 3 heartbeats")
-	errHubNoStream = errors.New("varmq: hub beat: no open stream")
-	errHubClosed   = errors.New("varmq: hub stream: closed by hub")
+	errHubStale     = errors.New("varmq: hub stream: no line for 3 heartbeats")
+	errHubBusy      = errors.New("varmq: hub stream: request queue full for 3 heartbeats (8 running, 64 waiting)")
+	errHubBadFrames = errors.New("varmq: hub stream: 16 bad frames")
+	errHubBadLine   = errors.New("varmq: hub frame: not a JSON object with a string type")
+	errHubNoStream  = errors.New("varmq: hub beat: no open stream")
+	errHubClosed    = errors.New("varmq: hub stream: closed by hub")
 )
 
 // ConnectHub connects this process to a hub (vartop) at hubURL and serves
@@ -98,16 +114,27 @@ var (
 // instance with no inbound port. It dials out, keeps one stream open,
 // redials with backoff when it drops, and returns ctx.Err() once ctx ends,
 // after telling the hub (best effort). It returns at once on a bad config:
-// hubURL not http(s), empty token, [InstanceID] empty or over 128 bytes,
-// or plain http:// to a host that is not loopback without [WithHubInsecure].
+// hubURL not http(s), or with userinfo, a query or a fragment; empty
+// token; [InstanceID] empty or over 128 bytes; or plain http:// to a host
+// that is not loopback without [WithHubInsecure].
 //
-// The token is sent as a bearer header and grants what Handler grants:
-// see [WithHubReadOnly] and [WithHubNoPayloads]. Set InstanceID first when
-// several processes share a host; the hub refuses a duplicate.
+// The token proves this instance to the hub; only TLS and hubURL prove the
+// hub. Whoever answers at hubURL gets everything Handler allows: it reads
+// job payloads and results, stops and resizes workers, pauses queues and
+// cancels jobs and workflows. On shared storage a queue pause or a job
+// cancel reaches every consumer process. See [WithHubReadOnly] and
+// [WithHubNoPayloads]. Set InstanceID first when several processes share
+// a host; the hub refuses a duplicate.
 //
-//	go varmq.ConnectHub(ctx, "https://vartop.internal", token)
+//	err := varmq.ConnectHub(ctx, "https://vartop.internal", token,
+//		varmq.WithHubErrHandler(func(err error) { log.Print(err) }))
 //
-// Nothing here runs on the job path. Protocol: spec/hub.md.
+// The hub connection holds no job-path lock. It runs the same handlers as
+// a mounted Handler, at most 8 at once, which turns on the same job
+// tracking as [NewServerMux]. A handler that ignores its context (a
+// Restart waiting for a long job, say) does not delay a redial or the
+// return: its goroutine may outlive the call, and its reply is dropped.
+// Protocol: spec/hub.md.
 func ConnectHub(ctx context.Context, hubURL, token string, opts ...HubOption) error {
 	h, err := newHub(hubURL, token, newHubConfig(opts))
 	if err != nil {
@@ -131,12 +158,28 @@ type hub struct {
 	stream  string
 	beat    string
 	bye     string
-	errMu   sync.Mutex
+	frames  chan hubJob // shared by every stream: the runners outlive them
+
+	errMu  sync.Mutex
+	closed bool // ConnectHub returned: no more callbacks
+}
+
+// hubJob is a request frame and the context of the stream it came on.
+type hubJob struct {
+	ctx context.Context
+	f   hubFrame
 }
 
 // newHubConfig applies opts over the protocol defaults.
 func newHubConfig(opts []HubOption) hubConfig {
-	cfg := hubConfig{heartbeat: hubDefaultBeat, minBeat: hubMinBeat, firstRetry: hubFirstRetry, maxRetry: hubMaxRetry}
+	cfg := hubConfig{
+		heartbeat:    hubDefaultBeat,
+		minBeat:      hubMinBeat,
+		firstRetry:   hubFirstRetry,
+		maxRetry:     hubMaxRetry,
+		replyTimeout: hubReplyTimeout,
+		runners:      new(sync.WaitGroup),
+	}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -146,16 +189,19 @@ func newHubConfig(opts []HubOption) hubConfig {
 	return cfg
 }
 
+// newHub checks the config. Its errors never repeat hubURL: it may hold
+// credentials.
 func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
 	u, err := url.Parse(hubURL)
-	if err != nil {
-		return nil, fmt.Errorf("varmq: hub url: %w", err)
-	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
-		return nil, fmt.Errorf("varmq: hub url %q: want http(s)://host[/path]", hubURL)
-	}
-	if u.Scheme == "http" && !cfg.insecure && !loopback(u.Hostname()) {
-		return nil, fmt.Errorf("varmq: hub url %q: plain http to a non-loopback host sends the token in clear text (WithHubInsecure allows it)", hubURL)
+	switch {
+	case err != nil:
+		return nil, errors.New("varmq: hub url: not a URL")
+	case u.User != nil:
+		return nil, errors.New("varmq: hub url: userinfo not allowed; the token authenticates")
+	case (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
+		return nil, errors.New("varmq: hub url: want http(s)://host[/path], no query or fragment")
+	case u.Scheme == "http" && !cfg.insecure && !loopback(u.Hostname()):
+		return nil, fmt.Errorf("varmq: hub url: plain http to %s, not loopback, sends the token in clear text (WithHubInsecure allows it)", u.Host)
 	}
 	if token == "" || strings.ContainsFunc(token, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return nil, errors.New("varmq: hub token empty or not a header value")
@@ -177,26 +223,26 @@ func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
 		stream:  u.JoinPath("hub", "stream").String() + q(url.Values{"instance": {id}, "protocol": {strconv.Itoa(hubProtocol)}}),
 		beat:    u.JoinPath("hub", "beat").String() + q(url.Values{"instance": {id}}),
 		bye:     u.JoinPath("hub", "beat").String() + q(url.Values{"instance": {id}, "bye": {"1"}}),
+		frames:  make(chan hubJob, hubQueued),
 	}
 
 	if cfg.client != nil {
 		c := *cfg.client
-		c.Timeout = 0 // the stream lives for hours; contexts bound every call
 		h.client = &c
 	} else {
-		t, ok := http.DefaultTransport.(*http.Transport)
-		if ok {
-			t = t.Clone()
-		} else { // wrapped (e.g. tracing): a fresh one, not a panic
-			t = &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true}
-		}
-		t.MaxIdleConnsPerHost = hubMaxInFlight + 2 // replies and beats reuse connections
-		h.client = &http.Client{
-			Transport: t,
-			// the token must not follow a redirect (maybe to plain http)
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		}
+		h.client = &http.Client{Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			ForceAttemptHTTP2:     true,
+			TLSHandshakeTimeout:   10 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			ExpectContinueTimeout: time.Second,
+			MaxIdleConnsPerHost:   hubMaxInFlight + 2, // replies and beats reuse connections
+		}}
 	}
+	h.client.Timeout = 0 // the stream lives for hours; contexts bound every call
+	// the token must not follow a redirect (maybe to plain http)
+	h.client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	return h, nil
 }
@@ -216,11 +262,22 @@ func (h *hub) report(err error) {
 	}
 	h.errMu.Lock()
 	defer h.errMu.Unlock()
-	h.cfg.onErr(err)
+	if !h.closed {
+		h.cfg.onErr(err)
+	}
 }
 
 // run dials until ctx ends, then says bye if a stream was ever open.
 func (h *hub) run(ctx context.Context) {
+	defer func() {
+		h.errMu.Lock()
+		h.closed = true
+		h.errMu.Unlock()
+	}()
+	for range hubMaxInFlight {
+		h.cfg.runners.Go(func() { h.runner(ctx) })
+	}
+
 	var (
 		ceiling time.Duration // current backoff ceiling, 0: none yet
 		ever    bool
@@ -245,12 +302,30 @@ func (h *hub) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
+		// a dead HTTP/2 connection (no FIN) would carry the redial: dial fresh
+		h.client.CloseIdleConnections()
 	}
 
 	if ever {
 		bctx, cancel := context.WithTimeout(context.Background(), hubByeTimeout)
 		defer cancel()
 		h.post(bctx, h.bye, nil, nil)
+	}
+}
+
+// runner serves queued frames until ctx ends. The runners live as long as
+// ConnectHub, not one stream: a handler stuck past its stream holds its
+// runner, so at most 8 requests run at once across redials.
+func (h *hub) runner(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case j := <-h.frames:
+			if j.ctx.Err() == nil { // dead stream: the hub fails what waits
+				h.serve(j.ctx, j.f)
+			}
+		}
 	}
 }
 
@@ -269,11 +344,11 @@ func (h *hub) nextBackoff(d time.Duration, capped bool) time.Duration {
 }
 
 // clampBeat is the heartbeat for a hello's heartbeat_ms: the configured
-// default when absent, else clamped to [minBeat, 60 s].
+// default when absent or 0, else clamped to [minBeat, 60 s].
 func (h *hub) clampBeat(ms int64) time.Duration {
 	d := h.cfg.heartbeat
-	if ms > 0 {
-		d = time.Duration(min(ms, int64(hubMaxBeat/time.Millisecond))) * time.Millisecond
+	if ms != 0 {
+		d = time.Duration(min(max(ms, 0), int64(hubMaxBeat/time.Millisecond))) * time.Millisecond
 	}
 	return min(max(d, h.cfg.minBeat), hubMaxBeat)
 }
@@ -288,19 +363,49 @@ type hubFrame struct {
 	Path        string `json:"path"`
 }
 
+// parseFrame decodes one stream line. Only hello and request are decoded
+// in full: any other type is ignored whole, whatever its fields hold.
+func parseFrame(line []byte) (hubFrame, error) {
+	var head struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(line, &head) != nil {
+		return hubFrame{}, errHubBadLine
+	}
+	if head.Type != "hello" && head.Type != "request" {
+		return hubFrame{Type: head.Type}, nil
+	}
+	var f hubFrame
+	if json.Unmarshal(line, &f) != nil {
+		return hubFrame{}, fmt.Errorf("varmq: hub frame: bad %s fields", head.Type)
+	}
+	if f.Type == "request" && !validFrameID(f.ID) {
+		return hubFrame{}, fmt.Errorf("varmq: hub frame: bad request id %.80q", f.ID)
+	}
+	return f, nil
+}
+
 // session runs one stream until it drops or ctx ends. hello reports the
-// hub's hello arrived. Every goroutine it starts has ended on return.
+// hub's hello arrived. It returns without waiting for the runners: a
+// request of this stream still running ends with its context.
 func (h *hub) session(ctx context.Context) (hello bool, err error) {
 	sctx, cancel := context.WithCancelCause(ctx)
-	var wg sync.WaitGroup
+	var beats sync.WaitGroup
 	defer func() {
 		cancel(nil)
-		wg.Wait()
+		beats.Wait()
 	}()
 
+	var full atomic.Bool // the reader waits for room in the queue
 	beat := h.clampBeat(0)
 	// the watchdog runs from the dial: a hub that never answers is dead too
-	stale := time.AfterFunc(3*beat, func() { cancel(errHubStale) })
+	stale := time.AfterFunc(3*beat, func() {
+		if full.Load() {
+			cancel(errHubBusy)
+		} else {
+			cancel(errHubStale)
+		}
+	})
 	defer stale.Stop()
 
 	req, err := http.NewRequestWithContext(sctx, http.MethodGet, h.stream, nil)
@@ -320,27 +425,17 @@ func (h *hub) session(ctx context.Context) (hello bool, err error) {
 	}
 	stale.Reset(3 * beat)
 
-	// ponytail: the reader blocks once hubQueued frames wait; a hub that
-	// floods slow requests past 3 heartbeats then gets a redial.
-	frames := make(chan hubFrame, hubQueued)
-	defer close(frames) // before wg.Wait (defers run last-first)
-	for range hubMaxInFlight {
-		wg.Go(func() {
-			for f := range frames {
-				if sctx.Err() == nil { // dead stream: the hub fails what waits
-					h.serve(sctx, f)
-				}
-			}
-		})
-	}
-
+	bad := 0
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 4<<10), hubMaxLine+1)
 	for sc.Scan() {
 		stale.Reset(3 * beat)
-		var f hubFrame
-		if err := json.Unmarshal(sc.Bytes(), &f); err != nil {
-			h.report(fmt.Errorf("varmq: hub frame: %w", err))
+		f, err := parseFrame(sc.Bytes())
+		if err != nil {
+			h.report(err)
+			if bad++; bad == hubMaxBadFrames { // the redial backoff bounds the rate
+				return hello, errHubBadFrames
+			}
 			continue
 		}
 		switch f.Type {
@@ -354,14 +449,20 @@ func (h *hub) session(ctx context.Context) (hello bool, err error) {
 			hello, beat = true, h.clampBeat(f.HeartbeatMS)
 			stale.Reset(3 * beat)
 			every := beat
-			wg.Go(func() { h.beatLoop(sctx, cancel, every) })
+			beats.Go(func() { h.beatLoop(sctx, cancel, every) })
 		case "request":
-			if !validFrameID(f.ID) {
-				h.report(fmt.Errorf("varmq: hub frame: bad request id %q", f.ID))
-				continue
-			}
+			// ponytail: the reader blocks once hubQueued frames wait; a
+			// hub that floods slow requests past 3 heartbeats gets a redial.
+			j := hubJob{sctx, f}
 			select {
-			case frames <- f:
+			case h.frames <- j:
+				continue
+			default:
+			}
+			full.Store(true)
+			select {
+			case h.frames <- j:
+				full.Store(false)
 			case <-sctx.Done():
 				return hello, context.Cause(sctx)
 			}
@@ -448,9 +549,13 @@ func validFrameID(id string) bool {
 	return true
 }
 
-// serve runs one request frame on the handler and posts the reply.
+// serve runs one request frame on the handler and posts the reply, once,
+// within the reply timeout. A reply for a stream that ended is dropped.
 func (h *hub) serve(ctx context.Context, f hubFrame) {
 	rec := h.run1(ctx, f)
+	if ctx.Err() != nil { // the hub failed the request with its stream
+		return
+	}
 
 	hdr := http.Header{}
 	hdr.Set("X-Hub-Status", strconv.Itoa(rec.code))
@@ -460,7 +565,9 @@ func (h *hub) serve(ctx context.Context, f hubFrame) {
 	hdr.Set(InstanceHeader, rec.h.Get(InstanceHeader))
 
 	target := h.base.JoinPath("hub", "reply", f.ID).String() + "?" + url.Values{"instance": {h.id}}.Encode()
-	code, err := h.post(ctx, target, hdr, rec.body.Bytes())
+	pctx, cancel := context.WithTimeout(ctx, h.cfg.replyTimeout)
+	defer cancel()
+	code, err := h.post(pctx, target, hdr, rec.body.Bytes())
 	switch {
 	case err != nil:
 		if ctx.Err() == nil {
@@ -473,25 +580,22 @@ func (h *hub) serve(ctx context.Context, f hubFrame) {
 }
 
 // run1 answers one frame: 400 for a bad frame, 403 for a write when read
-// only, else the handler's reply (502 when over 16 MiB or not strippable).
-func (h *hub) run1(ctx context.Context, f hubFrame) (rec *hubRecorder) {
-	rec = &hubRecorder{h: http.Header{}, code: http.StatusOK}
-	fail := func(code int, msg string) *hubRecorder {
-		rec = &hubRecorder{h: http.Header{}}
-		writeError(rec, code, msg)
-		return rec
-	}
-
+// only, 500 on a handler panic, 502 when the reply is over 16 MiB, else
+// the handler's reply.
+func (h *hub) run1(ctx context.Context, f hubFrame) *hubRecorder {
 	u, err := url.ParseRequestURI(f.Path)
 	switch {
 	case f.Method != http.MethodGet && f.Method != http.MethodPatch:
-		return fail(http.StatusBadRequest, "hub frame: method must be GET or PATCH")
+		return hubFail(http.StatusBadRequest, "hub frame: method must be GET or PATCH")
 	case !strings.HasPrefix(f.Path, "/") || err != nil:
-		return fail(http.StatusBadRequest, "hub frame: path must start with /")
+		return hubFail(http.StatusBadRequest, "hub frame: path must start with /")
 	case h.cfg.readOnly && f.Method != http.MethodGet:
-		return fail(http.StatusForbidden, "read-only hub connection")
+		return hubFail(http.StatusForbidden, "read-only hub connection")
 	}
 
+	if h.cfg.noPayloads { // the job handlers read it after routing
+		ctx = context.WithValue(ctx, noPayloadsKey{}, true)
+	}
 	req := (&http.Request{
 		Method:     f.Method,
 		URL:        u,
@@ -505,68 +609,29 @@ func (h *hub) run1(ctx context.Context, f hubFrame) (rec *hubRecorder) {
 		RemoteAddr: "hub",
 	}).WithContext(ctx)
 
-	panicked := func() (p bool) {
-		defer func() {
-			if r := recover(); r != nil {
-				p = true
-			}
-		}()
-		h.handler.ServeHTTP(rec, req)
-		return false
-	}()
-	switch {
-	case panicked:
-		return fail(http.StatusInternalServerError, "handler panicked")
-	case rec.over:
-		return fail(http.StatusBadGateway, "reply over 16 MiB")
+	rec := &hubRecorder{h: http.Header{}, code: http.StatusOK}
+	if p := h.call(rec, req); p != nil {
+		h.report(fmt.Errorf("varmq: hub: handler panicked on %s %.80q: %.80v", f.Method, f.Path, p))
+		return hubFail(http.StatusInternalServerError, "handler panicked")
 	}
-	if rec.h.Get("Content-Type") == "" && rec.body.Len() > 0 {
-		rec.h.Set("Content-Type", http.DetectContentType(rec.body.Bytes()))
-	}
-
-	if h.cfg.noPayloads && f.Method == http.MethodGet && rec.code == http.StatusOK && jobRoute(u) {
-		body, err := stripPayloads(rec.body.Bytes())
-		if err != nil { // fail closed: never forward what can't be stripped
-			return fail(http.StatusBadGateway, "reply not strippable")
-		}
-		rec.body.Reset()
-		rec.body.Write(body)
+	if rec.over {
+		return hubFail(http.StatusBadGateway, "reply over 16 MiB")
 	}
 	return rec
 }
 
-// jobRoute reports u is /queues/{id}/jobs or /queues/{id}/jobs/{jobId}.
-func jobRoute(u *url.URL) bool {
-	s := strings.Split(u.EscapedPath(), "/")
-	return (len(s) == 4 || len(s) == 5) && s[0] == "" && s[1] == "queues" && s[2] != "" && s[3] == "jobs" &&
-		(len(s) == 4 || s[4] != "")
+// call runs the handler and returns what it panicked with, nil if nothing.
+func (h *hub) call(w http.ResponseWriter, r *http.Request) (p any) {
+	defer func() { p = recover() }()
+	h.handler.ServeHTTP(w, r)
+	return nil
 }
 
-// stripPayloads sets payload null and removes result in a job record or a
-// page of them.
-func stripPayloads(body []byte) ([]byte, error) {
-	strip := func(m map[string]json.RawMessage) {
-		if _, ok := m["payload"]; ok {
-			m["payload"] = json.RawMessage("null")
-		}
-		delete(m, "result")
-	}
-	if t := bytes.TrimSpace(body); len(t) > 0 && t[0] == '[' {
-		var page []map[string]json.RawMessage
-		if err := json.Unmarshal(t, &page); err != nil {
-			return nil, err
-		}
-		for _, m := range page {
-			strip(m)
-		}
-		return json.Marshal(page)
-	}
-	var one map[string]json.RawMessage
-	if err := json.Unmarshal(body, &one); err != nil {
-		return nil, err
-	}
-	strip(one)
-	return json.Marshal(one)
+// hubFail is a JSON error reply.
+func hubFail(code int, msg string) *hubRecorder {
+	rec := &hubRecorder{h: http.Header{}}
+	writeError(rec, code, msg)
+	return rec
 }
 
 // hubRecorder is a minimal http.ResponseWriter that keeps up to 16 MiB.
