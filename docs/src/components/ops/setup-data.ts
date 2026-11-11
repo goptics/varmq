@@ -47,7 +47,7 @@ export const redisSetup: SetupStep[] = [
 		text: `<a href="${pkg}/redisq#New"><code>redisq.New</code></a> takes a Redis URL and returns a <a href="${pkg}/redisq#Queues"><code>Queues</code></a> value. It panics when the URL does not parse. Each queue takes a key, which names it in Redis. Pick the order.`,
 		code: [
 			{
-				label: 'First in, first out',
+				label: 'FIFO',
 				lang: 'go',
 				file: 'main.go',
 				code:
@@ -57,7 +57,7 @@ export const redisSetup: SetupStep[] = [
 				note: 'First in, first out, on a Redis list. Jobs survive a restart. Several processes can consume one queue, and each job goes to one of them.',
 			},
 			{
-				label: 'Lowest number first',
+				label: 'Priority',
 				lang: 'go',
 				file: 'main.go',
 				code:
@@ -102,13 +102,13 @@ export const sqliteSetup: SetupStep[] = [
 		text: 'Each queue gets its own database file in the folder, named after the queue in lower case: the queue <code>jobs</code> lives in <code>jobs.db</code>. Both constructors take the name of the queue and return an error as well as the queue.',
 		code: [
 			{
-				label: 'First in, first out',
+				label: 'FIFO',
 				lang: 'go',
 				file: 'main.go',
 				code: 'pq, err := sdb.NewQueue("jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithQueue(pq)',
 			},
 			{
-				label: 'Lowest number first',
+				label: 'Priority',
 				lang: 'go',
 				file: 'main.go',
 				code: 'pq, err := sdb.NewPriorityQueue("priority_jobs")\nif err != nil {\n\tpanic(err)\n}\ndefer pq.Close()\n\nqueue := worker.WithPriorityQueue(pq)\nqueue.Add("alert", 1) // a lower number runs first',
