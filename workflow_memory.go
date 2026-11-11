@@ -93,7 +93,10 @@ func NewWorkflowStore(opts ...StoreConfigFunc) WorkflowStore {
 	return m
 }
 
-var _ WorkflowInspector = (*memWorkflowStore)(nil)
+var (
+	_ WorkflowInspector = (*memWorkflowStore)(nil)
+	_ WorkflowCounter   = (*memWorkflowStore)(nil)
+)
 
 func (m *memWorkflowStore) ScopeID() string { return memoryScope() }
 
@@ -192,19 +195,27 @@ func (m *memWorkflowStore) sweep() {
 	}
 }
 
-// effects records an end and turns pushes into memPushes. Callers hold mu.
+// effects records an end and turns pushes into memPushes, stamping each
+// pushed task's enqueue time. Callers hold mu.
 func (m *memWorkflowStore) effects(w *memWorkflow, fx []wfEffect) []memPush {
 	var out []memPush
+	now := m.now().UnixMilli()
 	for _, e := range fx {
 		if e.End != "" {
-			w.finished = max(m.now().UnixMilli(), w.created) // a clamped created_at never ends after its finish
+			w.finished = max(now, w.created) // a clamped created_at never ends after its finish
 			m.ended = append(m.ended, w)
 		}
 		if e.Push == "" {
 			continue
 		}
 
-		tp := w.s.Tasks[e.Push].Plan
+		t := w.s.Tasks[e.Push]
+		if e.Undo {
+			t.UndoEnqueued = now
+		} else {
+			t.Enqueued = now
+		}
+		tp := t.Plan
 		p := memPush{w: w, task: e.Push, undo: e.Undo,
 			target: tp.Queue.(memTarget), item: tp.Item.(memTaskItem), prio: tp.Priority}
 		if e.Undo {
@@ -228,6 +239,12 @@ func (m *memWorkflowStore) push(work []memPush) {
 		}
 
 		m.mu.Lock()
+		p.w.s.At = m.now().UnixMilli()
+		if t := p.w.s.Tasks[p.task]; p.undo {
+			t.UndoEnqueued = 0 // never reached its queue
+		} else {
+			t.Enqueued = 0
+		}
 		// The task is in the plan and the outcome known: no error.
 		fx, _ := p.w.s.finish(TaskEnd{Workflow: p.w.id, Task: p.task, Outcome: OutcomeFailed,
 			Reason: refusedPromotion, Undo: p.undo})
@@ -265,6 +282,7 @@ func (m *memWorkflowStore) finish(e TaskEnd) error {
 		m.mu.Unlock()
 		return err
 	}
+	w.s.At = m.now().UnixMilli()
 	fx, err := w.s.finish(e)
 	pushes := m.effects(w, fx)
 	m.mu.Unlock()
@@ -303,6 +321,7 @@ func (m *memWorkflowStore) Cancel(_ context.Context, id string, undo *bool) erro
 	if undo != nil {
 		on = *undo
 	}
+	w.s.At = m.now().UnixMilli()
 	pushes := m.effects(w, w.s.cancel(on))
 	m.mu.Unlock()
 
@@ -312,7 +331,7 @@ func (m *memWorkflowStore) Cancel(_ context.Context, id string, undo *bool) erro
 }
 
 // Runnable is the pre-run check: whether the task (undo: its undo) may
-// start now.
+// start now. A yes stamps the start time: the job runs next.
 func (m *memWorkflowStore) Runnable(_ context.Context, workflowID, task string, undo bool) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -322,7 +341,14 @@ func (m *memWorkflowStore) Runnable(_ context.Context, workflowID, task string, 
 		return false, err
 	}
 
-	return w.s.runnable(task, undo), nil
+	ok := w.s.runnable(task, undo)
+	if t := w.s.Tasks[task]; ok && undo {
+		t.UndoStarted = m.now().UnixMilli()
+	} else if ok {
+		t.Started = m.now().UnixMilli()
+	}
+
+	return ok, nil
 }
 
 // DepResult returns a copy of task's result: ErrDepFailed when it failed or
@@ -387,6 +413,23 @@ func (m *memWorkflowStore) WorkflowKeys(_ context.Context, state WorkflowState, 
 	return out, nil
 }
 
+// WorkflowCounts counts the kept workflows per state.
+// ponytail: walks the kept workflows; a counter per state if big stores
+// show up.
+func (m *memWorkflowStore) WorkflowCounts(context.Context) (map[WorkflowState]int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := map[WorkflowState]int64{}
+	for _, w := range m.order {
+		if !w.gone {
+			out[w.s.State]++
+		}
+	}
+
+	return out, nil
+}
+
 // list collects the listed workflows under mu, in the order GET /workflows
 // merges: CreatedAt newest first, then ID. A state filter scans at most
 // maxWorkflowsOffset+limit workflows, matched or not, so a rare state never
@@ -433,13 +476,15 @@ func (w *memWorkflow) record() WorkflowRecord {
 	for _, name := range w.s.Order {
 		t := w.s.Tasks[name]
 		tr := TaskRecord{Name: name, State: t.State, Deps: slices.Clone(t.Plan.Deps), QueueID: t.Plan.QueueID,
-			JobID: t.Plan.JobID, Always: t.Plan.Always, Reason: t.Reason, ResultSize: len(t.Result)}
+			JobID: t.Plan.JobID, Always: t.Plan.Always, Reason: t.Reason, ResultSize: len(t.Result),
+			EnqueuedAt: t.Enqueued, StartedAt: t.Started, FinishedAt: t.Finished}
 		if u := t.Plan.Undo; u != nil {
 			st := t.UndoState
 			if st == "" {
 				st = JobWaiting
 			}
-			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID, Reason: t.UndoReason}
+			tr.Undo = &TaskRecord{Name: name, State: st, QueueID: u.QueueID, JobID: u.JobID, Reason: t.UndoReason,
+				EnqueuedAt: t.UndoEnqueued, StartedAt: t.UndoStarted, FinishedAt: t.UndoFinished}
 		}
 		r.Tasks = append(r.Tasks, tr)
 	}

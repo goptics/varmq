@@ -2,9 +2,12 @@ package varmq
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -928,6 +931,106 @@ func TestMuxWorkflowsAllStoresFail(t *testing.T) {
 	NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflows", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.Contains(t, rr.Body.String(), "redis down")
+}
+
+// countingWorkflowStore also counts its workflows per state.
+type countingWorkflowStore struct {
+	*fakeWorkflowStore
+	by map[WorkflowState]int64
+}
+
+func (c *countingWorkflowStore) WorkflowCounts(context.Context) (map[WorkflowState]int64, error) {
+	return c.by, c.err
+}
+
+// localWorkflowStore is a file on this host.
+type localWorkflowStore struct{ *fakeWorkflowStore }
+
+func (localWorkflowStore) HostLocal() {}
+
+// TestMuxWorkflowCounts: GET /workflow-counts gives one entry per durable
+// store under a hashed scope, the in-memory stores summed in one, every
+// state present; a failing store keeps its entry with no counts, 503 when all fail.
+func TestMuxWorkflowCounts(t *testing.T) {
+	resetWorkflowStores(t)
+
+	get := func() *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		NewServerMux().ServeHTTP(rr, httptest.NewRequest("GET", "/workflow-counts", nil))
+		return rr
+	}
+	assert.Equal(t, "[]\n", get().Body.String(), "no store")
+
+	w := NewWorker(func(Job[int]) {}, WithAutoRun(false))
+	q := w.BindQueue()
+	for _, id := range []string{"m1", "m2"} { // two in-memory stores: one entry
+		mem, _ := newMemStore(t)
+		defer runtime.KeepAlive(mem)
+		wf := NewWorkflow(mem, WithWorkflowID(id))
+		wf.Add("a", q, 1)
+		require.NoError(t, submit(t, wf))
+	}
+	counting := &countingWorkflowStore{&fakeWorkflowStore{scope: "redis://10.0.0.5:6379/0"},
+		map[WorkflowState]int64{WorkflowFailed: 3, "bogus": 9}}
+	useStore(t, counting)
+	useStore(t, localWorkflowStore{&fakeWorkflowStore{scope: "fake:old"}}) // lists, cannot count
+
+	rr := get()
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	for _, part := range []string{"10.0.0.5", "6379", "redis://"} {
+		assert.NotContains(t, rr.Body.String(), part, "the scope ID is hashed")
+	}
+	var got []storeCounts
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	require.Len(t, got, 3)
+
+	zero := map[WorkflowState]int64{WorkflowRunning: 0, WorkflowCompleted: 0, WorkflowFailed: 0, WorkflowCompensating: 0,
+		WorkflowCompensated: 0, WorkflowCompensationFailed: 0, WorkflowCancelled: 0}
+	want := func(st WorkflowState, n int64) map[WorkflowState]int64 {
+		m := maps.Clone(zero)
+		m[st] = n
+		return m
+	}
+	assert.Equal(t, storeCounts{Counts: want(WorkflowRunning, 2)}, got[0], "in-memory: summed, no store id")
+	var counted, old int
+	for _, e := range got[1:] {
+		assert.True(t, e.Shared)
+		assert.Regexp(t, "^[0-9a-f]{12}$", e.Store)
+		if e.Counts == nil {
+			old++
+		} else {
+			counted++
+			assert.Equal(t, want(WorkflowFailed, 3), e.Counts, "unknown states dropped")
+		}
+	}
+	assert.Equal(t, []int{1, 1}, []int{counted, old})
+	for scope, why := range map[string]string{
+		counting.scope:            "same scope, same ID on every instance",
+		hostname + "\x00fake:old": "host-local: the host is part of the ID",
+	} {
+		sum := sha256.Sum256([]byte(scope))
+		assert.True(t, slices.ContainsFunc(got, func(e storeCounts) bool { return e.Store == hex.EncodeToString(sum[:6]) }), why)
+	}
+
+	counting.err = errors.New("redis down")
+	rr = get()
+	require.Equal(t, http.StatusOK, rr.Code)
+	got = nil // Unmarshal would reuse the old maps
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	require.Len(t, got, 3, "the failing store keeps its entry")
+	sum := sha256.Sum256([]byte(counting.scope))
+	i := slices.IndexFunc(got, func(e storeCounts) bool { return e.Store == hex.EncodeToString(sum[:6]) })
+	require.GreaterOrEqual(t, i, 0)
+	assert.True(t, got[i].Shared)
+	assert.Nil(t, got[i].Counts, "failed store: entry without counts")
+	assert.NotContains(t, rr.Body.String(), "redis down")
+
+	resetWorkflowStores(t)
+	useStore(t, counting)
+	rr = get()
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	assert.Contains(t, rr.Body.String(), "workflow counts unavailable")
+	assert.NotContains(t, rr.Body.String(), "redis down", "store error text stays out")
 }
 
 // keyedWorkflowStore lists keys only; its records are read one by one.

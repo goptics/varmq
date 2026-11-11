@@ -27,6 +27,7 @@ The paths follow the prefix you give to `Handler`, for example `/varmq`.
 | `PATCH` | `/queues/{id}/jobs/{jobId}/actions/cancel` | cancels one job |
 | `GET` | `/workflows` | lists workflows, newest first |
 | `GET` | `/workflows/{id}` | returns one workflow, with its tasks |
+| `GET` | `/workflow-counts` | counts the workflows of each store, by state |
 | `PATCH` | `/workflows/{id}/actions/cancel` | cancels a workflow |
 
 ## Mounting it
@@ -227,7 +228,8 @@ An in-memory queue keeps no ended jobs by default. Pass [`WithEndedJobs`](https:
 The workflow routes read the [workflow](/guides/workflows/) stores this process knows. These are the in-memory stores you made with [`NewWorkflowStore`](https://pkg.go.dev/github.com/goptics/varmq#NewWorkflowStore), and every store an adapter registered, such as `redisq.NewWorkflowStore`. A process that only submits workflows, and runs no worker, lists and cancels them too. So protect the handler there as well.
 
 - **`GET /workflows`** lists the workflows of every store, newest first. `state` filters them, for example `running` or `failed`. `offset` is at most 10000, and `limit` is 50 by default and at most 1000.
-- **`GET /workflows/{id}`** returns one workflow, with the state of each task.
+- **`GET /workflows/{id}`** returns one workflow, with the state of each task. A task also shows when it went to its queue (`enqueued_at`), when a worker started it (`started_at`) and when it ended (`finished_at`), in Unix milliseconds. A store that does not keep these times leaves them out.
+- **`GET /workflow-counts`** counts the workflows by state. It returns one entry for each store, and one entry for all in-memory stores of the process. An entry with `shared: true` is the same on every instance that uses the store, so count it one time. An entry without `counts` comes from a store that cannot count, or whose count failed. Show no counts then. The reply is 503 only when no store counted and one failed. The `store` value is an opaque ID, a short hash of the store's scope. It is not a secret. For a file store, the hash includes the host name, so the same path on two hosts gives two IDs.
 - **`PATCH /workflows/{id}/actions/cancel`** cancels the workflow and answers `200` with its record. Add `?undo=false` to skip the undo steps. The API cannot turn on undo steps that the workflow turned off: `?undo=true` answers 400.
 
 ## Responses
