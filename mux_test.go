@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2188,4 +2190,509 @@ func resetWorkflowStores(t *testing.T) {
 	}
 	reset()
 	t.Cleanup(reset)
+}
+
+// withHubTiming lowers the protocol floors (1 s heartbeat, 0.5–30 s
+// backoff) so hub tests run in milliseconds.
+func withHubTiming(minBeat, firstRetry, maxRetry time.Duration) HubOption {
+	return func(c *hubConfig) { c.minBeat, c.firstRetry, c.maxRetry = minBeat, firstRetry, maxRetry }
+}
+
+// fakeHub is a hub (spec/hub.md) for tests: every stream it opens arrives
+// on streams, every reply on replies, every beat on beats.
+type fakeHub struct {
+	srv          *httptest.Server
+	token        string
+	hello        atomic.Value // string: first stream line
+	streamStatus atomic.Int32 // non-zero: refuse streams with it
+	beatStatus   atomic.Int32 // non-zero: answer beats with it
+	streams      chan *hubStream
+	replies      chan hubReply
+	beats        chan url.Values
+}
+
+// hubStream is one open stream: send lines down it, close quit to end it.
+type hubStream struct {
+	query url.Values
+	lines chan string
+	quit  chan struct{}
+}
+
+func (s *hubStream) send(lines ...string) {
+	for _, l := range lines {
+		s.lines <- l
+	}
+}
+
+// request sends a request frame.
+func (s *hubStream) request(id, method, path string) {
+	b, _ := json.Marshal(map[string]string{"type": "request", "id": id, "method": method, "path": path})
+	s.send(string(b))
+}
+
+type hubReply struct {
+	id, instance           string
+	status, ctype, varmqID string
+	body                   string
+}
+
+func hubHello(ms int) string {
+	return fmt.Sprintf(`{"type":"hello","protocol":1,"heartbeat_ms":%d}`, ms)
+}
+
+func newFakeHub(t *testing.T) *fakeHub {
+	t.Helper()
+	f := &fakeHub{
+		token:   "s3cret",
+		streams: make(chan *hubStream, 16),
+		replies: make(chan hubReply, 64),
+		beats:   make(chan url.Values, 256),
+	}
+	f.hello.Store(hubHello(5000))
+	authed := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Header.Get("Authorization") != "Bearer "+f.token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /hub/stream", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(w, r) {
+			return
+		}
+		if code := f.streamStatus.Load(); code != 0 {
+			w.WriteHeader(int(code))
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusOK)
+		fl := w.(http.Flusher)
+		write := func(l string) { io.WriteString(w, l+"\n"); fl.Flush() }
+		if h := f.hello.Load().(string); h != "" {
+			write(h)
+		} else {
+			fl.Flush()
+		}
+		s := &hubStream{query: r.URL.Query(), lines: make(chan string, 64), quit: make(chan struct{})}
+		f.streams <- s
+		for {
+			select {
+			case l := <-s.lines:
+				write(l)
+			case <-s.quit:
+				return
+			case <-r.Context().Done():
+				return
+			}
+		}
+	})
+	mux.HandleFunc("POST /hub/reply/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(w, r) {
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		f.replies <- hubReply{
+			id: r.PathValue("id"), instance: r.URL.Query().Get("instance"),
+			status: r.Header.Get("X-Hub-Status"), ctype: r.Header.Get("Content-Type"),
+			varmqID: r.Header.Get(InstanceHeader), body: string(body),
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /hub/beat", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(w, r) {
+			return
+		}
+		select {
+		case f.beats <- r.URL.Query():
+		default:
+		}
+		code := int(f.beatStatus.Load())
+		if code == 0 {
+			code = http.StatusNoContent
+		}
+		w.WriteHeader(code)
+	})
+	f.srv = httptest.NewServer(mux)
+	t.Cleanup(f.srv.Close) // after connect's cleanup (LIFO): ConnectHub has returned
+
+	old := InstanceID
+	InstanceID = "hub-test"
+	t.Cleanup(func() { InstanceID = old })
+	return f
+}
+
+// connect runs ConnectHub against f until stop or the test ends. Errors
+// reach errs (dropped once it is full).
+func (f *fakeHub) connect(t *testing.T, opts ...HubOption) (errs chan error, stop func() error) {
+	t.Helper()
+	errs = make(chan error, 256)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	opts = append([]HubOption{
+		withHubTiming(10*time.Millisecond, 10*time.Millisecond, 40*time.Millisecond),
+		WithHubErrHandler(func(err error) {
+			select {
+			case errs <- err:
+			default:
+			}
+		}),
+	}, opts...)
+	go func() { done <- ConnectHub(ctx, f.srv.URL, f.token, opts...) }()
+	var (
+		once sync.Once
+		err  error
+	)
+	stop = func() error {
+		once.Do(func() { cancel(); err = within(t, done) })
+		return err
+	}
+	t.Cleanup(func() { stop() })
+	return errs, stop
+}
+
+// reply waits for the reply to request id.
+func (f *fakeHub) reply(t *testing.T, id string) hubReply {
+	t.Helper()
+	r := within(t, f.replies)
+	require.Equal(t, id, r.id)
+	return r
+}
+
+// errIs waits until errs carries an error matching ok.
+func errIs(t *testing.T, errs chan error, ok func(error) bool) error {
+	t.Helper()
+	for {
+		if err := within(t, errs); ok(err) {
+			return err
+		}
+	}
+}
+
+func TestHubConnectGetAndPatch(t *testing.T) {
+	WorkerRegistry.Clear()
+	f := newFakeHub(t)
+	w := NewWorker(func(Job[int]) {}, WithName("hub-worker"))
+	t.Cleanup(func() { w.Stop(); WorkerRegistry.Clear() })
+	w.BindQueue()
+
+	f.connect(t)
+	s := within(t, f.streams)
+	assert.Equal(t, "hub-test", s.query.Get("instance"))
+	assert.Equal(t, "1", s.query.Get("protocol"))
+
+	s.request("g1", "GET", "/workers/hub-worker")
+	r := f.reply(t, "g1")
+	assert.Equal(t, "200", r.status)
+	assert.Equal(t, "application/json", r.ctype)
+	assert.Equal(t, "hub-test", r.varmqID)
+	assert.Equal(t, "hub-test", r.instance)
+	var got workerSummary
+	require.NoError(t, json.Unmarshal([]byte(r.body), &got))
+	assert.Equal(t, "hub-worker", got.Name)
+
+	s.request("p1", "PATCH", "/workers/hub-worker/actions/pause")
+	r = f.reply(t, "p1")
+	assert.Equal(t, "200", r.status)
+	assert.Empty(t, r.body)
+	assert.Empty(t, r.ctype, "no body, no type")
+	assert.Equal(t, "hub-test", r.varmqID)
+	assert.True(t, w.IsPaused())
+
+	s.request("n1", "GET", "/nope?x=1")
+	r = f.reply(t, "n1")
+	assert.Equal(t, "404", r.status)
+	assert.Equal(t, "hub-test", r.varmqID)
+}
+
+func TestHubReadOnly(t *testing.T) {
+	WorkerRegistry.Clear()
+	f := newFakeHub(t)
+	w := NewWorker(func(Job[int]) {}, WithName("hub-ro"))
+	t.Cleanup(func() { w.Stop(); WorkerRegistry.Clear() })
+	w.BindQueue()
+
+	f.connect(t, WithHubReadOnly())
+	s := within(t, f.streams)
+	s.request("p", "PATCH", "/workers/hub-ro/actions/pause")
+	r := f.reply(t, "p")
+	assert.Equal(t, "403", r.status)
+	assert.Equal(t, "application/json", r.ctype)
+	assert.JSONEq(t, `{"error":"read-only hub connection"}`, r.body)
+	assert.False(t, w.IsPaused(), "the handler never ran")
+
+	s.request("g", "GET", "/health")
+	assert.Equal(t, "200", f.reply(t, "g").status)
+}
+
+// hubJobStore serves one job with a payload and a result.
+type hubJobStore struct{ id string }
+
+func (s hubJobStore) QueueID() string { return s.id }
+func (hubJobStore) QueueStats(context.Context) (QueueStats, error) {
+	return QueueStats{}, nil
+}
+func (hubJobStore) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
+	return []JobRecord{{ID: "j", State: JobCompleted, Payload: json.RawMessage(`{"secret":1}`), Result: json.RawMessage(`{"secret":2}`)}}, nil
+}
+func (hubJobStore) Job(context.Context, string) (JobRecord, error) {
+	return JobRecord{ID: "j", State: JobCompleted, Payload: json.RawMessage(`{"secret":1}`), Result: json.RawMessage(`{"secret":2}`)}, nil
+}
+
+func TestHubNoPayloads(t *testing.T) {
+	id := "custom:hub/jobs" // escaped in the path
+	queueRegistry.Store(id, hubJobStore{id})
+	t.Cleanup(func() { queueRegistry.Delete(id) })
+	f := newFakeHub(t)
+	f.connect(t, WithHubNoPayloads())
+	s := within(t, f.streams)
+
+	base := "/queues/" + url.PathEscape(id) + "/jobs"
+	s.request("list", "GET", base+"?state=completed")
+	r := f.reply(t, "list")
+	require.Equal(t, "200", r.status, r.body)
+	assert.JSONEq(t, `[{"id":"j","state":"completed","payload":null,"attempts":0,"result_size":12}]`, r.body)
+
+	s.request("one", "GET", base+"/j")
+	r = f.reply(t, "one")
+	require.Equal(t, "200", r.status, r.body)
+	assert.JSONEq(t, `{"id":"j","state":"completed","payload":null,"attempts":0}`, r.body)
+	assert.Equal(t, "application/json", r.ctype)
+
+	s.request("q", "GET", "/queues")
+	r = f.reply(t, "q")
+	assert.Equal(t, "200", r.status)
+	assert.NotContains(t, r.body, "secret")
+
+	assert.True(t, jobRoute(&url.URL{Path: "/queues/a/jobs/b"}))
+	assert.False(t, jobRoute(&url.URL{Path: "/queues/a/jobs/"}))
+	assert.False(t, jobRoute(&url.URL{Path: "/queues/a"}))
+	_, err := stripPayloads([]byte("nope"))
+	assert.Error(t, err, "a reply that does not decode is not forwarded")
+}
+
+// An unknown message type and unknown fields are ignored; a bad frame
+// with an id is answered 400, one without a valid id is dropped.
+func TestHubFrames(t *testing.T) {
+	f := newFakeHub(t)
+	errs, _ := f.connect(t)
+	s := within(t, f.streams)
+
+	s.send(`{"type":"config","report_interval_ms":5000}`, `{"type":"ping"}`, `not json`)
+	s.send(`{"type":"request","id":"u","method":"GET","path":"/health","extra":true}`)
+	r := f.reply(t, "u")
+	assert.Equal(t, "200", r.status)
+	assert.JSONEq(t, `{"status":"ok"}`, r.body)
+
+	s.request("bad id!", "GET", "/health")
+	s.request("m", "DELETE", "/health")
+	s.request("p", "GET", "health")
+	got := map[string]hubReply{}
+	for range 2 {
+		r := within(t, f.replies)
+		got[r.id] = r
+	}
+	for _, id := range []string{"m", "p"} {
+		assert.Equal(t, "400", got[id].status, id)
+		assert.Equal(t, "application/json", got[id].ctype)
+		assert.Contains(t, got[id].body, `"error"`)
+	}
+	errIs(t, errs, func(err error) bool { return strings.Contains(err.Error(), "bad request id") })
+
+	select {
+	case <-f.streams:
+		t.Fatal("redialed on an unknown type")
+	default:
+	}
+}
+
+func TestHubUnauthorizedRetries(t *testing.T) {
+	f := newFakeHub(t)
+	f.streamStatus.Store(http.StatusUnauthorized)
+	errs, _ := f.connect(t)
+
+	err := errIs(t, errs, func(err error) bool {
+		var se *hubStatusError
+		return errors.As(err, &se) && se.code == http.StatusUnauthorized
+	})
+	assert.Contains(t, err.Error(), "401")
+	f.streamStatus.Store(0) // the token is fixed: the next retry heals
+	within(t, f.streams)
+}
+
+func TestHubStreamDropRedials(t *testing.T) {
+	f := newFakeHub(t)
+	errs, _ := f.connect(t)
+	s := within(t, f.streams)
+	close(s.quit)
+	errIs(t, errs, func(err error) bool { return errors.Is(err, errHubClosed) })
+	s = within(t, f.streams)
+	s.request("after", "GET", "/health")
+	assert.Equal(t, "200", f.reply(t, "after").status)
+}
+
+func TestHubStaleRedials(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(20)) // no pings follow
+	errs, _ := f.connect(t)
+	within(t, f.streams)
+	errIs(t, errs, func(err error) bool { return errors.Is(err, errHubStale) })
+	within(t, f.streams)
+	b := within(t, f.beats) // beats ran meanwhile
+	assert.Equal(t, "hub-test", b.Get("instance"))
+	assert.Empty(t, b.Get("bye"))
+}
+
+func TestHubBeatNotFoundRedials(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(20))
+	f.beatStatus.Store(http.StatusNotFound)
+	errs, _ := f.connect(t)
+	errIs(t, errs, func(err error) bool { return errors.Is(err, errHubNoStream) })
+}
+
+func TestHubByeOnCancel(t *testing.T) {
+	f := newFakeHub(t)
+	_, stop := f.connect(t)
+	s := within(t, f.streams)
+	s.request("h", "GET", "/health") // its reply: hello was read
+	f.reply(t, "h")
+	assert.ErrorIs(t, stop(), context.Canceled)
+	for {
+		if b := within(t, f.beats); b.Get("bye") == "1" {
+			assert.Equal(t, "hub-test", b.Get("instance"))
+			return
+		}
+	}
+}
+
+func TestHubConfigErrors(t *testing.T) {
+	old := InstanceID
+	t.Cleanup(func() { InstanceID = old })
+	InstanceID = "hub-test"
+	ctx := context.Background()
+
+	for _, u := range []string{"http://example.com", "http://10.0.0.1:8080", "ftp://localhost", "localhost:80", "https://h/?q=1", "://"} {
+		assert.Error(t, ConnectHub(ctx, u, "t"), u)
+	}
+	err := ConnectHub(ctx, "http://example.com", "t")
+	assert.ErrorContains(t, err, "WithHubInsecure")
+	assert.Error(t, ConnectHub(ctx, "https://h", ""))
+	assert.Error(t, ConnectHub(ctx, "https://h", "a\nb"))
+
+	InstanceID = ""
+	assert.ErrorContains(t, ConnectHub(ctx, "https://h", "t"), "InstanceID")
+	InstanceID = strings.Repeat("x", 129)
+	assert.ErrorContains(t, ConnectHub(ctx, "https://h", "t"), "InstanceID")
+	InstanceID = "hub-test"
+
+	for _, h := range []string{"localhost", "127.0.0.1", "::1"} {
+		assert.True(t, loopback(h), h)
+	}
+	assert.False(t, loopback("example.com"))
+
+	// plain http to a loopback host, or anywhere with the option, dials
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	assert.ErrorIs(t, ConnectHub(cctx, "http://localhost:1", "t"), context.Canceled)
+	assert.ErrorIs(t, ConnectHub(cctx, "http://example.com", "t", WithHubInsecure()), context.Canceled)
+}
+
+func TestHubTiming(t *testing.T) {
+	h := &hub{cfg: newHubConfig(nil)}
+	assert.Equal(t, 5*time.Second, h.clampBeat(0), "hello gives none: default")
+	assert.Equal(t, time.Second, h.clampBeat(10))
+	assert.Equal(t, 60*time.Second, h.clampBeat(600000))
+	assert.Equal(t, 2500*time.Millisecond, h.clampBeat(2500))
+	assert.Equal(t, 2*time.Second, (&hub{cfg: newHubConfig([]HubOption{WithHubHeartbeat(2 * time.Second)})}).clampBeat(0))
+
+	d := h.nextBackoff(0, false)
+	assert.Equal(t, time.Second, d, "first retry within 0.5-1 s")
+	var seq []time.Duration
+	for range 7 {
+		d = h.nextBackoff(d, false)
+		seq = append(seq, d)
+	}
+	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second, 30 * time.Second}, seq)
+	assert.Equal(t, 30*time.Second, h.nextBackoff(0, true), "401 and 400 retry at the cap")
+}
+
+// hubBlockingStore's Jobs blocks until release, counting calls at once.
+type hubBlockingStore struct {
+	hubJobStore
+	release      chan struct{}
+	entered      chan struct{}
+	now, highest atomic.Int32
+}
+
+func (s *hubBlockingStore) Jobs(ctx context.Context, st JobState, o, l int) ([]JobRecord, error) {
+	n := s.now.Add(1)
+	defer s.now.Add(-1)
+	for {
+		h := s.highest.Load()
+		if n <= h || s.highest.CompareAndSwap(h, n) {
+			break
+		}
+	}
+	s.entered <- struct{}{}
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+	}
+	return nil, nil
+}
+
+func TestHubConcurrencyCap(t *testing.T) {
+	st := &hubBlockingStore{hubJobStore: hubJobStore{"custom:hub-block"}, release: make(chan struct{}), entered: make(chan struct{}, 32)}
+	queueRegistry.Store(st.id, st)
+	t.Cleanup(func() { queueRegistry.Delete(st.id) })
+	f := newFakeHub(t)
+	f.connect(t)
+	s := within(t, f.streams)
+
+	const n = 12
+	for i := range n {
+		s.request("c"+strconv.Itoa(i), "GET", "/queues/"+st.id+"/jobs?state=pending")
+	}
+	for range hubMaxInFlight {
+		within(t, st.entered)
+	}
+	select {
+	case <-st.entered:
+		t.Fatal("a 9th request ran")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(st.release)
+	seen := map[string]bool{}
+	for range n {
+		r := within(t, f.replies)
+		assert.Equal(t, "200", r.status)
+		seen[r.id] = true
+	}
+	assert.Len(t, seen, n)
+	assert.EqualValues(t, hubMaxInFlight, st.highest.Load())
+}
+
+// hubHugeStore lists one job whose payload passes the 16 MiB reply cap.
+type hubHugeStore struct{ hubJobStore }
+
+func (hubHugeStore) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
+	return []JobRecord{{ID: "big", State: JobPending, Payload: json.RawMessage(`"` + strings.Repeat("a", hubMaxReply) + `"`)}}, nil
+}
+
+func TestHubOversizeReply(t *testing.T) {
+	st := hubHugeStore{hubJobStore{"custom:hub-huge"}}
+	queueRegistry.Store(st.id, st)
+	t.Cleanup(func() { queueRegistry.Delete(st.id) })
+	f := newFakeHub(t)
+	f.connect(t)
+	s := within(t, f.streams)
+
+	s.request("big", "GET", "/queues/"+st.id+"/jobs?state=pending")
+	r := f.reply(t, "big")
+	assert.Equal(t, "502", r.status)
+	assert.Equal(t, "application/json", r.ctype)
+	assert.JSONEq(t, `{"error":"reply over 16 MiB"}`, r.body)
+	assert.Equal(t, "hub-test", r.varmqID)
 }
