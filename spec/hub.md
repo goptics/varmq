@@ -34,10 +34,10 @@ Hub replies:
 | Status | Meaning |
 |---|---|
 | `200` | `Content-Type: application/x-ndjson`; the body stays open. |
-| `400` | `instance` missing, over 128 bytes, not valid UTF-8 or with a control character; or `protocol` not `1`. |
+| `400` | `instance` missing, over 128 bytes, not valid UTF-8 or with a control character; `protocol` not `1`; or the stream request carries a body. |
 | `401` | Token missing or wrong. |
 | `409` | An instance with that ID is already connected. The hub never replaces a live stream on a new connect. |
-| `503` | The hub is at its instance limit, its new-instance rate limit, or its reply-memory budget. |
+| `503` | The hub is at its instance limit, its new-stream rate limit, or is closing. |
 
 The body is one JSON object per line, ended by `\n`. The hub flushes after each line. A line is at most 64 KiB.
 
@@ -86,11 +86,11 @@ Hub replies:
 | Status | Meaning |
 |---|---|
 | `204` | Delivered. |
-| `400` | `X-Hub-Status` missing or not a status code from 200 to 599. |
+| `400` | `X-Hub-Status` missing or not a status code from 200 to 599, or the hub could not read the reply body (for example its 10 s read limit cut a slow body). |
 | `404` | No request with that ID is waiting from that instance (expired or unknown), or the instance has no stream with that session (header missing, wrong value, or an old stream). |
 | `401` | Token missing or wrong. |
 | `413` | Body over 16 MiB. |
-| `503` | The hub is at its reply-memory budget. |
+| `503` | The hub's reply-memory budget (per server) is full. |
 
 An instance MUST answer a request it cannot run (method not `GET` or `PATCH`, or `path` not starting with `/`) with `X-Hub-Status: 400` and a JSON body `{"error":"..."}`, when the frame has a valid `id`. A frame without a valid `id` is dropped.
 
@@ -150,8 +150,8 @@ These are choices of `ConnectHub`, not requirements on a hub.
 - A line with no `type`, or a `type` other than `hello`, `request` or `ping`, is ignored whole, whatever its fields hold. A line that is not a JSON object (an empty line included), a line whose `type` is not a string, a second `hello` or a `request` with fields of the wrong JSON type, a `request` without a valid `id`, or a `request` before `hello` is a bad frame: it is reported (hub text cut to 80 bytes) and dropped. 16 bad frames end the stream, so the redial backoff bounds the rate.
 - At most 8 requests run at once, across redials. Up to 64 more frames wait in order. When the queue is full the instance stops reading the stream; if it stays full for 3 × `heartbeat_ms`, the instance ends the stream and redials.
 - A `request` runs on a request context that ends when the stream drops. A request that is still running when its stream ends keeps its slot until its handler returns; its reply is not sent.
-- A reply is posted once, with a 30 s limit. No reply is retried.
-- An API reply over 16 MiB is answered with `X-Hub-Status: 502` and `{"error":"reply over 16 MiB"}`. A handler panic is answered with `500` and reported.
+- A reply is posted once, with a 30 s limit. The hub reads a reply body for at most 10 s, so a slower reply shows on the instance as a reply `400`. No reply is retried.
+- An API reply over 16 MiB is answered with `X-Hub-Status: 502` and `{"error":"reply over 16 MiB"}`. A handler panic is answered with `500` and reported. Reply-failure and panic reports are rate-limited per stream: the first goes at once, then at most one per heartbeat interval, ending "(and N more)" for the suppressed ones.
 - A beat answered `401` ends the stream and retries at the cap delay, as a stream `401` does. A `409` or `503` from the stream retries with the normal backoff.
 - The `bye` after a stream ends, and the `bye` on a clean stop, go once per stream that received `hello`, each on its own context with a 2 s limit. A stop during the backoff sleep sends no second `bye`. On a half-open HTTP/2 connection the `bye` can use its 2 s and be lost; the redial then dials fresh.
 - `InstanceID` is checked when `ConnectHub` starts. A bad ID returns a fixed error that does not repeat it.

@@ -187,6 +187,33 @@ type hubJob struct {
 	ctx     context.Context
 	session string
 	f       hubFrame
+	lim     *hubLimiter
+}
+
+// hubLimiter bounds the reply and panic reports of one stream: the first
+// goes at once, then at most one per interval, with a count of the rest.
+type hubLimiter struct {
+	mu    sync.Mutex
+	every time.Duration
+	next  time.Time
+	extra int
+}
+
+func (h *hub) reportLimited(l *hubLimiter, err error) {
+	l.mu.Lock()
+	now := time.Now()
+	if now.Before(l.next) {
+		l.extra++
+		l.mu.Unlock()
+		return
+	}
+	l.next = now.Add(l.every)
+	if l.extra > 0 {
+		err = fmt.Errorf("%w (and %d more)", err, l.extra)
+		l.extra = 0
+	}
+	l.mu.Unlock()
+	h.report(err)
 }
 
 // newHubConfig applies opts over the protocol defaults.
@@ -353,7 +380,7 @@ func (h *hub) runner(ctx context.Context) {
 			return
 		case j := <-h.frames:
 			if j.ctx.Err() == nil { // dead stream: the hub fails what waits
-				h.serve(j.ctx, j.session, j.f)
+				h.serve(j.ctx, j.session, j.f, j.lim)
 			}
 		}
 	}
@@ -429,6 +456,7 @@ func (h *hub) session(ctx context.Context) (sess string, err error) {
 		beats.Wait()
 	}()
 
+	lim := &hubLimiter{every: h.clampBeat(0)}
 	var full atomic.Bool // the reader waits for room in the queue
 	beat := h.clampBeat(0)
 	// the watchdog runs from the dial: a hub that never answers is dead too
@@ -490,12 +518,13 @@ func (h *hub) session(ctx context.Context) (sess string, err error) {
 			}
 			sess, beat = f.Session, h.clampBeat(f.HeartbeatMS)
 			stale.Reset(3 * beat)
+			lim.every = beat
 			every, s := beat, sess
 			beats.Go(func() { h.beatLoop(sctx, cancel, every, s) })
 		case "request":
 			// ponytail: the reader blocks once hubQueued frames wait; a
 			// hub that floods slow requests past 3 heartbeats gets a redial.
-			j := hubJob{ctx: sctx, session: sess, f: f}
+			j := hubJob{ctx: sctx, session: sess, f: f, lim: lim}
 			select {
 			case h.frames <- j:
 				continue
@@ -607,8 +636,8 @@ func validInstanceID(id string) bool {
 // serve runs one request frame on the handler and posts the reply of
 // session sess, once, within the reply timeout. A reply for a stream that
 // ended is dropped.
-func (h *hub) serve(ctx context.Context, sess string, f hubFrame) {
-	rec := h.run1(ctx, f)
+func (h *hub) serve(ctx context.Context, sess string, f hubFrame, lim *hubLimiter) {
+	rec := h.run1(ctx, f, lim)
 	if ctx.Err() != nil { // the hub failed the request with its stream
 		return
 	}
@@ -627,18 +656,18 @@ func (h *hub) serve(ctx context.Context, sess string, f hubFrame) {
 	switch {
 	case err != nil:
 		if ctx.Err() == nil {
-			h.report(fmt.Errorf("varmq: hub reply: %w", err))
+			h.reportLimited(lim, fmt.Errorf("varmq: hub reply: %w", err))
 		}
 	case code == http.StatusNoContent, code == http.StatusNotFound: // 404: the hub gave up on it
 	default:
-		h.report(&hubStatusError{op: "reply", code: code})
+		h.reportLimited(lim, &hubStatusError{op: "reply", code: code})
 	}
 }
 
 // run1 answers one frame: 400 for a bad frame, 403 for a write when read
 // only, 500 on a handler panic, 502 when the reply is over 16 MiB, else
 // the handler's reply.
-func (h *hub) run1(ctx context.Context, f hubFrame) *hubRecorder {
+func (h *hub) run1(ctx context.Context, f hubFrame, lim *hubLimiter) *hubRecorder {
 	u, err := url.ParseRequestURI(f.Path)
 	switch {
 	case f.Method != http.MethodGet && f.Method != http.MethodPatch:
@@ -667,7 +696,7 @@ func (h *hub) run1(ctx context.Context, f hubFrame) *hubRecorder {
 
 	rec := &hubRecorder{h: http.Header{}, code: http.StatusOK}
 	if p := h.call(rec, req); p != nil {
-		h.report(fmt.Errorf("varmq: hub: handler panicked on %s %.80q: %.80v", f.Method, f.Path, p))
+		h.reportLimited(lim, fmt.Errorf("varmq: hub: handler panicked on %s %.80q: %.80v", f.Method, f.Path, p))
 		return hubFail(http.StatusInternalServerError, "handler panicked")
 	}
 	if rec.over {

@@ -3498,6 +3498,24 @@ func TestHubReplyStatus(t *testing.T) {
 	assert.Equal(t, "200", f.reply(t, "ok").status)
 }
 
+// A hub that fails every reply gets one report at once, then at most one
+// per heartbeat with the count of the rest.
+func TestHubReplyErrorRate(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(5000))
+	f.replyStatus.Store(http.StatusInternalServerError)
+	errs, _ := f.connect(t)
+	s := within(t, f.streams)
+	for i := range 20 {
+		id := "r" + strconv.Itoa(i)
+		s.request(id, "GET", "/health")
+		f.reply(t, id)
+	}
+	errIs(t, errs, hubStatus("reply", http.StatusInternalServerError))
+	time.Sleep(100 * time.Millisecond)
+	assert.Empty(t, errs, "reports inside one heartbeat are suppressed")
+}
+
 // A stream 409 (ID taken) retries with the normal backoff, not the cap.
 func TestHubConflictBackoff(t *testing.T) {
 	f := newFakeHub(t)
