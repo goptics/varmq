@@ -126,13 +126,13 @@ const worker = `steps := varmq.NewErrWorker(func(j varmq.Job[string]) error {
 
 export const workflowSteps: SetupStep[] = [
 	{
-		title: 'Create a worker and the workflow',
-		text: `Each task is one job, so a worker must run it. Here one worker runs all three tasks. The workflow needs a store, which keeps its state. The queue and the store must use the same storage. Pick one.`,
+		title: 'Create the workflow',
+		text: 'The workflow needs a store, which keeps its state. Pick one.',
 		code: [
 			{
 				store: 'memory',
 				lang: 'go',
-				code: `${worker}.BindQueue()\n\nwf := varmq.NewWorkflow(varmq.NewWorkflowStore())`,
+				code: 'wf := varmq.NewWorkflow(varmq.NewWorkflowStore())',
 				note: `<a href="${pkg}/varmq#NewWorkflowStore"><code>NewWorkflowStore</code></a> keeps the state in your process. It is lost when the process exits.`,
 			},
 			{
@@ -140,8 +140,6 @@ export const workflowSteps: SetupStep[] = [
 				lang: 'go',
 				code:
 					'qs, err := sqliteq.New("data")\nif err != nil {\n\tpanic(err)\n}\ndefer qs.Close()\n\n' +
-					'queue, err := qs.NewQueue("steps")\nif err != nil {\n\tpanic(err)\n}\n' +
-					`${worker}.WithQueue(queue)\n\n` +
 					'store, err := sqliteq.NewWorkflowStore(qs)\nif err != nil {\n\tpanic(err)\n}\ndefer store.Close()\n\n' +
 					'wf := varmq.NewWorkflow(store)',
 				note: `<a href="${pkg}/sqliteq#NewWorkflowStore"><code>sqliteq.NewWorkflowStore</code></a> keeps the state in SQLite, so the workflow continues after a restart. The <code>defer</code> order closes the store before the client.`,
@@ -151,11 +149,23 @@ export const workflowSteps: SetupStep[] = [
 				lang: 'go',
 				code:
 					'qs := redisq.New("redis://localhost:6375")\ndefer qs.Close()\n\n' +
-					`${worker}.WithQueue(qs.NewQueue("steps"))\n\n` +
 					'store, err := redisq.NewWorkflowStore(qs)\nif err != nil {\n\tpanic(err)\n}\ndefer store.Close()\n\n' +
 					'wf := varmq.NewWorkflow(store)',
 				note: `<a href="${pkg}/redisq#NewWorkflowStore"><code>redisq.NewWorkflowStore</code></a> keeps the state in Redis, so the workflow continues after a restart and other processes can run its tasks. Port 6375 is the Redis of <a href="/persistence/redis/#setup">Redis setup</a>.`,
 			},
+		],
+	},
+	{
+		title: 'Create a worker',
+		text: 'Each task is one job, so a worker must run it. Here one worker runs all three tasks. Its queue must use the same storage as the store.',
+		code: [
+			{ store: 'memory', lang: 'go', code: `${worker}.BindQueue()` },
+			{
+				store: 'sqlite',
+				lang: 'go',
+				code: 'queue, err := qs.NewQueue("steps")\nif err != nil {\n\tpanic(err)\n}\n' + `${worker}.WithQueue(queue)`,
+			},
+			{ store: 'redis', lang: 'go', code: `${worker}.WithQueue(qs.NewQueue("steps"))` },
 		],
 	},
 	{

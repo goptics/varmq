@@ -86,6 +86,14 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 <script>
 	import { tabs, copyButtons } from '../ui/dom';
 
-	document.querySelectorAll<HTMLElement>('[data-ops-steps] [role="tablist"]').forEach((list) => tabs(list));
+	// Store tabs in one list of steps move together: pick SQLite once, every step shows SQLite.
+	document.querySelectorAll<HTMLElement>('[data-ops-steps] [role="tablist"]').forEach((list) =>
+		tabs(list, (key) => {
+			if (!list.hasAttribute('data-store-tabs')) return;
+			list.closest('[data-ops-steps]')
+				?.querySelectorAll<HTMLElement>(`[data-store-tabs] [data-key="${key}"][aria-selected="false"]`)
+				.forEach((t) => t.click());
+		}),
+	);
 	copyButtons();
 </script>
