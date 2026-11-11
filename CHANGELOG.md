@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.9.0. Specs: `spec/redis-storage.md` 1.9.0, `spec/openapi.yaml` 1.6.0.
+Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.9.0. Specs: `spec/redis-storage.md` 1.9.0, `spec/openapi.yaml` 1.6.0, `spec/hub.md` 1.0.0.
 
 ### ⚠️ Breaking Changes
 
@@ -32,6 +32,7 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
 
 ### ✨ New Features
 
+- **Hub connection** (#192, spec `hub.md` 1.0.0): `varmq.ConnectHub(ctx, hubURL, token, opts...)` dials out to vartop, serves `Handler` routes over one NDJSON stream; no inbound port. Beats, `bye` on stop, backoff with jitter (0.5 s → 30 s), max 8 requests at once, 16 MiB reply cap. Options `WithHubReadOnly`, `WithHubNoPayloads`, `WithHubClient`, `WithHubHeartbeat`, `WithHubInsecure`, `WithHubErrHandler`. Refuses plain `http://` to non-loopback host. Zero new deps; off job path.
 - **Workflows** (#179; adr 0005, spec 1.5.0, openapi 1.3.0, contract v0.6.0): DAG of jobs over queues. Storage queues a task in same atomic step that ends its last dependency; no scheduler.
   - `wf := varmq.NewWorkflow(store)`; `wf.Add(name, queue, data)` → `*Task` with `.After(...)`, `.Always()`, `.Undo(queue, data)` (saga, reverse order), `.Priority(p)`.
   - `wf.Submit`, `Cancel`, `Status`, `Wait`, `WaitContext`. `varmq.OpenWorkflow(store, id)` gives handle in any process; its `Add`/`Submit` → `ErrWorkflowSubmitted`.

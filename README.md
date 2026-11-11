@@ -426,6 +426,24 @@ Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 >
 > On shared storage, a job cancel reaches every consumer process. It marks the ID for 24 h, and a re-add of the ID clears the mark. It answers 202 for any ID with no ended record, and 409 for a retained ended job. A waiting workflow task answers 202 but still runs: cancel its workflow instead.
 
+### Connect to vartop (hub)
+
+A VarMQ process can dial out to a vartop hub instead of serving the REST API on a port. The hub then reads and controls the process through that connection.
+
+```go
+go varmq.ConnectHub(ctx, "https://vartop.internal", token)
+```
+
+`ConnectHub` keeps one stream open and runs each hub request on `Handler` inside the process. It redials with backoff when the stream drops, and it returns when `ctx` ends.
+
+- Set `varmq.InstanceID` first when several processes share a host. The hub refuses a second connection with the same ID.
+- The token gives the same control as `Handler`. Use `WithHubReadOnly()` to refuse actions, and `WithHubNoPayloads()` to hide job payloads and results.
+- `ConnectHub` refuses plain `http://` to a host that is not loopback, because the token would travel in clear text. `WithHubInsecure()` allows it.
+- `WithHubErrHandler(f)` receives connection errors, such as a rejected token. `WithHubClient(c)` sets custom TLS or a proxy.
+- The hub connection never touches the job path. A hub that is down has no effect on job processing.
+
+Protocol: [`spec/hub.md`](spec/hub.md).
+
 ## How It Works
 
 ### Event loop
