@@ -2634,8 +2634,11 @@ func TestHubConfigErrors(t *testing.T) {
 		"https://user:pw123@hub.example", "http://user:pw123@localhost:1", "https://user:pw123@hub.example?x=1",
 		"https://user:pw123@hub.example/%zz", "http://user:pw123@example.com", "https://:pw123@hub.example",
 	} {
-		err := ConnectHub(ctx, u, "t")
+		tctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond) // a regression dials: bound it
+		err := ConnectHub(tctx, u, "t")
+		cancel()
 		require.Error(t, err, u)
+		assert.ErrorContains(t, err, "varmq: hub url", u)
 		assert.NotContains(t, err.Error(), "pw123", u)
 	}
 
@@ -2880,20 +2883,25 @@ func TestHubStuckHandler(t *testing.T) {
 	assert.ErrorIs(t, stop(), context.Canceled)
 }
 
-// ConnectHub returns on cancel while a handler ignores ctx.
+// ConnectHub returns on cancel while a handler ignores ctx. The handler
+// ends after the return: no reply, and its panic reaches no callback.
 func TestHubStuckHandlerStop(t *testing.T) {
-	st := &hubStuckStore{hubJobStore{"custom:hub-stuck-stop"}, make(chan struct{}), make(chan struct{}, 32)}
+	st := &hubStuckStore{hubJobStore{"custom:hub-stuck-stop"}, make(chan struct{}), make(chan struct{}, 32), true}
 	queueRegistry.Store(st.id, st)
 	t.Cleanup(func() { queueRegistry.Delete(st.id) })
 	f := newFakeHub(t)
-	_, stop := f.connect(t)
+	var errs chan error
+	t.Cleanup(func() { // after connect's cleanup: the runners are done
+		assert.Empty(t, errs, "callback after ConnectHub returned")
+		assert.Empty(t, f.replies)
+	})
+	errs, stop := f.connect(t)
 	s := within(t, f.streams)
 
 	s.request("x", "GET", "/queues/"+st.id+"/jobs?state=pending")
 	within(t, st.entered)
 	assert.ErrorIs(t, stop(), context.Canceled, "returns while the handler waits")
-
-	close(st.release) // the handler ends: no reply; connect's cleanup waits for it
+	close(st.release)
 }
 
 // hubBarrierStore's Jobs returns once all 8 runners are in it.
@@ -2929,23 +2937,28 @@ func (f *fakeHub) runnersFree(t *testing.T, s *hubStream) {
 	}
 }
 
-// hubStuckStore's Jobs ignores ctx: it returns only on release.
+// hubStuckStore's Jobs ignores ctx: it returns only on release, or panics
+// then when panics is set.
 type hubStuckStore struct {
 	hubJobStore
 	release chan struct{}
 	entered chan struct{}
+	panics  bool
 }
 
 func (s *hubStuckStore) Jobs(context.Context, JobState, int, int) ([]JobRecord, error) {
 	s.entered <- struct{}{}
 	<-s.release
+	if s.panics {
+		panic("late")
+	}
 	return nil, nil
 }
 
 // The 8-request cap holds across redials: handlers stuck past their stream
 // still count, and their replies are dropped.
 func TestHubCapAcrossRedials(t *testing.T) {
-	st := &hubStuckStore{hubJobStore{"custom:hub-stuck"}, make(chan struct{}), make(chan struct{}, 32)}
+	st := &hubStuckStore{hubJobStore{"custom:hub-stuck"}, make(chan struct{}), make(chan struct{}, 32), false}
 	queueRegistry.Store(st.id, st)
 	t.Cleanup(func() { queueRegistry.Delete(st.id) })
 	f := newFakeHub(t)

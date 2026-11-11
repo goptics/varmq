@@ -445,7 +445,7 @@ go func() {
 - `WithHubErrHandler(f)` receives connection errors, such as a rejected token or a dropped stream. Without it, VarMQ does not report these errors.
 - `WithHubClient(c)` sets custom TLS or a proxy. VarMQ never follows a redirect, even with your own client, so the token goes only to the hub URL.
 
-**Trust.** The token only proves the VarMQ process to the hub. Only TLS and the hub URL prove the hub. Whoever answers at the hub URL gets everything that `Handler` allows. `WithHubInsecure()` allows plain `http://` to a host that is not loopback. Then any party on the network path can read the token and also act as the hub.
+**Trust.** The token only proves the VarMQ process to the hub. Only TLS and the hub URL prove the hub. Whoever answers at the hub URL gets everything that `Handler` allows. `ConnectHub` refuses plain `http://` to a host that is not loopback, because the token would travel in clear text. `WithHubInsecure()` allows plain `http://` to a host that is not loopback. Then any party on the network path can read the token and also act as the hub.
 
 **What the hub can do.** By default, the hub can read job payloads and results. It can stop and resize workers, pause queues, and cancel jobs and workflows. On shared storage, a queue pause or a job cancel reaches every consumer process.
 
