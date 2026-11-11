@@ -115,6 +115,9 @@ func ConnectHub(ctx context.Context, hubURL, token string, opts ...HubOption) er
 	}
 
 	h.run(ctx)
+	if h.cfg.client == nil { // own transport; a caller's stays theirs
+		h.client.CloseIdleConnections()
+	}
 	return ctx.Err()
 }
 
@@ -181,7 +184,12 @@ func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
 		c.Timeout = 0 // the stream lives for hours; contexts bound every call
 		h.client = &c
 	} else {
-		t := http.DefaultTransport.(*http.Transport).Clone()
+		t, ok := http.DefaultTransport.(*http.Transport)
+		if ok {
+			t = t.Clone()
+		} else { // wrapped (e.g. tracing): a fresh one, not a panic
+			t = &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true}
+		}
 		t.MaxIdleConnsPerHost = hubMaxInFlight + 2 // replies and beats reuse connections
 		h.client = &http.Client{
 			Transport: t,

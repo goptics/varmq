@@ -2276,7 +2276,11 @@ func newFakeHub(t *testing.T) *fakeHub {
 			fl.Flush()
 		}
 		s := &hubStream{query: r.URL.Query(), lines: make(chan string, 64), quit: make(chan struct{})}
-		f.streams <- s
+		select { // undrained (redial tests): never block srv.Close
+		case f.streams <- s:
+		case <-r.Context().Done():
+			return
+		}
 		for {
 			select {
 			case l := <-s.lines:
@@ -2293,10 +2297,13 @@ func newFakeHub(t *testing.T) *fakeHub {
 			return
 		}
 		body, _ := io.ReadAll(r.Body)
-		f.replies <- hubReply{
+		select {
+		case f.replies <- hubReply{
 			id: r.PathValue("id"), instance: r.URL.Query().Get("instance"),
 			status: r.Header.Get("X-Hub-Status"), ctype: r.Header.Get("Content-Type"),
 			varmqID: r.Header.Get(InstanceHeader), body: string(body),
+		}:
+		case <-r.Context().Done():
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
