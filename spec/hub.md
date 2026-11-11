@@ -37,7 +37,7 @@ Hub replies:
 | `400` | `instance` missing, over 128 bytes, not valid UTF-8 or with a control character; or `protocol` not `1`. |
 | `401` | Token missing or wrong. |
 | `409` | An instance with that ID is already connected. The hub never replaces a live stream on a new connect. |
-| `503` | The hub is at its instance limit or its new-instance rate limit. |
+| `503` | The hub is at its instance limit, its new-instance rate limit, or its reply-memory budget. |
 
 The body is one JSON object per line, ended by `\n`. The hub flushes after each line. A line is at most 64 KiB.
 
@@ -128,11 +128,7 @@ When a stream that received `hello` ends for any reason while the instance keeps
 - The hub MUST compare tokens and sessions in constant time.
 - The hub MUST NOT replace a live stream on a new connect: a duplicate ID gets `409`.
 
-### 4.2 Token scope
-
-One token per server means an instance of that server can connect under any unused ID of that server, or hold an ID before its owner connects. The session secret stops it from evicting, or answering for, an instance that is connected.
-
-### 4.3 Instance
+### 4.2 Instance
 
 - At most 8 requests run at once. Further frames wait in order.
 - Reconnect with exponential backoff and jitter. The first retry comes within 0.5 to 1 s. The delay `d` doubles to a cap of 30 s, and each sleep is random in [`d`/2, `d`]. The delay resets after a stream that received `hello`.
@@ -142,7 +138,7 @@ One token per server means an instance of that server can connect under any unus
 - The instance MUST NOT connect over `http://` to a host that is not loopback, unless an explicit option allows it: the token would travel in clear text.
 - Nothing in the instance's hub code may run on, or share a lock with, the job path (add, dispatch, ack).
 
-### 4.4 Instance behaviour in varmq (informative)
+### 4.3 Instance behaviour in varmq (informative)
 
 These are choices of `ConnectHub`, not requirements on a hub.
 
@@ -162,6 +158,10 @@ These are choices of `ConnectHub`, not requirements on a hub.
 - Read-only mode answers every `PATCH` with `403` and `{"error":"read-only hub connection"}`, without running the handler.
 - No-payload mode answers `GET /queues/{id}/jobs` and `GET /queues/{id}/jobs/{jobId}`, in any path spelling, with `payload` set to `null` and `result` removed (`result_size` stays). Job error texts (`errors[].error`) and workflow task `reason` texts are still sent; they can hold application data.
 - The hub connection holds no job-path lock. It runs the same handlers as a mounted `varmq.Handler`, which turns on the same job tracking as `varmq.NewServerMux`.
+
+### 4.4 Token scope
+
+One token per server means an instance of that server can connect under any unused ID of that server, or hold an ID before its owner connects. The session secret stops it from evicting, or answering for, an instance that is connected.
 
 ## 5. Compatibility
 

@@ -75,8 +75,9 @@ func WithHubNoPayloads() HubOption { return func(c *hubConfig) { c.noPayloads = 
 // WithHubClient sets the HTTP client, e.g. for custom TLS or a proxy.
 // ConnectHub uses a copy: its Timeout is ignored (the stream is long-lived)
 // and redirects are never followed (the token stays with hubURL). Before
-// each redial ConnectHub closes the idle connections of its transport, so
-// a dead HTTP/2 connection is not reused.
+// each redial, and before the bye that precedes it, ConnectHub closes the
+// idle connections of its transport, so a dead HTTP/2 connection is not
+// reused.
 func WithHubClient(c *http.Client) HubOption { return func(cfg *hubConfig) { cfg.client = c } }
 
 // WithHubHeartbeat sets the heartbeat used when the hub's hello gives none
@@ -305,10 +306,12 @@ func (h *hub) run(ctx context.Context) {
 		}
 		if sess != "" {
 			ceiling = 0
-			// a dead HTTP/2 connection (no FIN) would carry the bye: dial
-			// fresh. The transport may still hold it for a moment: then
-			// the bye uses its 2 s and is lost.
-			h.client.CloseIdleConnections()
+			if ctx.Err() == nil {
+				// a dead HTTP/2 connection (no FIN) would carry the bye:
+				// dial fresh. The transport may still hold it for a
+				// moment: then the bye uses its 2 s and is lost.
+				h.client.CloseIdleConnections()
+			}
 			h.sayBye(sess)
 		}
 		if ctx.Err() != nil {
