@@ -167,6 +167,45 @@ worker.WithQueue(dq)`,
 		source: { label: 'the Redis page', href: 'https://varmq.goptics.org/persistence/redis/' },
 	},
 	{
+		code: `wf := varmq.NewWorkflow(varmq.NewWorkflowStore())
+
+r := wf.Add("reserve", queue, "reserve stock")
+r.Undo(queue, "release stock")
+l := wf.Add("label", queue, "print label").After(r)
+c := wf.Add("charge", queue, "charge card").After(r)
+wf.Add("ship", queue, "ship order").After(l, c)
+
+wf.Submit(ctx)
+rec, _ := wf.Wait() // rec.State: compensated`,
+		lines: [[1, 3, 5, 6, 7], [9], [5, 6], [6, 7], [4, 10]],
+		phone: {
+			code: `wf := varmq.NewWorkflow(
+	varmq.NewWorkflowStore(),
+)
+
+r := wf.Add(
+	"reserve", queue, "reserve stock",
+)
+r.Undo(queue, "release stock")
+l := wf.Add(
+	"label", queue, "print label",
+).After(r)
+c := wf.Add(
+	"charge", queue, "charge card",
+).After(r)
+wf.Add(
+	"ship", queue, "ship order",
+).After(l, c)
+
+wf.Submit(ctx)
+// rec.State: compensated
+rec, _ := wf.Wait()`,
+			// A phone's code window shows about six lines: each caption lights one run of lines that fits it.
+			lines: [[1, 2, 3], [19], [9, 10, 11, 12, 13, 14], [12, 13, 14, 15, 16, 17], [8]],
+		},
+		source: { label: 'workflows-order', href: `${EXAMPLES}/workflows-order` },
+	},
+	{
 		code: `worker.Pause()
 worker.Resume()
 

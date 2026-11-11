@@ -1,4 +1,4 @@
-// The hero map's story: ten chapters, each a camera stop with its captions and the simulations that play
+// The hero map's story: eleven chapters, each a camera stop with its captions and the simulations that play
 // there. Pure data for the renderer and the choreographer, which draw and animate exactly these events.
 // Every land, dispatch, take and ack comes out of the pool and store simulations (`pool.ts`, `stores.ts`),
 // so the map can only show what varmq does; the plans here choose when things happen and how long jobs run.
@@ -21,6 +21,7 @@ import {
 	type StoreEvent,
 	type StoreJob,
 } from './stores.ts';
+import { runWorkflow, type TaskSpec, type WorkflowPlan, type WorkflowRun } from './workflow.ts';
 
 export type Worker = 'core' | 'result' | 'second';
 
@@ -31,6 +32,7 @@ export type Part =
 			plan: PoolPlan;
 			events: PoolEvent[];
 			outcomes?: Record<string, 'value' | 'error'>; // what each job of a result worker hands back
+			workflow?: WorkflowRun; // the workflow whose tasks these jobs are (`workflow.ts`)
 	  }
 	| { kind: 'sqlite'; plan: SqlitePlan; events: StoreEvent[] }
 	| { kind: 'redis'; plan: RedisPlan; events: StoreEvent[] };
@@ -117,6 +119,27 @@ function pool(carry: Carry, worker: Worker, rest: Omit<PoolPlan, 'limit' | 'idle
 	carry.pools[worker] = endState(plan, events);
 	return { kind: 'pool', worker, plan, events };
 }
+
+/**
+ * A workflow on the result worker: its tasks are the worker's only jobs here, each added to the queue when the
+ * workflow's rules say it is ready, and each handing its outcome back.
+ */
+function workflow(carry: Carry, wf: WorkflowPlan): PoolPart {
+	const base = { ...carry.pools.result, ...PACE, sources: [R_QUEUE] };
+	const { jobs, events, outcomes, run } = runWorkflow(wf, base, R_QUEUE.id);
+	const plan = { ...base, jobs };
+	carry.pools.result = endState(plan, events);
+	return { kind: 'pool', worker: 'result', plan, events, outcomes, workflow: run };
+}
+
+// The workflow's four tasks, in Add order: reserve, then label and charge, then ship, which waits for both. Only
+// reserve has an undo. This is the Workflows page's "Failure and undo" example without its last task.
+const order = (works: number[], fails = false): TaskSpec[] => [
+	{ name: 'reserve', work: works[0], undoWork: works[4] },
+	{ name: 'label', deps: ['reserve'], work: works[1] },
+	{ name: 'charge', deps: ['reserve'], work: works[2], fails },
+	{ name: 'ship', deps: ['label', 'charge'], work: works[3] },
+];
 
 function sqlite(carry: Carry, rest: Omit<SqlitePlan, 'idle'>): Part {
 	const plan = { ...rest, idle: carry.stores.sqlite };
@@ -368,7 +391,33 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 9. Pause while two jobs run: they finish, and the two added meanwhile wait. Resume once nothing runs (a
+	// 9. A workflow on the result worker's queue. Submit adds reserve alone: the others wait for it. Its outcome
+	// releases label and charge, which run one after the other, as the worker has one goroutine. charge fails: ship,
+	// which waits for it, is cancelled, and the workflow fails. reserve completed and has an undo, so its undo job
+	// runs, and the workflow ends compensated. Each caption starts on a still frame: at Submit, at reserve's done, at
+	// charge's failure, and as the undo job leaves the workflow.
+	(carry) => ({
+		title: 'Workflows',
+		duration: 14300,
+		captions: [
+			{ at: 300, text: 'A *workflow* is jobs that wait for other jobs' },
+			{ at: 2300, text: '*Submit* queues the tasks with nothing to wait for' },
+			{ at: 5100, text: 'A finished task *releases* the tasks after it' },
+			{ at: 9350, text: 'charge !fails!, so ship is *cancelled*' },
+			{ at: 10400, text: 'and the *undo* job of reserve runs' },
+		],
+		parts: [
+			workflow(carry, {
+				id: 'w',
+				submit: 2300,
+				promote: 1000,
+				undoAfter: 1700,
+				tasks: order([1400, 1300, 1300, 1300, 1300], true),
+			}),
+		],
+	}),
+
+	// 10. Pause while two jobs run: they finish, and the two added meanwhile wait. Resume once nothing runs (a
 	// pausing worker refuses it), and they start. A third is added while they run, and Stop comes as it is due: the
 	// two running finish and every goroutine goes, and the third waits with the two added while the worker is
 	// stopped. Restart starts it again with one idle goroutine, and the three run. Each press starts its caption.
@@ -405,7 +454,7 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 		],
 	}),
 
-	// 10. The whole map runs a little at once, and the core is stopped while its jobs still run: they finish,
+	// 11. The whole map runs a little at once, the workflow from Submit to completed, and the core is stopped while its jobs still run: they finish,
 	// and then its goroutines go. Nothing waits in its queue at the stop; the stop only winds the map down. From 7800 ms
 	// the camera zooms into chapter 1's frame as everything else fades, and the loop starts over.
 	(carry) => {
@@ -432,17 +481,8 @@ const SCRIPT: ((carry: Carry) => Omit<Chapter, 'n'>)[] = [
 					],
 				}),
 				pool(carry, 'second', { ...PACE, sources: [TOPIC], jobs: copies(published, 'second', [1500]) }),
-				{
-					...pool(carry, 'result', {
-						...PACE,
-						sources: [R_QUEUE],
-						jobs: queued(R_QUEUE.id, [
-							['zx0', 1900, 1400],
-							['zx1', 2900, 1400],
-						]),
-					}),
-					outcomes: { zx0: 'value', zx1: 'error' },
-				},
+				// Quick tasks: all four are done, and the workflow completed, before the zoom into chapter 1 starts.
+				workflow(carry, { id: 'zw', submit: 1300, promote: 600, undoAfter: 600, tasks: order([575, 575, 575, 575, 575]) }),
 				sqlite(carry, {
 					...SQLITE_TRAVEL,
 					limit: 2,

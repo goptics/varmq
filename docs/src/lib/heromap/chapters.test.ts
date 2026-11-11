@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CHAPTERS, STATIC_AT, TOTAL, plain, starts } from './chapters.ts';
+import { CAMERA, CHAPTERS, STATIC_AT, TOTAL, plain, starts } from './chapters.ts';
 import { endState, poolStates } from './pool.ts';
 import { PIECES, RINGS } from './scene.ts';
 import { queueStates, ringStates, trayStates, workers } from './stores.ts';
@@ -9,22 +9,22 @@ const part = (n, kind, worker?) => CHAPTERS[n - 1].parts.find(p => p.kind === ki
 const dispatches = p => p.events.filter(e => e.type === 'dispatch');
 
 describe('chapters', () => {
-	it('are the agreed ten, in order', () => {
+	it('are the agreed eleven, in order', () => {
 		assert.deepEqual(CHAPTERS.map(c => c.title), ['One worker', 'The pool', 'Results and errors', 'Priority',
-			'Many queues, one worker', 'Topics', 'SQLite', 'Redis', 'Control', 'Everything together']);
+			'Many queues, one worker', 'Topics', 'SQLite', 'Redis', 'Workflows', 'Control', 'Everything together']);
 	});
 	it('carry the agreed captions', () => {
 		assert.equal(plain(CHAPTERS[0].captions[0].text), 'Add puts jobs in a queue');
 		assert.equal(plain(CHAPTERS[6].captions[3].text), 'The program dies mid-job');
-		assert.deepEqual(CHAPTERS[9].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
-		assert.equal(plain(CHAPTERS[9].captions[0].swap.text), 'Redis');
+		assert.deepEqual(CHAPTERS[10].captions.map(c => plain(c.text)), ['One worker model, from memory to SQLite']);
+		assert.equal(plain(CHAPTERS[10].captions[0].swap.text), 'Redis');
 		assert.deepEqual(CHAPTERS[4].captions.map(c => plain(c.text).split(' ')[0]), ['Priority,', 'MaxLen', 'MinLen', 'RoundRobin']);
-		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 26);
+		assert.equal(CHAPTERS.flatMap(c => c.captions).length, 31);
 	});
 	// The site plays a step per scroll rather than the loop, so the loop may run long enough to show every strategy.
-	it('run about 100 seconds', () => {
-		assert.ok(TOTAL >= 80000 && TOTAL <= 105000, String(TOTAL));
-		assert.equal(starts()[9] + CHAPTERS[9].duration, TOTAL);
+	it('run about two minutes', () => {
+		assert.ok(TOTAL >= 80000 && TOTAL <= 120000, String(TOTAL));
+		assert.equal(starts()[10] + CHAPTERS[10].duration, TOTAL);
 	});
 	// The site stops on each chapter's last frame, so its last job's done (a 900 ms pulse and check) must have settled.
 	it('finish every part a second before its chapter ends', () => {
@@ -50,8 +50,8 @@ describe('chapters', () => {
 		// It starts at the queue in chapter 4, where a second source first binds; chapter 9 takes only from the queue,
 		// so chapter 10 looks at the priority queue first and finds the topic's copy before the queue's jobs.
 		assert.equal(part(4, 'pool', 'core').plan.turn, 0);
-		assert.equal(part(10, 'pool', 'core').plan.turn, 1);
-		assert.deepEqual(dispatches(part(10, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
+		assert.equal(part(11, 'pool', 'core').plan.turn, 1);
+		assert.deepEqual(dispatches(part(11, 'pool', 'core')).map(d => d.job), ['zt0-core', 'zj0', 'zj1']);
 	});
 	it('chapter 4 runs the lowest number first', () => {
 		assert.deepEqual(dispatches(part(4, 'pool', 'core')).map(e => e.job), ['p1', 'p2', 'p3', 'p5', 'p8']);
@@ -65,8 +65,8 @@ describe('chapters', () => {
 	it('chapter 8 never holds more than 4 in flight', () => {
 		for (const s of trayStates(part(8, 'redis').events)) assert.ok(s.tray.filter(Boolean).length <= 4);
 	});
-	it('chapter 9 starts nothing while paused or stopped, empties the pool at the stop, and runs what waited after Restart', () => {
-		const p = part(9, 'pool', 'core');
+	it('chapter 10 starts nothing while paused or stopped, empties the pool at the stop, and runs what waited after Restart', () => {
+		const p = part(10, 'pool', 'core');
 		const at = op => p.plan.controls.find(c => c.op === op).at;
 		const [pause, resume, stop, restart] = ['pause', 'resume', 'stop', 'restart'].map(at);
 		assert.ok(dispatches(p).every(d => d.at < pause || (d.at >= resume && d.at < stop) || d.at >= restart));
@@ -76,12 +76,12 @@ describe('chapters', () => {
 		// The job due at the stop and the two added while stopped run after the restart.
 		assert.deepEqual(dispatches(p).filter(d => d.at >= restart).map(d => d.job), ['k4', 'k5', 'k6']);
 	});
-	it('chapter 10 ends with Stop and no goroutine left on the core worker', () => {
-		const p = part(10, 'pool', 'core');
+	it('chapter 11 ends with Stop and no goroutine left on the core worker', () => {
+		const p = part(11, 'pool', 'core');
 		assert.ok(p.plan.controls.some(c => c.op === 'stop'));
 		assert.deepEqual(endState(p.plan, p.events).idle, []);
-		assert.ok(CHAPTERS[9].parts.every(q => Math.min(...q.events.map(e => e.at)) >= 1500));
-		assert.equal(STATIC_AT, starts()[9] + 1300);
+		assert.ok(CHAPTERS[10].parts.every(q => Math.min(...q.events.map(e => e.at)) >= 1500));
+		assert.equal(STATIC_AT, starts()[10] + 1300);
 	});
 });
 
@@ -161,7 +161,7 @@ describe('chapter rules', () => {
 				assert.ok(w.limit <= places && w.idle.every(i => i < places), `chapter ${c.n}: ${w.id}`);
 			}
 		}
-		// The TunePool(5) chip takes the place of the Restart() control that chapter 9 switches on.
+		// The TunePool(5) chip takes the place of the Restart() control that chapter 10 switches on.
 		assert.deepEqual(CHAPTERS[1].chips, [{ id: 'ctl-restart', label: 'TunePool(5)', at: 1300, until: 2500 }]);
 		assert.ok(CHAPTERS.flatMap(c => c.chips ?? []).every(chip => piece[chip.id]?.kind === 'chip'));
 	});
@@ -240,8 +240,8 @@ describe('chapter rules', () => {
 			'10370 exit c 1',
 		]);
 		// The finale's store workers start with one ring each, the one their last chapter left idle.
-		assert.deepEqual(workers(part(10, 'sqlite').plan).map(w => w.idle), [[0]]);
-		assert.deepEqual(workers(part(10, 'redis').plan).map(w => w.idle), [[0], [0]]);
+		assert.deepEqual(workers(part(11, 'sqlite').plan).map(w => w.idle), [[0]]);
+		assert.deepEqual(workers(part(11, 'redis').plan).map(w => w.idle), [[0], [0]]);
 	});
 	it('hold no more records in flight than busy rings, but for a dead program\'s, until the requeue', () => {
 		for (const c of CHAPTERS) for (const p of c.parts) {
@@ -256,8 +256,33 @@ describe('chapter rules', () => {
 			});
 		}
 	});
-	it('chapter 9 lands jobs while the worker is paused', () => {
-		const p = part(9, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
+	it('chapter 10 lands jobs while the worker is paused', () => {
+		const p = part(10, 'pool', 'core'), at = op => p.plan.controls.find(k => k.op === op).at;
 		assert.ok(p.events.some(e => e.type === 'land' && e.at > at('pause') && e.at < at('resume')));
+	});
+	it('chapter 9 runs the workflow by varmq\'s rules: charge fails, ship is cancelled, reserve is undone', () => {
+		const p = part(9, 'pool', 'result'), run = p.workflow;
+		// One goroutine: reserve, then label and charge in Add order, then the undo job. ship never becomes a job.
+		assert.deepEqual(dispatches(p).map(d => d.job), ['w-reserve', 'w-label', 'w-charge', 'w-reserve-undo']);
+		assert.deepEqual(p.outcomes, { 'w-reserve': 'value', 'w-label': 'value', 'w-charge': 'error', 'w-reserve-undo': 'value' });
+		const last = Object.fromEntries(run.marks.map(m => [m.task, m.mark]));
+		assert.deepEqual(last, { reserve: 'undone', label: 'done', charge: 'failed', ship: 'cancelled' });
+		assert.deepEqual(run.states.map(s => s.state), ['running', 'compensating', 'compensated']);
+		// A task's job lands only after the tasks it waits for are done, and the undo job after the failure.
+		const at = (type, job) => p.events.find(e => e.type === type && e.job === job).at;
+		for (const job of ['w-label', 'w-charge']) assert.ok(at('land', job) > at('done', 'w-reserve'), job);
+		assert.ok(at('land', 'w-reserve-undo') > at('done', 'w-charge'));
+		// Each caption after the first starts at the event it names.
+		const caps = CHAPTERS[8].captions.map(c => c.at);
+		assert.deepEqual(caps.slice(1, 4), [run.submit, at('done', 'w-reserve'), at('done', 'w-charge')]);
+		assert.ok(caps[4] > at('done', 'w-charge') && caps[4] < at('land', 'w-reserve-undo') - 400);
+	});
+	it('chapter 11 runs the same workflow to completed, before the zoom into chapter 1', () => {
+		const p = part(11, 'pool', 'result'), run = p.workflow;
+		assert.deepEqual(dispatches(p).map(d => d.job), ['zw-reserve', 'zw-label', 'zw-charge', 'zw-ship']);
+		assert.ok(run.marks.filter(m => m.mark === 'done').length === 4);
+		assert.deepEqual(run.states.map(s => s.state), ['running', 'completed']);
+		assert.ok(run.states.at(-1).at + 600 <= CHAPTERS[10].duration - CAMERA, String(run.states.at(-1).at));
+		assert.ok(run.submit >= 1300);
 	});
 });

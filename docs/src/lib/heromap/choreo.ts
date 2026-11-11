@@ -1,4 +1,4 @@
-// The hero map, animated: one looping anime.js timeline, `TOTAL` long, that plays the ten chapters of
+// The hero map, animated: one looping anime.js timeline, `TOTAL` long, that plays the eleven chapters of
 // `chapters.ts` on the nodes `render.ts` drew. It shows the simulations' events and nothing else: a job flies from
 // Add() to land in its lane at its land, leaves at its dispatch or take, and runs its ring's arc until it is done;
 // a store's record waits in the tray until its ack lands; the SQLite program dies and restarts when its plan says.
@@ -16,7 +16,7 @@
 import { eases, svg, type Timeline } from 'animejs';
 import { CAMERA, CHAPTERS, TOTAL, chipKey, starts, type Chapter, type Part } from './chapters.ts';
 import { poolStates, type PoolEvent } from './pool.ts';
-import type { MapNodes } from './render.ts';
+import { MARKS, WF_STATES, isTask, type MapNodes } from './render.ts';
 import { CONNS, LANE, PIECES, REGIONS, RINGS, RING_R, frame, slotX, slotY, type Box, type Camera } from './scene.ts';
 import {
 	Score,
@@ -34,6 +34,7 @@ import {
 	type Values,
 } from './score.ts';
 import { queueStates, workers } from './stores.ts';
+import type { Mark, WorkflowRun } from './workflow.ts';
 
 type Worker = keyof typeof RINGS;
 type PoolPart = Extract<Part, { kind: 'pool' }>;
@@ -63,6 +64,9 @@ const CLEAR = 44; // a copy has left the store's mouth, for the next one, once i
 const NEAR = 16; // a landing square this close to its slot is all but in it: from then on it must not touch
 const PULSE = { scale: 1.22, up: 140, down: 380 }; // a ring when its job is done
 const EXIT_AFTER = 400; // a goroutine that exits at its job's done leaves once its pulse has settled
+const WF_FLIGHT = 400; // a task's job from the workflow into its queue
+const OUTCOME = 200; // a job's outcome from its ring up to the workflow, which then marks the task and pushes the next
+const MARK = 250; // a task's chip changing state
 
 const E = {
 	move: eases.inOutExpo,
@@ -329,6 +333,7 @@ const ENTRY: Record<string, Pt[]> = {
 	'r-queue': [centre(box('r-add')), ...line('r-add-to-r-queue')],
 	's-queue': [centre(box('s-add')), ...line('s-add-to-s-queue')],
 	'r-queue2': [centre(box('a-add')), ...line('a-add-to-r-queue2')],
+	wf: line('wf-to-r-queue'), // a task's job comes out where the workflow's line leaves it
 };
 
 /**
@@ -493,6 +498,9 @@ export class Choreo {
 	private readonly inboxes = new Map<string, number>();
 	/** The squares of the chapter being written. */
 	private bodies!: Bodies;
+	/** What each workflow task's chip shows, and the workflow's state label, as the last run left them. */
+	private readonly marks = new Map<string, Mark>();
+	private wfState?: string;
 
 	constructor(nodes: MapNodes, page: Page) {
 		this.nodes = nodes;
@@ -528,6 +536,11 @@ export class Choreo {
 				if (el) score.start(el, { opacity: 0 });
 			}
 		}
+		// A workflow task waits at first, and the workflow's label names no state.
+		for (const p of PIECES.filter((q) => isTask(q.id) && q.id !== 'wf')) {
+			for (const m of MARKS) score.start(this.markOf(p.id, m), { opacity: m === 'waiting' ? 1 : 0 });
+		}
+		for (const state of WF_STATES) score.start(this.stateOf(state), { opacity: 0 });
 		score.start(this.loop(), { opacity: 1 });
 		score.start(this.pulse(), { scale: 1, opacity: 0 });
 		for (const [worker, places] of Object.entries(RINGS)) {
@@ -580,6 +593,16 @@ export class Choreo {
 
 	private loop(): Element {
 		return this.nodes.piece('loop').querySelector('.vm-shape')!;
+	}
+
+	/** A task chip's layer for a state (render.ts, `MARKS`). */
+	private markOf(piece: string, mark: string): Element {
+		return this.nodes.piece(piece).querySelector(`:scope > .vm-mark-${mark}`)!;
+	}
+
+	/** The workflow's label for a state. */
+	private stateOf(state: string): Element {
+		return this.nodes.piece('wf').querySelector(`:scope > .vm-wf-${state}`)!;
 	}
 
 	private pulse(): Element {
@@ -830,6 +853,8 @@ export class Choreo {
 		const squares = new Map<string, Square>();
 		const done = new Map(part.events.flatMap((e) => (e.type === 'done' ? [[e.job, T + e.at] as const] : [])));
 
+		if (part.workflow) this.workflow(part.workflow, T, agenda);
+
 		part.events.forEach((e, k) => {
 			const at = T + e.at;
 			switch (e.type) {
@@ -837,7 +862,9 @@ export class Choreo {
 					if (e.source === 'topic') return; // its published value stands for it in the lane
 					const sq = this.job(e.job);
 					squares.set(e.job, sq);
-					agenda.add(at, () => this.arrive(lane(e.source, order(e.source)), sq, e.source, at, ADD_FLIGHT));
+					// A workflow's job comes from the workflow, not from Add().
+					const [entry, flight] = part.workflow ? ['wf', WF_FLIGHT] : [e.source, ADD_FLIGHT];
+					agenda.add(at, () => this.arrive(lane(e.source, order(e.source)), sq, entry, at, flight, !!part.workflow));
 					return;
 				}
 				case 'dispatch': {
@@ -862,6 +889,7 @@ export class Choreo {
 				}
 				case 'done':
 					agenda.add(at, () => this.done(part.worker, e.ring, at, squares.get(e.job)!, part.outcomes?.[e.job]));
+					if (part.workflow) agenda.add(at, () => this.outcome(part.worker, e.ring, at, part.outcomes![e.job]));
 					return;
 				case 'exit': {
 					// A goroutine leaves once the pulse of its last job's done has settled: at its done, or soon after, as
@@ -876,6 +904,49 @@ export class Choreo {
 					return;
 			}
 		});
+	}
+
+	/**
+	 * A workflow run. Submit() is pressed, and each task's chip shows its state: at Submit for the tasks it pushes, and
+	 * otherwise once the outcome that changed it has come up from the worker. A run starts with every task waiting and
+	 * no state named, whatever the run before left.
+	 */
+	private workflow(run: WorkflowRun, T: number, agenda: Agenda) {
+		const tasks = PIECES.filter((p) => isTask(p.id) && p.id !== 'wf').map((p) => p.id);
+		for (const id of tasks) this.mark(id, 'waiting', T + OPENS);
+		this.state(undefined, T + OPENS);
+		const when = (at: number) => T + at + (at === run.submit ? 0 : OUTCOME);
+		agenda.add(T + run.submit, () => this.press(this.nodes.piece('wf-submit'), T + run.submit));
+		for (const m of run.marks) agenda.add(when(m.at), () => this.mark(`wf-${m.task}`, m.mark, when(m.at)));
+		for (const s of run.states) agenda.add(when(s.at), () => this.state(s.state, when(s.at)));
+	}
+
+	/** A task's chip changes state: the layer it showed goes as the new one comes. Queued is the bare chip. */
+	private mark(piece: string, mark: Mark, at: number) {
+		const was = this.marks.get(piece) ?? 'waiting';
+		if (was === mark) return;
+		this.marks.set(piece, mark);
+		if (mark !== 'queued') this.score.tween(this.markOf(piece, mark), { opacity: 1 }, at, MARK, E.fade);
+		if (was !== 'queued') this.score.tween(this.markOf(piece, was), { opacity: 0 }, at, MARK, E.fade);
+		if (mark !== 'waiting') this.press(this.nodes.piece(piece), at);
+	}
+
+	/** The workflow's label names its state, or with none is its own again. */
+	private state(state: string | undefined, at: number) {
+		if (state === this.wfState) return;
+		const { score } = this;
+		const label = this.nodes.piece('wf').querySelector(':scope > .vm-label')!;
+		score.tween(this.wfState ? this.stateOf(this.wfState) : label, { opacity: 0 }, at, 100, E.out);
+		score.tween(state ? this.stateOf(state) : label, { opacity: 1 }, at + 100, 150, E.fade);
+		this.wfState = state;
+	}
+
+	/** A job's outcome goes from its ring up to the workflow. */
+	private outcome(worker: Worker, i: number, at: number, kind: 'value' | 'error') {
+		const ring = RINGS[worker][i];
+		const up = line('result-to-wf');
+		const rail = (box(worker).y + ring.y - RING_R) / 2;
+		this.signal(kind, [pt(ring.x, ring.y - RING_R), pt(ring.x, rail), pt(up[0].x, rail), ...up], at, OUTCOME);
 	}
 
 	/** A subscriber's copy of a published value appears on the value, to leave from there. */

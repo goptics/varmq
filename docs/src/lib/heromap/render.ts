@@ -111,6 +111,21 @@ const CRASHES = new Map([
 	['b-prog', false],
 ]);
 const HIDDEN = { opacity: 0 };
+/**
+ * A workflow task's chip shows its state. Bare, it is a job's amber: queued or running. Each other state is a `.vm-mark`
+ * over it, one shown at a time (choreo.ts): waiting at first, then done, failed, cancelled or undone.
+ */
+export const MARKS = ['waiting', 'done', 'failed', 'cancelled', 'undone'] as const;
+const MARK_TONE: Record<(typeof MARKS)[number], string> = {
+	waiting: 'vm-wait',
+	done: 'vm-value',
+	failed: 'vm-error',
+	cancelled: 'vm-wait vm-cancel',
+	undone: 'vm-undo',
+};
+/** The workflow's states, each a label in its piece's label's place (`WORKFLOW · FAILED`), hidden. */
+export const WF_STATES = ['running', 'completed', 'failed', 'compensating', 'compensated'] as const;
+export const isTask = (id: string) => id.startsWith('wf-') && id !== 'wf-submit';
 
 function add<K extends keyof SVGElementTagNameMap>(
 	parent: Element,
@@ -198,6 +213,13 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 			add(lit, 'rect', { class: 'vm-shape', x, y, width: w, height: h, rx: RADIUS[p.kind] });
 			add(lit, 'text', { class: 'vm-text', ...centre }, label);
 		}
+		if (isTask(p.id)) {
+			for (const mark of MARKS) {
+				const m = add(g, 'g', { class: `vm-mark vm-mark-${mark} ${MARK_TONE[mark]}`, ...(mark === 'waiting' ? {} : HIDDEN) });
+				add(m, 'rect', { class: 'vm-shape', x, y, width: w, height: h, rx: RADIUS[p.kind] });
+				add(m, 'text', { class: 'vm-text', ...centre }, label);
+			}
+		}
 	} else if (p.kind === 'loop') {
 		// EVENT over LOOP: on one line it would reach the worker's card and the third queue's line.
 		const baseline = y + h + LABEL_GAP + LABEL_PX - DESCENT;
@@ -210,6 +232,11 @@ function drawPiece(world: SVGGElement, p: Piece, key = p.id, label = p.label, at
 			add(g, 'path', { class: `vm-logo vm-logo-${logo.name}`, d: logo.d, transform: at });
 		}
 		add(g, 'text', { class: 'vm-label', x: logo ? x + LOGO + LOGO_GAP : x, y: top }, label);
+	}
+	if (p.id === 'wf') {
+		for (const state of WF_STATES) {
+			add(g, 'text', { class: `vm-label vm-wf-state vm-wf-${state}`, x, y: top, ...HIDDEN }, `${label} · ${state.toUpperCase()}`);
+		}
 	}
 	if (CRASHES.has(p.id)) {
 		add(g, 'text', { class: 'vm-label vm-died', x, y: top, ...HIDDEN }, `${label} · DIED`);
