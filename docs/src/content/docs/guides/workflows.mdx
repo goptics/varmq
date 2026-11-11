@@ -14,7 +14,7 @@ A workflow is a set of tasks with dependencies. Each task is one job on a queue 
 
 ## A first workflow
 
-This workflow has three tasks: download a photo, resize it, then save it. Each task waits for the one before it.
+A [`Workflow`](https://pkg.go.dev/github.com/goptics/varmq#Workflow) holds tasks and the order they run in. This one has three tasks: download a photo, resize it, then save it. Each task waits for the one before it.
 
 <SetupSteps id="wf-steps" steps={workflowSteps} />
 
