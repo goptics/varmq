@@ -1,5 +1,25 @@
 {
 	"title": "Guides",
 	"icon": "Book",
-	"pages": ["worker-types", "queues", "waiting", "errors", "concurrency", "adding-many", "job-ids", "strategies", "topics", "workflows", "context", "metrics", "function-helpers"]
+	"pages": [
+		"---Basics---",
+		"worker-types",
+		"queues",
+		"waiting",
+		"errors",
+		"context",
+		"---Scaling---",
+		"concurrency",
+		"adding-many",
+		"job-ids",
+		"strategies",
+		"---Building blocks---",
+		"topics",
+		"workflows",
+		"function-helpers",
+		"patterns",
+		"---Quality---",
+		"metrics",
+		"testing"
+	]
 }
