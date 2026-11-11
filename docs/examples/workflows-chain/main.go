@@ -1,5 +1,3 @@
-// The steps of guides/workflows.mdx, "A first workflow" (workflowSteps in components/ops/setup-data.ts),
-// as one program, so run_test.go checks that they compile and run. Keep the two in sync.
 package main
 
 import (

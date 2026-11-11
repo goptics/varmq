@@ -1,6 +1,3 @@
-// The workflow of the home page's map (src/lib/heromap/chapters.ts, chapter 7, and src/lib/story/stations.ts):
-// four tasks on one result worker's queue. charge fails, ship is cancelled, and the undo jobs of label and reserve
-// run, label's first.
 package main
 
 import (
@@ -12,6 +9,9 @@ import (
 	"github.com/goptics/varmq"
 )
 
+// The workflow of the home page's map (src/lib/heromap/chapters.ts, chapter 7, and src/lib/story/stations.ts):
+// four tasks on one result worker's queue. charge fails, ship is cancelled, and the undo jobs of label and reserve
+// run, label's first.
 func main() {
 	// One worker with one goroutine runs every task, and the undo jobs too.
 	queue := varmq.NewResultWorker(func(j varmq.Job[string]) (string, error) {
