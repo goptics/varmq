@@ -136,6 +136,7 @@ When a stream that received `hello` ends for any reason while the instance keeps
 - Any other status from the stream (`409`, `503` and others) goes to the callback, and the instance retries with the normal backoff.
 - Before it redials after a stream that received `hello`, the instance posts `bye=1` with that stream's session (section 3).
 - The instance MUST NOT connect over `http://` to a host that is not loopback, unless an explicit option allows it: the token would travel in clear text.
+- The hub closes idle connections after 30 s. The instance's HTTP client SHOULD keep idle connections for less (varmq: 20 s), or a reply POST can land on a connection the hub just closed and be lost.
 - Nothing in the instance's hub code may run on, or share a lock with, the job path (add, dispatch, ack).
 
 ### 4.3 Instance behaviour in varmq (informative)

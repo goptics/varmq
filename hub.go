@@ -77,7 +77,8 @@ func WithHubNoPayloads() HubOption { return func(c *hubConfig) { c.noPayloads = 
 // and redirects are never followed (the token stays with hubURL). Before
 // each redial, and before the bye that precedes it, ConnectHub closes the
 // idle connections of its transport, so a dead HTTP/2 connection is not
-// reused.
+// reused. The hub closes idle connections after 30 s: keep idle
+// connections for less (the default client uses 20 s).
 func WithHubClient(c *http.Client) HubOption { return func(cfg *hubConfig) { cfg.client = c } }
 
 // WithHubHeartbeat sets the heartbeat used when the hub's hello gives none
@@ -235,6 +236,10 @@ func newHubConfig(opts []HubOption) hubConfig {
 	return cfg
 }
 
+// hubIdleConn: below the hub's 30 s idle close, so a reply POST never
+// lands on a connection the hub just closed.
+const hubIdleConn = 20 * time.Second
+
 // newHub checks the config. Its errors never repeat hubURL: it may hold
 // credentials.
 func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
@@ -281,7 +286,7 @@ func newHub(hubURL, token string, cfg hubConfig) (*hub, error) {
 			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 			ForceAttemptHTTP2:     true,
 			TLSHandshakeTimeout:   10 * time.Second,
-			IdleConnTimeout:       90 * time.Second,
+			IdleConnTimeout:       hubIdleConn,
 			ExpectContinueTimeout: time.Second,
 			MaxIdleConnsPerHost:   hubMaxInFlight + 2, // replies and beats reuse connections
 		}}

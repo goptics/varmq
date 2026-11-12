@@ -3516,6 +3516,14 @@ func TestHubReplyErrorRate(t *testing.T) {
 	assert.Empty(t, errs, "reports inside one heartbeat are suppressed")
 }
 
+// The default client keeps idle connections for less than the hub's 30 s.
+func TestHubDefaultIdleConnTimeout(t *testing.T) {
+	h, err := newHub("https://hub.example", "tok", newHubConfig(nil))
+	require.NoError(t, err)
+	tr := h.client.Transport.(*http.Transport)
+	assert.Equal(t, 20*time.Second, tr.IdleConnTimeout)
+}
+
 // A stream 409 (ID taken) retries with the normal backoff, not the cap.
 func TestHubConflictBackoff(t *testing.T) {
 	f := newFakeHub(t)
