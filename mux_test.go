@@ -3658,3 +3658,18 @@ func TestHubWithClient(t *testing.T) {
 	assert.Equal(t, time.Millisecond, c.Timeout)
 	assert.Nil(t, c.CheckRedirect)
 }
+
+// A URL that http.NewRequest refuses ends the stream dial and the post with
+// its error, before any request leaves.
+func TestHubBadRequestURL(t *testing.T) {
+	const bad = "http://hub\x7f"
+	h := &hub{cfg: newHubConfig(nil), stream: bad}
+
+	sess, err := h.session(context.Background())
+	assert.Error(t, err)
+	assert.Empty(t, sess)
+
+	code, err := h.post(context.Background(), bad, nil, nil)
+	assert.Error(t, err)
+	assert.Zero(t, code)
+}
