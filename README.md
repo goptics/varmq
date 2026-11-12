@@ -426,6 +426,38 @@ Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 >
 > On shared storage, a job cancel reaches every consumer process. It marks the ID for 24 h, and a re-add of the ID clears the mark. It answers 202 for any ID with no ended record, and 409 for a retained ended job. A waiting workflow task answers 202 but still runs: cancel its workflow instead.
 
+### Connect to vartop (hub)
+
+A VarMQ process can dial out to a vartop hub instead of serving the REST API on a port. The hub then reads and controls the process through that connection.
+
+```go
+go func() {
+	err := varmq.ConnectHub(ctx, "https://vartop.internal", token,
+		varmq.WithHubErrHandler(func(err error) { log.Printf("hub: %v", err) }),
+	)
+	log.Printf("hub connection stopped: %v", err) // a bad config returns at once
+}()
+```
+
+`ConnectHub` keeps one stream open and runs each hub request on `Handler` inside the process. It redials with backoff when the stream drops, and it returns when `ctx` ends. Before each redial, it tells the hub that the old stream is gone, so the hub frees the ID at once. It returns an error at once when the config is bad, for example a URL with a user name and password.
+
+- Set `varmq.InstanceID` first when several processes share a host. The hub refuses a second connection with the same ID. The ID must be 1 to 128 bytes of UTF-8 with no control characters.
+- `WithHubErrHandler(f)` receives connection errors, such as a rejected token or a dropped stream. Without it, VarMQ does not report these errors.
+- `WithHubClient(c)` sets custom TLS or a proxy. VarMQ never follows a redirect, even with your own client, so the token goes only to the hub URL.
+
+**Trust.** The token only proves the VarMQ process to the hub. Only TLS and the hub URL prove the hub. Whoever answers at the hub URL gets everything that `Handler` allows. `ConnectHub` refuses plain `http://` to a host that is not loopback, because the token would travel in clear text. `WithHubInsecure()` allows plain `http://` to a host that is not loopback. Then any party on the network path can read the token and also act as the hub.
+
+**Sessions.** Each stream gets its own secret session from the hub. The process sends it in a header with every reply and heartbeat, never in a URL or an error. All processes of one server share one token. So a process can connect under an unused ID of that server, or take an ID before its owner connects. The session stops it from removing a connected process or from answering for it.
+
+**What the hub can do.** By default, the hub can read job payloads and results. It can stop and resize workers, pause queues, and cancel jobs and workflows. On shared storage, a queue pause or a job cancel reaches every consumer process.
+
+- `WithHubReadOnly()` refuses every action, so the hub can only read.
+- `WithHubNoPayloads()` sends job payloads as `null` and leaves out job results. Job error texts and workflow task reasons are still sent, and they can contain application data.
+
+**Job path.** The hub connection holds no lock on the job path, so a hub that is down does not slow job processing. It runs the same handlers as a mounted `Handler`. Like `NewServerMux`, it turns on the same job tracking for the job routes.
+
+Protocol: [`spec/hub.md`](spec/hub.md).
+
 ## How It Works
 
 ### Event loop
