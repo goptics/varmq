@@ -62,7 +62,7 @@ The body is one JSON object per line, ended by `\n`. The hub flushes after each 
 
 A receiver MUST ignore a line whose `type` it does not know, and MUST ignore fields it does not know.
 
-An instance MUST clamp a `heartbeat_ms` outside 1000 to 60000 into that range. It MUST treat the stream as dead and redial when it has received no line for 3 × `heartbeat_ms`.
+An instance MUST clamp a `heartbeat_ms` outside 1000 to 60000 into that range. A missing `heartbeat_ms`, or `0`, means the instance's own configured heartbeat instead. It MUST treat the stream as dead and redial when it has received no line for 3 × `heartbeat_ms`.
 
 A `hello` without a valid `session` ends the stream: the instance redials. An instance MUST drop a `request` that arrives before `hello`: it has no session to reply with.
 
@@ -105,7 +105,7 @@ POST {hub}/hub/beat?instance=<instance id>&bye=1
 
 Every beat, `bye=1` included, carries the header `X-Hub-Session` with the session of its stream.
 
-The instance posts its first beat at once after it reads `hello`, then one every `heartbeat_ms`. It MUST NOT post a beat outside a live session: none before `hello`, none after the stream ended. With `bye=1` the instance is stopping, or its stream ended, and the hub removes it at once.
+The instance posts its first beat at once after it reads `hello`, then one every `heartbeat_ms`. It MUST NOT post a beat outside a live session: none before `hello`, none after the stream ended. The one exception is the `bye=1` of that stream. With `bye=1` the instance is stopping, or its stream ended, and the hub removes it at once.
 
 Hub replies:
 
