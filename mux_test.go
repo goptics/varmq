@@ -3504,7 +3504,7 @@ func TestHubReplyErrorRate(t *testing.T) {
 	f := newFakeHub(t)
 	f.hello.Store(hubHello(5000))
 	f.replyStatus.Store(http.StatusInternalServerError)
-	errs, _ := f.connect(t)
+	errs, stop := f.connect(t)
 	s := within(t, f.streams)
 	for i := range 20 {
 		id := "r" + strconv.Itoa(i)
@@ -3514,6 +3514,13 @@ func TestHubReplyErrorRate(t *testing.T) {
 	errIs(t, errs, hubStatus("reply", http.StatusInternalServerError))
 	time.Sleep(100 * time.Millisecond)
 	assert.Empty(t, errs, "reports inside one heartbeat are suppressed")
+	// the suppressed rest is reported once when the stream ends
+	stop()
+	err := errIs(t, errs, func(err error) bool {
+		return hubStatus("reply", http.StatusInternalServerError)(err) && strings.Contains(err.Error(), "more)")
+	})
+	assert.Contains(t, err.Error(), "(and ")
+	assert.NotContains(t, err.Error(), f.token)
 }
 
 // The default client keeps idle connections for less than the hub's 30 s.

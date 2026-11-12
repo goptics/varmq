@@ -198,6 +198,22 @@ type hubLimiter struct {
 	every time.Duration
 	next  time.Time
 	extra int
+	last  error // latest suppressed error
+}
+
+// flush reports the suppressed rest once, when the stream ends.
+func (h *hub) flush(l *hubLimiter) {
+	l.mu.Lock()
+	err, n := l.last, l.extra
+	l.extra, l.last, l.next = 0, nil, time.Time{}
+	l.mu.Unlock()
+	if n == 0 {
+		return
+	}
+	if n > 1 {
+		err = fmt.Errorf("%w (and %d more)", err, n-1)
+	}
+	h.report(err)
 }
 
 func (h *hub) reportLimited(l *hubLimiter, err error) {
@@ -205,13 +221,14 @@ func (h *hub) reportLimited(l *hubLimiter, err error) {
 	now := time.Now()
 	if now.Before(l.next) {
 		l.extra++
+		l.last = err
 		l.mu.Unlock()
 		return
 	}
 	l.next = now.Add(l.every)
 	if l.extra > 0 {
 		err = fmt.Errorf("%w (and %d more)", err, l.extra)
-		l.extra = 0
+		l.extra, l.last = 0, nil
 	}
 	l.mu.Unlock()
 	h.report(err)
@@ -456,12 +473,12 @@ func parseFrame(line []byte) (hubFrame, error) {
 func (h *hub) session(ctx context.Context) (sess string, err error) {
 	sctx, cancel := context.WithCancelCause(ctx)
 	var beats sync.WaitGroup
+	lim := &hubLimiter{every: h.clampBeat(0)}
 	defer func() {
 		cancel(nil)
 		beats.Wait()
+		h.flush(lim)
 	}()
-
-	lim := &hubLimiter{every: h.clampBeat(0)}
 	var full atomic.Bool // the reader waits for room in the queue
 	beat := h.clampBeat(0)
 	// the watchdog runs from the dial: a hub that never answers is dead too
