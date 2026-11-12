@@ -47,7 +47,7 @@ A FIFO queue gives jobs out in the order you added them. A priority queue gives 
 
 ### What happens when a job panics?
 
-The worker recovers the panic and counts the job as failed. The process continues. The panic becomes an error on the job's handle, the `Errs()` channel and the error handler. [Errors](/guides/errors/#where-a-failure-is-reported) explains.
+The worker recovers the panic and counts the job as failed. The process continues. The panic becomes an error. It goes to the `Errs()` channel, which holds one error, and to the error handler, which gets every error. With an error worker or a result worker, the job's handle returns it too. A plain worker's handle has no error. [Errors](/guides/errors/#where-a-failure-is-reported) explains.
 
 ## Storage and processes
 

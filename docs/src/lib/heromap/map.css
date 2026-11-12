@@ -336,7 +336,7 @@ varmq-map .vm-svg:not(.vm-under) {
 }
 
 :is(varmq-map, .vm-mini) .vm-undo > .vm-text {
-	fill: var(--vm-loop);
+	fill: var(--vm-pulse);
 }
 
 :is(varmq-map, .vm-mini) .vm-label.vm-wf-failed {

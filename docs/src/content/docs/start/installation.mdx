@@ -39,7 +39,7 @@ redisq and sqliteq support these features:
 Neither adapter reads one job by its ID. For their queues, that REST route answers 501.
 
 :::caution
-Older adapter releases do not work with this VarMQ: redisq v1.5.1 and older, and sqliteq v0.3.0 and older. They do not have `Reject`, so your module does not compile.
+Older adapter releases do not work with this VarMQ: redisq v1.5.1 and older, and sqliteq v0.3.0 and older. They do not have `Reject`. Your module compiles, but `WithQueue` does not bind them as shared storage: jobs are not stored as JSON and are not acknowledged.
 :::
 
 Next: the [quick start](/start/quick-start/).

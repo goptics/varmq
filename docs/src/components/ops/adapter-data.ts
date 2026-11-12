@@ -111,6 +111,7 @@ export const NODES: NodeDef[] = [
 			'DequeueWithAckId: once for each job it takes, when a slot is free and Len is above 0.',
 			'Acknowledge: once for each job that completed, with its ID, when the function has returned and the worker closes the job. An empty ID means nothing to acknowledge.',
 			'Reject: instead of Acknowledge, for a job that failed or panicked, with the error text. The storage records it failed and does not queue it again.',
+			'Neither, in two cases. A durable workflow task ends through FinishTask of the workflow store. A cancelled job ends through AcknowledgeCancelled, if the storage has it.',
 			'What happens to a job that is taken and not acknowledged is the storage’s decision. So the delivery guarantee is the adapter’s.',
 		],
 		by: ['redisq', 'sqliteq'],

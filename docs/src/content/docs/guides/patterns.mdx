@@ -5,7 +5,9 @@ description: "Retries with backoff, a dead-letter queue, delayed jobs, periodic 
 
 import GoPlay from '../../../components/GoPlay.astro';
 
-VarMQ runs each job once. It has no built-in retry, delay, schedule or rate limit. This page shows how to build each one from a queue, a worker and the Go standard library. Every program on this page runs in the Go Playground.
+VarMQ does not run a job again by itself. It has no built-in retry, delay, schedule or rate limit. This page shows how to build each one from a queue, a worker and the Go standard library. Every program on this page runs in the Go Playground.
+
+On Redis or SQLite storage, a job can run again after its process dies or its acknowledgement fails. [What this guarantees](/persistence/overview/#what-this-guarantees) has the cases.
 
 | You want | Build it from |
 | --- | --- |
@@ -59,7 +61,7 @@ The ticker fires each 100 ms, and one run takes 250 ms. So some ticks print `ski
 
 The ID stops a second **waiting** job. It does not stop a new job while one with the same ID **runs**. [Job IDs](/guides/job-ids/) has the rules for each storage.
 
-On shared storage, such as redisq or sqliteq, every process has its own ticker and the storage checks the ID. The storage keeps an ID for a window it sets, which can be longer than the time the job waits. A tick inside that window is refused. [Job IDs on shared storage](/guides/job-ids/#persistent-and-distributed-queues) has the rules.
+With redisq, every process has its own ticker and Redis checks the ID. sqliteq checks it too, in its [one process](/persistence/sqlite/). The storage keeps an ID for a window it sets, which can be longer than the time the job waits. A tick inside that window adds no job, but `Add` still returns `true`. So the `!ok` branch of the example does not print those ticks. [Job IDs on shared storage](/guides/job-ids/#persistent-and-distributed-queues) has the rules.
 
 ## Rate limits
 

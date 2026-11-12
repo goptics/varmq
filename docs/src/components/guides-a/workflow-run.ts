@@ -73,8 +73,10 @@ function init(root: HTMLElement) {
 			if (res) res.textContent = st === 'completed' ? `result: ${t.result}` : '';
 			const u = node.querySelector<HTMLElement>('[data-ust]');
 			if (u) {
-				// A task record shows its undo as waiting until an undo phase reaches it.
-				const us = !tk ? '—' : running.includes(`${t.name}:undo`) ? 'running' : tk.undoState || 'waiting';
+				// A completed task's undo waits until an undo phase reaches it. No undo runs for a task that did not
+				// complete, or after the workflow has ended.
+				const idle = tk?.state === 'failed' || tk?.state === 'cancelled' || ended() ? '—' : 'waiting';
+				const us = !tk ? '—' : running.includes(`${t.name}:undo`) ? 'running' : tk.undoState || idle;
 				u.textContent = us;
 				u.parentElement!.dataset.state = us;
 			}
@@ -88,6 +90,8 @@ function init(root: HTMLElement) {
 		stepBtn.disabled = ended();
 		cancelBtn.disabled = !m || m.state !== 'running' || cancelled;
 		ffBtn.disabled = alwaysBtn.disabled = !!m;
+		// The task that fails is fixed at Submit, as the two options are.
+		for (const b of failsList.querySelectorAll('button')) b.disabled = !!m;
 		edges();
 	};
 
@@ -230,6 +234,8 @@ function init(root: HTMLElement) {
 	tabs(q(root, '[data-examples]'), (k) => {
 		ex = EXAMPLES.find((e) => e.key === k)!;
 		fail = ex.fail;
+		ffBtn.setAttribute('aria-pressed', 'false');
+		alwaysBtn.setAttribute('aria-pressed', 'true');
 		build();
 		reset();
 		say(root, `${ex.label} example. ${ex.note}`);

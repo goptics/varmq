@@ -139,7 +139,7 @@ wf.Submit(ctx)
 if varmq.TaskOf(j).Undo {
 	return undo(j.Data())
 }`,
-		lines: [[1, 3, 5, 7, 8], [10], [5, 7], [7, 8], [4, 6, 12, 13, 14, 15]],
+		lines: [[1, 3, 5, 7, 8], [10], [5, 7], [7, 8], [12, 13, 14, 15]],
 		phone: {
 			code: `wf := varmq.NewWorkflow(
 	varmq.NewWorkflowStore(),
