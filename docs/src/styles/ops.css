@@ -1040,6 +1040,13 @@
 	padding: 0;
 	list-style: none;
 }
+/* The store tabs of a list of steps, above step 1. */
+.ops-stores {
+	margin-top: 1.5rem;
+}
+.ops-stores + .ops-steps {
+	margin-top: 10px;
+}
 .ops-step {
 	display: grid;
 	grid-template-columns: 32px minmax(0, 1fr);
