@@ -1,0 +1,62 @@
+---
+import '../../styles/guides-a.css';
+import Scene from '../ui/Scene.astro';
+import { EXAMPLES } from './workflow-plan';
+
+const first = EXAMPLES[0];
+const rows = (ex: typeof first) => Math.max(...ex.tasks.map((t) => ex.tasks.filter((x) => x.col === t.col).length));
+const describe =
+	'A workflow on the real workflow rules, with two examples. Simple: download, then resize, then save, each one after the one before. Failure and undo: reserve, then charge and label, then ship, then notify with Always; charge fails, ship is cancelled, notify still runs, and the undo job of reserve runs, so the workflow ends as compensated. You pick which task fails, turn fail-fast and Always on or off, then submit, step or cancel.';
+---
+
+<Scene id="workflow-run" title="Workflow run" call={first.call} describe={describe} class="ga">
+	<p slot="stats" class="wf-state" data-wf-state>not submitted</p>
+	<div class="seg wf-examples" role="radiogroup" aria-label="Example workflow" data-examples>
+		{
+			EXAMPLES.map((ex, i) => (
+				<button type="button" role="radio" data-key={ex.key} aria-checked={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+					{ex.label}
+				</button>
+			))
+		}
+	</div>
+	<div class="wf-dag" data-dag style={`--local-cols: ${Math.max(...first.tasks.map((t) => t.col)) + 1}; --local-rows: ${rows(first)}`}>
+		<svg class="wf-edges" aria-hidden="true" data-edges></svg>
+		{
+			first.tasks.map((t) => (
+				<section class="wf-node" data-node={t.name} data-col={t.col} data-state="new" aria-label={`Task ${t.name}`}>
+					<h3>{t.name}</h3>
+					<p class="wf-node__state" data-st>not submitted</p>
+				</section>
+			))
+		}
+	</div>
+
+	<Fragment slot="controls">
+		<span class="ga-field" data-fails-field hidden={!first.options}>
+			<span class="slabel">fails</span>
+			<span class="seg" role="radiogroup" aria-label="The task whose function returns an error" data-fails>
+				<button type="button" role="radio" data-key="none" aria-checked="true" tabindex="0">nothing</button>
+				{
+					first.tasks.map((t) => (
+						<button type="button" role="radio" data-key={t.name} aria-checked="false" tabindex="-1">
+							{t.name}
+						</button>
+					))
+				}
+			</span>
+		</span>
+		<button type="button" class="pbtn" aria-pressed="false" data-failfast hidden>WithFailFast()</button>
+		<button type="button" class="pbtn" aria-pressed="true" data-always hidden>notify.Always()</button>
+		<span class="sframe__spacer"></span>
+		<button type="button" class="pbtn pbtn--primary" data-submit>Submit</button>
+		<button type="button" class="pbtn" data-step>Step</button>
+		<button type="button" class="pbtn pbtn--danger" data-cancel disabled>Cancel</button>
+		<button type="button" class="pbtn" data-reset>Reset</button>
+	</Fragment>
+	<p class="sframe__note" slot="note" data-note>{first.note}</p>
+</Scene>
+
+<script>
+	import './workflow-run';
+</script>

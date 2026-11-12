@@ -1,0 +1,112 @@
+---
+title: Testing
+description: "Test a worker function and the code around it: results, waiting with a time limit, a full queue, and the race detector."
+---
+
+A test needs no storage and no mock. An in-memory queue is fast and has nothing to set up, so a test can run the real worker. This page shows the usual tests.
+
+## Keep the work in a plain function
+
+Put the work in a function that takes plain Go values. The worker function then only reads the job's data and calls it. You can test the plain function with no VarMQ in the test.
+
+```go
+// The function under test: plain Go, no VarMQ type in it.
+func parse(s string) (int, error) { return strconv.Atoi(s) }
+
+worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
+	return parse(j.Data())
+})
+```
+
+## Test a result or an error
+
+To test the worker too, add a job and read its handle. [`Result()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedResultJob) and [`Err()`](https://pkg.go.dev/github.com/goptics/varmq#EnqueuedErrJob) block until the job has ended, so the test needs no sleep.
+
+```go
+func TestParseWorker(t *testing.T) {
+	worker := varmq.NewResultWorker(func(j varmq.Job[string]) (int, error) {
+		return parse(j.Data())
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	good, _ := queue.Add("42")
+	bad, _ := queue.Add("forty-two")
+
+	if n, err := good.Result(); err != nil || n != 42 {
+		t.Fatalf("good: got %d, %v", n, err)
+	}
+	if _, err := bad.Result(); !errors.Is(err, strconv.ErrSyntax) {
+		t.Fatalf("bad: got %v", err)
+	}
+}
+```
+
+`defer worker.Stop()` ends the worker's event loop when the test ends. Without it, each test leaves one goroutine behind.
+
+## Wait with a time limit
+
+A test that waits for ever hides the failure: the test run stops at the package timeout, with no message from your test. Wait with [`WaitContext`](https://pkg.go.dev/github.com/goptics/varmq#Worker.WaitContext) and a deadline. It returns the context's error if the jobs did not finish in time.
+
+```go
+func TestEveryJobRuns(t *testing.T) {
+	var seen []int
+	worker := varmq.NewWorker(func(j varmq.Job[int]) {
+		seen = append(seen, j.Data()) // concurrency 1: one goroutine at a time
+	})
+	queue := worker.BindQueue()
+	defer worker.Stop()
+
+	for i := range 3 {
+		queue.Add(i)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := worker.WaitContext(ctx); err != nil {
+		t.Fatalf("jobs did not finish: %v", err)
+	}
+	if len(seen) != 3 {
+		t.Fatalf("ran %d jobs, want 3", len(seen))
+	}
+}
+```
+
+With a concurrency above 1, more than one goroutine runs the function. Guard shared values such as `seen` with a `sync.Mutex`.
+
+## Test what happens when Add is refused
+
+To test your code's answer to a full queue, keep the jobs in the queue. A worker made with [`WithAutoRun(false)`](https://pkg.go.dev/github.com/goptics/varmq#WithAutoRun) takes no job until `Start`, so the queue fills in a known order.
+
+```go
+func TestQueueFull(t *testing.T) {
+	worker := varmq.NewWorker(func(j varmq.Job[int]) {}, varmq.WithAutoRun(false))
+	queue := worker.BindQueue(varmq.WithQueueCapacity(1))
+
+	if _, ok := queue.Add(1); !ok {
+		t.Fatal("first Add refused")
+	}
+	if _, ok := queue.Add(2); ok {
+		t.Fatal("second Add accepted on a full queue")
+	}
+}
+```
+
+The same worker lets you test [job ID deduplication](/guides/job-ids/#deduplicating) and [priority order](/guides/queues/), because nothing leaves the queue before you call `Start`.
+
+## Run the tests with the race detector
+
+A worker function runs on other goroutines than the test. Run the tests with `-race`, so Go reports a value that two goroutines use without a lock.
+
+```bash
+go test -race ./...
+```
+
+## Code that uses Redis or SQLite
+
+- **The worker function is the same for every storage.** Test it on an in-memory queue, as above.
+- **SQLite needs no server.** A test can make a database in [`t.TempDir()`](https://pkg.go.dev/testing#T.TempDir) and use the real [sqliteq](/persistence/sqlite/) adapter.
+- **Redis needs a server.** Use the real [redisq](/persistence/redis/) adapter with a Redis that the test run starts, for example the one from the [Redis setup](/persistence/redis/#setup).
+- **Jobs on shared storage are JSON.** Add one test that sends your job type through `encoding/json` and back, so a field that JSON cannot carry fails in a test and not in production.
+
+Next: [persistence](/persistence/overview/).

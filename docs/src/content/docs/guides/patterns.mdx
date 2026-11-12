@@ -1,0 +1,86 @@
+---
+title: Patterns
+description: "Retries with backoff, a dead-letter queue, delayed jobs, periodic jobs, rate limits and job timeouts, each built from VarMQ and the standard library."
+---
+
+import GoPlay from '../../../components/GoPlay.astro';
+
+VarMQ does not run a job again by itself. It has no built-in retry, delay, schedule or rate limit. This page shows how to build each one from a queue, a worker and the Go standard library. Every program on this page runs in the Go Playground.
+
+On Redis or SQLite storage, a job can run again after its process dies or its acknowledgement fails. [What this guarantees](/persistence/overview/#what-this-guarantees) has the cases.
+
+| You want | Build it from |
+| --- | --- |
+| [Retry a failed job](#retry-with-backoff) | An attempt number in the job's data, `time.AfterFunc` and a second `Add` |
+| [Keep the jobs that never succeed](#dead-letter-queue) | A second queue |
+| [Run a job later](#delayed-jobs) | `time.AfterFunc` and `Add` |
+| [Run a job again and again](#periodic-jobs) | `time.Ticker`, `Add` and a job ID |
+| [Limit calls per second](#rate-limits) | A `time.Ticker` that the worker function waits for |
+| [Give one job a time limit](#job-timeouts) | `context.WithTimeout` on `j.Context()` |
+
+:::caution
+A timer lives in your process. A delayed job or a retry that waits in a timer is lost when the process exits, also when the queue is in Redis or SQLite. The storage has the job only after `Add` returns. If a delay must survive a restart, save the time the job is due in your own database and add the job when that time comes.
+:::
+
+## Retry with backoff
+
+A failed job is final: VarMQ does not run it again. To retry, add a new job for the same work. The job's data carries the attempt number, so the function knows when to stop.
+
+<GoPlay example="patterns-retry" />
+
+It prints two failed attempts for each URL, then `a.example: done on attempt 3` and `dead letter: b.example`.
+
+What to know:
+
+- **Each attempt is its own job.** The handle that the first `Add` returned follows the first attempt only. To learn the last outcome, report it from the function, as the example does with a `sync.WaitGroup`.
+- **`WaitUntilIdle` does not see a timer.** A worker with an empty queue is idle, even when a retry waits in a timer. Wait for the outcomes instead.
+- **The function returns no error here.** It handles the failure itself. If you use [`NewErrWorker`](https://pkg.go.dev/github.com/goptics/varmq#NewErrWorker) and return the error, each failed attempt also counts in [`Metrics().Failed()`](/guides/metrics/) and goes to the [error handler](/guides/errors/#the-error-handler).
+- **The backoff here grows by 100 ms each attempt.** For more attempts, double it each time and set a maximum.
+
+## Dead-letter queue
+
+The same program has one. `deadLetters` is a second queue with its own worker. A job that fails on its last attempt goes there, and the worker of that queue records it. In a real program that worker writes the job to a log or a table, or sends an alert.
+
+To keep the dead letters across a restart, bind that second queue to [Redis](/persistence/redis/) or [SQLite](/persistence/sqlite/) storage.
+
+## Delayed jobs
+
+`Add` always queues the job now. To run a job later, call `Add` from a timer.
+
+<GoPlay example="patterns-delay" />
+
+It prints `welcome after 0s`, then `reminder after 500ms`.
+
+## Periodic jobs
+
+A `time.Ticker` adds the job on each tick. Give the job a [job ID](/guides/job-ids/): the queue refuses a second job with the same ID while the first one waits. A slow worker then does not collect a long line of the same job.
+
+<GoPlay example="patterns-periodic" />
+
+The ticker fires each 100 ms, and one run takes 250 ms. So some ticks print `skipped: sync already waits`.
+
+The ID stops a second **waiting** job. It does not stop a new job while one with the same ID **runs**. [Job IDs](/guides/job-ids/) has the rules for each storage.
+
+With redisq, every process has its own ticker and Redis checks the ID. sqliteq checks it too, in its [one process](/persistence/sqlite/). The storage keeps an ID for a window it sets, which can be longer than the time the job waits. A tick inside that window adds no job, but `Add` still returns `true`. So the `!ok` branch of the example does not print those ticks. [Job IDs on shared storage](/guides/job-ids/#persistent-and-distributed-queues) has the rules.
+
+## Rate limits
+
+[Concurrency](/guides/concurrency/) limits how many jobs run at the same time. It does not limit how many start each second. For that, make the worker function wait for a shared ticker before it does its work.
+
+<GoPlay example="patterns-rate-limit" />
+
+Five goroutines take the five jobs at once, but one call starts each 200 ms. The order of the calls can change between runs.
+
+A ticker gives a fixed rate with no bursts. For bursts, use [`rate.Limiter`](https://pkg.go.dev/golang.org/x/time/rate#Limiter) from `golang.org/x/time/rate` and call `limiter.Wait(j.Context())` in the function. Both limit one process only. Two processes on one queue each have their own limit.
+
+## Job timeouts
+
+A worker has no timeout setting for its jobs. Make a context with a deadline in the function, from [`j.Context()`](https://pkg.go.dev/github.com/goptics/varmq#Job), and pass it to the work.
+
+<GoPlay example="patterns-timeout" />
+
+It prints `fast: <nil>` and `slow: context deadline exceeded`.
+
+The timeout stops the job only if the work watches the context. VarMQ cannot stop a function that does not return. [Stopping a running job early](/guides/context/#stopping-a-running-job-early) shows how a job watches the worker's context too.
+
+Next: [Metrics](/guides/metrics/).

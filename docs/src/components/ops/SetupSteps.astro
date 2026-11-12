@@ -1,10 +1,16 @@
 ---
-// Numbered setup steps. A step may have tabs for alternatives. Every code card has a copy button.
+// Numbered setup steps. Every code card has a copy button. A step may have tabs for alternatives. Code that differs
+// by storage has no tabs in its step: one list of store tabs sits above step 1 and sets every step. A store tab leads
+// with its mark, as JOB 02's tabs on the home page do (ui/stores.ts).
 import '../../styles/ops.css';
+import '../../lib/heromap/map.css';
+import { STORES, type StoreKey } from '../ui/stores';
 import { highlightGo, highlightShell } from '../ui/go';
 
 interface Code {
 	label?: string;
+	/** A storage: the store tabs above the steps pick this code. */
+	store?: StoreKey;
 	file?: string;
 	lang?: 'bash' | 'go';
 	code: string;
@@ -22,7 +28,30 @@ interface Props {
 
 const { id, steps } = Astro.props;
 const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightShell(c.code));
+/** The stores the steps have code for, in first-seen order. */
+const stores = [...new Set(steps.flatMap((s) => s.code.flatMap((c) => (c.store ? [c.store] : []))))];
+/** A step whose code differs by storage only: the store tabs above the steps pick its code. */
+const byStore = (s: Step) => s.code.length > 1 && s.code.every((c) => c.store);
+/** A step with tabs of its own. */
+const tabbed = (s: Step) => s.code.length > 1 && !byStore(s);
 ---
+
+{
+	stores.length > 0 && (
+		<div class="ops ops-stores not-content not-prose">
+			<div class="seg" role="tablist" aria-label="Storage" data-store-tabs>
+				{stores.map((k, i) => (
+					<button type="button" role="tab" id={`${id}-store-${k}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1} data-key={k}>
+						<svg class="store-tab__icon" viewBox="0 0 24 24" aria-hidden="true">
+							<path d={STORES[k].icon} />
+						</svg>
+						{STORES[k].label}
+					</button>
+				))}
+			</div>
+		</div>
+	)
+}
 
 <ol class="ops ops-steps not-content not-prose" data-ops-steps>
 	{
@@ -32,7 +61,7 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 				<div class="ops-step__main">
 					<h3 class="ops-step__t">{s.title}</h3>
 					{s.text && <p class="ops-step__p" set:html={s.text} />}
-					{s.code.length > 1 && (
+					{tabbed(s) && (
 						<div class="seg" role="tablist" aria-label={s.title}>
 							{s.code.map((c, ci) => (
 								<button
@@ -53,8 +82,9 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 						<div
 							role={s.code.length > 1 ? 'tabpanel' : undefined}
 							id={s.code.length > 1 ? `${id}-${si}-panel-${ci}` : undefined}
-							aria-labelledby={s.code.length > 1 ? `${id}-${si}-tab-${ci}` : undefined}
-							hidden={s.code.length > 1 && ci !== 0}
+							aria-labelledby={byStore(s) ? `${id}-store-${c.store}` : tabbed(s) ? `${id}-${si}-tab-${ci}` : undefined}
+							data-store={byStore(s) ? c.store : undefined}
+							hidden={byStore(s) ? c.store !== stores[0] : tabbed(s) && ci !== 0}
 						>
 							<div class="code code--dark">
 								<div class="code__head">
@@ -77,5 +107,10 @@ const render = (c: Code) => (c.lang === 'go' ? highlightGo(c.code) : highlightSh
 	import { tabs, copyButtons } from '../ui/dom';
 
 	document.querySelectorAll<HTMLElement>('[data-ops-steps] [role="tablist"]').forEach((list) => tabs(list));
+	// The store tabs above the steps: each step shows its code for the picked store.
+	document.querySelectorAll<HTMLElement>('.ops-stores [role="tablist"]').forEach((list) => {
+		const steps = list.parentElement!.nextElementSibling as HTMLElement;
+		tabs(list, (key) => steps.querySelectorAll<HTMLElement>('[data-store]').forEach((p) => (p.hidden = p.dataset.store !== key)), { shared: steps });
+	});
 	copyButtons();
 </script>

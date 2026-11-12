@@ -60,7 +60,7 @@ const page = {
 };
 
 describe('choreography', () => {
-	it('builds the whole loop, all ten chapters, with nothing refused', () => {
+	it('builds the whole loop, all eleven chapters, with nothing refused', () => {
 		// The choreographer refuses what it cannot draw: a lane with no slot free for a landing, a property changed out
 		// of order, a tween past the loop's end, a set with no room for its pad. Any of them fails this test.
 		const timeline = new Choreo(nodes, page).build();

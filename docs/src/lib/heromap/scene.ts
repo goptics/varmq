@@ -40,7 +40,7 @@ export function slotY(laneY: number): number {
 export type PieceKind = 'program' | 'store' | 'lane' | 'tray' | 'card' | 'loop' | 'chip';
 
 /**
- * Something drawn on the map. It switches on in `chapter` (1 to 9) and stays on. `parent` names the
+ * Something drawn on the map. It switches on in `chapter` (1 to 10) and stays on. `parent` names the
  * piece whose box it sits inside. `label` is its text, one 14-unit line (two for the loop, split at a
  * newline): inside a chip; below the loop, centred and 6 units clear of it; and above anything else,
  * starting at its left edge and 6 units clear of its top.
@@ -103,32 +103,42 @@ export const PIECES: Piece[] = [
 	{ id: 'topic', kind: 'lane', chapter: 6, box: lane(190, 158), label: 'TOPIC' },
 	{ id: 'second', kind: 'card', chapter: 6, box: rect(570, 145, 130, 70), label: 'ANOTHER WORKER' },
 
-	// 7. SQLite, below the core: a program with Add() and a worker, and the jobs.db file with its lane and
+	// 7. A workflow, above the results row: Submit(), and the workflow with its four tasks. It has no worker of its
+	// own: a task that is ready becomes a job in the result worker's queue. Each task is a chip whose colour is its
+	// state (render.ts, `MARKS`). The area stays inside the world's bounds, so the whole-map frame is as it was.
+	{ id: 'wf-submit', kind: 'chip', chapter: 7, box: chip(800, 225, 84), label: 'Submit()' },
+	{ id: 'wf', kind: 'store', chapter: 7, box: rect(900, 165, 350, 120), label: 'WORKFLOW' },
+	{ id: 'wf-reserve', kind: 'chip', chapter: 7, box: chip(925, 225, 74), label: 'reserve', parent: 'wf' },
+	{ id: 'wf-label', kind: 'chip', chapter: 7, box: chip(1038, 198, 74), label: 'label', parent: 'wf' },
+	{ id: 'wf-charge', kind: 'chip', chapter: 7, box: chip(1038, 252, 74), label: 'charge', parent: 'wf' },
+	{ id: 'wf-ship', kind: 'chip', chapter: 7, box: chip(1151, 225, 74), label: 'ship', parent: 'wf' },
+
+	// 8. SQLite, below the core: a program with Add() and a worker, and the jobs.db file with its lane and
 	// tray. The store is 162 high, like Redis's, so the area ends at y 924.
-	{ id: 's-prog', kind: 'program', chapter: 7, box: rect(60, 580, 520, 140), label: 'PROGRAM' },
-	{ id: 's-add', kind: 'chip', chapter: 7, box: chip(88, 650, 68), label: 'Add()', parent: 's-prog' },
-	{ id: 'sqlite', kind: 'card', chapter: 7, box: rect(360, 610, 200, 80), label: 'WORKER', parent: 's-prog' },
-	{ id: 's-store', kind: 'store', chapter: 7, box: rect(220, 762, 210, 162), label: 'SQLITE · JOBS.DB' },
-	{ id: 's-queue', kind: 'lane', chapter: 7, box: lane(240, 790), label: 'QUEUE', parent: 's-store' },
-	{ id: 's-tray', kind: 'tray', chapter: 7, box: lane(240, 864), label: 'IN FLIGHT', parent: 's-store' },
+	{ id: 's-prog', kind: 'program', chapter: 8, box: rect(60, 580, 520, 140), label: 'PROGRAM' },
+	{ id: 's-add', kind: 'chip', chapter: 8, box: chip(88, 650, 68), label: 'Add()', parent: 's-prog' },
+	{ id: 'sqlite', kind: 'card', chapter: 8, box: rect(360, 610, 200, 80), label: 'WORKER', parent: 's-prog' },
+	{ id: 's-store', kind: 'store', chapter: 8, box: rect(220, 762, 210, 162), label: 'SQLITE · JOBS.DB' },
+	{ id: 's-queue', kind: 'lane', chapter: 8, box: lane(240, 790), label: 'QUEUE', parent: 's-store' },
+	{ id: 's-tray', kind: 'tray', chapter: 8, box: lane(240, 864), label: 'IN FLIGHT', parent: 's-store' },
 
-	// 8. Redis, below the core: program A adds, the store holds the queue and the tray, B and C run workers.
+	// 9. Redis, below the core: program A adds, the store holds the queue and the tray, B and C run workers.
 	// Program A is 20 wider than in the mockup, so its label fits.
-	{ id: 'a-prog', kind: 'program', chapter: 8, box: rect(650, 690, 170, 80), label: 'PROGRAM A · ADDS' },
-	{ id: 'a-add', kind: 'chip', chapter: 8, box: chip(701, 730, 68), label: 'Add()', parent: 'a-prog' },
-	{ id: 'r-store', kind: 'store', chapter: 8, box: rect(870, 652, 210, 162), label: 'REDIS' },
-	{ id: 'r-queue2', kind: 'lane', chapter: 8, box: lane(890, 680), label: 'QUEUE', parent: 'r-store' },
-	{ id: 'r-tray', kind: 'tray', chapter: 8, box: lane(890, 754), label: 'IN FLIGHT', parent: 'r-store' },
-	{ id: 'b-prog', kind: 'program', chapter: 8, box: rect(1115, 590, 165, 120), label: 'PROGRAM B' },
-	{ id: 'redis-b', kind: 'card', chapter: 8, box: rect(1130, 625, 135, 70), label: 'WORKER', parent: 'b-prog' },
-	{ id: 'c-prog', kind: 'program', chapter: 8, box: rect(1115, 760, 165, 120), label: 'PROGRAM C' },
-	{ id: 'redis-c', kind: 'card', chapter: 8, box: rect(1130, 795, 135, 70), label: 'WORKER', parent: 'c-prog' },
+	{ id: 'a-prog', kind: 'program', chapter: 9, box: rect(650, 690, 170, 80), label: 'PROGRAM A · ADDS' },
+	{ id: 'a-add', kind: 'chip', chapter: 9, box: chip(701, 730, 68), label: 'Add()', parent: 'a-prog' },
+	{ id: 'r-store', kind: 'store', chapter: 9, box: rect(870, 652, 210, 162), label: 'REDIS' },
+	{ id: 'r-queue2', kind: 'lane', chapter: 9, box: lane(890, 680), label: 'QUEUE', parent: 'r-store' },
+	{ id: 'r-tray', kind: 'tray', chapter: 9, box: lane(890, 754), label: 'IN FLIGHT', parent: 'r-store' },
+	{ id: 'b-prog', kind: 'program', chapter: 9, box: rect(1115, 590, 165, 120), label: 'PROGRAM B' },
+	{ id: 'redis-b', kind: 'card', chapter: 9, box: rect(1130, 625, 135, 70), label: 'WORKER', parent: 'b-prog' },
+	{ id: 'c-prog', kind: 'program', chapter: 9, box: rect(1115, 760, 165, 120), label: 'PROGRAM C' },
+	{ id: 'redis-c', kind: 'card', chapter: 9, box: rect(1130, 795, 135, 70), label: 'WORKER', parent: 'c-prog' },
 
-	// 9. Control: two rows of two above the core's card, inside its x span (570 to 770).
-	{ id: 'ctl-pause', kind: 'chip', chapter: 9, box: chip(570, 254, 70), label: 'Pause()' },
-	{ id: 'ctl-resume', kind: 'chip', chapter: 9, box: chip(648, 254, 78), label: 'Resume()' },
-	{ id: 'ctl-restart', kind: 'chip', chapter: 9, box: chip(570, 290, 100), label: 'Restart()' },
-	{ id: 'ctl-stop', kind: 'chip', chapter: 9, box: chip(678, 290, 64), label: 'Stop()' },
+	// 10. Control: two rows of two above the core's card, inside its x span (570 to 770).
+	{ id: 'ctl-pause', kind: 'chip', chapter: 10, box: chip(570, 254, 70), label: 'Pause()' },
+	{ id: 'ctl-resume', kind: 'chip', chapter: 10, box: chip(648, 254, 78), label: 'Resume()' },
+	{ id: 'ctl-restart', kind: 'chip', chapter: 10, box: chip(570, 290, 100), label: 'Restart()' },
+	{ id: 'ctl-stop', kind: 'chip', chapter: 10, box: chip(678, 290, 64), label: 'Stop()' },
 ];
 
 // Each line stops 2 units short of the pieces it joins. Where lines split or join, the shorter one runs
@@ -153,22 +163,38 @@ export const CONNS: Conn[] = [
 	{ id: 'result-to-r-error', kind: 'line', chapter: 3, d: 'M1258 398L1278 426' },
 
 	// SQLite. Add() writes to the queue, the worker takes from its head, and its ack goes to the tray.
-	{ id: 's-add-to-s-queue', kind: 'line', chapter: 7, d: 'M122 666V812H238' },
-	{ id: 's-queue-to-sqlite', kind: 'line', chapter: 7, d: 'M412 812H460V692' },
+	{ id: 's-add-to-s-queue', kind: 'line', chapter: 8, d: 'M122 666V812H238' },
+	{ id: 's-queue-to-sqlite', kind: 'line', chapter: 8, d: 'M412 812H460V692' },
 	{
 		id: 'sqlite-to-s-tray',
 		kind: 'ack',
-		chapter: 7,
+		chapter: 8,
 		d: 'M540 692V886H412',
 		label: { text: 'ACK', x: 548, y: 802 }, // right of the line, where the mockup has it
 	},
 
 	// Redis. Program A adds, Redis wakes B and C down the lines they pull jobs through, and each acks to the tray.
-	{ id: 'a-add-to-r-queue2', kind: 'line', chapter: 8, d: 'M771 730H867V702H888' },
-	{ id: 'r-queue2-to-redis-b', kind: 'line', chapter: 8, d: 'M1062 702H1095V660H1128' },
-	{ id: 'r-queue2-to-redis-c', kind: 'line', chapter: 8, d: 'M1095 702V830H1128' },
-	{ id: 'redis-b-to-r-tray', kind: 'ack', chapter: 8, d: 'M1128 680H1087V776H1062' },
-	{ id: 'redis-c-to-r-tray', kind: 'ack', chapter: 8, d: 'M1128 845H1087V776' },
+	{ id: 'a-add-to-r-queue2', kind: 'line', chapter: 9, d: 'M771 730H867V702H888' },
+	{ id: 'r-queue2-to-redis-b', kind: 'line', chapter: 9, d: 'M1062 702H1095V660H1128' },
+	{ id: 'r-queue2-to-redis-c', kind: 'line', chapter: 9, d: 'M1095 702V830H1128' },
+	{ id: 'redis-b-to-r-tray', kind: 'ack', chapter: 9, d: 'M1128 680H1087V776H1062' },
+	{ id: 'redis-c-to-r-tray', kind: 'ack', chapter: 9, d: 'M1128 845H1087V776' },
+
+	// The workflow. Submit() starts it, each task's line runs to the tasks that wait for it, a ready task's job goes
+	// down to the result worker's queue, joining Add()'s line, and each job's outcome comes back up to the workflow.
+	{ id: 'wf-submit-to-wf', kind: 'line', chapter: 7, d: 'M886 225H898' },
+	{ id: 'wf-reserve-to-label', kind: 'line', chapter: 7, d: 'M1001 219L1036 204' },
+	{ id: 'wf-reserve-to-charge', kind: 'line', chapter: 7, d: 'M1001 231L1036 246' },
+	{ id: 'wf-label-to-ship', kind: 'line', chapter: 7, d: 'M1114 204L1149 219' },
+	{ id: 'wf-charge-to-ship', kind: 'line', chapter: 7, d: 'M1114 246L1149 231' },
+	{ id: 'wf-to-r-queue', kind: 'line', chapter: 7, d: 'M919 287V390' },
+	{
+		id: 'result-to-wf',
+		kind: 'ack',
+		chapter: 7,
+		d: 'M1241 353V287',
+		label: { text: 'OUTCOME', x: 1249, y: 312 }, // right of the line, clear of the result worker's label
+	},
 ];
 
 /**
@@ -233,13 +259,15 @@ export const REGIONS: Box[] = [
 	around('p-add', 'prio', 'loop', 'core'), // 4. Priority
 	around('p-add', 'c-add', 'prio', 'queue-c', 'strategy', 'loop', 'core'), // 5. Many queues, one worker
 	around('publish', 'topic', 'second', 'core'), // 6. Topics
-	around('s-prog', 's-store'), // 7. SQLite
-	around('a-prog', 'b-prog', 'c-prog', 'r-store'), // 8. Redis
-	// 9. Control, with the queue where jobs wait, and the topic and the second worker, which are on by then. The box
+	// 7. The workflow, with the results row its jobs run in.
+	around('wf-submit', 'wf', 'r-add', 'r-queue', 'result', 'r-value', 'r-error'),
+	around('s-prog', 's-store'), // 8. SQLite
+	around('a-prog', 'b-prog', 'c-prog', 'r-store'), // 9. Redis
+	// 10. Control, with the queue where jobs wait, and the topic and the second worker, which are on by then. The box
 	// reaches up to y 36, so the camera sits at y 238: the SQLite program below is out of view, its label too, which
 	// at y 282 still showed through the top of the caption band, where the band is not yet opaque.
 	upTo(around('queue', 'loop', 'core', 'ctl-pause', 'ctl-resume', 'ctl-restart', 'ctl-stop', 'topic', 'second'), 36),
-	union(PIECES.map((p) => p.box)), // 10. Everything together
+	union(PIECES.map((p) => p.box)), // 11. Everything together
 ];
 
 /** The camera that fits `box` and a margin into the map area, centred on it and never zoomed in past 1.1. */

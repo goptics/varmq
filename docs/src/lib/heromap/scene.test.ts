@@ -23,24 +23,24 @@ describe('scene', () => {
 		for (const a of PIECES) for (const b of PIECES)
 			if (a !== b && a.parent === b.parent && a.id < b.id) assert.ok(!overlap(a.box, b.box), `${a.id} × ${b.id}`);
 	});
-	it('frames chapters 1–9 with readable labels and the finale with everything', () => {
-		for (let n = 1; n <= 9; n++) {
+	it('frames chapters 1–10 with readable labels and the finale with everything', () => {
+		for (let n = 1; n <= 10; n++) {
 			const c = frame(REGIONS[n - 1]);
 			assert.ok(inside(REGIONS[n - 1], view(c)), `chapter ${n}`);
 			const px = (LABEL_PX * c.s * MIN_SQUARE) / VIEW.w;
 			assert.equal(labelOpacity((c.s * MIN_SQUARE) / VIEW.w), 1, `chapter ${n} labels at ${px}px`);
 		}
-		assert.ok(frame(REGIONS[8]).s >= 0.6, `chapter 9 scale ${frame(REGIONS[8]).s}`);
-		for (const p of PIECES) assert.ok(inside(p.box, view(frame(REGIONS[9]))), p.id);
+		assert.ok(frame(REGIONS[9]).s >= 0.6, `chapter 10 scale ${frame(REGIONS[9]).s}`);
+		for (const p of PIECES) assert.ok(inside(p.box, view(frame(REGIONS[10]))), p.id);
 	});
 	it('fades labels between 5.75 and 7 px on screen, and hides the finale\'s on the largest square', () => {
 		assert.equal(labelOpacity(5.75 / LABEL_PX), 0);
 		assert.equal(labelOpacity(7 / LABEL_PX), 1);
-		assert.equal(labelOpacity((frame(REGIONS[9]).s * MAX_SQUARE) / VIEW.w), 0);
+		assert.equal(labelOpacity((frame(REGIONS[10]).s * MAX_SQUARE) / VIEW.w), 0);
 	});
 	it('has unique ids and a chapter for every piece and line', () => {
 		const ids = [...PIECES, ...CONNS].map(p => p.id);
 		assert.equal(new Set(ids).size, ids.length);
-		for (const p of [...PIECES, ...CONNS]) assert.ok(p.chapter >= 1 && p.chapter <= 9, p.id);
+		for (const p of [...PIECES, ...CONNS]) assert.ok(p.chapter >= 1 && p.chapter <= 10, p.id);
 	});
 });

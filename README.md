@@ -154,7 +154,7 @@ j := varmq.OpenResultJob[string](rq.NewQueue("thumbs"), job.ID()) // OpenJob / O
 s, err = j.Result()
 ```
 
-Needs redisq v1.6.0+ or sqliteq v0.4.0+. Older releases (redisq v1.5.1, sqliteq v0.3.0) lack `Reject` and do not compile with this VarMQ. See the [versions table](https://varmq.goptics.org/start/installation/#versions).
+Needs a current redisq or sqliteq. Older releases (redisq v1.5.1 and older, sqliteq v0.3.0 and older) lack `Reject` and do not compile with this VarMQ. See the [versions table](https://varmq.goptics.org/start/installation/#versions).
 
 On a bound handle, `Wait`, `Err` and `Result` work as with in-memory queues when the storage reports outcomes (`OutcomeWatcher`: redisq and sqliteq). A failed job's `Err` is a `*varmq.RemoteError`, with the error text only. A result over 64 KiB is dropped (`ErrNoResult`). Custom storage without `OutcomeWatcher` gives `ErrDetached`. A job added without an ID gets a random one, so its outcome can be matched.
 

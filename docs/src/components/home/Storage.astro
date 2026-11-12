@@ -5,7 +5,7 @@ import '../../lib/heromap/map.css';
 import '../../styles/home.css';
 import { StillDocument } from '../../lib/heromap/still';
 import { highlightGo } from '../ui/go';
-import { LOGOS } from '../../lib/heromap/render';
+import { STORES } from '../ui/stores';
 import { still } from './store';
 
 const stage = (still(new StillDocument() as unknown as Document).stage.svg as unknown as { outerHTML: string }).outerHTML;
@@ -13,9 +13,7 @@ const stage = (still(new StillDocument() as unknown as Document).stage.svg as un
 const tabs = [
 	{
 		key: 'memory',
-		label: 'In memory',
-		// A memory chip, drawn on the logos' 24-unit grid.
-		icon: 'M5 5h14v14H5zm3 3v8h8V8zM8 1h2v3H8zm3 0h2v3h-2zm3 0h2v3h-2zM8 20h2v3H8zm3 0h2v3h-2zm3 0h2v3h-2zM1 8h3v2H1zm0 3h3v2H1zm0 3h3v2H1zm19-6h3v2h-3zm0 3h3v2h-3zm0 3h3v2h-3z',
+		...STORES.memory,
 		text: 'Built in. Plain queues, priority queues and topics live in your process. They have nothing to set up, and they end when the process ends.',
 		note: 'Use it when a lost job is fine, or when you can add it again.',
 		file: 'main.go',
@@ -28,8 +26,7 @@ pq := worker.BindPriorityQueue()`,
 	},
 	{
 		key: 'sqlite',
-		label: 'SQLite',
-		icon: LOGOS['s-store'].d,
+		...STORES.sqlite,
 		text: 'sqliteq keeps jobs in local SQLite files, so a single process keeps them across a restart with no server to run.',
 		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
 		file: 'main.go',
@@ -49,8 +46,7 @@ queue := worker.WithQueue(pq)`,
 	},
 	{
 		key: 'redis',
-		label: 'Redis',
-		icon: LOGOS['r-store'].d,
+		...STORES.redis,
 		text: 'redisq keeps jobs in Redis, so they survive a restart. Several processes can share one queue, and each job goes to one of them.',
 		note: 'A job that was running when the process died can run again. Write jobs so a second run is safe.',
 		file: 'main.go',

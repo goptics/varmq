@@ -45,6 +45,8 @@
 	--vm-ghost: color-mix(in srgb, var(--brand) 75%, transparent);
 	--vm-check: #095e46;
 	/* A lit control chip's text is green text, so --accent-text, on a lighter tint than the dark map's for its 4.5:1. */
+	--vm-wait: color-mix(in srgb, var(--ink-3) 7%, var(--paper));
+	--vm-undo: color-mix(in srgb, #6b4bb8 12%, var(--paper));
 	--vm-lit: color-mix(in srgb, var(--brand) 8%, var(--vm-chip));
 	--vm-lit-ink: var(--accent-text);
 	--vm-card: color-mix(in srgb, var(--brand) 14%, transparent);
@@ -95,6 +97,8 @@
 	--vm-go-fill: rgba(68, 191, 158, 0.1);
 	--vm-ghost: rgba(68, 191, 158, 0.3);
 	--vm-check: #d6fff0;
+	--vm-wait: #171c22;
+	--vm-undo: #1d1a2e;
 	--vm-lit: color-mix(in srgb, var(--vm-go) 18%, var(--vm-chip));
 	--vm-lit-ink: var(--vm-go);
 	--vm-card: rgba(68, 191, 158, 0.04);
@@ -305,6 +309,42 @@ varmq-map .vm-svg:not(.vm-under) {
 
 :is(varmq-map, .vm-mini) .vm-error > .vm-text {
 	fill: var(--vm-red);
+}
+
+/* A workflow task's states, each a layer over its chip: waiting and cancelled are grey, cancelled struck
+   through (a dashed edge would show the chip's own between its dashes), and undone is the stores' purple. Done and failed are the value and error chips' tones, above. */
+:is(varmq-map, .vm-mini) .vm-mark > .vm-shape {
+	stroke-width: max(1, var(--vm-floor));
+}
+
+:is(varmq-map, .vm-mini) .vm-wait > .vm-shape {
+	fill: var(--vm-wait);
+	stroke: var(--vm-program-edge);
+}
+
+:is(varmq-map, .vm-mini) .vm-wait > .vm-text {
+	fill: var(--vm-ink);
+}
+
+:is(varmq-map, .vm-mini) .vm-cancel > .vm-text {
+	text-decoration: line-through;
+}
+
+:is(varmq-map, .vm-mini) .vm-undo > .vm-shape {
+	fill: var(--vm-undo);
+	stroke: var(--vm-store-edge);
+}
+
+:is(varmq-map, .vm-mini) .vm-undo > .vm-text {
+	fill: var(--vm-pulse);
+}
+
+:is(varmq-map, .vm-mini) .vm-label.vm-wf-failed {
+	fill: var(--vm-red);
+}
+
+:is(varmq-map, .vm-mini) :is(.vm-label.vm-wf-completed, .vm-label.vm-wf-compensated) {
+	fill: var(--vm-green);
 }
 
 :is(varmq-map, .vm-mini) .vm-flash {

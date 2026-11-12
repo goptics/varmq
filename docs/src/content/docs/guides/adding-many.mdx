@@ -6,7 +6,7 @@ description: "Add a slice of jobs in one call with AddAll, then wait for the gro
 import GoPlay from '../../../components/GoPlay.astro';
 import AddAllCompare from '../../../components/guides-a/AddAllCompare.astro';
 
-[`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) queues a slice of [`Item`](https://pkg.go.dev/github.com/goptics/varmq#Item) values in one call. It returns one handle for the whole group, not one per job. It is a method of the in-memory queues: persistent and distributed queues have only [`Add`](https://pkg.go.dev/github.com/goptics/varmq#Queue.Add).
+[`AddAll`](https://pkg.go.dev/github.com/goptics/varmq#Queue.AddAll) queues a slice of [`Item`](https://pkg.go.dev/github.com/goptics/varmq#Item) values in one call. It returns one handle for the whole group, not one per job. It works on in-memory queues and on queues over shared storage (persistent and distributed).
 
 An `Item` has three fields:
 

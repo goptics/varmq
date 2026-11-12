@@ -124,6 +124,54 @@ topic.Publish(2)`,
 		source: { label: 'topic-subscribe', href: `${EXAMPLES}/topic-subscribe` },
 	},
 	{
+		code: `wf := varmq.NewWorkflow(varmq.NewWorkflowStore())
+
+r := wf.Add("reserve", queue, "reserve stock")
+r.Undo(queue, "release stock")
+l := wf.Add("label", queue, "print label").After(r)
+l.Undo(queue, "void label")
+c := wf.Add("charge", queue, "charge card").After(r)
+wf.Add("ship", queue, "ship order").After(l, c)
+
+wf.Submit(ctx)
+
+// in the worker function: an undo job
+if varmq.TaskOf(j).Undo {
+	return undo(j.Data())
+}`,
+		lines: [[1, 3, 5, 7, 8], [10], [5, 7], [7, 8], [12, 13, 14, 15]],
+		phone: {
+			code: `wf := varmq.NewWorkflow(
+	varmq.NewWorkflowStore(),
+)
+
+r := wf.Add(
+	"reserve", queue, "reserve stock",
+)
+r.Undo(queue, "release stock")
+l := wf.Add(
+	"label", queue, "print label",
+).After(r)
+l.Undo(queue, "void label")
+c := wf.Add(
+	"charge", queue, "charge card",
+).After(r)
+wf.Add(
+	"ship", queue, "ship order",
+).After(l, c)
+
+wf.Submit(ctx)
+
+// in the worker function: an undo job
+if varmq.TaskOf(j).Undo {
+	return undo(j.Data())
+}`,
+			// A phone's code window shows about six lines: each caption lights one run of lines that fits it.
+			lines: [[1, 2, 3], [20], [9, 10, 11, 12, 13, 14, 15], [13, 14, 15, 16, 17, 18], [22, 23, 24, 25]],
+		},
+		source: { label: 'workflows-order', href: `${EXAMPLES}/workflows-order` },
+	},
+	{
 		code: `sdb, _ := sqliteq.New("data")
 pq, _ := sdb.NewQueue("jobs")
 
