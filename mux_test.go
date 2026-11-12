@@ -2692,6 +2692,9 @@ func TestHubTiming(t *testing.T) {
 	assert.Equal(t, 2500*time.Millisecond, h.clampBeat(2500))
 	assert.Equal(t, time.Second, h.clampBeat(-5), "only absent or 0 is the default")
 	assert.Equal(t, 2*time.Second, (&hub{cfg: newHubConfig([]HubOption{WithHubHeartbeat(2 * time.Second)})}).clampBeat(0))
+	for _, d := range []time.Duration{0, -time.Second} {
+		assert.Equal(t, hubDefaultBeat, newHubConfig([]HubOption{WithHubHeartbeat(d)}).heartbeat, "%v falls back to the default", d)
+	}
 
 	d := h.nextBackoff(0, false)
 	assert.Equal(t, time.Second, d, "first retry within 0.5-1 s")
@@ -3267,6 +3270,31 @@ func TestHubQueueFull(t *testing.T) {
 	assert.Contains(t, err.Error(), "queue")
 }
 
+// A full frame queue that gets room again is no fault: the stream stays.
+func TestHubQueueRoom(t *testing.T) {
+	st := &hubBlockingStore{hubJobStore: hubJobStore{"custom:hub-room"}, release: make(chan struct{}), entered: make(chan struct{}, 256)}
+	queueRegistry.Store(st.id, st)
+	t.Cleanup(func() { queueRegistry.Delete(st.id) })
+	f := newFakeHub(t)
+	errs, _ := f.connect(t) // hello: 5 s, the watchdog stays far
+	s := within(t, f.streams)
+
+	n := hubMaxInFlight + hubQueued + 1 // the last one waits in the reader
+	for i := range n {
+		s.request("q"+strconv.Itoa(i), "GET", "/queues/"+st.id+"/jobs?state=pending")
+	}
+	for range hubMaxInFlight {
+		within(t, st.entered)
+	}
+	time.Sleep(50 * time.Millisecond) // the reader is at the full queue
+	close(st.release)
+	for range n {
+		assert.Equal(t, "200", within(t, f.replies).status)
+	}
+	assert.Empty(t, f.streams, "no redial")
+	assert.Empty(t, errs)
+}
+
 // heartbeat_ms in hello sets the beat; absent, the configured one does.
 func TestHubHelloHeartbeat(t *testing.T) {
 	t.Run("from hello", func(t *testing.T) {
@@ -3482,6 +3510,31 @@ func TestHubBeatUnauthorized(t *testing.T) {
 	within(t, f.streams)
 }
 
+// A beat answered with another status is reported; the stream stays.
+func TestHubBeatStatusReported(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(20))
+	f.beatStatus.Store(http.StatusInternalServerError)
+	errs, _ := f.connect(t)
+	s := within(t, f.streams)
+	errIs(t, errs, hubStatus("beat", http.StatusInternalServerError))
+	s.request("ok", "GET", "/health")
+	assert.Equal(t, "200", f.reply(t, "ok").status)
+	assert.Empty(t, f.streams, "no redial")
+}
+
+// A dial that fails with no watchdog cause is reported as it is.
+func TestHubDialError(t *testing.T) {
+	f := newFakeHub(t)
+	f.srv.Close()
+	errs, _ := f.connect(t)
+	err := errIs(t, errs, func(err error) bool {
+		var op *net.OpError
+		return errors.As(err, &op)
+	})
+	assert.NotErrorIs(t, err, errHubStale)
+}
+
 // A reply the hub answers with an unexpected status is reported; the
 // stream stays.
 func TestHubReplyStatus(t *testing.T) {
@@ -3521,6 +3574,29 @@ func TestHubReplyErrorRate(t *testing.T) {
 	})
 	assert.Contains(t, err.Error(), "(and ")
 	assert.NotContains(t, err.Error(), f.token)
+}
+
+// An error that comes after the interval, while others were suppressed,
+// goes out in-stream with the count of the suppressed.
+func TestHubReplyErrorRateAfterInterval(t *testing.T) {
+	f := newFakeHub(t)
+	f.hello.Store(hubHello(400)) // the report interval
+	f.replyStatus.Store(http.StatusInternalServerError)
+	errs, _ := f.connect(t)
+	s := within(t, f.streams)
+	for i := range 3 {
+		id := "r" + strconv.Itoa(i)
+		s.request(id, "GET", "/health")
+		f.reply(t, id)
+	}
+	errIs(t, errs, hubStatus("reply", http.StatusInternalServerError))
+	time.Sleep(450 * time.Millisecond)
+	s.request("late", "GET", "/health")
+	f.reply(t, "late")
+	err := errIs(t, errs, func(err error) bool {
+		return hubStatus("reply", http.StatusInternalServerError)(err) && strings.Contains(err.Error(), "more)")
+	})
+	assert.Contains(t, err.Error(), "(and ")
 }
 
 // The default client keeps idle connections for less than the hub's 30 s.
