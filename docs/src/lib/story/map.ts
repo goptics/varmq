@@ -25,9 +25,9 @@ export interface MapHandle {
 	 */
 	rewind(to: number, most: number, then?: () => void): void;
 	/**
-	 * Shows the map at `to`, every piece in place, under the camera it shows now, and moves the camera out to `to`'s
-	 * view over `ms`, then holds and calls `then` if given: the tour's close, pulling back from a step to the whole
-	 * map, with everything around the step already there. The seek and the camera put back happen in one task, so no
+	 * The tour's close, pulling back from a step to the whole map: it shows `to`, every piece in place, under the
+	 * camera it showed, and moves the camera out to `to`'s view over `ms` while all its text fades out (map.css,
+	 * data-quiet); then it holds and calls `then` if given. The seek and the camera put back happen in one task, so no
 	 * frame shows the whole view before the move.
 	 */
 	pullBack(to: number, ms: number, then?: () => void): void;
@@ -111,6 +111,8 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		cancelAnimationFrame(frameId);
 		frames?.stop();
 		frames = undefined;
+		// Whatever comes next, the labels are back; a pull back sets them quiet again after its own seek.
+		delete host.dataset.quiet;
 	};
 
 	const seek = (at: number) => {
@@ -221,6 +223,8 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		}
 		const from = { ...(camera as Camera) };
 		seek(to);
+		// After the seek, whose cancel lets the text back: it fades from what the step showed (map.css).
+		host.dataset.quiet = '';
 		const goal = { ...(camera as Camera) };
 		nodes.setCamera(from);
 		const begun = performance.now();
@@ -238,6 +242,7 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 				frameId = requestAnimationFrame(tick);
 				return;
 			}
+			delete host.dataset.quiet;
 			then?.();
 		};
 		frameId = requestAnimationFrame(tick);
