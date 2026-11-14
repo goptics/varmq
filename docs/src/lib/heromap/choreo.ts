@@ -549,9 +549,11 @@ export class Choreo {
 				score.start(r.ring, { scale: 0, opacity: 1 });
 				score.start(r.ghost, { opacity: 0 });
 				score.start(r.progress, { opacity: 1 });
-				score.start(r.check, { opacity: 1 });
+				for (const mark of [r.check, r.cross]) {
+					score.start(mark, { opacity: 1 });
+					score.start(score.drawable(mark), { draw: [0, 0] });
+				}
 				score.start(score.drawable(r.progress), { draw: [0, 0] });
-				score.start(score.drawable(r.check), { draw: [0, 0] });
 			});
 		}
 		// The rest of the text on the map, a chip's and the ACK line's, shows wherever its piece does (`wrap`).
@@ -1019,16 +1021,17 @@ export class Choreo {
 		this.score.tween(arc, { draw: [0, to] }, start, stop - start, E.linear, { draw: [0, 0] });
 	}
 
-	/** The job is done: it goes, its ring pulses, and a check draws and fades. */
+	/** The job is done: it goes, its ring pulses, and a check, or for an error a cross, draws and fades. */
 	private done(worker: string, i: number, at: number, sq: Square, outcome?: 'value' | 'error') {
 		const { score, nodes } = this;
 		const r = nodes.ring(worker, i);
 		each(score, sq.els, { scale: 0, opacity: 0 }, at, 260, E.vanish);
 		score.tween(r.ring, { scale: PULSE.scale }, at, PULSE.up, E.fade);
 		score.tween(r.ring, { scale: 1 }, at + PULSE.up, PULSE.down, E.pop);
-		const check = score.drawable(r.check);
-		score.tween(check, { draw: [0, 1] }, at + 60, 260, E.fade, { draw: [0, 0] });
-		score.tween(check, { draw: [1, 1] }, at + 640, 260, E.out);
+		// The cross's four arms each restart the dash, so a quarter of its length draws all of it (render.ts).
+		const [mark, all] = outcome === 'error' ? [score.drawable(r.cross), 0.25] : [score.drawable(r.check), 1];
+		score.tween(mark, { draw: [0, all] }, at + 60, 260, E.fade, { draw: [0, 0] });
+		score.tween(mark, { draw: [all, all] }, at + 640, 260, E.out);
 		score.tween(score.drawable(r.progress), { draw: [1, 1] }, at + 120, 300, E.out);
 		if (outcome) {
 			// A result worker hands back a value or an error: a dot takes it to its chip.
@@ -1240,7 +1243,7 @@ export class Choreo {
 		RINGS[worker].forEach((_, i) => {
 			const r = nodes.ring(worker, i);
 			score.tween(r.progress, { opacity: 0 }, at + 60, 380, E.out);
-			score.tween(r.check, { opacity: 0 }, at + 60, 380, E.out);
+			for (const mark of [r.check, r.cross]) score.tween(mark, { opacity: 0 }, at + 60, 380, E.out);
 			score.tween(r.ghost, { opacity: 0 }, at + 300, 400, E.out);
 		});
 	}
@@ -1259,9 +1262,11 @@ export class Choreo {
 		RINGS[worker].forEach((_, i) => {
 			const r = nodes.ring(worker, i);
 			score.set(score.drawable(r.progress), { draw: [0, 0] }, at);
-			score.set(score.drawable(r.check), { draw: [0, 0] }, at);
 			score.set(r.progress, { opacity: 1 }, at + 250);
-			score.set(r.check, { opacity: 1 }, at + 250);
+			for (const mark of [r.check, r.cross]) {
+				score.set(score.drawable(mark), { draw: [0, 0] }, at);
+				score.set(mark, { opacity: 1 }, at + 250);
+			}
 			score.tween(r.ghost, { opacity: 1 }, at + 250, 400, E.fade);
 		});
 	}

@@ -385,12 +385,17 @@ varmq-map .vm-svg:not(.vm-under) {
 	stroke-linecap: round;
 }
 
-:is(varmq-map, .vm-mini) .vm-check {
+:is(varmq-map, .vm-mini) :is(.vm-check, .vm-cross) {
 	fill: none;
 	stroke: var(--vm-check);
 	stroke-width: max(2, var(--vm-floor));
 	stroke-linecap: round;
 	stroke-linejoin: round;
+}
+
+/* An error's cross: the error chip's red, and a cross, not a check, so colour is not its only sign. */
+:is(varmq-map, .vm-mini) .vm-cross {
+	stroke: var(--vm-red);
 }
 
 /* A job's edge matches its fill in the dark, so an in-flight record is its fill-opacity alone. */

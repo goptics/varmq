@@ -19,8 +19,8 @@
 //   back as itself.
 // - `ring(worker, i)`: for each place in `RINGS[worker]`, the ring (a group at scale 1, shown if the finale starts
 //   with it and hidden otherwise, as the still frame has them), its progress arc (r 15, drawing clockwise from 12
-//   o'clock) and its check, both hidden, and the dashed ghost under the ring, shown. The arc and the check sit
-//   beside the ring's group, so a pulse of the ring leaves them be.
+//   o'clock), its check (a value) and its cross (an error), all hidden, and the dashed ghost under the ring, shown.
+//   The arc and the marks sit beside the ring's group, so a pulse of the ring leaves them be.
 // - `job(id)`: [main, trail 1, trail 2] for every job and published value in the chapters, hidden at the world's
 //   origin. Each is a lane slot's square centred on its own origin, so `x` and `y` place it. The trails' faintness
 //   (.35 and .15) is on their square: show all three at opacity 1. A priority job's main square shows its number.
@@ -64,7 +64,7 @@ export interface MapNodes {
 	ring(
 		worker: string,
 		i: number,
-	): { ring: SVGGElement; progress: SVGCircleElement; check: SVGPathElement; ghost: SVGElement };
+	): { ring: SVGGElement; progress: SVGCircleElement; check: SVGPathElement; cross: SVGPathElement; ghost: SVGElement };
 	/** [main, trail 1, trail 2] */
 	job(id: string): SVGGElement[];
 	/** A store record (SQLite and Redis chapters). */
@@ -352,7 +352,10 @@ export function renderMap(host: HTMLElement): MapNodes {
 			});
 			const tick = `M${x - 4.7} ${y}l3.1 3.5 6.3-7`;
 			const check = add(world, 'path', { class: 'vm-check', d: tick, ...data, ...HIDDEN });
-			rings.set(`${worker}:${i}`, { ring, progress, check, ghost });
+			// Four arms out from the centre: a dash restarts on each subpath, so a part drawn is a smaller cross.
+			const x2 = ['-3.5-3.5', '3.5 3.5', '3.5-3.5', '-3.5 3.5'].map((arm) => `M${x} ${y}l${arm}`).join('');
+			const cross = add(world, 'path', { class: 'vm-cross', d: x2, ...data, ...HIDDEN });
+			rings.set(`${worker}:${i}`, { ring, progress, check, cross, ghost });
 		});
 	}
 
