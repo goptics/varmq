@@ -351,7 +351,8 @@
 }
 
 /* The slider is a point at Skip's centre, so its box covers nothing: only the band over the track takes the pointer,
-   and it sits over the button, which stays one tap off the band. */
+   and it sits over the button, which stays one tap off the band. A finger on the band drags the knob, never the page
+   (main.ts). */
 .st-dock .st-arc {
 	--st-arc-scale: calc(34 / 88);
 	--st-tick-r: 2.5;
@@ -364,6 +365,7 @@
 	height: 0;
 	outline: none;
 	pointer-events: none;
+	touch-action: none;
 	transition: --st-arc-scale 240ms var(--ease);
 }
 
@@ -592,6 +594,12 @@
 
 	.st-notes button {
 		padding-block: calc((44px - 1lh) / 2);
+	}
+
+	/* The arc's band is 24 px at rest, r 22 to 46: it starts 2 px inside Skip's edge and is over the button there, so
+	   a finger that lands on the button's rim still takes the arc. Held, it keeps the 20 px above. */
+	.st-arc-band {
+		stroke-width: calc(2 * (88px * var(--st-arc-scale) - 22px));
 	}
 }
 

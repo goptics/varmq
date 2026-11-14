@@ -3,7 +3,7 @@ import { MagicMoveRenderer } from '@shikijs/magic-move/renderer';
 import type { KeyedTokensInfo } from '@shikijs/magic-move/types';
 import CODE from 'virtual:code-steps';
 import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
-import { HALF, QUARTER, arcPath, tickPoint, type Span } from './arc.ts';
+import { HALF, QUARTER, arcPath, stepAt, tickPoint, type Span } from './arc.ts';
 import { mountMap } from './map.ts';
 import { STEPS, STOPS, STORY_TEXT, until, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
@@ -12,8 +12,9 @@ import { wheelSteps } from './wheel.ts';
 // starts the story: the page then snaps a caption at a time, and each scroll plays the next caption of a step on the
 // map, at the map's own pace, while the one code block morphs into that caption's code and lights the lines it is
 // about. A scroll back up within a step plays its last caption backward; a step reached from another one plays from
-// its start. Under reduced motion a caption shows its last frame. Skip, Esc, or a scroll on past the last step ends the
-// tour, and the page is the intro and the sections under it again.
+// its start, and so does a step jumped to on the arc over Skip. Under reduced motion a caption shows its last frame.
+// Skip, Esc, or a scroll on past the last step ends the tour, and the page is the intro and the sections under it
+// again.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
 /** The snap positions: the intro, then one per caption (STOPS). */
@@ -128,6 +129,11 @@ let span: Span = short.matches ? QUARTER : HALF;
 /** The arc's ticks, one per step, as drawArc made them. */
 let ticks: SVGCircleElement[] = [];
 let knob: SVGCircleElement;
+/** The step picked on the arc: the step shown, but for one the reader points at, holds the knob on, or keys to. */
+let preview = 0;
+/** The pointer that holds the arc, or -1, and the band it holds it by (its capture). */
+let held = -1;
+let holder: Element | null = null;
 
 /**
  * Draws the arc for the current span: the track, a wider band over it that takes the pointer, a tick per step, and
@@ -167,19 +173,12 @@ function paintArc(preview: number) {
 drawArc();
 short.addEventListener('change', () => {
 	span = short.matches ? QUARTER : HALF;
+	// A held arc lets go first: drawArc replaces the band that holds the pointer.
+	if (held >= 0) settle();
 	// The new track does not draw in again.
 	arc.removeAttribute('data-draw');
 	drawArc();
-	if (step >= 0) paintArc(step);
-});
-// The arc grows a little under the pointer, as it does with keyboard focus (story.css). Its band stays clear of Skip
-// at both sizes, so the pointer is still on it once it has grown.
-const onBand = (e: Event) => (e.target as Element).classList.contains('st-arc-band');
-arc.addEventListener('pointerover', (e) => {
-	if (onBand(e) && arc.dataset.state === 'rest') arc.dataset.state = 'hover';
-});
-arc.addEventListener('pointerout', (e) => {
-	if (onBand(e) && arc.dataset.state === 'hover') arc.dataset.state = 'rest';
+	if (step >= 0) paintArc(preview);
 });
 // The arc draws itself in once, as the tour starts (startTour, story.css).
 arc.addEventListener('animationend', (e) => {
@@ -311,7 +310,9 @@ function show(k: number, c: number, back = false) {
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
 	tell(`Step ${k + 1} of ${STEPS.length}: ${s.title}`);
-	paintArc(k);
+	// The knob goes to the step, and a pick from the pointer or the keys goes with it; one held stays where it is held.
+	if (held < 0) preview = k;
+	paintArc(preview);
 	const focused = notes.contains(document.activeElement);
 	notes.innerHTML = s.notes
 		.map((note, i) => `<li><button type="button" data-i="${i}" aria-describedby="st-does">${POINT}${note}</button></li>`)
@@ -402,7 +403,8 @@ const tick = () => {
 		at = k;
 		if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
-		} else show(stop.step, stop.caption, up);
+		} else show(stop.step, stop.caption, up && !leap);
+		leap = false;
 	}
 	if (Math.abs(position() - target) < 1 / height()) target = -1;
 };
@@ -418,10 +420,18 @@ addEventListener('resize', () => {
 showIntro();
 
 /** Scrolls to snap position k, snapping on the way if k is in the story above its last step. */
-function go(k: number) {
+function go(k: number, behavior: ScrollBehavior = motion()) {
 	target = k;
 	snapping();
-	scrollTo({ top: top() + k * height(), behavior: motion() });
+	scrollTo({ top: top() + k * height(), behavior });
+}
+
+/** Set by jump: the stop it heads for shows its step from the start, going up too. */
+let leap = false;
+/** Jumps to step k's first stop at once, no stop on the way shown, and step k plays from its start. */
+function jump(k: number) {
+	leap = true;
+	go(STOPS.findIndex((s) => s.step === k && s.caption === 0) + 1, 'instant');
 }
 
 /** Starts the tour: the track takes its stops, and step 1 shows and plays. */
@@ -443,6 +453,16 @@ function startTour() {
 	skip.disabled = false;
 	dock.inert = false;
 	arc.toggleAttribute('data-draw', true);
+	// On a reader's first tour the arc grows a moment, to say it can be held (story.css). Not under reduced motion.
+	clearTimeout(hinting);
+	if (!reduce.matches && !hinted()) {
+		arc.dataset.state = 'hint';
+		arcLabel.textContent = 'Drag to jump to a step';
+		// Unless the reader has taken the arc by then.
+		hinting = window.setTimeout(() => {
+			if (arc.dataset.state === 'hint') arc.dataset.state = 'rest';
+		}, 1200);
+	}
 	go(1);
 	title.focus({ preventScroll: true });
 }
@@ -469,6 +489,9 @@ function endTour(keep: boolean, back = false) {
 	at = 0;
 	skip.disabled = true;
 	dock.inert = true;
+	release();
+	leap = false;
+	clearTimeout(hinting);
 	arc.dataset.state = 'rest';
 	arc.removeAttribute('data-draw');
 	showIntro(back);
@@ -497,6 +520,126 @@ function endTour(keep: boolean, back = false) {
 
 tour.addEventListener('click', startTour);
 skip.addEventListener('click', () => endTour(false));
+
+// The arc over Skip jumps to a step. Under the pointer it grows a little and picks the step the pointer points at;
+// held, it is full size and its knob snaps from tick to tick, while the page stays where it is: the page jumps only
+// once the arc is let go, to the step picked. A tap picks and jumps at once. From the keyboard it is a slider: the
+// left and right arrows, Home and End pick, Enter jumps; up and down still scroll the tour. Let go on the step shown,
+// Esc, or a pointer taken away (cancelled, its capture lost, or let go outside the window) drops the pick.
+const onBand = (e: Event) => (e.target as Element).classList.contains('st-arc-band');
+
+/** The step the pointer points at: by its angle from the arc's centre, Skip's centre (arc.ts). */
+function stepUnder(e: PointerEvent) {
+	const c = arc.getBoundingClientRect();
+	return stepAt(e.clientX - c.left, e.clientY - c.top, STEPS.length, span);
+}
+
+/**
+ * Lets go of the pointer that holds the arc, if one does. It is not held any more first, so the lostpointercapture
+ * that follows is not taken for a cancel.
+ */
+function release() {
+	const id = held;
+	held = -1;
+	if (id >= 0 && holder?.hasPointerCapture(id)) holder.releasePointerCapture(id);
+	holder = null;
+}
+
+/**
+ * Drops a pick without a jump: the arc rests on the step shown, or, with a jump on its way, on the step it goes to.
+ * Off the tour there is no step to rest on.
+ */
+function settle() {
+	release();
+	arc.dataset.state = 'rest';
+	if (step < 0) return;
+	if (!leap) preview = step;
+	paintArc(preview);
+}
+
+/** Whether the hint has shown before on this browser, and marks it shown. Storage that cannot be read says no. */
+function hinted() {
+	try {
+		if (localStorage.getItem('varmq:tour-arc-hint')) return true;
+		localStorage.setItem('varmq:tour-arc-hint', '1');
+	} catch {
+		// No storage: the hint shows.
+	}
+	return false;
+}
+let hinting = 0;
+
+// Every state the reader puts the arc in paints it, so the hint's words leave the label.
+arc.addEventListener('pointerover', (e) => {
+	if (held >= 0 || !onBand(e)) return;
+	arc.dataset.state = 'hover';
+	preview = stepUnder(e);
+	paintArc(preview);
+});
+arc.addEventListener('pointermove', (e) => {
+	if (held >= 0 ? e.pointerId !== held : !onBand(e)) return;
+	if (held < 0) arc.dataset.state = 'hover';
+	const n = stepUnder(e);
+	if (n === preview) return;
+	preview = n;
+	paintArc(n);
+});
+arc.addEventListener('pointerleave', () => {
+	if (held < 0) settle();
+});
+// Held, the band keeps the pointer (its capture), and touch-action stops a finger on it scrolling the page (story.css).
+// The press selects no text and moves focus only here, to the slider, with no scroll, so Esc reaches it.
+arc.addEventListener('pointerdown', (e) => {
+	if (held >= 0 || e.button !== 0 || !onBand(e)) return;
+	e.preventDefault();
+	held = e.pointerId;
+	holder = e.target as Element;
+	holder.setPointerCapture(held);
+	arc.dataset.state = 'grab';
+	preview = stepUnder(e);
+	paintArc(preview);
+	arc.focus({ preventScroll: true });
+});
+arc.addEventListener('pointerup', (e) => {
+	if (e.pointerId !== held) return;
+	const out = e.clientX < 0 || e.clientY < 0 || e.clientX > innerWidth || e.clientY > innerHeight;
+	if (out || preview === step) return settle();
+	release();
+	arc.dataset.state = 'rest';
+	jump(preview);
+});
+const drop = (e: PointerEvent) => {
+	if (e.pointerId === held) settle();
+};
+arc.addEventListener('pointercancel', drop);
+arc.addEventListener('lostpointercapture', drop);
+
+arc.addEventListener('focus', () => {
+	// A press focuses the arc too (pointerdown): the arc is held then, and stays so.
+	if (held >= 0 || step < 0) return;
+	arc.dataset.state = 'hover';
+	if (!leap) preview = step;
+	paintArc(preview);
+});
+arc.addEventListener('blur', settle);
+// Each key the arc takes is defaultPrevented, so the page's own keys (below) leave it be: End on the arc picks the last
+// step, and does not stop the snapping. Esc with nothing to drop goes on to end the tour.
+arc.addEventListener('keydown', (e) => {
+	if (e.altKey || e.ctrlKey || e.metaKey) return;
+	const keys: Record<string, number> = { ArrowLeft: preview - 1, ArrowRight: preview + 1, Home: 0, End: Infinity };
+	if (Object.hasOwn(keys, e.key)) {
+		e.preventDefault();
+		if (arc.dataset.state === 'rest') arc.dataset.state = 'hover';
+		preview = Math.min(STEPS.length - 1, Math.max(0, keys[e.key]));
+		paintArc(preview);
+	} else if (e.key === 'Enter') {
+		e.preventDefault();
+		if (held < 0 && preview !== step) jump(preview);
+	} else if (e.key === 'Escape' && (held >= 0 || preview !== step)) {
+		e.preventDefault();
+		settle();
+	}
+});
 
 // Keyboard and touch scroll natively and snap a stop at a time. The wheel is taken over, so that one turn is one stop
 // (wheel.ts): snapping alone lets a short notch fall back to where it was. From the last step down, the page scrolls as
