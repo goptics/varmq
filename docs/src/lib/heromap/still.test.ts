@@ -30,6 +30,9 @@ describe('still map', () => {
 		const rings = Object.values(RINGS).reduce((n, places) => n + places.length, 0);
 		assert.equal(count(html, /class="vm-ring"/g), rings);
 		assert.equal(count(html, /class="vm-ghost"/g), rings);
+		// Each ring's two marks, both hidden in the still: a value's check and an error's cross.
+		assert.equal(count(html, /class="vm-check"[^>]*opacity="0"/g), rings);
+		assert.equal(count(html, /class="vm-cross"[^>]*opacity="0"/g), rings);
 	});
 	it('escapes text and attribute values', () => {
 		const el = new StillDocument().createElementNS('', 'text');

@@ -41,6 +41,7 @@ const ring = lookup(new Set(rings), 'ring', id => ({
 	ring: element(`${id} ring`),
 	progress: element(`${id} progress`),
 	check: element(`${id} check`),
+	cross: element(`${id} cross`),
 	ghost: element(`${id} ghost`),
 }));
 const nodes = {
