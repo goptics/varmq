@@ -136,7 +136,7 @@ func main() {
 
    The first prints a `200 OK` with no body. While a job is running, the next call shows the worker as `Pausing`, and later `Paused`, as [`Pause`](https://pkg.go.dev/github.com/goptics/varmq#Worker.Pause) does. Run `resume` once it reads `Paused`: on a worker that is still `Pausing`, it is refused (see [the status codes](#responses)). The last call changes the limit to 4.
 
-The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](https://github.com/goptics/vartop) is a separate terminal dashboard for VarMQ workers that reads this API, and the example's last comment suggests pointing it at `http://localhost:8080/api`.
+The repository's `examples/api-control` runs four named workers with a steady supply of jobs. [vartop](/operations/vartop/) is a separate web dashboard and command line that reads and controls this API across every process of a service. The example's last comment suggests pointing it at `http://localhost:8080/api`.
 
 ## Which workers it serves
 

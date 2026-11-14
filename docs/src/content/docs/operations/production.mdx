@@ -33,6 +33,7 @@ This page is a checklist. Each item says what to do and links to the page that e
 
 - **Protect the handler.** The REST API has no authentication. Anyone who can reach it can stop workers, read job payloads and cancel jobs. Listen on loopback, or put your own authentication in front. [Mounting it](/operations/rest-api/#mounting-it) has an example.
 - **Name the workers you want to control.** The API serves named workers only. [Which workers it serves](/operations/rest-api/#which-workers-it-serves) has the rules.
+- **Watch every process in one place.** [vartop](/operations/vartop/) shows the workers, queues, jobs and workflows of all your processes, and acts on them.
 
 ## Metrics and alerts
 

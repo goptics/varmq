@@ -1,0 +1,88 @@
+---
+title: Dashboard (vartop)
+description: "Watch and control every VarMQ process of a service from one dashboard, with vartop."
+---
+
+[vartop](https://github.com/goptics/vartop) is a dashboard and command line for the VarMQ processes of a service. It is a separate program: you run it on your machine, or anywhere that can reach your processes. It talks to each process through the [REST API](/operations/rest-api/), so it needs nothing in your code but `Handler` or `ConnectHub`.
+
+![The vartop dashboard: completed per second, failed per minute, pending jobs and workers by status, with one row and a 10-minute trend for each worker](https://raw.githubusercontent.com/goptics/vartop/main/docs/images/dashboard-light.png)
+
+This page covers the VarMQ side. For vartop itself (install, configuration, its pages and its limits), read the [vartop README](https://github.com/goptics/vartop#readme) and its [docs](https://github.com/goptics/vartop/tree/main/docs).
+
+## What it shows
+
+vartop merges every process of a service into one view, and it keeps the history in a local SQLite store.
+
+| vartop page | What it reads from VarMQ |
+|---|---|
+| Dashboard, instance grid | `GET /workers` of each process: status, concurrency, busy and idle, pending |
+| Worker page | `GET /workers/{name}`: counters, charts from 1 hour to 30 days, the queues and topics the worker pulls from |
+| Queues and job pages | `GET /queues`, `GET /queues/{id}/jobs`, `GET /queues/{id}/jobs/{jobId}` |
+| Workflows | `GET /workflows`, `GET /workflows/{id}`, `GET /workflow-counts` |
+
+From the same pages, and from its command line, vartop pauses, resumes, restarts, stops and resizes workers. It also pauses queues, and cancels jobs and workflows. Each action is a `PATCH` route of the REST API.
+
+A page that needs a newer API than a process serves says so. VarMQ v1.10.0 serves the worker routes only. The queue, job and workflow routes, and `ConnectHub`, come in the next release (REST API 1.6.0). Until then, use `go get github.com/goptics/varmq@main`.
+
+## Connect your processes
+
+There are two ways. Pick one for each vartop server.
+
+### vartop dials your processes
+
+Mount `Handler` on each process, as [Mounting it](/operations/rest-api/#mounting-it) shows:
+
+```go
+mux := http.NewServeMux()
+mux.Handle("/varmq/", varmq.Handler("/varmq"))
+http.ListenAndServe(":8080", mux)
+```
+
+Then give vartop the address of each process: a list of URLs, or a DNS name that resolves to every process (a Kubernetes headless Service, for example). vartop must reach each address.
+
+```bash
+go install github.com/goptics/vartop@latest
+vartop web    # a wizard asks for the server on first run
+```
+
+### Your processes dial vartop (hub)
+
+[`ConnectHub`](https://pkg.go.dev/github.com/goptics/varmq#ConnectHub) opens one stream from the process to vartop, and vartop sends its requests down that stream. The process needs no inbound port, and vartop needs no addresses. Use it when processes are short-lived, or when vartop cannot reach them.
+
+```go
+onErr := func(err error) { log.Printf("hub: %v", err) }
+go func() {
+	err := varmq.ConnectHub(ctx, "https://vartop.internal:7071", token,
+		varmq.WithHubErrHandler(onErr))
+	// a bad config returns at once
+	log.Printf("hub connection stopped: %v", err)
+}()
+```
+
+`token` is the token of a hub server in vartop's config, and vartop must run with `--hub-listen`. `ConnectHub` redials with backoff when the stream drops, and it returns when `ctx` ends.
+
+| Option | Effect |
+|---|---|
+| `WithHubErrHandler(f)` | Receives connection errors, such as a rejected token or a dropped stream. Without it, VarMQ does not report them. |
+| `WithHubReadOnly()` | Refuses every request but `GET`. vartop can show the process, but its actions fail. |
+| `WithHubNoPayloads()` | Sends job payloads as `null` and leaves out job results. Job error texts and workflow task reasons are still sent. |
+| `WithHubClient(c)` | Uses your `http.Client`, for custom TLS or a proxy. VarMQ never follows a redirect. |
+| `WithHubHeartbeat(d)` | Sets the heartbeat when the hub gives none. Default 5 s, clamped to 1–60 s. |
+| `WithHubInsecure()` | Allows plain `http://` to a host that is not loopback. The token then travels in clear text. |
+
+The [README](https://github.com/goptics/varmq#connect-to-vartop-hub) has the full rules, and [`spec/hub.md`](https://github.com/goptics/varmq/blob/main/spec/hub.md) is the protocol.
+
+## Name your processes and workers
+
+- **Name every worker you want to see.** The REST API serves named workers only. [Which workers it serves](/operations/rest-api/#which-workers-it-serves) has the rules.
+- **Give each process a stable ID.** vartop tells processes apart by the [instance header](/operations/rest-api/#which-instance-answered), which carries `varmq.InstanceID`. It is the hostname by default, which is the pod name on Kubernetes. Set `varmq.InstanceID` when several processes share a host. A hub refuses a second connection with the same ID.
+
+## Security
+
+:::caution
+Whoever reaches the REST API, or answers at the hub URL, can read job payloads and results, stop and resize workers, pause shared queues for every process, and cancel jobs and workflows.
+:::
+
+- **With `Handler`**, the API has no authentication. Keep it on a trusted network, or put a proxy in front that checks a bearer token, and give vartop that token.
+- **With `ConnectHub`**, the token proves the process to vartop, but only TLS and the hub URL prove vartop to the process. Use `https://`. Use `WithHubReadOnly` or `WithHubNoPayloads` when vartop needs less.
+- **The vartop dashboard listens on loopback only**, and it keeps tokens on its own side. Its [security model](https://github.com/goptics/vartop/blob/main/SECURITY.md) has the details.
