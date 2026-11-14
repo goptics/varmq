@@ -134,6 +134,12 @@ let preview = 0;
 /** The pointer that holds the arc, or -1, and the band it holds it by (its capture). */
 let held = -1;
 let holder: Element | null = null;
+/**
+ * The focus a press took to the arc (pointerdown), to give back once the arc is let go: to where it was in the story,
+ * or to nothing. A focused arc can show its hover look (:focus-visible) after the pointer has gone. Null when the
+ * press took none, as on an arc the keyboard had focused already.
+ */
+let lent: { to: HTMLElement | null } | null = null;
 
 /**
  * Draws the arc for the current span: the track, a wider band over it that takes the pointer, a tick per step, and
@@ -490,6 +496,8 @@ function endTour(keep: boolean, back = false) {
 	skip.disabled = true;
 	dock.inert = true;
 	release();
+	// Focus is endTour's to move.
+	lent = null;
 	leap = false;
 	clearTimeout(hinting);
 	arc.dataset.state = 'rest';
@@ -552,9 +560,20 @@ function release() {
 function settle() {
 	release();
 	arc.dataset.state = 'rest';
-	if (step < 0) return;
-	if (!leap) preview = step;
-	paintArc(preview);
+	if (step >= 0) {
+		if (!leap) preview = step;
+		paintArc(preview);
+	}
+	giveBack();
+}
+
+/** Gives back the focus a press took, if it took any. The arc's blur that follows settles it again, to no effect. */
+function giveBack() {
+	if (!lent) return;
+	const { to } = lent;
+	lent = null;
+	if (to) to.focus({ preventScroll: true });
+	else arc.blur();
 }
 
 /** Whether the hint has shown before on this browser, and marks it shown. Storage that cannot be read says no. */
@@ -588,7 +607,8 @@ arc.addEventListener('pointerleave', () => {
 	if (held < 0) settle();
 });
 // Held, the band keeps the pointer (its capture), and touch-action stops a finger on it scrolling the page (story.css).
-// The press selects no text and moves focus only here, to the slider, with no scroll, so Esc reaches it.
+// The press selects no text and moves focus only here, to the slider, with no scroll, so Esc reaches it while it is
+// held; letting go gives the focus back (giveBack).
 arc.addEventListener('pointerdown', (e) => {
 	if (held >= 0 || e.button !== 0 || !onBand(e)) return;
 	e.preventDefault();
@@ -598,6 +618,8 @@ arc.addEventListener('pointerdown', (e) => {
 	arc.dataset.state = 'grab';
 	preview = stepUnder(e);
 	paintArc(preview);
+	const was = document.activeElement;
+	if (was !== arc) lent = { to: was instanceof HTMLElement && root.contains(was) ? was : null };
 	arc.focus({ preventScroll: true });
 });
 arc.addEventListener('pointerup', (e) => {
@@ -606,7 +628,9 @@ arc.addEventListener('pointerup', (e) => {
 	if (out || preview === step) return settle();
 	release();
 	arc.dataset.state = 'rest';
+	// The jump first, so the blur that giving focus back makes keeps the knob on the step it goes to.
 	jump(preview);
+	giveBack();
 });
 const drop = (e: PointerEvent) => {
 	if (e.pointerId === held) settle();
