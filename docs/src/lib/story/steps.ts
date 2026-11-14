@@ -3,6 +3,7 @@ import { STATIONS } from './stations.ts';
 
 // Step 1 also plays the zoom from the whole map into chapter 1, which closes the loop (the finale's last CAMERA ms);
 // the finale holds the whole map up to where that zoom starts. So every step opens on a camera move CAMERA ms long.
+// The finale is not a step: it is the whole map the intro loops (main.ts), where the tour ends.
 
 /** A code block's cut: the wide one, or the phone one with its long lines broken. */
 export type Cut = 'wide' | 'phone';
@@ -46,14 +47,17 @@ export function marks(text: string): string {
 // Where each station's first code sits in the compiled list, which holds every station's code and then its `then`.
 const firsts = STATIONS.map((_, i) => STATIONS.slice(0, i).reduce((n, s) => n + 1 + (s.then?.length ?? 0), 0));
 
-/** Each chapter as a step of the story: its stretch of the loop, its captions' times, and the code lines they light. */
-export const STEPS: Step[] = CHAPTERS.map((chapter, i) => {
+/**
+ * Each chapter but the finale as a step of the story: its stretch of the loop, its captions' times, and the code lines
+ * they light.
+ */
+export const STEPS: Step[] = CHAPTERS.slice(0, -1).map((chapter, i) => {
 	const station = STATIONS[i];
 	const phone = station.phone ?? station;
 	const lead = i === 0 ? CAMERA : 0;
 	return {
 		from: i === 0 ? TOTAL - CAMERA : starts()[i],
-		ms: lead + chapter.duration - (i === CHAPTERS.length - 1 ? CAMERA : 0),
+		ms: lead + chapter.duration,
 		captions: chapter.captions.map((c) => lead + c.at),
 		code: chapter.captions.map((_, c) => firsts[i] + Math.min(c, station.then?.length ?? 0)),
 		lines: { wide: station.lines, phone: phone.lines },

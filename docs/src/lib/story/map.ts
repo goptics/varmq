@@ -1,7 +1,7 @@
 import type { Timeline } from 'animejs';
 import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
 import { renderMap } from '../heromap/render.ts';
-import { REGIONS, VIEW, frame } from '../heromap/scene.ts';
+import { REGIONS, VIEW, frame, type Camera } from '../heromap/scene.ts';
 
 /** A stretch that plays over: it holds its end `again` ms, then plays again from `restart` (its start by default) to
  * the same end. */
@@ -24,6 +24,13 @@ export interface MapHandle {
 	 * pace if need be. Then it holds at `to`, and calls `then` if given.
 	 */
 	rewind(to: number, most: number, then?: () => void): void;
+	/**
+	 * Shows the map at `to`, every piece in place, under the camera it shows now, and moves the camera out to `to`'s
+	 * view over `ms`, then holds and calls `then` if given: the tour's close, pulling back from a step to the whole
+	 * map, with everything around the step already there. The seek and the camera put back happen in one task, so no
+	 * frame shows the whole view before the move.
+	 */
+	pullBack(to: number, ms: number, then?: () => void): void;
 	/** The loop's time the map shows. */
 	now(): number;
 }
@@ -205,6 +212,37 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		frameId = requestAnimationFrame(tick);
 	};
 
+	const pullBack = (to: number, ms: number, then?: () => void) => {
+		// Not loaded yet, the map still shows the whole network (the still frame): nothing to pull back from.
+		if (!timeline || !camera) {
+			seek(to);
+			then?.();
+			return;
+		}
+		const from = { ...(camera as Camera) };
+		seek(to);
+		const goal = { ...(camera as Camera) };
+		nodes.setCamera(from);
+		const begun = performance.now();
+		const tick = () => {
+			const p = Math.min(1, (performance.now() - begun) / ms);
+			// ponytail: a cubic ease in and out, not the map's own (choreo.ts E.zoom), which lives in the timeline.
+			const e = p < 0.5 ? 4 * p ** 3 : 1 - (2 - 2 * p) ** 3 / 2;
+			// The zoom changes by a ratio, so it moves by one: an even pull back at every scale.
+			nodes.setCamera({
+				x: from.x + (goal.x - from.x) * e,
+				y: from.y + (goal.y - from.y) * e,
+				s: from.s * (goal.s / from.s) ** e,
+			});
+			if (p < 1) {
+				frameId = requestAnimationFrame(tick);
+				return;
+			}
+			then?.();
+		};
+		frameId = requestAnimationFrame(tick);
+	};
+
 	// Building the timeline takes a few hundred ms on a slow phone, so it goes in steps: it lets the page scroll and draw
 	// once BUILD ms have passed, and again before its first seek and before what was asked of it meanwhile, each a full
 	// seek. The still frame stays until it is done.
@@ -229,5 +267,5 @@ export function mountMap(host: HTMLElement, onTime: (t: number) => void): MapHan
 		};
 		later(next);
 	});
-	return { seek, play, rewind, now: () => t };
+	return { seek, play, rewind, pullBack, now: () => t };
 }
