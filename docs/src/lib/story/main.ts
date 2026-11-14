@@ -167,6 +167,8 @@ function paintArc(preview: number) {
 drawArc();
 short.addEventListener('change', () => {
 	span = short.matches ? QUARTER : HALF;
+	// The new track does not draw in again.
+	arc.removeAttribute('data-draw');
 	drawArc();
 	if (step >= 0) paintArc(step);
 });
@@ -180,7 +182,9 @@ arc.addEventListener('pointerout', (e) => {
 	if (onBand(e) && arc.dataset.state === 'hover') arc.dataset.state = 'rest';
 });
 // The arc draws itself in once, as the tour starts (startTour, story.css).
-arc.addEventListener('animationend', () => arc.removeAttribute('data-draw'));
+arc.addEventListener('animationend', (e) => {
+	if ((e.target as Element).classList.contains('st-arc-track')) arc.removeAttribute('data-draw');
+});
 $('.st-all').insertAdjacentHTML('beforeend', STORY_TEXT);
 
 /** Whether the reader is on the tour: the track holds its stops, and the page snaps through them. */

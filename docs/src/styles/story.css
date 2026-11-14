@@ -394,11 +394,12 @@
 	scale: var(--st-arc-scale);
 }
 
+/* The track's stroke is in the group's units, scaled back to 2 px on screen, not non-scaling: a non-scaling stroke's
+   dashes land in screen px, and the draw-in below, in the path's own length, would be whole at once. */
 .st-arc-track {
 	fill: none;
 	stroke: var(--rule);
-	stroke-width: 2px;
-	vector-effect: non-scaling-stroke;
+	stroke-width: calc(2px / var(--st-arc-scale));
 }
 
 /* Keyboard focus shows on the arc itself: the slider's own box is a point, with no room for a ring. */
