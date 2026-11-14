@@ -431,7 +431,7 @@
 	stroke: transparent;
 	stroke-width: calc(2 * (88px * var(--st-arc-scale) - 24px));
 	vector-effect: non-scaling-stroke;
-	pointer-events: stroke;
+	pointer-events: visibleStroke;
 }
 
 .st-dock .st-arc:is([data-state='grab'], [data-state='hint']) .st-arc-band {
@@ -444,17 +444,15 @@
 	transform-origin: center;
 }
 
+/* A step not played yet is --ink-3, dark enough on the paper to read as a mark, not a gap in the --rule track; the
+   knob covers the current step's tick. */
 .st-arc-tick {
-	fill: var(--rule);
+	fill: var(--ink-3);
 	scale: calc(var(--st-tick-r) / var(--st-arc-scale));
 }
 
 .st-arc-tick[data-done] {
 	fill: var(--brand);
-}
-
-.st-arc-tick[data-on] {
-	fill: var(--accent-text);
 }
 
 .st-arc-knob {
@@ -465,7 +463,8 @@
 	scale: calc(var(--st-knob-r) / var(--st-arc-scale));
 }
 
-/* The picked step's number and title, over the arc's top, once the arc is more than its rest size. */
+/* The picked step's number and title, over the arc's top, once the arc is more than its rest size. A hairline sets it
+   off the page; it casts no shadow. */
 .st-arc-label {
 	position: absolute;
 	bottom: calc(88px * var(--st-arc-scale) + 14px);
@@ -474,8 +473,8 @@
 	overflow: hidden;
 	padding: 3px 8px;
 	border-radius: var(--corner);
+	border: 1px solid var(--rule);
 	background: var(--paper);
-	box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 12%, transparent);
 	color: var(--ink);
 	font: 0.8125rem/1.4 var(--mono);
 	text-overflow: ellipsis;

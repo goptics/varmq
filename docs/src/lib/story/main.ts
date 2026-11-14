@@ -159,21 +159,18 @@ function drawArc() {
 }
 
 /**
- * Paints the arc with step `preview` picked: every played step's tick filled, the picked step's tick lit and the knob
- * on it, and its number and title in the label and for screen readers. Off a drag it is the step shown.
+ * Paints the arc with step k picked: every played step's tick filled, the knob on step k's tick, and its number and
+ * title in the label and for screen readers. Off a drag it is the step shown.
  */
-function paintArc(preview: number) {
-	ticks.forEach((tick, n) => {
-		tick.toggleAttribute('data-done', played.has(n));
-		tick.toggleAttribute('data-on', n === preview);
-	});
-	const { x, y } = tickPoint(preview, STEPS.length, span, ARC_R);
+function paintArc(k: number) {
+	ticks.forEach((tick, n) => tick.toggleAttribute('data-done', played.has(n)));
+	const { x, y } = tickPoint(k, STEPS.length, span, ARC_R);
 	knob.setAttribute('cx', String(x));
 	knob.setAttribute('cy', String(y));
-	const name = STEPS[preview].title;
-	arc.setAttribute('aria-valuenow', String(preview + 1));
-	arc.setAttribute('aria-valuetext', `${preview + 1} of ${STEPS.length}: ${name}`);
-	arcLabel.textContent = `${preview + 1} · ${name}`;
+	const name = STEPS[k].title;
+	arc.setAttribute('aria-valuenow', String(k + 1));
+	arc.setAttribute('aria-valuetext', `${k + 1} of ${STEPS.length}: ${name}`);
+	arcLabel.textContent = `${k + 1} · ${name}`;
 }
 
 drawArc();
@@ -458,7 +455,9 @@ function startTour() {
 	show(STOPS[0].step, STOPS[0].caption);
 	skip.disabled = false;
 	dock.inert = false;
-	arc.toggleAttribute('data-draw', true);
+	// It draws in as the tour starts, but not under reduced motion: no animation runs there, so no animationend
+	// would take the attribute off again.
+	arc.toggleAttribute('data-draw', !reduce.matches);
 	// On a reader's first tour the arc grows a moment, to say it can be held (story.css). Not under reduced motion.
 	clearTimeout(hinting);
 	if (!reduce.matches && !hinted()) {
@@ -567,13 +566,21 @@ function settle() {
 	giveBack();
 }
 
-/** Gives back the focus a press took, if it took any. The arc's blur that follows settles it again, to no effect. */
+/**
+ * Gives back the focus a press took, if it took any: to where it was, if that is still on the page, or to nothing.
+ * The arc's blur that follows settles it again, to no effect.
+ */
 function giveBack() {
 	if (!lent) return;
 	const { to } = lent;
 	lent = null;
-	if (to) to.focus({ preventScroll: true });
+	if (to?.isConnected) to.focus({ preventScroll: true });
 	else arc.blur();
+}
+
+/** Jumps to the step picked, unless the arc is held or the pick is the step shown (Enter, or a screen reader's tap). */
+function take() {
+	if (held < 0 && preview !== step) jump(preview);
 }
 
 /** Whether the hint has shown before on this browser, and marks it shown. Storage that cannot be read says no. */
@@ -611,10 +618,17 @@ arc.addEventListener('pointerleave', () => {
 // held; letting go gives the focus back (giveBack).
 arc.addEventListener('pointerdown', (e) => {
 	if (held >= 0 || e.button !== 0 || !onBand(e)) return;
+	// The capture first: a pointer that cannot be captured (no longer active) does not take the arc, and leaves no
+	// hold behind.
+	const band = e.target as Element;
+	try {
+		band.setPointerCapture(e.pointerId);
+	} catch {
+		return;
+	}
 	e.preventDefault();
 	held = e.pointerId;
-	holder = e.target as Element;
-	holder.setPointerCapture(held);
+	holder = band;
 	arc.dataset.state = 'grab';
 	preview = stepUnder(e);
 	paintArc(preview);
@@ -637,6 +651,11 @@ const drop = (e: PointerEvent) => {
 };
 arc.addEventListener('pointercancel', drop);
 arc.addEventListener('lostpointercapture', drop);
+// A touch screen reader's double-tap on the slider is a click with no pointer press behind it (detail 0), so it jumps
+// as Enter does. A tap from a mouse or a finger counts its clicks (detail 1 or more): pointerup has handled it.
+arc.addEventListener('click', (e) => {
+	if (e.detail === 0) take();
+});
 
 arc.addEventListener('focus', () => {
 	// A press focuses the arc too (pointerdown): the arc is held then, and stays so.
@@ -658,7 +677,7 @@ arc.addEventListener('keydown', (e) => {
 		paintArc(preview);
 	} else if (e.key === 'Enter') {
 		e.preventDefault();
-		if (held < 0 && preview !== step) jump(preview);
+		take();
 	} else if (e.key === 'Escape' && (held >= 0 || preview !== step)) {
 		e.preventDefault();
 		settle();

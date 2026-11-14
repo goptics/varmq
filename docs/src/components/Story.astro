@@ -72,10 +72,12 @@ const still = stillMap();
 	     the tour at JOB 01's heading, #sched-title. -->
 	<div class="st-dock" inert>
 		<div class="st-arc" role="slider" tabindex="0" aria-label="Go to a tour step" aria-orientation="horizontal"
-		     aria-valuemin="1" data-state="rest">
+		     aria-valuemin="1" aria-describedby="st-arc-does" data-state="rest">
 			<svg class="st-arc-svg" aria-hidden="true"></svg>
 			<span class="st-arc-label" aria-hidden="true"></span>
 		</div>
+		<!-- What the slider's Enter does, for screen readers; a screen reader's double-tap does the same (main.ts). -->
+		<p id="st-arc-does" hidden>Enter jumps to the step.</p>
 		<button class="st-skip" type="button" aria-label="Skip the rest of the tour" disabled>
 			<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"></path></svg>
 		</button>
