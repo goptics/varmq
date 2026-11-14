@@ -51,6 +51,7 @@
 - **Job cancel and outcome**: cancel a job, or wait for its result, from any process on shared storage.
 - **Queue pause**: pause a queue for every worker in every process; the pause survives a restart.
 - **REST API**: inspect and control workers, queues, jobs and workflows over HTTP.
+- **Dashboard**: [vartop](https://github.com/goptics/vartop) shows every process of a service in one place, with history, and acts on workers, queues, jobs and workflows.
 - **Extensible**: plug in your own storage by implementing [`IQueue`](https://pkg.go.dev/github.com/goptics/varmq#IQueue) or [`IPriorityQueue`](https://pkg.go.dev/github.com/goptics/varmq#IPriorityQueue). Optional interfaces add acknowledgments, wake-ups and pause (`varmq`), and outcomes, cancel and inspection ([`contract`](https://pkg.go.dev/github.com/goptics/varmq/contract)).
 
 ## Quick Start
@@ -419,7 +420,7 @@ Job routes show one job (state, payload, attempts, times, errors, result) and ca
 - A job can start while the route reads it. If you use the job routes, don't change `Data()` in place.
 - Shared storage serves the read route when it implements `JobReader`, and cancel when it implements `JobCanceller`. redisq and sqliteq cancel jobs but answer 501 to a read.
 
-Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
+Full contract: [`spec/openapi.yaml`](spec/openapi.yaml). For a dashboard over this API, see [vartop](https://github.com/goptics/vartop).
 
 > [!Warning]
 > The REST API is unauthenticated by design. Protect it with middleware, network isolation, or a reverse proxy before you expose it to untrusted networks. It serves job payloads and results. It can stop and resize workers, pause queues in every process, and cancel jobs and workflows.
@@ -428,7 +429,7 @@ Full contract: [`spec/openapi.yaml`](spec/openapi.yaml).
 
 ### Connect to vartop (hub)
 
-A VarMQ process can dial out to a vartop hub instead of serving the REST API on a port. The hub then reads and controls the process through that connection.
+A VarMQ process can dial out to a [vartop](https://github.com/goptics/vartop) hub instead of serving the REST API on a port. The hub then reads and controls the process through that connection.
 
 ```go
 go func() {
