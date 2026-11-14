@@ -111,6 +111,13 @@
 	display: none;
 }
 
+/* Closing the tour, the map pulls back to the whole of it first (main.ts, data-closing); the way in comes back once
+   it is there. */
+.st[data-closing] .st-tour {
+	visibility: hidden;
+	opacity: 0;
+}
+
 .st-intro,
 .st-step {
 	grid-area: 1 / 1;
@@ -220,6 +227,7 @@
 	translate: -50% 0;
 	background: var(--paper);
 	white-space: nowrap;
+	transition: opacity 240ms var(--ease);
 }
 
 .st-frame .st-tour:hover {
@@ -278,14 +286,37 @@
 	fill: var(--brand);
 }
 
-/* ---- Skip: a fixed round button at the foot of the screen, on the tour's steps (main.ts enables it). It ends the
-   tour. Its outline is ten segments, one per step, that fill in --brand as the steps play. ---- */
+/* ---- The close button and the step arc: fixed at the foot of the screen on the tour's steps (main.ts enables the
+   button and lifts the dock's inert). The button, a cross, ends the tour back at the intro. Over it, centred on it, an
+   arc with a segment per step is the story's progress: a step's segment fills in --brand once that step has played,
+   and the knob sits on the step shown. ---- */
 
-.st-skip {
+.st-dock {
 	position: fixed;
 	z-index: 5;
 	bottom: max(16px, env(safe-area-inset-bottom));
 	left: var(--skip-left, 50%);
+	width: 48px;
+	height: 48px;
+	translate: var(--skip-x, -50%) 0;
+	transition:
+		opacity 240ms var(--ease),
+		translate 240ms var(--ease),
+		visibility 0s;
+}
+
+/* Off the tour, and scrolled out past its last step (main.ts, data-out), the dock goes. */
+.st-dock:is([data-out], :has(.st-skip:disabled)) {
+	visibility: hidden;
+	opacity: 0;
+	translate: var(--skip-x, -50%) 12px;
+	transition:
+		opacity 240ms var(--ease),
+		translate 240ms var(--ease),
+		visibility 0s 240ms;
+}
+
+.st-skip {
 	display: grid;
 	place-items: center;
 	width: 48px;
@@ -296,51 +327,11 @@
 	background: var(--paper);
 	box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 12%, transparent);
 	cursor: pointer;
-	translate: var(--skip-x, -50%) 0;
-	transition:
-		opacity 240ms var(--ease),
-		translate 240ms var(--ease),
-		visibility 0s;
-}
-
-.st-skip:disabled {
-	visibility: hidden;
-	opacity: 0;
-	translate: var(--skip-x, -50%) 12px;
-	transition:
-		opacity 240ms var(--ease),
-		translate 240ms var(--ease),
-		visibility 0s 240ms;
 }
 
 .st-skip:focus-visible {
 	outline: 2px solid var(--accent-text);
 	outline-offset: 3px;
-}
-
-.st-skip-ring {
-	position: absolute;
-	inset: 0;
-	rotate: -90deg;
-	fill: none;
-	stroke-width: 3;
-}
-
-/* Each segment is 8.4 of the circle's 100, a gap of 1.6 between them. */
-.st-skip-ring circle {
-	stroke: var(--rule);
-	stroke-dasharray: 8.4 91.6;
-	stroke-dashoffset: calc(var(--n) * -10 - 0.8);
-}
-
-.st-skip-ring .st-fill {
-	stroke: var(--brand);
-	stroke-dasharray: 0 100;
-	transition: stroke-dasharray 420ms var(--ease);
-}
-
-.st-skip-ring [data-done] .st-fill {
-	stroke-dasharray: 8.4 91.6;
 }
 
 .st-skip-icon {
@@ -358,11 +349,165 @@
 	stroke: var(--accent-text);
 }
 
-/* Short of height, the step's code reaches the foot of the screen: the button moves to the corner, under the map. */
+/* The arc's size is --st-arc-scale, its radius over the full 88 px (main.ts, ARC_R): 34 px at rest, clear of the
+   step's text, 40 px under the pointer or keyboard focus, and full while it is held or hints at being held (main.ts,
+   data-state). The SVG is drawn at full size and one group scales; the knob scales back by as much, to its own radius
+   in px (--st-knob-r), and the segments' stroke holds its px width (--st-seg-w), so a size change makes the segments
+   longer, not thicker. */
+@property --st-arc-scale {
+	syntax: '<number>';
+	inherits: true;
+	initial-value: 1;
+}
+
+/* The slider is a point at the button's centre, so its box covers nothing: only the band over the track takes the pointer,
+   and it sits over the button, which stays one tap off the band. A finger on the band drags the knob, never the page
+   (main.ts). */
+.st-dock .st-arc {
+	--st-arc-scale: calc(34 / 88);
+	--st-seg-w: 3px;
+	--st-knob-r: 5;
+	position: absolute;
+	z-index: 1;
+	top: 50%;
+	left: 50%;
+	width: 0;
+	height: 0;
+	outline: none;
+	pointer-events: none;
+	touch-action: none;
+	transition: --st-arc-scale 240ms var(--ease);
+}
+
+.st-dock .st-arc:is([data-state='hover'], :focus-visible) {
+	--st-arc-scale: calc(40 / 88);
+}
+
+.st-dock .st-arc:is([data-state='grab'], [data-state='hint']) {
+	--st-arc-scale: 1;
+	--st-seg-w: 4px;
+	--st-knob-r: 6;
+}
+
+/* The SVG's side is twice main.ts's ARC_BOX, and its view box the same, so a unit is a pixel at full size. */
+.st-arc-svg {
+	position: absolute;
+	top: -100px;
+	left: -100px;
+	width: 200px;
+	height: 200px;
+	overflow: visible;
+}
+
+.st-arc-svg g {
+	transform-box: view-box;
+	transform-origin: 0 0;
+	scale: var(--st-arc-scale);
+}
+
+/* A segment per step, the gaps between them the arc's only track. A step not played yet is --ink-3, dark enough on
+   the paper to read as part of a control; played, it fills in --brand. The stroke is in the group's units, scaled
+   back to --st-seg-w on screen, not non-scaling: a non-scaling stroke's dashes land in screen px, and the draw-in
+   below, in the path's own length, would be whole at once. */
+.st-arc-seg {
+	fill: none;
+	stroke: var(--ink-3);
+	stroke-width: calc(var(--st-seg-w) / var(--st-arc-scale));
+}
+
+.st-arc-seg[data-done] {
+	stroke: var(--brand);
+}
+
+/* Keyboard focus shows on the arc itself: the slider's own box is a point, with no room for a ring. */
+.st-dock .st-arc:focus-visible .st-arc-seg:not([data-done]) {
+	stroke: var(--accent-text);
+}
+
+/* Tour start (main.ts, data-draw): the segments draw in one after another, from step 1's to the last's, over 600 ms
+   in all. Each waits hidden for its turn (fill-mode both). */
+.st-dock .st-arc[data-draw] .st-arc-seg {
+	animation: st-arc-draw 240ms var(--ease) calc(var(--i) * 36ms) both;
+}
+
+@keyframes st-arc-draw {
+	from {
+		stroke-dasharray: 0 1;
+	}
+	to {
+		stroke-dasharray: 1 1;
+	}
+}
+
+/* The band is 20 px wide at rest, r 24 to 44, from the button's edge out. Its inner edge stays on the button's edge as the arc
+   grows to its hover size, so the pointer that made it grow is still on it. Held, the pointer is captured, and the
+   band needs no more than its own width. */
+.st-arc-band {
+	fill: none;
+	stroke: transparent;
+	stroke-width: calc(2 * (88px * var(--st-arc-scale) - 24px));
+	vector-effect: non-scaling-stroke;
+	pointer-events: visibleStroke;
+}
+
+.st-dock .st-arc:is([data-state='grab'], [data-state='hint']) .st-arc-band {
+	stroke-width: 20px;
+}
+
+.st-arc-knob {
+	transform-box: fill-box;
+	transform-origin: center;
+	fill: var(--brand);
+	stroke: var(--paper);
+	stroke-width: 2px;
+	vector-effect: non-scaling-stroke;
+	scale: calc(var(--st-knob-r) / var(--st-arc-scale));
+}
+
+/* The picked step's number and title, over the arc's top, once the arc is more than its rest size. A hairline sets it
+   off the page; it casts no shadow. */
+.st-arc-label {
+	position: absolute;
+	bottom: calc(88px * var(--st-arc-scale) + 14px);
+	left: 0;
+	max-width: calc(100vw - 32px);
+	overflow: hidden;
+	padding: 3px 8px;
+	border-radius: var(--corner);
+	border: 1px solid var(--rule);
+	background: var(--paper);
+	color: var(--ink);
+	font: 0.8125rem/1.4 var(--mono);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	translate: -50% 0;
+	visibility: hidden;
+	opacity: 0;
+	transition:
+		opacity 160ms var(--ease),
+		visibility 0s 160ms;
+}
+
+.st-dock .st-arc:is([data-state='hover'], [data-state='grab'], [data-state='hint'], :focus-visible) .st-arc-label {
+	visibility: visible;
+	opacity: 1;
+	transition:
+		opacity 160ms var(--ease),
+		visibility 0s;
+}
+
+/* Short of height, the step's code reaches the foot of the screen: the close button moves to the corner, under the map. The arc
+   is a quarter there, from the button's left round to over it (main.ts), and its label ends at the dock's right edge. */
 @media (max-height: 30rem) {
-	.st-skip {
+	.st-dock {
 		--skip-left: calc(100% - 16px);
 		--skip-x: -100%;
+	}
+
+	.st-arc-label {
+		right: -24px;
+		left: auto;
+		translate: none;
 	}
 }
 
@@ -449,6 +594,12 @@
 
 	.st-notes button {
 		padding-block: calc((44px - 1lh) / 2);
+	}
+
+	/* The arc's band is 24 px at rest, r 22 to 46: it starts 2 px inside the button's edge and is over the button there, so
+	   a finger that lands on the button's rim still takes the arc. Held, it keeps the 20 px above. */
+	.st-arc-band {
+		stroke-width: calc(2 * (88px * var(--st-arc-scale) - 22px));
 	}
 }
 
@@ -845,10 +996,11 @@
 		align-self: start;
 	}
 
-	/* The skip button sits at the foot of the screen, under the text: a step keeps clear of it (the button is 48px,
-	   16px up), so its code gives up lines rather than its source link going under the button. */
+	/* The close button and its arc sit at the foot of the screen, under the text: a step keeps clear of them (the button is 48px,
+	   16px up, and the arc at rest reaches 44px out from its centre), so its code gives up lines rather than its
+	   source link going under them. */
 	.st[data-at='step'] .st-text {
-		padding-bottom: 76px;
+		padding-bottom: 92px;
 	}
 	/* Before the tour the intro comes first and the map under it, at the same size: the reader meets the words, then
 	   the picture. The text is as tall as the intro here, so it sizes

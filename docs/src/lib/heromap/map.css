@@ -200,6 +200,13 @@ varmq-map .vm-svg:not(.vm-under) {
 	fill: var(--vm-ink);
 }
 
+/* As the map's camera pulls back from a step to the whole map, when the home tour closes (story/map.ts, data-quiet),
+   all its text fades out with the move: labels, chips' text, numbers and store logos. */
+varmq-map[data-quiet] :is(.vm-label, .vm-text, .vm-num, .vm-logo) {
+	fill-opacity: 0;
+	transition: fill-opacity 400ms var(--ease);
+}
+
 :is(varmq-map, .vm-mini) .vm-label.vm-died {
 	fill: var(--vm-red);
 }
