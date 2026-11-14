@@ -3,6 +3,7 @@ import { MagicMoveRenderer } from '@shikijs/magic-move/renderer';
 import type { KeyedTokensInfo } from '@shikijs/magic-move/types';
 import CODE from 'virtual:code-steps';
 import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
+import { HALF, QUARTER, arcPath, tickPoint, type Span } from './arc.ts';
 import { mountMap } from './map.ts';
 import { STEPS, STOPS, STORY_TEXT, until, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
@@ -104,14 +105,82 @@ const track = $('.st-track');
 const tour = $<HTMLButtonElement>('.st-tour');
 const skip = $<HTMLButtonElement>('.st-skip');
 const live = $('.st-live');
-/** The skip's outline: a segment per step, each a track and the fill over it. */
-const segments = STEPS.map((_, n) => {
-	const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-	g.style.setProperty('--n', String(n));
-	g.innerHTML = '<circle cx="24" cy="24" r="22" pathLength="100"/><circle class="st-fill" cx="24" cy="24" r="22" pathLength="100"/>';
-	return g;
+/** Skip and the step arc over it, fixed at the foot of the screen on the tour. */
+const dock = $('.st-dock');
+/** The step arc, a slider over the steps. Caption points use the class too, so it is looked up in the dock. */
+const arc = $('.st-dock .st-arc');
+const arcSvg = arc.querySelector('svg')!;
+const arcLabel = $('.st-arc-label');
+/**
+ * The arc's radius at full size, in px. The SVG is drawn at it, and CSS scales the arc down to its other sizes
+ * (story.css, --st-arc-scale). ARC_BOX is half the SVG's side, which takes in the hit band at full size too;
+ * story.css sizes the SVG to match.
+ */
+const ARC_R = 88;
+const ARC_BOX = 100;
+arcSvg.setAttribute('viewBox', `${-ARC_BOX} ${-ARC_BOX} ${2 * ARC_BOX} ${2 * ARC_BOX}`);
+arc.setAttribute('aria-valuemax', String(STEPS.length));
+/** The steps that have played to their end on this tour; a step jumped over is not one of them. */
+const played = new Set<number>();
+/** Short of height, Skip sits in the corner (story.css): the arc is a quarter, from its left round to over it. */
+const short = matchMedia('(max-height: 30rem)');
+let span: Span = short.matches ? QUARTER : HALF;
+/** The arc's ticks, one per step, as drawArc made them. */
+let ticks: SVGCircleElement[] = [];
+let knob: SVGCircleElement;
+
+/**
+ * Draws the arc for the current span: the track, a wider band over it that takes the pointer, a tick per step, and
+ * the knob, all at full size, centred on Skip's centre.
+ */
+function drawArc() {
+	const d = arcPath(span, ARC_R);
+	const dots = STEPS.map((_, n) => {
+		const { x, y } = tickPoint(n, STEPS.length, span, ARC_R);
+		return `<circle class="st-arc-tick" cx="${x}" cy="${y}" r="1"/>`;
+	});
+	arcSvg.innerHTML =
+		`<g><path class="st-arc-track" d="${d}" pathLength="1"/>${dots.join('')}` +
+		`<circle class="st-arc-knob" r="1"/><path class="st-arc-band" d="${d}"/></g>`;
+	ticks = [...arcSvg.querySelectorAll<SVGCircleElement>('.st-arc-tick')];
+	knob = arcSvg.querySelector<SVGCircleElement>('.st-arc-knob')!;
+}
+
+/**
+ * Paints the arc with step `preview` picked: every played step's tick filled, the picked step's tick lit and the knob
+ * on it, and its number and title in the label and for screen readers. Off a drag it is the step shown.
+ */
+function paintArc(preview: number) {
+	ticks.forEach((tick, n) => {
+		tick.toggleAttribute('data-done', played.has(n));
+		tick.toggleAttribute('data-on', n === preview);
+	});
+	const { x, y } = tickPoint(preview, STEPS.length, span, ARC_R);
+	knob.setAttribute('cx', String(x));
+	knob.setAttribute('cy', String(y));
+	const name = STEPS[preview].title;
+	arc.setAttribute('aria-valuenow', String(preview + 1));
+	arc.setAttribute('aria-valuetext', `${preview + 1} of ${STEPS.length}: ${name}`);
+	arcLabel.textContent = `${preview + 1} · ${name}`;
+}
+
+drawArc();
+short.addEventListener('change', () => {
+	span = short.matches ? QUARTER : HALF;
+	drawArc();
+	if (step >= 0) paintArc(step);
 });
-$('.st-skip-ring').append(...segments);
+// The arc grows a little under the pointer, as it does with keyboard focus (story.css). Its band stays clear of Skip
+// at both sizes, so the pointer is still on it once it has grown.
+const onBand = (e: Event) => (e.target as Element).classList.contains('st-arc-band');
+arc.addEventListener('pointerover', (e) => {
+	if (onBand(e) && arc.dataset.state === 'rest') arc.dataset.state = 'hover';
+});
+arc.addEventListener('pointerout', (e) => {
+	if (onBand(e) && arc.dataset.state === 'hover') arc.dataset.state = 'rest';
+});
+// The arc draws itself in once, as the tour starts (startTour, story.css).
+arc.addEventListener('animationend', () => arc.removeAttribute('data-draw'));
 $('.st-all').insertAdjacentHTML('beforeend', STORY_TEXT);
 
 /** Whether the reader is on the tour: the track holds its stops, and the page snaps through them. */
@@ -176,9 +245,11 @@ const map = mountMap($('varmq-map'), (t) => {
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
 	if (li) done(li, p >= 1);
-	// A step's segment fills once its last caption is done.
-	const played = i === s.captions.length - 1 && p >= 1;
-	segments.forEach((g, n) => g.toggleAttribute('data-done', n < step || (n === step && played)));
+	// A step's tick fills once its last caption is done. Only that tick changes, so a pick on the arc stays.
+	if (i === s.captions.length - 1 && p >= 1 && !played.has(step)) {
+		played.add(step);
+		ticks[step].toggleAttribute('data-done', true);
+	}
 });
 
 /** The step to say once the page rests on it, and the step said last. */
@@ -236,6 +307,7 @@ function show(k: number, c: number, back = false) {
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
 	tell(`Step ${k + 1} of ${STEPS.length}: ${s.title}`);
+	paintArc(k);
 	const focused = notes.contains(document.activeElement);
 	notes.innerHTML = s.notes
 		.map((note, i) => `<li><button type="button" data-i="${i}" aria-describedby="st-does">${POINT}${note}</button></li>`)
@@ -362,8 +434,11 @@ function startTour() {
 	);
 	// Step 1 shows at once, so focus can move to its title; the stage stays pinned while the page scrolls to its stop.
 	at = 1;
+	played.clear();
 	show(STOPS[0].step, STOPS[0].caption);
 	skip.disabled = false;
+	dock.inert = false;
+	arc.toggleAttribute('data-draw', true);
 	go(1);
 	title.focus({ preventScroll: true });
 }
@@ -389,6 +464,9 @@ function endTour(keep: boolean, back = false) {
 	target = -1;
 	at = 0;
 	skip.disabled = true;
+	dock.inert = true;
+	arc.dataset.state = 'rest';
+	arc.removeAttribute('data-draw');
 	showIntro(back);
 	// html scrolls smoothly (scroll-behavior), so these jumps say instant. The current scrollY already holds any
 	// adjustment the browser's scroll anchoring made.
