@@ -1,5 +1,5 @@
 ---
-// The home page's opening: the intro with the whole map, and the tour of varmq's story in eleven steps, a caption per
+// The home page's opening: the intro with the whole map, and the tour of varmq's story in ten steps, a caption per
 // scroll, for the reader who starts it. Each step plays its chapter of the map while the one code block morphs into the
 // code behind it (lib/story/main.ts). The title and the lede come from pages/index.astro.
 import '@shikijs/magic-move/style.css';
@@ -7,6 +7,7 @@ import '../lib/heromap/map.css';
 import '../styles/story.css';
 import Install from './ui/Install.astro';
 import { stillMap } from '../lib/heromap/still.ts';
+import { STEPS } from '../lib/story/steps.ts';
 
 interface Props {
 	title: string;
@@ -62,17 +63,26 @@ const still = stillMap();
 				<!-- Starts the tour, on the map it plays: the track takes its stops and the page snaps through them (main.ts). -->
 				<button class="pbtn pbtn--paper st-tour" type="button">
 					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.25v9.5L12.5 8z"></path></svg>
-					Take the tour<span class="st-tour-n">&nbsp;· 11 steps</span>
+					Take the tour<span class="st-tour-n">&nbsp;· {STEPS.length} steps</span>
 				</button>
 			</div>
 		</div>
 	</div>
-	<!-- On the tour's steps only: ends the tour at JOB 01's heading, #sched-title. Its outline is the story's
-	     progress, a segment per step, filled once that step has played (main.ts). -->
-	<button class="st-skip" type="button" aria-label="Skip the rest of the tour" disabled>
-		<svg class="st-skip-ring" viewBox="0 0 48 48" aria-hidden="true"></svg>
-		<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"></path></svg>
-	</button>
+	<!-- On the tour's steps only (main.ts enables the button and lifts inert). The arc over the button is the story's
+	     progress, a segment per step, filled once that step has played, and its knob is on the step shown. The button
+	     closes the tour: the page goes back to the intro, at its top. -->
+	<div class="st-dock" inert>
+		<div class="st-arc" role="slider" tabindex="0" aria-label="Go to a tour step" aria-orientation="horizontal"
+		     aria-valuemin="1" aria-describedby="st-arc-does" data-state="rest">
+			<svg class="st-arc-svg" aria-hidden="true"></svg>
+			<span class="st-arc-label" aria-hidden="true"></span>
+		</div>
+		<!-- What the slider's Enter does, for screen readers; a screen reader's double-tap does the same (main.ts). -->
+		<p id="st-arc-does" hidden>Enter jumps to the step.</p>
+		<button class="st-skip" type="button" aria-label="End the tour" disabled>
+			<svg class="st-skip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+		</button>
+	</div>
 	<!-- The step the page comes to rest on, said once (main.ts). -->
 	<p class="sr-only st-live" aria-live="polite" aria-atomic="true"></p>
 	<!-- The whole story as text, for screen readers: the stage only ever shows one step. After the stage, so the h1

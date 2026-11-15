@@ -2,7 +2,8 @@ import { syncTokenKeys, toKeyedTokens } from '@shikijs/magic-move/core';
 import { MagicMoveRenderer } from '@shikijs/magic-move/renderer';
 import type { KeyedTokensInfo } from '@shikijs/magic-move/types';
 import CODE from 'virtual:code-steps';
-import { STATIC_AT, TOTAL } from '../heromap/chapters.ts';
+import { CAMERA, STATIC_AT, TOTAL } from '../heromap/chapters.ts';
+import { HALF, QUARTER, arcPath, segment, stepAt, tickPoint, type Span } from './arc.ts';
 import { mountMap } from './map.ts';
 import { STEPS, STOPS, STORY_TEXT, until, type Cut, type Step } from './steps.ts';
 import { wheelSteps } from './wheel.ts';
@@ -11,17 +12,18 @@ import { wheelSteps } from './wheel.ts';
 // starts the story: the page then snaps a caption at a time, and each scroll plays the next caption of a step on the
 // map, at the map's own pace, while the one code block morphs into that caption's code and lights the lines it is
 // about. A scroll back up within a step plays its last caption backward; a step reached from another one plays from
-// its start. Under reduced motion a caption shows its last frame. Skip, Esc, or a scroll on past the last step ends the
-// tour, and the page is the intro and the sections under it again.
+// its start, and so does a step jumped to on the arc over the close button. Under reduced motion a caption shows its last frame.
+// The close button, Esc, or a scroll on past the last step ends the tour, and the page is the intro and the sections under it
+// again.
 
 const MORPH = { duration: 700, stagger: 0.02, lineNumbers: false };
 /** The snap positions: the intro, then one per caption (STOPS). */
 const COUNT = STOPS.length + 1;
 /**
- * The whole map's run, as the intro loops it: from STATIC_AT, where the last step's camera has pulled back, to that
- * step's end, where step 1's zoom begins; held AGAIN.again ms between runs.
+ * The whole map's run, as the intro loops it: the finale, from STATIC_AT, where its camera has pulled back, to where
+ * step 1's zoom begins, CAMERA ms before the loop's end; held AGAIN.again ms between runs.
  */
-const RUN_END = STEPS[STEPS.length - 1].from + STEPS[STEPS.length - 1].ms;
+const RUN_END = TOTAL - CAMERA;
 const AGAIN = { again: 1500 };
 /** How far past the last step, in steps, the page stops snapping, and how far back above it it snaps again. */
 const SLACK = 0.02;
@@ -104,14 +106,86 @@ const track = $('.st-track');
 const tour = $<HTMLButtonElement>('.st-tour');
 const skip = $<HTMLButtonElement>('.st-skip');
 const live = $('.st-live');
-/** The skip's outline: a segment per step, each a track and the fill over it. */
-const segments = STEPS.map((_, n) => {
-	const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-	g.style.setProperty('--n', String(n));
-	g.innerHTML = '<circle cx="24" cy="24" r="22" pathLength="100"/><circle class="st-fill" cx="24" cy="24" r="22" pathLength="100"/>';
-	return g;
+/** The close button and the step arc over it, fixed at the foot of the screen on the tour. */
+const dock = $('.st-dock');
+/** The step arc, a slider over the steps. Caption points use the class too, so it is looked up in the dock. */
+const arc = $('.st-dock .st-arc');
+const arcSvg = arc.querySelector('svg')!;
+const arcLabel = $('.st-arc-label');
+/**
+ * The arc's radius at full size, in px. The SVG is drawn at it, and CSS scales the arc down to its other sizes
+ * (story.css, --st-arc-scale). ARC_BOX is half the SVG's side, which takes in the hit band at full size too;
+ * story.css sizes the SVG to match.
+ */
+const ARC_R = 88;
+const ARC_BOX = 100;
+arcSvg.setAttribute('viewBox', `${-ARC_BOX} ${-ARC_BOX} ${2 * ARC_BOX} ${2 * ARC_BOX}`);
+arc.setAttribute('aria-valuemax', String(STEPS.length));
+/** The steps that have played to their end on this tour; a step jumped over is not one of them. */
+const played = new Set<number>();
+/** Short of height, the close button sits in the corner (story.css): the arc is a quarter, from its left round to over it. */
+const short = matchMedia('(max-height: 30rem)');
+let span: Span = short.matches ? QUARTER : HALF;
+/** The arc's segments, one per step, as drawArc made them. */
+let segs: SVGPathElement[] = [];
+let knob: SVGCircleElement;
+/** The step picked on the arc: the step shown, but for one the reader points at, holds the knob on, or keys to. */
+let preview = 0;
+/** The pointer that holds the arc, or -1, and the band it holds it by (its capture). */
+let held = -1;
+let holder: Element | null = null;
+/**
+ * The focus a press took to the arc (pointerdown), to give back once the arc is let go: to where it was in the story,
+ * or to nothing. A focused arc can show its hover look (:focus-visible) after the pointer has gone. Null when the
+ * press took none, as on an arc the keyboard had focused already.
+ */
+let lent: { to: HTMLElement | null } | null = null;
+
+/**
+ * Draws the arc for the current span: a segment per step with a gap between, the knob, and a band over the whole arc
+ * that takes the pointer, all at full size, centred on the button's centre. --i orders the segments' draw-in (story.css).
+ */
+function drawArc() {
+	const parts = STEPS.map(
+		(_, n) =>
+			`<path class="st-arc-seg" d="${arcPath(segment(n, STEPS.length, span), ARC_R)}" pathLength="1" style="--i:${n}"/>`,
+	);
+	arcSvg.innerHTML =
+		`<g>${parts.join('')}` +
+		`<circle class="st-arc-knob" r="1"/><path class="st-arc-band" d="${arcPath(span, ARC_R)}"/></g>`;
+	segs = [...arcSvg.querySelectorAll<SVGPathElement>('.st-arc-seg')];
+	knob = arcSvg.querySelector<SVGCircleElement>('.st-arc-knob')!;
+}
+
+/**
+ * Paints the arc with step k picked: every played step's segment filled, the knob on step k's, and its number and
+ * title in the label and for screen readers. Off a drag it is the step shown.
+ */
+function paintArc(k: number) {
+	segs.forEach((seg, n) => seg.toggleAttribute('data-done', played.has(n)));
+	const { x, y } = tickPoint(k, STEPS.length, span, ARC_R);
+	knob.setAttribute('cx', String(x));
+	knob.setAttribute('cy', String(y));
+	const name = STEPS[k].title;
+	arc.setAttribute('aria-valuenow', String(k + 1));
+	arc.setAttribute('aria-valuetext', `${k + 1} of ${STEPS.length}: ${name}`);
+	arcLabel.textContent = `${k + 1} · ${name}`;
+}
+
+drawArc();
+short.addEventListener('change', () => {
+	span = short.matches ? QUARTER : HALF;
+	// A held arc lets go first: drawArc replaces the band that holds the pointer.
+	if (held >= 0) settle();
+	// The new track does not draw in again.
+	arc.removeAttribute('data-draw');
+	drawArc();
+	if (step >= 0) paintArc(preview);
 });
-$('.st-skip-ring').append(...segments);
+// The arc draws itself in once, as the tour starts (startTour, story.css), segment by segment; the last one ends it.
+arc.addEventListener('animationend', (e) => {
+	if (e.target === segs.at(-1)) arc.removeAttribute('data-draw');
+});
 $('.st-all').insertAdjacentHTML('beforeend', STORY_TEXT);
 
 /** Whether the reader is on the tour: the track holds its stops, and the page snaps through them. */
@@ -176,9 +250,11 @@ const map = mountMap($('varmq-map'), (t) => {
 	const li = notes.children[i] as HTMLElement | undefined;
 	li?.style.setProperty('--p', String(p));
 	if (li) done(li, p >= 1);
-	// A step's segment fills once its last caption is done.
-	const played = i === s.captions.length - 1 && p >= 1;
-	segments.forEach((g, n) => g.toggleAttribute('data-done', n < step || (n === step && played)));
+	// A step's segment fills once its last caption is done. Only that segment changes, so a pick on the arc stays.
+	if (i === s.captions.length - 1 && p >= 1 && !played.has(step)) {
+		played.add(step);
+		segs[step].toggleAttribute('data-done', true);
+	}
 });
 
 /** The step to say once the page rests on it, and the step said last. */
@@ -200,22 +276,31 @@ function tell(text: string) {
 }
 
 /**
- * Shows the intro, beside the whole map running as in the last step: from where its camera has pulled back, held a
+ * Shows the intro, beside the whole map running as in its last chapter: from where its camera has pulled back, held a
  * moment once it is still, and run again, until the reader takes the tour. Back up from step 1, the map first plays
- * backward to the end of the run, then runs. Under reduced motion it shows its still frame, the one the HTML ships
- * (heromap/still.ts).
+ * backward to the end of the run, then runs. Closing the tour (`close`), the camera first pulls back from the step to
+ * the whole map, as long as a chapter's own camera move, and the tour button shows once it is done. Under reduced
+ * motion it shows its still frame, the one the HTML ships (heromap/still.ts).
  */
-function showIntro(back = false) {
+function showIntro(back = false, close = false) {
 	step = -1;
 	caption = -1;
 	root.dataset.at = 'intro';
 	// Focus in the step, which is about to go, is endTour's to move.
 	stepView.hidden = true;
 	news = said = '';
+	delete root.dataset.closing;
 	const run = () => map.play(STATIC_AT, RUN_END - STATIC_AT, AGAIN);
 	if (reduce.matches) map.seek(STATIC_AT);
 	else if (back) map.rewind(RUN_END, STEPS[0].ms, run);
-	else run();
+	else if (close) {
+		// The tour button waits for the pull back (story.css).
+		root.dataset.closing = '';
+		map.pullBack(STATIC_AT, CAMERA, () => {
+			delete root.dataset.closing;
+			run();
+		});
+	} else run();
 }
 
 /**
@@ -236,6 +321,9 @@ function show(k: number, c: number, back = false) {
 	count.innerHTML = `<span>${k + 1}</span> / ${STEPS.length}`;
 	title.textContent = s.title;
 	tell(`Step ${k + 1} of ${STEPS.length}: ${s.title}`);
+	// The knob goes to the step, and a pick from the pointer or the keys goes with it; one held stays where it is held.
+	if (held < 0) preview = k;
+	paintArc(preview);
 	const focused = notes.contains(document.activeElement);
 	notes.innerHTML = s.notes
 		.map((note, i) => `<li><button type="button" data-i="${i}" aria-describedby="st-does">${POINT}${note}</button></li>`)
@@ -312,6 +400,13 @@ const tick = () => {
 	const p = position();
 	const foot = scrollY >= document.documentElement.scrollHeight - innerHeight - 1;
 	if (p >= COUNT || (foot && p > COUNT - 1 + SLACK)) return endTour(true);
+	// Scrolling on out past the last step, the reader has finished the story: the close button and the arc go at once,
+	// and come back if the reader scrolls back up into it.
+	const out = p > COUNT - 1 + SLACK;
+	if (dock.hasAttribute('data-out') !== out) {
+		dock.toggleAttribute('data-out', out);
+		dock.inert = out;
+	}
 	snapping();
 	const k = nearest();
 	// On the way to a stop further than the next, as a caption's button can go, the stops passed are not shown.
@@ -326,7 +421,8 @@ const tick = () => {
 		at = k;
 		if (was?.step === stop.step && Math.abs(was.caption - stop.caption) === 1) {
 			move(stop.caption, stop.caption < was.caption);
-		} else show(stop.step, stop.caption, up);
+		} else show(stop.step, stop.caption, up && !leap);
+		leap = false;
 	}
 	if (Math.abs(position() - target) < 1 / height()) target = -1;
 };
@@ -342,10 +438,18 @@ addEventListener('resize', () => {
 showIntro();
 
 /** Scrolls to snap position k, snapping on the way if k is in the story above its last step. */
-function go(k: number) {
+function go(k: number, behavior: ScrollBehavior = motion()) {
 	target = k;
 	snapping();
-	scrollTo({ top: top() + k * height(), behavior: motion() });
+	scrollTo({ top: top() + k * height(), behavior });
+}
+
+/** Set by jump: the stop it heads for shows its step from the start, going up too. */
+let leap = false;
+/** Jumps to step k's first stop at once, no stop on the way shown, and step k plays from its start. */
+function jump(k: number) {
+	leap = true;
+	go(STOPS.findIndex((s) => s.step === k && s.caption === 0) + 1, 'instant');
 }
 
 /** Starts the tour: the track takes its stops, and step 1 shows and plays. */
@@ -362,8 +466,23 @@ function startTour() {
 	);
 	// Step 1 shows at once, so focus can move to its title; the stage stays pinned while the page scrolls to its stop.
 	at = 1;
+	played.clear();
 	show(STOPS[0].step, STOPS[0].caption);
 	skip.disabled = false;
+	dock.inert = false;
+	// It draws in as the tour starts, but not under reduced motion: no animation runs there, so no animationend
+	// would take the attribute off again.
+	arc.toggleAttribute('data-draw', !reduce.matches);
+	// On a reader's first tour the arc grows a moment, to say it can be held (story.css). Not under reduced motion.
+	clearTimeout(hinting);
+	if (!reduce.matches && !hinted()) {
+		arc.dataset.state = 'hint';
+		arcLabel.textContent = 'Drag to jump to a step';
+		// Unless the reader has taken the arc by then.
+		hinting = window.setTimeout(() => {
+			if (arc.dataset.state === 'hint') arc.dataset.state = 'rest';
+		}, 1200);
+	}
 	go(1);
 	title.focus({ preventScroll: true });
 }
@@ -371,9 +490,9 @@ function startTour() {
 /**
  * Ends the tour: the track gives up its stops, so the page is the intro and the sections under it again. Kept in place
  * (scrolled out at either end, or tabbed out), the page moves by what the track gave up, so what is in view stays
- * where it is, and focus left in the story moves to what is in view; otherwise (Skip, Esc) it goes to JOB 01's
- * heading, #sched-title, at the top of the screen, and focuses it. Back up at the intro from step 1 (`back`), the map plays
- * back to its run.
+ * where it is, and focus left in the story moves to what is in view; otherwise (the close button, Esc) the page goes
+ * back to the intro at its top, where the map loops the whole of it, and the h1 takes focus. Back up at the intro
+ * from step 1 (`back`), the map plays back to its run.
  */
 function endTour(keep: boolean, back = false) {
 	const row = document.querySelector('section.home-row');
@@ -389,11 +508,18 @@ function endTour(keep: boolean, back = false) {
 	target = -1;
 	at = 0;
 	skip.disabled = true;
-	showIntro(back);
+	dock.inert = true;
+	dock.removeAttribute('data-out');
+	release();
+	// Focus is endTour's to move.
+	lent = null;
+	leap = false;
+	clearTimeout(hinting);
+	arc.dataset.state = 'rest';
+	arc.removeAttribute('data-draw');
+	showIntro(back, !keep);
 	// html scrolls smoothly (scroll-behavior), so these jumps say instant. The current scrollY already holds any
 	// adjustment the browser's scroll anchoring made.
-	const heading = document.getElementById('sched-title');
-	if (heading && !heading.hasAttribute('tabindex')) heading.tabIndex = -1;
 	if (keep) {
 		if (row) scrollTo({ top: scrollY + row.getBoundingClientRect().top - was, behavior: 'instant' });
 		// Never to something out of view: past the end, the first section heading wholly between the header and the
@@ -409,12 +535,170 @@ function endTour(keep: boolean, back = false) {
 		}
 		return;
 	}
-	heading?.focus({ preventScroll: true });
-	heading?.scrollIntoView({ behavior: 'instant', block: 'start' });
+	// The stage was pinned at the top of the screen, where the intro is at the page's top: the jump keeps the stage in
+	// place, and the step's text and map turn into the intro's there.
+	scrollTo({ top: 0, behavior: 'instant' });
+	h1.focus({ preventScroll: true });
 }
 
 tour.addEventListener('click', startTour);
 skip.addEventListener('click', () => endTour(false));
+
+// The arc over the close button jumps to a step. Under the pointer it grows a little and picks the step the pointer points at;
+// held, it is full size and its knob snaps from segment to segment, while the page stays where it is: the page jumps only
+// once the arc is let go, to the step picked. A tap picks and jumps at once. From the keyboard it is a slider: the
+// left and right arrows, Home and End pick, Enter jumps; up and down still scroll the tour. Let go on the step shown,
+// Esc, or a pointer taken away (cancelled, its capture lost, or let go outside the window) drops the pick.
+const onBand = (e: Event) => (e.target as Element).classList.contains('st-arc-band');
+
+/** The step the pointer points at: by its angle from the arc's centre, the button's centre (arc.ts). */
+function stepUnder(e: PointerEvent) {
+	const c = arc.getBoundingClientRect();
+	return stepAt(e.clientX - c.left, e.clientY - c.top, STEPS.length, span);
+}
+
+/**
+ * Lets go of the pointer that holds the arc, if one does. It is not held any more first, so the lostpointercapture
+ * that follows is not taken for a cancel.
+ */
+function release() {
+	const id = held;
+	held = -1;
+	if (id >= 0 && holder?.hasPointerCapture(id)) holder.releasePointerCapture(id);
+	holder = null;
+}
+
+/**
+ * Drops a pick without a jump: the arc rests on the step shown, or, with a jump on its way, on the step it goes to.
+ * Off the tour there is no step to rest on.
+ */
+function settle() {
+	release();
+	arc.dataset.state = 'rest';
+	if (step >= 0) {
+		if (!leap) preview = step;
+		paintArc(preview);
+	}
+	giveBack();
+}
+
+/**
+ * Gives back the focus a press took, if it took any: to where it was, if that is still on the page, or to nothing.
+ * The arc's blur that follows settles it again, to no effect.
+ */
+function giveBack() {
+	if (!lent) return;
+	const { to } = lent;
+	lent = null;
+	if (to?.isConnected) to.focus({ preventScroll: true });
+	else arc.blur();
+}
+
+/** Jumps to the step picked, unless the arc is held or the pick is the step shown (Enter, or a screen reader's tap). */
+function take() {
+	if (held < 0 && preview !== step) jump(preview);
+}
+
+/** Whether the hint has shown before on this browser, and marks it shown. Storage that cannot be read says no. */
+function hinted() {
+	try {
+		if (localStorage.getItem('varmq:tour-arc-hint')) return true;
+		localStorage.setItem('varmq:tour-arc-hint', '1');
+	} catch {
+		// No storage: the hint shows.
+	}
+	return false;
+}
+let hinting = 0;
+
+// Every state the reader puts the arc in paints it, so the hint's words leave the label.
+arc.addEventListener('pointerover', (e) => {
+	if (held >= 0 || !onBand(e)) return;
+	arc.dataset.state = 'hover';
+	preview = stepUnder(e);
+	paintArc(preview);
+});
+arc.addEventListener('pointermove', (e) => {
+	if (held >= 0 ? e.pointerId !== held : !onBand(e)) return;
+	if (held < 0) arc.dataset.state = 'hover';
+	const n = stepUnder(e);
+	if (n === preview) return;
+	preview = n;
+	paintArc(n);
+});
+arc.addEventListener('pointerleave', () => {
+	if (held < 0) settle();
+});
+// Held, the band keeps the pointer (its capture), and touch-action stops a finger on it scrolling the page (story.css).
+// The press selects no text and moves focus only here, to the slider, with no scroll, so Esc reaches it while it is
+// held; letting go gives the focus back (giveBack).
+arc.addEventListener('pointerdown', (e) => {
+	if (held >= 0 || e.button !== 0 || !onBand(e)) return;
+	// The capture first: a pointer that cannot be captured (no longer active) does not take the arc, and leaves no
+	// hold behind.
+	const band = e.target as Element;
+	try {
+		band.setPointerCapture(e.pointerId);
+	} catch {
+		return;
+	}
+	e.preventDefault();
+	held = e.pointerId;
+	holder = band;
+	arc.dataset.state = 'grab';
+	preview = stepUnder(e);
+	paintArc(preview);
+	const was = document.activeElement;
+	if (was !== arc) lent = { to: was instanceof HTMLElement && root.contains(was) ? was : null };
+	arc.focus({ preventScroll: true });
+});
+arc.addEventListener('pointerup', (e) => {
+	if (e.pointerId !== held) return;
+	const out = e.clientX < 0 || e.clientY < 0 || e.clientX > innerWidth || e.clientY > innerHeight;
+	if (out || preview === step) return settle();
+	release();
+	arc.dataset.state = 'rest';
+	// The jump first, so the blur that giving focus back makes keeps the knob on the step it goes to.
+	jump(preview);
+	giveBack();
+});
+const drop = (e: PointerEvent) => {
+	if (e.pointerId === held) settle();
+};
+arc.addEventListener('pointercancel', drop);
+arc.addEventListener('lostpointercapture', drop);
+// A touch screen reader's double-tap on the slider is a click with no pointer press behind it (detail 0), so it jumps
+// as Enter does. A tap from a mouse or a finger counts its clicks (detail 1 or more): pointerup has handled it.
+arc.addEventListener('click', (e) => {
+	if (e.detail === 0) take();
+});
+
+arc.addEventListener('focus', () => {
+	// A press focuses the arc too (pointerdown): the arc is held then, and stays so.
+	if (held >= 0 || step < 0) return;
+	arc.dataset.state = 'hover';
+	if (!leap) preview = step;
+	paintArc(preview);
+});
+arc.addEventListener('blur', settle);
+// Each key the arc takes is defaultPrevented, so the page's own keys (below) leave it be: End on the arc picks the last
+// step, and does not stop the snapping. Esc with nothing to drop goes on to end the tour.
+arc.addEventListener('keydown', (e) => {
+	if (e.altKey || e.ctrlKey || e.metaKey) return;
+	const keys: Record<string, number> = { ArrowLeft: preview - 1, ArrowRight: preview + 1, Home: 0, End: Infinity };
+	if (Object.hasOwn(keys, e.key)) {
+		e.preventDefault();
+		if (arc.dataset.state === 'rest') arc.dataset.state = 'hover';
+		preview = Math.min(STEPS.length - 1, Math.max(0, keys[e.key]));
+		paintArc(preview);
+	} else if (e.key === 'Enter') {
+		e.preventDefault();
+		take();
+	} else if (e.key === 'Escape' && (held >= 0 || preview !== step)) {
+		e.preventDefault();
+		settle();
+	}
+});
 
 // Keyboard and touch scroll natively and snap a stop at a time. The wheel is taken over, so that one turn is one stop
 // (wheel.ts): snapping alone lets a short notch fall back to where it was. From the last step down, the page scrolls as
@@ -446,7 +730,7 @@ addEventListener('scrollend', () => {
 	schedule();
 });
 
-// Esc ends the tour, as Skip does. End goes to the foot of the page, so it stops the snapping first. From the last step
+// Esc ends the tour, as the close button does. End goes to the foot of the page, so it stops the snapping first. From the last step
 // down the keys scroll as usual, but the keys that scroll up go to the last step from just below it, and from it to the
 // stop before, as the wheel does.
 addEventListener('keydown', (e) => {
