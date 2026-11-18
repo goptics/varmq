@@ -56,6 +56,43 @@ task sqlite:txt
 
 Run details, at the foot of the explorer, shows the command for the groups in scope. The full run takes hours. The committed pool files took {Math.round(data.datasets.find((d) => d.id === 'pool-24cpu').seconds)} s, {Math.round(data.datasets.find((d) => d.id === 'pool-8cpu').seconds)} s and {Math.round(data.datasets.find((d) => d.id === 'pool-4cpu').seconds)} s.
 
+## Micro-benchmarks
+
+These measure one call in the VarMQ repository, not other libraries. They ran on the same i7-13700, linux/amd64, with `-cpu=1`. The benchmarks use one worker, so one CPU gives the most stable number.
+
+`Add` adds one job and waits for it. Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAdd)$' -cpu=1`
+
+| Worker | Queue | ns/op | B/op | allocs/op |
+|---|---|---:|---:|---:|
+| `Worker` | Queue | 1,020 | 86 | 1 |
+| | Priority | 1,057 | 64 | 1 |
+| `ErrWorker` | ErrQueue | 1,055 | 110 | 1 |
+| | ErrPriority | 1,093 | 88 | 1 |
+| `ResultWorker` | ResultQueue | 1,053 | 102 | 1 |
+| | ResultPriority | 1,093 | 80 | 1 |
+
+`AddAll` adds 1,000 jobs in one call and waits once. The numbers are for the whole call, so divide by 1,000 for one job. Command: `go test -run=^$ -benchmem -bench '^(BenchmarkAddAll)$' -cpu=1`
+
+| Worker | Queue | ns/op | B/op | allocs/op |
+|---|---|---:|---:|---:|
+| `Worker` | Queue | 144,307 | 86,163 | 1,004 |
+| | Priority | 700,103 | 64,129 | 1,002 |
+| `ErrWorker` | ErrQueue | 171,741 | 126,701 | 1,507 |
+| | ErrPriority | 745,010 | 104,669 | 1,505 |
+| `ResultWorker` | ResultQueue | 181,409 | 143,299 | 1,007 |
+| | ResultPriority | 735,915 | 121,268 | 1,005 |
+
+One job in an `AddAll` to a queue costs about 144 ns, against 1,020 ns for an `Add`. There are two causes:
+
+- **Batched dispatch.** The event loop gives each worker its share of the backlog in one wake-up. A priority queue gives out one job at a time, so a higher-priority job never waits behind a batch. That is why its `AddAll` gains less. [How it works](/concepts/how-it-works/#batched-dispatch) has the details.
+- **One wait.** One group job tracks the whole call, and the caller waits once.
+
+`Publish` publishes `b.N` payloads to a topic with one subscribed worker, and waits once at the end. So the number is throughput per payload, not a round trip. Command: `go test -run=^$ -benchmem -bench '^(BenchmarkPublish)$' -cpu=1`
+
+| Worker | Source | ns/op | B/op | allocs/op |
+|---|---|---:|---:|---:|
+| `Worker` | Topic | 126.8 | 76 | 1 |
+
 See also the [comparison](/reference/comparison/) of features and the [micro-benchmark log](https://varmq.goptics.org/bench-log/) of each release.
 
 Next: [Configuration](/guides/configuration/).

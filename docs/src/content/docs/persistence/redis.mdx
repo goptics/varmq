@@ -307,6 +307,6 @@ redisq supports these VarMQ features. Each guide has the details.
 
 ## Batches
 
-redisq implements [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable). So a worker with only this queue takes as many jobs as it has free slots in one call. Each job starts on its own goroutine at once.
+redisq implements [`IBatchAcknowledgeable`](https://pkg.go.dev/github.com/goptics/varmq#IBatchAcknowledgeable). So a worker with only this queue takes as many jobs as it has free slots in one call, up to 64. Each job starts on its own goroutine at once.
 
 Next: [SQLite](/persistence/sqlite/).
