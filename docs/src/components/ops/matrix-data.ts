@@ -40,15 +40,24 @@ const Y: Cell = ['Yes'];
 const N: Cell = ['No'];
 
 export const ROWS: Row[] = [
-	row('Generic (type-safe) API', 'API', [Y, Y, Y, Y, N, N, N]),
+	row(
+		'Generic (type-safe) API',
+		'API',
+		[Y, Y, Y, Y, N, N, N],
+		{
+			text: 'Shared storage keeps each job as JSON, so the job type has to work with encoding/json. Function helpers do not work there.',
+			href: '/persistence/overview/#what-is-stored',
+			source: 'What is stored',
+		},
+	),
 	row(
 		'Tasks return results and errors',
 		'API',
 		[Y, N, Y, Y, N, ['No', 2], N],
 		{
-			text: 'On shared storage too: the job handle learns the outcome from the process that ran the job.',
-			href: '/guides/worker-types/#which-queues-each-worker-can-bind',
-			source: 'Worker types',
+			text: 'On shared storage, the handle gets the outcome only if the storage implements OutcomeWatcher. redisq and sqliteq do. A result over 64 KiB is dropped, and an error comes back as its text only.',
+			href: '/concepts/jobs/#jobs-in-other-processes',
+			source: 'Jobs in other processes',
 		},
 	),
 	row(
@@ -77,9 +86,9 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, N, N, N, N, N, N],
 		{
-			text: 'Of the existing adapters, only redisq (Redis) provides one. sqliteq has no distributed queue. An adapter of your own can implement IDistributedQueue.',
-			href: '/persistence/sqlite/',
-			source: 'SQLite',
+			text: 'Every redisq queue serves many processes and wakes them when a job is added. sqliteq serves only the processes on one host, through one file, and an idle worker checks it about once a second.',
+			href: '/persistence/overview/#persistent-or-distributed',
+			source: 'Persistent or distributed',
 		},
 	),
 	row('Several queues bound to one pool', 'Queues', [Y, N, ['Yes', 4], N, N, N, N]),
@@ -88,8 +97,8 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, N, N, N, N, N, N],
 		{
-			text: 'Topics are in-memory only. To share jobs between processes, use a distributed queue.',
-			href: '/persistence/overview/#topics',
+			text: 'Topics are in-memory only, and only NewWorker can subscribe, so a topic job has no result or error. To share jobs between processes, use shared storage.',
+			href: '/guides/topics/',
 			source: 'Topics',
 		},
 	),
@@ -98,7 +107,7 @@ export const ROWS: Row[] = [
 		'Queues',
 		[Y, Y, Y, N, N, ['No', 3], N],
 		{
-			text: 'Not with redisq or sqliteq. Neither implements CapacitySetter, so Add is not refused on their persistent or distributed queues. An adapter of your own can implement it.',
+			text: 'Not with redisq or sqliteq. Neither implements CapacitySetter, so Add is not refused on them. An adapter of your own can implement it.',
 			href: '/persistence/overview/#what-is-stored',
 			source: 'Persistence overview',
 		},
@@ -108,26 +117,44 @@ export const ROWS: Row[] = [
 		'Lifecycle',
 		[Y, N, N, N, Y, N, N],
 		{
-			text: 'On a persistent or distributed queue, Pause and Stop do not park a job the worker already took. It runs.',
+			text: 'On shared storage, Pause and Stop do not park a job the worker already took. It runs.',
 			href: '/persistence/overview/#acknowledgement',
 			source: 'Acknowledgement',
 		},
 	),
-	row('Restart after stop', 'Lifecycle', [Y, Y, N, N, N, N, N]),
+	row(
+		'Restart after stop',
+		'Lifecycle',
+		[Y, Y, N, N, N, N, N],
+		{
+			text: 'Not after the worker’s context is cancelled: a done context stays done. Create a new worker instead.',
+			href: '/guides/context/#starting-again-after-a-cancel',
+			source: 'Context',
+		},
+	),
 	row('Resize pool at runtime', 'Lifecycle', [Y, Y, Y, N, N, N, Y]),
 	row(
 		'Cancel work via context',
 		'Lifecycle',
 		[Y, N, Y, Y, N, Y, N],
 		{
-			text: 'Cancelling the context shuts the worker down. A running job is not interrupted: VarMQ cannot stop a function. Jobs that wait do not start.',
-			href: '/guides/context/#what-cancelling-does',
-			source: 'Context',
+			text: 'VarMQ cannot stop a function. Cancelling the context shuts the worker down, and a running job stops only if it watches the worker’s Context(). To stop one job, call its Cancel and watch j.Context().',
+			href: '/concepts/jobs/#cancelling-a-job',
+			source: 'Cancelling a job',
 		},
 	),
 	row('Panic recovery', 'Lifecycle', [Y, Y, Y, ['No', 1], N, N, Y]),
-	row('Task counters (submitted, failed, ...)', 'Operations', [Y, N, Y, N, N, N, N]),
-	row('Built-in REST API', 'Operations', [Y, N, N, N, N, N, N]),
+	row('Task counters (completed, failed, ...)', 'Operations', [Y, N, Y, N, N, N, N]),
+	row(
+		'Built-in REST API',
+		'Operations',
+		[Y, N, N, N, N, N, N],
+		{
+			text: 'It has no authentication. Put it behind middleware or a reverse proxy before you expose it.',
+			href: '/operations/rest-api/',
+			source: 'REST API',
+		},
+	),
 ];
 
 export const NOTES: string[] = [
