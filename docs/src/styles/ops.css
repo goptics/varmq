@@ -1283,9 +1283,11 @@
 	line-height: 1.5;
 	color: var(--ink-2);
 }
-.mx__limit b {
-	display: inline-block;
-	margin-right: 4px;
+/* ponytail: native <details>, closed by default; the "Limits in VarMQ" chip opens them all. */
+.mx__limit summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	padding: 0 6px;
 	border-radius: var(--corner);
 	background: var(--amber);
@@ -1293,6 +1295,29 @@
 	font: 700 0.6875rem/1.6 var(--mono);
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
+	list-style: none;
+	cursor: pointer;
+}
+.mx__limit summary::-webkit-details-marker {
+	display: none;
+}
+.mx__limit summary::after {
+	content: '';
+	width: 0;
+	height: 0;
+	border-left: 4px solid currentColor;
+	border-block: 3px solid transparent;
+	transition: transform 120ms ease;
+}
+.mx__limit[open] summary::after {
+	transform: rotate(90deg);
+}
+.mx__limit summary:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 2px;
+}
+.mx__limit p {
+	margin: 4px 0 0;
 }
 .mx__v {
 	display: inline-flex;
