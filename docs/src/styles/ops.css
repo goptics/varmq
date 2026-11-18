@@ -1248,7 +1248,8 @@
 }
 .mx__table thead th {
 	position: sticky;
-	top: calc(var(--nav-height));
+	/* below the docs sticky bars: top bar + contents bar on phones (96px), none on desktop */
+	top: var(--fd-docs-row-3, 0px);
 	z-index: 2;
 	padding-block: 12px;
 	border-bottom: 2px solid var(--ink);
