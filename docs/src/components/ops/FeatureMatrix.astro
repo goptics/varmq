@@ -38,7 +38,7 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 
 	<div class="mx__how">
 		<b>How to read it.</b> Every row is a feature VarMQ has, so the VarMQ column reads Yes all the way down. The table does not list features that another library has and VarMQ lacks.
-		Where a VarMQ Yes has a limit, the row has a <b>VarMQ limit</b> note, with the page of these docs that explains it. For speed, see the{' '}
+		Where a VarMQ Yes has a limit, the row has a <b>VarMQ limit</b> tag. Press it to read the limit and the page of these docs that explains it. <b>Limits in VarMQ</b> shows only those rows, with every limit open. For speed, see the{' '}
 		<a href="/reference/benchmarks/">benchmarks</a>.
 	</div>
 
@@ -63,9 +63,12 @@ const others = (r: (typeof ROWS)[number]) => LIBS.filter((l) => l !== 'varmq').s
 						<th scope="row" class="mx__feat">
 							<span class="mx__name">{r.feature}</span>
 							{r.limit && (
-								<span class="mx__limit">
-									<b>VarMQ limit</b> {r.limit.text} <a href={r.limit.href}>{r.limit.source}</a>
-								</span>
+								<details class="mx__limit" data-limit-note>
+									<summary>VarMQ limit</summary>
+									<p>
+										{r.limit.text} <a href={r.limit.href}>{r.limit.source}</a>
+									</p>
+								</details>
 							)}
 						</th>
 						{LIBS.map((l) => {

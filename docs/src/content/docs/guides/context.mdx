@@ -57,7 +57,7 @@ Without either, the worker follows no context of yours. It behaves as if you had
 
 `DefaultCtx` is shared: every worker created after it follows that one context, so cancelling it stops all of them. [Configuration](/guides/configuration/#the-default-functions) says when the `Default*` functions take effect.
 
-The context does not reach your worker function. A [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job) has only [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data) and [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID). A function that needs the context captures it. See [stopping a running job early](#stopping-a-running-job-early).
+The context does not reach your worker function. A [`Job[T]`](https://pkg.go.dev/github.com/goptics/varmq#Job) has [`Data()`](https://pkg.go.dev/github.com/goptics/varmq#Job.Data), [`ID()`](https://pkg.go.dev/github.com/goptics/varmq#Identifiable.ID) and its own `Context()`. That `Context()` is cancelled when the job is [cancelled](/concepts/jobs/#cancelling-a-job) or its run ends, not when your context is done. A function that needs your context captures it. See [stopping a running job early](#stopping-a-running-job-early).
 
 ## What cancelling does
 

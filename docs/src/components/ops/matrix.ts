@@ -22,6 +22,9 @@ function init(root: HTMLElement) {
 		if (on) libs.add(c.dataset.libChip!);
 	});
 
+	const notes = (open: boolean) =>
+		root.querySelectorAll<HTMLDetailsElement>('[data-limit-note]').forEach((d) => (d.open = open));
+
 	function apply() {
 		const text = q.value.trim().toLowerCase();
 		let shown = 0;
@@ -59,6 +62,8 @@ function init(root: HTMLElement) {
 				if (k === 'unique') flags.delete('shared');
 			}
 			root.querySelectorAll<HTMLElement>('[data-flag]').forEach((b) => b.setAttribute('aria-pressed', String(flags.has(b.dataset.flag!))));
+			// The limit filter opens every note; leaving it closes them again.
+			if (k === 'limit') notes(flags.has('limit'));
 		} else if (l) {
 			const k = l.dataset.libChip!;
 			if (libs.has(k)) libs.delete(k);
@@ -70,6 +75,7 @@ function init(root: HTMLElement) {
 			q.value = '';
 			root.querySelectorAll<HTMLElement>('[data-group].mx__chip').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.group === '')));
 			root.querySelectorAll<HTMLElement>('[data-flag]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+			notes(false);
 		} else return;
 		apply();
 	});

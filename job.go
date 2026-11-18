@@ -168,7 +168,8 @@ type Job[T any] interface {
 	// Data returns the data associated with the job.
 	Data() T
 	// Context is cancelled when the job is cancelled (Cancel, from this or
-	// any process) while it runs. Watch it to stop a cancelled job.
+	// any process) while it runs, and when its run ends. Watch it to stop a
+	// cancelled job.
 	Context() context.Context
 }
 
