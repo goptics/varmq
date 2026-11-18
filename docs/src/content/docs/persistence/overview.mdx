@@ -36,6 +36,7 @@ This page covers what such a queue does in VarMQ. [Redis](/persistence/redis/) a
 | Does VarMQ retry a failed job? | No. A job that fails or panics is rejected, which ends it like an acknowledgement. To acknowledge a job is to tell the storage that the job is done, so the storage forgets it. |
 | In what order do jobs leave storage? | In the order the adapter gives: first in, first out, or lowest priority number first. |
 | Is a repeated `Add` stored once? | Only with [`WithJobId`](https://pkg.go.dev/github.com/goptics/varmq#WithJobId) and an adapter whose [`EnqueueOnce`](https://pkg.go.dev/github.com/goptics/varmq#IQueue.EnqueueOnce) checks IDs. redisq and sqliteq do. |
+| What about in-memory queues and topics? | At most once. Their jobs live in the process and are lost if it exits. A topic subscription gets each payload published after it subscribed. |
 
 [What this guarantees](#what-this-guarantees) explains each answer.
 

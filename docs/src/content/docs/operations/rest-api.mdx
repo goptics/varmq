@@ -30,6 +30,8 @@ The paths follow the prefix you give to `Handler`, for example `/varmq`.
 | `GET` | `/workflow-counts` | counts the workflows of each store, by state |
 | `PATCH` | `/workflows/{id}/actions/cancel` | cancels a workflow |
 
+The full contract is in [`spec/openapi.yaml`](https://github.com/goptics/varmq/blob/main/spec/openapi.yaml).
+
 ## Mounting it
 
 [`Handler`](https://pkg.go.dev/github.com/goptics/varmq#Handler) takes a path prefix and returns an [`http.Handler`](https://pkg.go.dev/net/http#Handler). It strips the prefix from each request before it looks for a route. Mount it on a mux with the prefix in the pattern, with a trailing slash:
