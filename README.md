@@ -197,7 +197,10 @@ w.WithQueue(rq.NewQueue("thumbs"))
 
 // producer process: no worker
 q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs"))
-job, _ := q.Add(64)
+job, ok := q.Add(64)
+if !ok {
+	return // storage refused the job
+}
 s, err := job.Result() // waits, whichever process ran it
 ```
 
@@ -262,7 +265,7 @@ The signal channel holds one pending signal, so extra signals from many `Add` ca
 
 ![VarMQ worker pool with concurrency 4](./assets/diagrams/varmq-worker-pool.svg)
 
-With many short jobs, the event loop becomes the bottleneck. So a worker can take a batch of jobs from an in-memory queue or topic and run them in order. Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time. Priority queues, shared storage and multi-queue workers do not batch.
+With many short jobs, the event loop becomes the bottleneck. So a worker can take a batch of jobs from an in-memory queue or topic and run them in order. Below, 8 cheap jobs with concurrency 2: the first worker takes 4, a second worker is started for 2, and the last 2 go out one at a time. Priority queues and multi-queue workers do not batch. Shared storage (redisq, sqliteq) that is the worker's only source instead pops one job per free slot in one call, up to 64, and starts each job at once.
 
 ![VarMQ batched dispatch](./assets/diagrams/varmq-batch.svg)
 
@@ -273,7 +276,7 @@ Batch size rules and shared-storage dispatch: [How it works](https://varmq.gopti
 | Where | Guarantee | Notes |
 | --- | --- | --- |
 | In-memory queue | At most once | Jobs live in the process and are lost if it exits. |
-| Shared storage | At least once | A job comes back if its consumer dies or its acknowledgment is lost. Make handlers safe to run twice. |
+| redisq, sqliteq | At least once | A job comes back if its consumer dies or its acknowledgment is lost. Make handlers safe to run twice. A custom adapter sets its own guarantee and can lose jobs. |
 | `Add` with `WithJobId` on redisq or sqliteq | Stored once per ID | A retried `Add` with the same ID is stored once. The job can still run twice. |
 | Topic | At most once, per subscription | Each subscribed worker gets every payload published after it subscribed. |
 
