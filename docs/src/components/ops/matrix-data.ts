@@ -127,7 +127,7 @@ export const ROWS: Row[] = [
 		'Lifecycle',
 		[Y, Y, N, N, N, N, N],
 		{
-			text: 'Not after the worker’s context is cancelled: a done context stays done. Create a new worker instead.',
+			text: 'Restart works after Stop, but not once the context you gave the worker is cancelled: the new worker context comes from it and is done at once. Create a new worker instead.',
 			href: '/guides/context/#starting-again-after-a-cancel',
 			source: 'Context',
 		},
