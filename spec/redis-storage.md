@@ -196,7 +196,7 @@ Retention decides how many Job Records storage keeps. It is set on each queue ob
 | completed | 0 (none) | none |
 | failed | 10,000 | 7 days |
 
-These are the defaults. Since 1.10.0 the default keeps no completed records: the record write is the largest cost of a finish (before, 1,000 for 24 hours). An application MAY change each of the four limits; one that lists completed jobs, or whose waiters may start after a job ended (section 6.13), sets the completed limits above 0. When either limit of a state is 0, storage keeps no records of that state: it writes none, and the next trim removes the ones that exist. The `:stats` counters count every job, whatever the retention.
+These are the defaults. Since 1.10.0 the default keeps no completed records: the record write is the largest cost of a finish (before, 1,000 for 24 hours). An application MAY change each of the four limits; one that lists completed jobs, or whose waiters may start after a job ended (section 6.13), sets the completed limits above 0. An instance that leaves the completed limits unset writes no completed records and its trims MUST leave `:completed` alone, so that it never removes records another instance keeps; a limit set to 0 removes them, as below. When either limit of a state is 0, storage keeps no records of that state: it writes none, and the next trim removes the ones that exist. The `:stats` counters count every job, whatever the retention.
 
 **Trim** of a state with set `Z` (`:completed` or `:failed`), most records `N`, longest age `A` (ms) and current time `now` (ms):
 
