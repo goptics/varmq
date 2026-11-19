@@ -1,6 +1,6 @@
 # VarMQ Redis storage
 
-**Version 1.9.0**
+**Version 1.10.0**
 
 This document is the contract for a varmq queue kept in Redis. redisq is its Go implementation. A TypeScript or Rust implementation that follows it can produce to, consume from and inspect the same queue as redisq, and `spec/openapi.yaml` describes how the result reaches observers. A change to anything below starts here, with a version bump.
 
@@ -8,6 +8,7 @@ The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Changes
 
+- **1.10.0**: a completed job with an empty envelope `id` MAY leave no Job Record (sections 4, 6.3). Section 6 names the equivalent forms a script MAY use: several finishes or pushes in one call, one clock reading per call, the envelope `id` from the client that popped the item, one `EXISTS` for the pause and cancel checks; section 5 allows a trim that removes as it collects. No key, channel, item or record format changes. Nothing from 1.9.0 changes for a reader that copes with a missing record, as retention 0 already asks.
 - **1.9.0**: workflow counts and task times (sections 1.2, 6.6, 6.9 to 6.12, 7.3): sorted set `wf:index:states` (workflow ID → state number), written with every `meta.state` write; hash fields `ea:<task>`, `sa:<task>` and `fa:<task>`, and `u:<task>` members `enqueued_at`, `started_at` and `finished_at`; Runnable is one script that stamps the start on a yes. Nothing from 1.8.0 changes for a reader that ignores them.
 - **1.8.0**: FinishTask (section 6.10) is an operation of the workflow store, not of the queue: the caller passes the queue ID and the ack ID of the item. A store registers itself by scope, so a queue only names its scope, and a consumer finds the store by that scope. No key, script or item changes: nothing from 1.7.0 changes for the data in Redis.
 - **1.7.0**: job cancel (section 6.14): sorted set `<base>:cancelled`, control message `cancel:<job id>`, record and outcome state `cancelled`. Nothing from 1.6.0 changes while the set is absent.
@@ -163,7 +164,11 @@ A producer that reuses an `id` after the dedupe window ends gets a new job with 
 
 ## 4. Job Record
 
-When a job completes or fails, storage writes one Job Record under its Job ID in `<base>:jobs`, if retention keeps that state (section 5). The record is a JSON object:
+When a job completes or fails, storage writes one Job Record under its Job ID in `<base>:jobs`, if retention keeps that state (section 5).
+
+Since 1.10.0, an implementation MAY write no record for a completed job whose envelope `id` is empty: no caller holds an ID to ask for it, and the write is the largest cost of a finish. Such a job still counts in `:stats`, and the script still removes an older record of that Job ID (section 6.3, step 6). A failed job gets its record whatever its `id`. redisq writes none for such a job. A reader MUST NOT rely on a completed job with an empty `id` having a record.
+
+The record is a JSON object:
 
 | Field | Type | Contents |
 |---|---|---|
@@ -203,15 +208,22 @@ These are the defaults. An application MAY change each of the four limits. When 
 2. Collect the members outside the newest `N` (`ZRANGE Z 0 -(N+1)`). If `N` is 0, collect all members.
 3. For each collected member: `ZREM Z member` and `HDEL <base>:jobs member`.
 
-A trim MUST remove the record from `:jobs` together with its set member. It MUST collect members before it removes them, so that it knows which `:jobs` fields to delete. An implementation MAY limit how many members one trim removes, to keep each script short; the next trim removes the rest.
+A trim MUST remove the record from `:jobs` together with its set member. It MUST collect members before it removes them, so that it knows which `:jobs` fields to delete. An implementation MAY limit how many members one trim removes, to keep each script short; the next trim removes the rest. Since 1.10.0 it MAY remove as it collects, with a command that returns what it removed (for example `ZPOPMIN`, Redis 5.0), and MAY skip the age read when the newest member it removed by count is younger than the age limit: the members removed MUST be the same as steps 1 to 3 remove.
 
-The Acknowledge and Reject scripts trim the state they write. An implementation SHOULD also trim both states from time to time, for example in its once-a-second sweep, so that records of an idle queue still age out. A reader MAY show records past the age limit until the next trim.
+The Acknowledge and Reject scripts trim the state they write; one that wrote no record (section 4) MAY skip the trim. An implementation SHOULD also trim both states from time to time, for example in its once-a-second sweep, so that records of an idle queue still age out. A reader MAY show records past the age limit until the next trim.
 
 ## 6. Operations
 
 Each operation below MUST run as one Lua script (`EVAL` / `EVALSHA`), so that Redis applies it atomically. Scripts that read `TIME` and then write MUST call `redis.replicate_commands()` first; Redis 6 rejects such writes otherwise.
 
 "Now (ms)" means `t = redis.call('TIME')`, then `t[1] * 1000 + math.floor(t[2] / 1000)`.
+
+**Equivalent forms (since 1.10.0).** A script MAY differ from the steps below when the data it leaves in Redis, what it publishes and what it reports are the same:
+
+- **Several in one call.** A script MAY settle several jobs (6.3, 6.4, 6.13, 6.14) or push several items (6.1) in one call. The result MUST be that of the single operations run one by one in argument order, with one "now" for all. A call that fails MUST leave every job of it in processing (redelivered), so the in-flight keys are removed last.
+- **One clock reading.** A script MAY read `TIME` once and use it for every time it writes in that call.
+- **Envelope `id` from the client.** The client that popped an item MAY pass its envelope `id` to the settle script, which then skips the decode of step 3. It MUST do so only for an item that its own JSON reader and cjson read alike (same `id`, same bytes); for any other item the script decodes.
+- **One check for two keys.** A pop MAY test `EXISTS <base>:paused <base>:cancelled` in one command, and look at each key alone only when the answer is above 0.
 
 ### 6.1 Enqueue
 
@@ -245,7 +257,7 @@ Input: the ack ID. Steps:
 3. Find the envelope `id` (`pcall(cjson.decode, item)`, then take `id` if it is a string). The Job ID is that `id`, or the ack ID when it is empty.
 4. `attempts = 1 + (HGET <base>:attempts <id> or 0)`, then `HDEL <base>:attempts <id>`; both only when the envelope `id` is not empty.
 5. `HINCRBY <base>:stats completed 1`.
-6. `ZREM <base>:failed <job id>`, so a reused Job ID moves to the newest state. Then, if retention keeps completed records: `HSET <base>:jobs <job id> <record>` and `ZADD <base>:completed <now (ms)> <job id>`; if not: `HDEL <base>:jobs <job id>`.
+6. `ZREM <base>:failed <job id>`, so a reused Job ID moves to the newest state. Then, if retention keeps completed records (and, since 1.10.0, the implementation writes one for this job, section 4): `HSET <base>:jobs <job id> <record>` and `ZADD <base>:completed <now (ms)> <job id>`; if not: `HDEL <base>:jobs <job id>`.
 7. Trim `:completed` (section 5).
 
 ### 6.4 Reject (failed)
@@ -539,4 +551,5 @@ A record is **live** when its score is at least `now - 3 × interval_ms`, with n
 - 1.7.0 adds a key, a control message and a pop rule. A pre-1.7.0 consumer ignores `<base>:cancelled`, so it still hands out and runs a cancelled job. A cancel is reliable only once every consumer of the queue runs 1.7.0.
 - 1.8.0 changes no data. A consumer process that has no workflow store registered for the scope of a queue holds that queue's workflow items unacked and reports an error. Every consumer process of a workflow queue MUST create the store.
 - 1.9.0 adds a key, hash fields and `u:` members, and makes Runnable a script. A pre-1.9.0 reader ignores them. A pre-1.9.0 writer writes neither `wf:index:states` nor the times, and drops the time members of a `u:<task>` it rewrites: its tasks show no (or partial) times. Its new workflows and its trims change the size of one ZSET only, which the next Counts backfill repairs; a state change it makes to a workflow already in `wf:index:states` leaves a stale score that the size check does not see. So the counts are exact only once every writer runs 1.9.0; `DEL wf:index:states` then forces one full backfill.
+- 1.10.0 adds no key and no field. A pre-1.10.0 consumer writes a record for every completed job, so a queue with consumers of both versions has records for some completed jobs with an empty `id` and none for others. The counts in `:stats` are the same either way.
 - A new field in an item, a Job Record or an Instance Record is a minor version. A new Job State is a minor version too (section 7). A changed meaning, or a removed or renamed key or field, is a major version.
