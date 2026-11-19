@@ -1104,7 +1104,7 @@ func TestRemoteCancelRunning(t *testing.T) {
 	defer w.Stop()
 	w.WithQueue(s) // consumer
 
-	j, _ := NewErrQueue[int](s).Add(1) // producer
+	j, _ := NewErrQueue[int](s).Add(1, WithJobId("TestRemoteCancelRunning1")) // producer
 	<-started
 	require.NoError(t, OpenErrJob(s, j.ID()).Cancel(), "from any handle")
 	assert.ErrorIs(t, j.Err(), ErrJobCancelled)
@@ -1114,7 +1114,7 @@ func TestRemoteCancelRunning(t *testing.T) {
 func TestRemoteCancelWaiting(t *testing.T) {
 	s := newCancelStore()
 	p := NewErrQueue[int](s)
-	j, _ := p.Add(1) // no consumer yet
+	j, _ := p.Add(1, WithJobId("TestRemoteCancelWaiting1")) // no consumer yet
 	require.NoError(t, j.Cancel())
 
 	ran := make(chan int, 1)
@@ -1136,7 +1136,7 @@ func TestRemoteCancelUnsupported(t *testing.T) {
 
 func TestCancelWaitingDurableJobFinishesInStorage(t *testing.T) {
 	s := newCancelStore()
-	h, _ := NewErrQueue[int](s).Add(1) // producer handle
+	h, _ := NewErrQueue[int](s).Add(1, WithJobId("TestCancelWaitingDurableJobFinishesInStorage1")) // producer handle
 	_, ok, ack := s.sharedStore.DequeueWithAckId()
 	require.True(t, ok)
 
@@ -1242,7 +1242,7 @@ func TestCancelThenPanic(t *testing.T) {
 	defer w.Stop()
 	w.WithQueue(s)
 
-	j, _ := NewQueue[int](s).Add(1)
+	j, _ := NewQueue[int](s).Add(1, WithJobId("TestCancelThenPanic1"))
 	<-started
 	require.NoError(t, j.Cancel())
 	j.Wait()
@@ -1331,7 +1331,7 @@ func TestUnhashableStorageGetsNoCancelWatch(t *testing.T) {
 	w.WithQueue(plain) // turns the watch on
 	q := w.WithQueue(odd)
 
-	j, ok := q.Add(1)
+	j, ok := q.Add(1, WithJobId("TestUnhashableStorageGetsNoCancelWatch1"))
 	require.True(t, ok)
 	<-started // tracking it did not panic
 	require.NoError(t, OpenErrJob(odd, j.ID()).Cancel(), "requested")
@@ -1617,7 +1617,12 @@ type cancelOnly struct{ *cancelStore }
 func (cancelOnly) WatchOutcome() {}
 
 func TestCancelOnlyStorageGetsAnID(t *testing.T) {
-	j, ok := NewErrQueue[int](cancelOnly{newCancelStore()}).Add(1)
+	none, ok := NewErrQueue[int](cancelOnly{newCancelStore()}).Add(1)
+	require.True(t, ok)
+	assert.Empty(t, none.ID(), "IDs are opt-in")
+	assert.ErrorIs(t, none.Cancel(), ErrCancelUnsupported, "nothing to cancel by")
+
+	j, ok := NewErrQueue[int](cancelOnly{newCancelStore()}).Add(1, WithJobId("c"))
 	require.True(t, ok)
 	assert.NotEmpty(t, j.ID(), "an ID to cancel by")
 	assert.ErrorIs(t, j.Err(), ErrDetached)
@@ -1635,7 +1640,7 @@ type failingCancel struct{ *sharedStore }
 func (failingCancel) CancelJob(string) error { return errors.New("down") }
 
 func TestRemoteCancelError(t *testing.T) {
-	j, _ := NewQueue[int](failingCancel{newSharedStore()}).Add(1)
+	j, _ := NewQueue[int](failingCancel{newSharedStore()}).Add(1, WithJobId("TestRemoteCancelError1"))
 	assert.EqualError(t, j.Cancel(), "down")
 }
 
@@ -1703,7 +1708,7 @@ func TestResultMarshalPanicFailsJob(t *testing.T) {
 	w := NewResultWorker(func(Job[int]) (panicky, error) { return panicky{}, nil })
 	defer w.Stop()
 
-	j, _ := w.WithQueue(s).Add(1)
+	j, _ := w.WithQueue(s).Add(1, WithJobId("TestResultMarshalPanicFailsJob1"))
 	_, err := j.Result()
 	var re *RemoteError
 	require.ErrorAs(t, err, &re, "the worker survived and failed the job")
@@ -1724,7 +1729,7 @@ func TestResultMarshalPanicFailsJob(t *testing.T) {
 	defer mw.Stop()
 	ms := newSharedStore()
 	errs := mw.Errs()
-	mj2, _ := mw.WithQueue(ms).Add(1)
+	mj2, _ := mw.WithQueue(ms).Add(1, WithJobId("TestResultMarshalPanicFailsJob2"))
 	_, err = mj2.Result()
 	require.Error(t, err)
 	select {

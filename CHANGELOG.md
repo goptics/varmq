@@ -48,7 +48,7 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
 - **Remote job outcome** (#179; spec 1.6.0, contract v0.6.0): storage with optional `OutcomeWatcher` resolves durable job handle when job ends in any process.
   - `Wait`, `Err` (`*RemoteError`, text only), `Result` (worker's R as JSON via optional `ResultAcknowledgeable`, max 64 KiB, else `ErrNoResult`), `AddAll` groups.
   - `varmq.OpenJob(storage, id)`, `OpenErrJob`, `OpenResultJob[R]`: handle for job ID from any process.
-  - Durable job added without ID gets random one. Generated IDs on shared storage must be globally unique.
+  - Job IDs opt-in, as v1.10: only a durable job with an ID (`WithJobId`, `Item.ID`, `WithJobIdGenerator`) is watched, cancellable by ID and leaves an outcome record. Without ID: handle ends at once with `ErrDetached`, `Cancel` → `ErrCancelUnsupported`; no outcome watch, no cancel tracking. sqliteq writes no outcome record for it; redisq publishes no outcome for it; its Job Record (under the ack ID, inspection) follows the queue's retention: failed kept, completed none by default. Generated IDs on shared storage must be globally unique.
   - Storage without `OutcomeWatcher`: `ErrDetached`.
 - **Job cancel** (#179; spec 1.7.0, contract v0.6.0): `job.Cancel()` on every job handle.
   - Not started → never runs (`ErrJobCancelled`). Running → `j.Context()` cancelled; job ends cancelled if it then errors or panics.
