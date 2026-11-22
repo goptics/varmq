@@ -1616,7 +1616,7 @@ type cancelOnly struct{ *cancelStore }
 
 func (cancelOnly) WatchOutcome() {}
 
-func TestCancelOnlyStorageGetsAnID(t *testing.T) {
+func TestCancelOnlyStorageCancelsByGivenID(t *testing.T) {
 	none, ok := NewErrQueue[int](cancelOnly{newCancelStore()}).Add(1)
 	require.True(t, ok)
 	assert.Empty(t, none.ID(), "IDs are opt-in")

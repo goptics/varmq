@@ -2094,7 +2094,7 @@ func TestDetachedWithoutWatcher(t *testing.T) {
 	p := NewErrQueue[int](plain{s})
 	j, ok := p.Add(1)
 	require.True(t, ok)
-	assert.Empty(t, j.ID(), "no watcher: no generated ID")
+	assert.Empty(t, j.ID(), "IDs are opt-in")
 	assert.ErrorIs(t, j.Err(), ErrDetached)
 }
 
@@ -2118,8 +2118,9 @@ func TestPurgeDetachesHandles(t *testing.T) {
 	w.Pause() // nothing runs: the job stays queued
 	defer w.Stop()
 
-	j, ok := q.Add(1)
+	j, ok := q.Add(1, WithJobId("purged")) // an ID: a watched handle Purge must detach
 	require.True(t, ok)
+	require.False(t, j.IsClosed(), "watched until Purge")
 	q.Purge()
 	assert.ErrorIs(t, j.Err(), ErrDetached)
 }
