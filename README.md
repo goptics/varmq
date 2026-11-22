@@ -186,7 +186,7 @@ for order := range 4 {
 
 ### Shared Storage (Redis, SQLite)
 
-Same `WithQueue` / `WithPriorityQueue`. Jobs go out as JSON, survive restarts, and any process bound to the same queue runs them. Results come back to whichever process waits.
+Same `WithQueue` / `WithPriorityQueue`. Jobs go out as JSON, survive restarts, and any process bound to the same queue runs them. Results of a job with an ID come back to whichever process waits.
 
 ```go
 rq := redisq.New(url)
@@ -197,7 +197,7 @@ w.WithQueue(rq.NewQueue("thumbs"))
 
 // producer process: no worker
 q := varmq.NewResultQueue[int, string](rq.NewQueue("thumbs"))
-job, ok := q.Add(64)
+job, ok := q.Add(64, varmq.WithJobId("thumb-64")) // no ID: handle ends at once, ErrDetached
 if !ok {
 	return // storage refused the job
 }

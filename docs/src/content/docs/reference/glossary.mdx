@@ -16,7 +16,7 @@ The terms these docs use, in alphabetical order. Each term links to the page tha
 | [Goroutine (pool member)](/concepts/how-it-works/#the-worker-pool) | A goroutine in the worker's pool that runs your function. The pool starts more while jobs wait, up to the concurrency limit. |
 | [Job](/concepts/jobs/) | One unit of work: your data, an optional ID, and a status that changes as the worker runs it. `Add` creates it. |
 | [Job ID](/guides/job-ids/) | An optional string that names a job. An in-memory queue refuses a second `Add` with an ID that a job still in the queue holds. |
-| [Outcome](/concepts/jobs/#jobs-in-other-processes) | How a job ended: completed, failed or cancelled. Shared storage reports it to the job's handle in any process. |
+| [Outcome](/concepts/jobs/#jobs-in-other-processes) | How a job ended: completed, failed or cancelled. Shared storage reports it to the handle of a job with an ID, in any process. |
 | [Parked job](/concepts/lifecycle/#what-happens-to-jobs) | A job from a batch that did not start before a pause or stop. It stays `Queued` and runs first after `Resume` or `Restart`. |
 | [Persistent queue](/persistence/overview/#persistent-or-distributed) | A queue in shared storage that keeps jobs across a restart of the process. |
 | [Priority queue](/guides/queues/#fifo-and-priority-queues) | A queue that gives out waiting jobs in priority order. A lower number runs first. |

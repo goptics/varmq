@@ -5,8 +5,9 @@ import "sync"
 // Durable handles: what WithQueue and WithPriorityQueue return for
 // acknowledgeable storage (redisq, sqliteq, custom), and what NewQueue and
 // NewPriorityQueue return for producers. Jobs go out as JSON; Add returns a
-// remoteJob, so Wait, Err and Result work across processes when the storage
-// reports outcomes (OutcomeWatcher), and report ErrDetached when it doesn't.
+// remoteJob, so Wait, Err and Result work across processes for a job with
+// an ID when the storage reports outcomes (OutcomeWatcher), and report
+// ErrDetached for a job without one or when it doesn't.
 //
 // H and G are the job and group handle types of the worker kind
 // (EnqueuedJob/EnqueuedGroupJob, the Err and Result ones): a remoteJob[R]

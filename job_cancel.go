@@ -14,7 +14,8 @@ var (
 	// while it ran and then returned an error (or panicked).
 	ErrJobCancelled = errors.New("varmq: job cancelled")
 	// ErrCancelUnsupported is Cancel's error on a job whose storage can't
-	// cancel jobs by ID (no JobCanceller).
+	// cancel jobs by ID (no JobCanceller), or on a shared-storage job added
+	// without an ID.
 	ErrCancelUnsupported = errors.New("varmq: storage can't cancel jobs")
 )
 

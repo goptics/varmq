@@ -11,9 +11,10 @@ import (
 	"github.com/goptics/varmq/contract"
 )
 
-// ErrDetached is the outcome of a job on shared storage that can't report
-// outcomes (no OutcomeWatcher), or whose handle was closed: it may still
-// run, but this handle never learns how it ended.
+// ErrDetached is the outcome of a job on shared storage added without an
+// ID, or on storage that can't report outcomes (no OutcomeWatcher), or whose
+// handle was closed: it may still run, but this handle never learns how it
+// ended.
 var ErrDetached = errors.New("varmq: job outcome unknown to this handle")
 
 // RemoteError is a failed job's error as it came back from shared storage:
@@ -114,7 +115,8 @@ func (j *remoteJob[R]) WaitContext(ctx context.Context) error {
 // process holds it: one still waiting never runs, a running one has its
 // Context cancelled. Its outcome then says cancelled (ErrJobCancelled), or
 // how it ended if it finished first. ErrJobAlreadyClosed once it ended;
-// ErrCancelUnsupported on storage that can't. A handle that saw the
+// ErrCancelUnsupported for a job without an ID, or on storage that can't.
+// A handle that saw the
 // outcome answers ErrJobAlreadyClosed itself: the ID may name a newer job
 // by now (a re-add), which the request would cancel. A detached handle
 // still asks the storage.
