@@ -1897,16 +1897,28 @@ func (s *sharedStore) finish(ackID string, st JobState, reason string, result []
 }
 
 func (s *sharedStore) WatchOutcome(id string, fn func(JobOutcome)) func() {
+	catchUp, cancel := s.SubscribeOutcome(id, fn)
+	catchUp()
+	return cancel
+}
+
+func (s *sharedStore) SubscribeOutcome(id string, fn func(JobOutcome)) (catchUp, cancel func()) {
+	var once sync.Once
+	fire := func(o JobOutcome) { once.Do(func() { fn(o) }) } // one call, live or caught up
 	s.mu.Lock()
-	if o, ended := s.outcomes[id]; ended {
-		s.mu.Unlock()
-		fn(o)
-		return func() {}
-	}
-	p := &fn
+	p := &fire
 	s.watches[id] = append(s.watches[id], p)
 	s.mu.Unlock()
-	return func() { // this watch only, even after the id's list was reset
+	catchUp = func() {
+		s.mu.Lock()
+		o, ended := s.outcomes[id]
+		f := *p
+		s.mu.Unlock()
+		if ended {
+			f(o)
+		}
+	}
+	return catchUp, func() { // this watch only, even after the id's list was reset
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		*p = func(JobOutcome) {}
@@ -1933,6 +1945,7 @@ var (
 	_ IPersistentQueue            = (*sharedStore)(nil)
 	_ ISubscribable               = (*sharedStore)(nil)
 	_ OutcomeWatcher              = (*sharedStore)(nil)
+	_ OutcomeSubscriber           = (*sharedStore)(nil)
 	_ ResultAcknowledgeable       = (*sharedStore)(nil)
 	_ EnqueuedResultJob[int]      = (*remoteJob[int])(nil)
 	_ EnqueuedJob                 = (*job[int])(nil) // WaitContext in memory too
@@ -1985,7 +1998,7 @@ func TestWithQueueSharedResultWorker(t *testing.T) {
 	defer w.Stop()
 
 	q := w.WithQueue(s)
-	j, ok := q.Add(1<<53 + 1, WithJobId("TestWithQueueSharedResultWorker1")) // not a float64: the JSON is kept, not re-encoded
+	j, ok := q.Add(1<<53+1, WithJobId("TestWithQueueSharedResultWorker1")) // not a float64: the JSON is kept, not re-encoded
 	require.True(t, ok)
 	r, err := j.Result()
 	require.NoError(t, err)
@@ -2363,4 +2376,36 @@ func TestDurableNoIDIsDetached(t *testing.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	assert.Empty(t, s.watches, "no watch for a job without ID")
+}
+
+// fastNoRecord keeps no ended record (redisq's default for completed jobs)
+// and runs each job before EnqueueOnce returns: the outcome is published
+// before the push call is back.
+type fastNoRecord struct{ *sharedStore }
+
+func (s fastNoRecord) EnqueueOnce(item any, _ string) bool {
+	if !s.push(item, 0) {
+		return false
+	}
+	_, _, ack := s.DequeueWithAckId()
+	s.Acknowledge(ack)
+	s.mu.Lock()
+	clear(s.outcomes)
+	s.mu.Unlock()
+	return true
+}
+
+// A job with a given ID that ends before the push returns, on storage that
+// keeps no record of it, still resolves its handle.
+func TestGivenIDOutcomeBeforePushReturns(t *testing.T) {
+	j, ok := NewErrQueue[int](fastNoRecord{newSharedStore()}).Add(1, WithJobId("fast"))
+	require.True(t, ok)
+	done := make(chan struct{})
+	go func() { j.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait hangs: the outcome came before the watch")
+	}
+	assert.NoError(t, j.Err())
 }

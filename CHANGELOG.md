@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.9.0. Specs: `spec/redis-storage.md` 1.9.0, `spec/openapi.yaml` 1.6.0, `spec/hub.md` 1.0.0.
+Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need redisq v1.6.0+ or sqliteq v0.4.0+. Storage contract: module `github.com/goptics/varmq/contract` v0.10.0. Specs: `spec/redis-storage.md` 1.10.0, `spec/openapi.yaml` 1.6.0, `spec/hub.md` 1.0.0.
 
 ### ⚠️ Breaking Changes
 
@@ -48,7 +48,8 @@ Needs Go 1.27. Shared storage features (Reject, outcome, cancel, pause) need red
 - **Remote job outcome** (#179; spec 1.6.0, contract v0.6.0): storage with optional `OutcomeWatcher` resolves durable job handle when job ends in any process.
   - `Wait`, `Err` (`*RemoteError`, text only), `Result` (worker's R as JSON via optional `ResultAcknowledgeable`, max 64 KiB, else `ErrNoResult`), `AddAll` groups.
   - `varmq.OpenJob(storage, id)`, `OpenErrJob`, `OpenResultJob[R]`: handle for job ID from any process.
-  - Job IDs opt-in, as v1.10: only a durable job with an ID (`WithJobId`, `Item.ID`, `WithJobIdGenerator`) is watched, cancellable by ID and leaves an outcome record. Without ID: handle ends at once with `ErrDetached`, `Cancel` → `ErrCancelUnsupported`; no outcome watch, no cancel tracking. sqliteq writes no outcome record for it; redisq publishes no outcome for it; its Job Record (under the ack ID, inspection) follows the queue's retention: failed kept, completed none by default. Generated IDs on shared storage must be globally unique.
+  - Job IDs opt-in, as in v1.10.0 (#200): only a durable job with an ID (`WithJobId`, `Item.ID`, `WithJobIdGenerator`) is watched and cancellable by ID. Without ID: handle ends at once with `ErrDetached`, `Cancel` → `ErrCancelUnsupported`; no outcome watch, no cancel tracking. sqliteq writes no outcome record for it; redisq publishes no outcome for it. redisq Job Records (under the ack ID for a job without ID) follow the queue's retention: failed kept, completed none by default, so a completed job is reported only by its message: a watch that starts after it, or a lost message, waits for good. Generated IDs on shared storage must be globally unique.
+  - Given ID on storage with `OutcomeSubscriber` (contract v0.10.0, redisq): subscribe before the push, read the record after it. Before, the watch started after the push, and an outcome published in between was lost when no record kept it (`Wait` hung).
   - Storage without `OutcomeWatcher`: `ErrDetached`.
 - **Job cancel** (#179; spec 1.7.0, contract v0.6.0): `job.Cancel()` on every job handle.
   - Not started → never runs (`ErrJobCancelled`). Running → `j.Context()` cancelled; job ends cancelled if it then errors or panics.

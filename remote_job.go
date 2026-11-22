@@ -52,6 +52,16 @@ func watchRemote[R any](s any, id string, onEnd func(*remoteJob[R])) *remoteJob[
 	return j
 }
 
+// subscribeRemote is watchRemote in two steps (OutcomeSubscriber): the
+// handle hears every outcome of id from now on; catchUp reports one that
+// ended before.
+func subscribeRemote[R any](s OutcomeSubscriber, id string, onEnd func(*remoteJob[R])) (*remoteJob[R], func()) {
+	j := &remoteJob[R]{id: id, done: make(chan struct{}), onEnd: onEnd, s: s}
+	catchUp, cancel := s.SubscribeOutcome(id, func(o JobOutcome) { j.end(o, nil) })
+	j.cancel = cancel
+	return j, catchUp
+}
+
 // detachedJob is the handle of a job added with no ID: ended at once with
 // ErrDetached. s stays so Cancel answers like any detached handle.
 func detachedJob[R any](s any) *remoteJob[R] {
