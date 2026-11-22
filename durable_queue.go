@@ -1,9 +1,6 @@
 package varmq
 
-import (
-	"crypto/rand"
-	"sync"
-)
+import "sync"
 
 // Durable handles: what WithQueue and WithPriorityQueue return for
 // acknowledgeable storage (redisq, sqliteq, custom), and what NewQueue and
@@ -58,20 +55,15 @@ func producerBase[T, R any](s IBaseQueue, configs []QueueConfigFunc) durableBase
 	}
 }
 
-// add enqueues data through push and returns its watched handle. A job with
-// no ID gets one when the storage reports outcomes or cancels by ID; only a
-// given ID dedupes.
+// add enqueues data through push and returns its handle. Only a job with an
+// ID (WithJobId, Item.ID, WithJobIdGenerator) is watched, can be cancelled by
+// ID and leaves an outcome record; one without gets a detached handle
+// (ErrDetached) and costs the storage nothing past the push, as in v1.10.
+// Only a given ID dedupes.
 func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []byte, onceID string) bool) (*remoteJob[R], bool) {
 	c := loadJobConfigs(d.cfg(), configs...)
 	if reservedID(c.Id) {
 		return nil, false
-	}
-	_, ow := d.s.(OutcomeWatcher)
-	_, jc := d.s.(JobCanceller)
-	if (ow || jc) && c.Id == "" {
-		// Random, not a counter: a counter restarts with the process and
-		// would match an old record.
-		c.Id = rand.Text()
 	}
 
 	j := newJob(data, c)
@@ -85,6 +77,14 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 	// push clears (spec 6.13): watch after it, or the catch-up read could
 	// report that run.
 	var rj *remoteJob[R]
+	if j.id == "" {
+		// No ID: nothing to watch, nothing for Purge or Close to detach
+		if !push(val, "") {
+			return nil, false
+		}
+		d.wake()
+		return detachedJob[R](d.s), true
+	}
 	watch := func() {
 		rj = watchRemote(d.s, j.id, func(e *remoteJob[R]) { d.live.Delete(e) })
 		d.live.Store(rj, struct{}{})
@@ -107,14 +107,19 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 		watch()
 	}
 
+	d.wake()
+	return rj, true
+}
+
+// wake tells the bound worker a job landed, after the storage confirmed it:
+// a pop must not mark the source empty before the item lands.
+func (d durableBase[T, R]) wake() {
 	if d.poke != nil {
-		d.poke() // after the storage confirmed: a pop must not mark it empty before the item lands
+		d.poke()
 	}
 	if d.w != nil {
 		d.w.notifyToPullNextJobs()
 	}
-
-	return rj, true
 }
 
 // Purge drops the waiting jobs and detaches this handle's live job

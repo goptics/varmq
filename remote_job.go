@@ -52,6 +52,14 @@ func watchRemote[R any](s any, id string, onEnd func(*remoteJob[R])) *remoteJob[
 	return j
 }
 
+// detachedJob is the handle of a job added with no ID: ended at once with
+// ErrDetached. s stays so Cancel answers like any detached handle.
+func detachedJob[R any](s any) *remoteJob[R] {
+	j := &remoteJob[R]{done: make(chan struct{}), s: s}
+	j.end(JobOutcome{}, ErrDetached)
+	return j
+}
+
 func (j *remoteJob[R]) end(o JobOutcome, err error) {
 	j.once.Do(func() {
 		j.out, j.err = o, err

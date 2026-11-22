@@ -1947,9 +1947,9 @@ func TestWithQueueSharedWorker(t *testing.T) {
 	defer w.Stop()
 
 	q := w.WithQueue(s)
-	j, ok := q.Add(7)
+	j, ok := q.Add(7, WithJobId("TestWithQueueSharedWorker1"))
 	require.True(t, ok)
-	assert.NotEmpty(t, j.ID(), "an ID is generated to match the outcome")
+	assert.NotEmpty(t, j.ID(), "the given ID matches the outcome")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -1969,8 +1969,8 @@ func TestWithQueueSharedErrWorker(t *testing.T) {
 	defer w.Stop()
 
 	q := w.WithQueue(s)
-	good, _ := q.Add("ok")
-	bad, _ := q.Add("bad")
+	good, _ := q.Add("ok", WithJobId("TestWithQueueSharedErrWorker1"))
+	bad, _ := q.Add("bad", WithJobId("TestWithQueueSharedErrWorker2"))
 	assert.NoError(t, good.Err())
 
 	var re *RemoteError
@@ -1985,7 +1985,7 @@ func TestWithQueueSharedResultWorker(t *testing.T) {
 	defer w.Stop()
 
 	q := w.WithQueue(s)
-	j, ok := q.Add(1<<53 + 1) // not a float64: the JSON is kept, not re-encoded
+	j, ok := q.Add(1<<53 + 1, WithJobId("TestWithQueueSharedResultWorker1")) // not a float64: the JSON is kept, not re-encoded
 	require.True(t, ok)
 	r, err := j.Result()
 	require.NoError(t, err)
@@ -2002,7 +2002,7 @@ func TestWithPriorityQueueSharedGroup(t *testing.T) {
 	})
 	defer w.Stop()
 
-	g := w.WithPriorityQueue(sharedPrio{s}).AddAll([]Item[int]{{Data: 1, Priority: 2}, {Data: -1, Priority: 1}, {ID: "x", Data: 5}})
+	g := w.WithPriorityQueue(sharedPrio{s}).AddAll([]Item[int]{{ID: "TestWithPriorityQueueSharedGroupi1", Data: 1, Priority: 2}, {ID: "TestWithPriorityQueueSharedGroupi2", Data: -1, Priority: 1}, {ID: "x", Data: 5}})
 	g.Wait()
 	assert.Equal(t, 0, g.NumPending())
 
@@ -2024,7 +2024,7 @@ func TestResultTooLargeHasNoResult(t *testing.T) {
 	w := NewResultWorker(func(Job[int]) (string, error) { return string(make([]byte, remoteResultLimit)), nil })
 	defer w.Stop()
 
-	j, _ := w.WithQueue(s).Add(1)
+	j, _ := w.WithQueue(s).Add(1, WithJobId("big"))
 	_, err := j.Result()
 	assert.ErrorIs(t, err, ErrNoResult)
 	assert.NoError(t, j.(EnqueuedErrJob).Err(), "the job still completed")
@@ -2035,7 +2035,7 @@ func TestStorageWithoutResultAck(t *testing.T) {
 	w := NewResultWorker(func(Job[int]) (int, error) { return 3, nil })
 	defer w.Stop()
 
-	j, _ := w.WithQueue(s).Add(1)
+	j, _ := w.WithQueue(s).Add(1, WithJobId("s1"))
 	_, err := j.Result()
 	assert.ErrorIs(t, err, ErrNoResult)
 }
@@ -2087,7 +2087,7 @@ func TestDetachedWithoutWatcher(t *testing.T) {
 
 func TestRemoteJobCloseAndContext(t *testing.T) {
 	s := newSharedStore()
-	j, _ := NewErrQueue[int](s).Add(1) // no consumer
+	j, _ := NewErrQueue[int](s).Add(1, WithJobId("rc1")) // no consumer
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -2122,7 +2122,7 @@ func TestRefusedResultStillCompletes(t *testing.T) {
 	w := NewResultWorker(func(Job[int]) (int, error) { return 1, nil })
 	defer w.Stop()
 
-	j, _ := w.WithQueue(s).Add(1)
+	j, _ := w.WithQueue(s).Add(1, WithJobId("r1"))
 	_, err := j.Result()
 	assert.ErrorIs(t, err, ErrNoResult)
 }
@@ -2156,13 +2156,13 @@ func TestResultProducer(t *testing.T) {
 	defer w.Stop()
 	w.WithQueue(s)
 
-	j, ok := NewResultQueue[int, string](s).Add(3)
+	j, ok := NewResultQueue[int, string](s).Add(3, WithJobId("p3"))
 	require.True(t, ok)
 	r, err := j.Result()
 	require.NoError(t, err)
 	assert.Equal(t, "r-3", r)
 
-	pj, ok := NewResultPriorityQueue[int, string](sharedPrio{newSharedStore()}).Add(1, 0)
+	pj, ok := NewResultPriorityQueue[int, string](sharedPrio{newSharedStore()}).Add(1, 0, WithJobId("p1"))
 	require.True(t, ok)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -2175,7 +2175,7 @@ func TestPlainProducerWaits(t *testing.T) {
 	defer w.Stop()
 	w.WithQueue(s)
 
-	j, ok := NewQueue[int](s).Add(1) // EnqueuedJob: Wait only, as NewWorker's
+	j, ok := NewQueue[int](s).Add(1, WithJobId("w1")) // EnqueuedJob: Wait only, as NewWorker's
 	require.True(t, ok)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -2203,7 +2203,7 @@ func TestInMemoryWaitContext(t *testing.T) {
 
 func TestCloseDetachesHandles(t *testing.T) {
 	q := NewErrQueue[int](newSharedStore())
-	j, ok := q.Add(1) // no consumer: it would wait for good
+	j, ok := q.Add(1, WithJobId("c1")) // no consumer: it would wait for good
 	require.True(t, ok)
 	require.NoError(t, q.Close())
 	assert.ErrorIs(t, j.Err(), ErrDetached)
@@ -2214,7 +2214,7 @@ func TestResultGroupKeepsErrNoResult(t *testing.T) {
 	w := NewResultWorker(func(Job[int]) (int, error) { return 1, nil })
 	defer w.Stop()
 
-	g := w.WithQueue(s).AddAll([]Item[int]{{Data: 1}, {Data: 2}})
+	g := w.WithQueue(s).AddAll([]Item[int]{{ID: "1", Data: 1}, {ID: "2", Data: 2}})
 	n := 0
 	for r := range g.Results() {
 		n++
@@ -2234,7 +2234,7 @@ func TestDurablePriorityOrder(t *testing.T) {
 	}, WithAutoRun(false), WithConcurrency(1))
 	defer w.Stop()
 
-	g := w.WithPriorityQueue(sharedPrio{s}).AddAll([]Item[string]{{Data: "a", Priority: 3}, {Data: "b", Priority: 1}, {Data: "c", Priority: 2}})
+	g := w.WithPriorityQueue(sharedPrio{s}).AddAll([]Item[string]{{ID: "a", Data: "a", Priority: 3}, {ID: "b", Data: "b", Priority: 1}, {ID: "c", Data: "c", Priority: 2}})
 	require.NoError(t, w.Start())
 	g.Wait()
 	assert.Equal(t, []string{"b", "c", "a"}, order, "each item kept its priority")
@@ -2293,7 +2293,7 @@ func TestDurableHandles(t *testing.T) {
 	assert.Equal(t, "boom", (&RemoteError{Reason: "boom"}).Error())
 
 	p := NewErrQueue[int](newSharedStore()) // no consumer
-	j, _ := p.Add(1)
+	j, _ := p.Add(1, WithJobId("q1"))
 	assert.Equal(t, "Queued", j.Status())
 	j.(EnqueuedResultJob[struct{}]).Drain()
 
@@ -2301,7 +2301,7 @@ func TestDurableHandles(t *testing.T) {
 	idle.Pause() // nothing runs: the group waits
 	defer idle.Stop()
 	q := idle.WithQueue(newSharedStore())
-	g := q.AddAll([]Item[int]{{Data: 1}})
+	g := q.AddAll([]Item[int]{{ID: "1", Data: 1}})
 	g.Drain()
 	require.NoError(t, q.Close()) // detaches: the group ends
 	g.Wait()
@@ -2329,7 +2329,7 @@ func TestOldHandleCloseKeepsNewWatch(t *testing.T) {
 func TestRemoteGroupWaitContext(t *testing.T) {
 	w := NewResultWorker(func(j Job[int]) (int, error) { return j.Data(), nil }, WithAutoRun(false))
 	defer w.Stop()
-	g := w.WithQueue(newSharedStore()).AddAll([]Item[int]{{Data: 1}})
+	g := w.WithQueue(newSharedStore()).AddAll([]Item[int]{{ID: "1", Data: 1}})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -2338,4 +2338,29 @@ func TestRemoteGroupWaitContext(t *testing.T) {
 	require.NoError(t, w.Start())
 	g.Drain()
 	assert.NoError(t, g.WaitContext(context.Background()))
+}
+
+// A durable job added with no ID is not tracked (as in v1.10): its handle
+// ends at once with ErrDetached, no watch is set, Cancel is unsupported. The
+// job itself still runs.
+func TestDurableNoIDIsDetached(t *testing.T) {
+	s := newSharedStore()
+	ran := make(chan int, 1)
+	w := NewWorker(func(j Job[int]) { ran <- j.Data() })
+	defer w.Stop()
+
+	j, ok := w.WithQueue(s).Add(7)
+	require.True(t, ok)
+	assert.Equal(t, "", j.ID())
+	assert.True(t, j.IsClosed())
+	assert.ErrorIs(t, j.Cancel(), ErrCancelUnsupported)
+	select {
+	case got := <-ran:
+		assert.Equal(t, 7, got)
+	case <-time.After(2 * time.Second):
+		t.Fatal("not run")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Empty(t, s.watches, "no watch for a job without ID")
 }
