@@ -5,8 +5,9 @@ import "sync"
 // Durable handles: what WithQueue and WithPriorityQueue return for
 // acknowledgeable storage (redisq, sqliteq, custom), and what NewQueue and
 // NewPriorityQueue return for producers. Jobs go out as JSON; Add returns a
-// remoteJob, so Wait, Err and Result work across processes when the storage
-// reports outcomes (OutcomeWatcher), and report ErrDetached when it doesn't.
+// remoteJob, so Wait, Err and Result work across processes for a job with
+// an ID when the storage reports outcomes (OutcomeWatcher), and report
+// ErrDetached for a job without one or when it doesn't.
 //
 // H and G are the job and group handle types of the worker kind
 // (EnqueuedJob/EnqueuedGroupJob, the Err and Result ones): a remoteJob[R]
@@ -74,8 +75,10 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 
 	// A generated ID is new: watch before the push, so a fast outcome is
 	// never missed. A given ID may name an earlier run whose record the
-	// push clears (spec 6.13): watch after it, or the catch-up read could
-	// report that run.
+	// push clears (spec 6.13): its catch-up read goes after the push, or it
+	// could report that run. Storage with OutcomeSubscriber subscribes
+	// before the push too; without it the whole watch goes after, and an
+	// outcome that comes first is lost when the storage keeps no record.
 	var rj *remoteJob[R]
 	if j.id == "" {
 		// No ID: nothing to watch, nothing for Purge or Close to detach
@@ -85,8 +88,14 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 		d.wake()
 		return detachedJob[R](d.s), true
 	}
+	onEnd := func(e *remoteJob[R]) { d.live.Delete(e) }
+	var catchUp func()
 	watch := func() {
-		rj = watchRemote(d.s, j.id, func(e *remoteJob[R]) { d.live.Delete(e) })
+		if sub, ok := d.s.(OutcomeSubscriber); ok && c.given {
+			rj, catchUp = subscribeRemote(sub, j.id, onEnd)
+		} else {
+			rj = watchRemote(d.s, j.id, onEnd)
+		}
 		d.live.Store(rj, struct{}{})
 		if rj.IsClosed() { // ended before the Store: its Delete already ran
 			d.live.Delete(rj)
@@ -94,7 +103,8 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 	}
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	if !c.given {
+	_, early := d.s.(OutcomeSubscriber)
+	if !c.given || early {
 		watch()
 	}
 	if !push(val, c.onceId(j.id)) {
@@ -103,7 +113,10 @@ func (d durableBase[T, R]) add(data T, configs []JobConfigFunc, push func(val []
 		}
 		return nil, false
 	}
-	if c.given {
+	switch {
+	case catchUp != nil:
+		catchUp()
+	case c.given:
 		watch()
 	}
 

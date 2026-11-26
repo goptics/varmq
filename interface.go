@@ -182,6 +182,7 @@ type (
 
 	JobOutcome            = contract.JobOutcome
 	OutcomeWatcher        = contract.OutcomeWatcher
+	OutcomeSubscriber     = contract.OutcomeSubscriber
 	ResultAcknowledgeable = contract.ResultAcknowledgeable
 	JobCanceller          = contract.JobCanceller
 	CancelNotifier        = contract.CancelNotifier
