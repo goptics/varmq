@@ -2058,3 +2058,30 @@ func TestWorkerWaitContext(t *testing.T) {
 	close(release)
 	assert.NoError(t, w.WaitContext(context.Background()))
 }
+
+func TestWorkerStartWithCancelledParent(t *testing.T) {
+	old := runtime.GOMAXPROCS(8)
+	defer runtime.GOMAXPROCS(old)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := range 1000 {
+		w := NewWorker(func(Job[int]) {}, WithAutoRun(false), WithContext(ctx), WithIdleWorkerExpiryDuration(time.Hour))
+		q := w.BindQueue()
+		_, ok := q.Add(1)
+		require.True(t, ok)
+		require.NoError(t, w.Start())
+
+		deadline := time.Now().Add(time.Second)
+		for !w.IsStopped() && time.Now().Before(deadline) {
+			runtime.Gosched()
+		}
+		if !w.IsStopped() {
+			s := w.Status()
+			_ = w.Stop()
+			q.Purge()
+			t.Fatalf("iteration %d: cancelled parent left worker %s instead of Stopped", i, s)
+		}
+		q.Purge()
+	}
+}
