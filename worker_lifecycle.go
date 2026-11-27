@@ -37,12 +37,12 @@ func (w *worker[T, JobType]) Start() error {
 		w.memMx.Unlock()
 	}
 
-	w.goEventLoop()
-	w.goRemoveIdleWorkers()
-
 	w.pool.PushNode(w.initPoolNode())
 
+	// Publish Idle before the event loop can move it to Stopping on cancellation.
 	w.status.Store(idle)
+	w.goEventLoop()
+	w.goRemoveIdleWorkers()
 	w.waiters.Broadcast()
 	w.notifyToPullNextJobs()
 	w.lifecycleChanged()
